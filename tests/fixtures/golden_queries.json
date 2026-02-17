@@ -1,0 +1,68 @@
+{
+  "golden_queries": [
+    {
+      "query": "What is the LDL-C target for secondary prevention?",
+      "expected_keywords": ["LDL-C", "secondary", "prevention", "1.8", "mmol"],
+      "expected_sources": ["Lipid"]
+    },
+    {
+      "query": "What are the dietary recommendations for pre-diabetes?",
+      "expected_keywords": ["diet", "vegetables", "plate", "grains", "pre-diabetes"],
+      "expected_sources": ["pre-diabetes"]
+    },
+    {
+      "query": "What is FH and when should genetic testing be considered?",
+      "expected_keywords": ["FH", "genetic", "testing", "LDL-C", "4.9"],
+      "expected_sources": ["Lipid"]
+    },
+    {
+      "query": "What BMI threshold indicates need for medication in pre-diabetes?",
+      "expected_keywords": ["BMI", "23", "medication", "pre-diabetes"],
+      "expected_sources": ["pre-diabetes"]
+    },
+    {
+      "query": "What are risk enhancers in cardiovascular risk assessment?",
+      "expected_keywords": ["risk", "enhancers", "cardiovascular", "statin"],
+      "expected_sources": ["Lipid"]
+    },
+    {
+      "query": "How should vegetables and fruits be consumed for pre-diabetes?",
+      "expected_keywords": ["vegetables", "fruits", "plate", "half"],
+      "expected_sources": ["pre-diabetes"]
+    },
+    {
+      "query": "What is the goal of lipid management?",
+      "expected_keywords": ["lipid", "ASCVD", "LDL", "cholesterol", "reduce"],
+      "expected_sources": ["Lipid"]
+    },
+    {
+      "query": "When should metformin be considered for pre-diabetes?",
+      "expected_keywords": ["metformin", "pre-diabetes", "lifestyle", "BMI"],
+      "expected_sources": ["pre-diabetes"]
+    }
+  ],
+  "stop_words": ["the", "and", "a", "an", "of", "to", "in", "is", "it", "for", "on", "with", "as", "at", "by"],
+  "stemming_test_cases": [
+    {"query_word": "running", "doc_word": "run", "should_match": true},
+    {"query_word": "management", "doc_word": "managing", "should_match": true},
+    {"query_word": "prevention", "doc_word": "prevent", "should_match": true},
+    {"query_word": "diabetes", "doc_word": "diabetic", "should_match": true}
+  ],
+  "test_documents": [
+    {
+      "id": "test_doc_1",
+      "content": "LDL cholesterol is the primary target for lipid lowering therapy. For secondary prevention, the LDL-C target is less than 1.8 mmol/L or less than 70 mg/dL.",
+      "source": "test.pdf"
+    },
+    {
+      "id": "test_doc_2", 
+      "content": "Pre-diabetes management includes lifestyle modification. Metformin may be considered if BMI is 23 or higher and lifestyle changes are insufficient.",
+      "source": "test.pdf"
+    },
+    {
+      "id": "test_doc_3",
+      "content": "Cardiovascular risk assessment should consider risk enhancers beyond traditional calculators. Statin therapy may be indicated based on these factors.",
+      "source": "test.pdf"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI__MODEL=${GEMINI__MODEL:-models/gemini-2.5-flash}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5174:5173"
+    environment:
+      - PUBLIC_API_URL=http://localhost:8001
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5173"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  test:
+    image: mcr.microsoft.com/playwright:latest
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      - CI=true
+    command: >
+      sh -c "cd frontend && bun run build && bunx playwright test"
+    depends_on:
+      frontend:
+        condition: service_healthy
