@@ -1,7 +1,8 @@
 import csv
 import logging
+import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from src.ingest import get_documents
 from src.processors import chunk_documents
@@ -121,6 +122,91 @@ def retrieve_context(query: str, top_k: int = 5):
         context_parts.append(f"[Source: {source_name}]\n{r['content']}")
 
     return "\n\n".join(context_parts), sources
+
+
+def retrieve_context_with_trace(query: str, top_k: int = 5):
+    """
+    Retrieve context with detailed pipeline trace information.
+
+    Returns:
+        tuple: (context, sources, pipeline_trace)
+            - context: Formatted context string for LLM
+            - sources: List of source names
+            - pipeline_trace: Dictionary with detailed pipeline metadata
+    """
+    import time
+    from src.models import (
+        RetrievedDocument, RetrievalStage, ContextStage,
+        GenerationStage, PipelineTrace
+    )
+
+    total_start = time.time()
+
+    initialize_vector_store()
+    vector_store = get_vector_store()
+
+    # Retrieval stage
+    retrieval_start = time.time()
+    results, retrieval_trace = vector_store.similarity_search_with_trace(query, top_k=top_k)
+
+    # Build retrieval stage
+    retrieved_docs = []
+    context_parts = []
+    sources = []
+
+    for r in results:
+        page_info = f" page {r.get('page', 'N/A')}" if r.get('page') else ""
+        source_name = f"{r['source']}{page_info}"
+        sources.append(source_name)
+        context_parts.append(f"[Source: {source_name}]\n{r['content']}")
+
+        retrieved_docs.append(RetrievedDocument(
+            id=r["id"],
+            content=r["content"],
+            source=r["source"],
+            page=r.get("page"),
+            semantic_score=r["semantic_score"],
+            keyword_score=r["keyword_score"],
+            source_boost=r["source_boost"],
+            combined_score=r["combined_score"],
+            rank=r["rank"]
+        ))
+
+    retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
+    retrieval_stage = RetrievalStage(
+        query=query,
+        top_k=top_k,
+        documents=retrieved_docs,
+        score_weights=retrieval_trace.get("score_weights", {}),
+        timing_ms=retrieval_timing_ms
+    )
+
+    # Context stage
+    context = "\n\n".join(context_parts)
+    context_stage = ContextStage(
+        total_chunks=len(results),
+        total_chars=len(context),
+        sources=sources,
+        preview=context[:200] + "..." if len(context) > 200 else context
+    )
+
+    # Generation stage (timing will be updated by caller)
+    generation_stage = GenerationStage(
+        model="models/gemini-2.5-flash",
+        timing_ms=0,
+        tokens_estimate=None
+    )
+
+    # Build pipeline trace
+    total_time_ms = int((time.time() - total_start) * 1000)
+    pipeline_trace = PipelineTrace(
+        retrieval=retrieval_stage,
+        context=context_stage,
+        generation=generation_stage,
+        total_time_ms=total_time_ms
+    )
+
+    return context, sources, pipeline_trace
 
 
 def get_full_context() -> str:

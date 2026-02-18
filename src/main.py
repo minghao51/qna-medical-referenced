@@ -1,12 +1,21 @@
 import logging
-from typing import Optional
+import time
+from typing import Optional, Union
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from src.llm import get_client
 from src.middleware import APIKeyMiddleware, RateLimitMiddleware, RequestIDMiddleware
-from src.rag import initialize_vector_store, retrieve_context
+from src.models import (
+    ChatResponseWithPipeline,
+    ContextStage,
+    GenerationStage,
+    PipelineTrace,
+    RetrievedDocument,
+    RetrievalStage,
+)
+from src.rag import initialize_vector_store, retrieve_context, retrieve_context_with_trace
 from src.storage import chat_store
 
 logging.basicConfig(level=logging.INFO)
@@ -55,29 +64,65 @@ def health_check():
     return {"status": "healthy"}
 
 
-@app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
+@app.post("/chat", response_model=Union[ChatResponse, ChatResponseWithPipeline])
+def chat(
+    request: ChatRequest,
+    include_pipeline: bool = Query(False, description="Include pipeline trace in response")
+):
     try:
         session_id = request.session_id or "default"
         history = chat_store.get_history(session_id)
-        
-        context, sources = retrieve_context(request.message, top_k=5)
-        
-        history_context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
-        full_context = f"{history_context}\n\nContext: {context}" if history_context else context
 
-        response = llm_client.generate(
-            prompt=request.message,
-            context=full_context
-        )
+        # Check if pipeline tracing is requested
+        if include_pipeline:
+            import time
+            chat_start = time.time()
 
-        chat_store.save_message(session_id, "user", request.message)
-        chat_store.save_message(session_id, "assistant", response)
+            # Use enhanced retrieval with trace
+            context, sources, pipeline_trace = retrieve_context_with_trace(request.message, top_k=5)
 
-        return ChatResponse(
-            response=response,
-            sources=sources
-        )
+            history_context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
+            full_context = f"{history_context}\n\nContext: {context}" if history_context else context
+
+            # Generate response and track timing
+            gen_start = time.time()
+            response = llm_client.generate(
+                prompt=request.message,
+                context=full_context
+            )
+            gen_timing_ms = int((time.time() - gen_start) * 1000)
+
+            # Update generation stage in pipeline trace
+            pipeline_trace.generation.timing_ms = gen_timing_ms
+            pipeline_trace.total_time_ms = int((time.time() - chat_start) * 1000)
+
+            chat_store.save_message(session_id, "user", request.message)
+            chat_store.save_message(session_id, "assistant", response)
+
+            return ChatResponseWithPipeline(
+                response=response,
+                sources=sources,
+                pipeline=pipeline_trace
+            )
+        else:
+            # Use normal retrieval (fast path)
+            context, sources = retrieve_context(request.message, top_k=5)
+
+            history_context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
+            full_context = f"{history_context}\n\nContext: {context}" if history_context else context
+
+            response = llm_client.generate(
+                prompt=request.message,
+                context=full_context
+            )
+
+            chat_store.save_message(session_id, "user", request.message)
+            chat_store.save_message(session_id, "assistant", response)
+
+            return ChatResponse(
+                response=response,
+                sources=sources
+            )
     except Exception as e:
         logger.error(f"Chat error: {type(e).__name__}: {str(e)}")
         raise HTTPException(status_code=500, detail="An error occurred processing your request")

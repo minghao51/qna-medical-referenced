@@ -4,6 +4,7 @@ import logging
 import math
 import os
 import re
+import time
 from pathlib import Path
 from typing import List, Dict, Set
 
@@ -271,6 +272,102 @@ class VectorStore:
         magnitude_a = sum(x * x for x in a) ** 0.5
         magnitude_b = sum(x * x for x in b) ** 0.5
         return dot_product / (magnitude_a * magnitude_b) if magnitude_a * magnitude_b > 0 else 0
+
+    def similarity_search_with_trace(self, query: str, top_k: int = 5, hybrid: bool = True) -> tuple[List[dict], dict]:
+        """
+        Perform similarity search and return results with detailed trace information.
+
+        Returns:
+            tuple: (results, trace_info)
+                - results: List of retrieved documents with scores
+                - trace_info: Dictionary with timing, individual scores, and metadata
+        """
+        start_time = time.time()
+        trace_info = {
+            "query": query,
+            "top_k": top_k,
+            "score_weights": {
+                "semantic": self.semantic_weight,
+                "keyword": self.keyword_weight,
+                "source": self.boost_weight
+            }
+        }
+
+        if not self.documents["contents"]:
+            trace_info["timing_ms"] = int((time.time() - start_time) * 1000)
+            return [], trace_info
+
+        self._rebuild_index_if_needed()
+
+        # Keyword search
+        keyword_start = time.time()
+        keyword_scores = self._keyword_score(query) if hybrid else {}
+        trace_info["keyword_timing_ms"] = int((time.time() - keyword_start) * 1000)
+
+        # Semantic search
+        semantic_start = time.time()
+        try:
+            query_embedding = self._embed([query])[0]
+            use_semantic = True
+            trace_info["semantic_timing_ms"] = int((time.time() - semantic_start) * 1000)
+        except Exception as e:
+            logger.warning(f"Embedding failed, falling back to keyword-only search: {e}")
+            use_semantic = False
+            trace_info["semantic_timing_ms"] = 0
+
+        max_kw_score = max(keyword_scores.values()) if keyword_scores else 1
+        source_boost = {"pdf": 1.0, "csv": 0.5}
+
+        # Calculate scores for all documents
+        all_scores = []
+        for i, emb in enumerate(self.documents["embeddings"]):
+            if use_semantic:
+                semantic_score = self._cosine_similarity(query_embedding, emb)
+            else:
+                semantic_score = 0.0
+
+            source = self.documents["metadatas"][i].get("source", "")
+            boost = source_boost.get("pdf", 1.0) if ".pdf" in source else source_boost.get("csv", 0.5)
+
+            if hybrid and keyword_scores:
+                kw_score = keyword_scores.get(i, 0) / max_kw_score if max_kw_score > 0 else 0
+                if use_semantic:
+                    combined = self.semantic_weight * semantic_score + self.keyword_weight * kw_score + self.boost_weight * boost
+                else:
+                    combined = (1 - self.boost_weight) * kw_score + self.boost_weight * boost
+            else:
+                combined = semantic_score * boost
+
+            all_scores.append({
+                "idx": i,
+                "semantic_score": semantic_score,
+                "keyword_score": keyword_scores.get(i, 0) / max_kw_score if max_kw_score > 0 else 0,
+                "source_boost": boost,
+                "combined_score": combined
+            })
+
+        # Sort by combined score and get top_k
+        all_scores.sort(key=lambda x: x["combined_score"], reverse=True)
+        top_scores = all_scores[:top_k]
+
+        # Build results with individual scores
+        results = []
+        for rank, score_info in enumerate(top_scores, start=1):
+            idx = score_info["idx"]
+            results.append({
+                "id": self.documents["ids"][idx],
+                "content": self.documents["contents"][idx],
+                "source": self.documents["metadatas"][idx].get("source", "unknown"),
+                "page": self.documents["metadatas"][idx].get("page"),
+                "semantic_score": round(score_info["semantic_score"], 4),
+                "keyword_score": round(score_info["keyword_score"], 4),
+                "source_boost": round(score_info["source_boost"], 4),
+                "combined_score": round(score_info["combined_score"], 4),
+                "rank": rank
+            })
+
+        trace_info["timing_ms"] = int((time.time() - start_time) * 1000)
+        return results, trace_info
 
     def clear(self):
         self.documents = {"ids": [], "contents": [], "embeddings": [], "metadatas": [], "content_hashes": []}

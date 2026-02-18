@@ -1,17 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-
-	interface Message {
-		role: 'user' | 'assistant';
-		content: string;
-		sources?: string[];
-	}
+	import type { Message } from '$lib/types';
+	import PipelinePanel from '$lib/components/PipelinePanel.svelte';
 
 	let messages: Message[] = $state([]);
 	let input = $state('');
 	let loading = $state(false);
 	let sessionId = $state('');
 	let error = $state('');
+	let showPipeline = $state(false);
+	let includePipelineForSession = $state(false);
 
 	const API_URL = 'http://localhost:8000';
 
@@ -38,7 +36,7 @@
 
 	async function sendMessage() {
 		if (!input.trim() || loading) return;
-		
+
 		const userMessage = input.trim();
 		input = '';
 		loading = true;
@@ -47,7 +45,13 @@
 		messages = [...messages, { role: 'user', content: userMessage }];
 
 		try {
-			const res = await fetch(`${API_URL}/chat`, {
+			// Build URL with pipeline parameter if enabled
+			const url = new URL(`${API_URL}/chat`);
+			if (includePipelineForSession) {
+				url.searchParams.append('include_pipeline', 'true');
+			}
+
+			const res = await fetch(url.toString(), {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -64,8 +68,14 @@
 			messages = [...messages, {
 				role: 'assistant',
 				content: data.response,
-				sources: data.sources
+				sources: data.sources,
+				pipeline: data.pipeline
 			}];
+
+			// Auto-open pipeline panel if data is available
+			if (data.pipeline && includePipelineForSession) {
+				showPipeline = true;
+			}
 		} catch (e) {
 			error = 'Failed to send message. Make sure the API is running.';
 			console.error(e);
@@ -83,6 +93,7 @@
 
 	function clearChat() {
 		messages = [];
+		showPipeline = false;
 		fetch(`${API_URL}/history/${sessionId}`, { method: 'DELETE' });
 	}
 
@@ -90,11 +101,21 @@
 		sessionId = generateSessionId();
 		loadHistory();
 	});
+
+	function hasPipeline(message: Message): boolean {
+		return message.role === 'assistant' && message.pipeline !== undefined;
+	}
 </script>
 
 <div class="chat-container">
 	<header>
-		<h1>Health Screening Q&A</h1>
+		<div class="header-left">
+			<h1>Health Screening Q&A</h1>
+			<label class="pipeline-toggle">
+				<input type="checkbox" bind:checked={includePipelineForSession} />
+				<span>Show pipeline details</span>
+			</label>
+		</div>
 		<button onclick={clearChat}>New Chat</button>
 	</header>
 
@@ -104,8 +125,8 @@
 				<p>Ask me anything about your health screening results.</p>
 			</div>
 		{/if}
-		
-		{#each messages as msg}
+
+		{#each messages as msg, index}
 			<div class="message {msg.role}">
 				<div class="content">{msg.content}</div>
 				{#if msg.sources && msg.sources.length > 0}
@@ -116,15 +137,24 @@
 						{/each}
 					</div>
 				{/if}
+				{#if hasPipeline(msg)}
+					<button
+						class="pipeline-btn"
+						onclick={() => (showPipeline = !showPipeline)}
+						class:active={showPipeline}
+					>
+						{showPipeline ? 'Hide' : 'Show'} Pipeline Details
+					</button>
+				{/if}
 			</div>
 		{/each}
-		
+
 		{#if loading}
 			<div class="message assistant loading">
 				<div class="content">Thinking...</div>
 			</div>
 		{/if}
-		
+
 		{#if error}
 			<div class="error">{error}</div>
 		{/if}
@@ -142,6 +172,13 @@
 			Send
 		</button>
 	</div>
+
+	{#if showPipeline && messages.length > 0}
+		{@const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && m.pipeline)}
+		{#if lastAssistantMsg?.pipeline}
+			<PipelinePanel pipeline={lastAssistantMsg.pipeline} isOpen={showPipeline} />
+		{/if}
+	{/if}
 </div>
 
 <style>
@@ -160,11 +197,34 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: 1rem;
+		flex-wrap: wrap;
+		gap: 1rem;
+	}
+
+	.header-left {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
 	}
 
 	header h1 {
 		font-size: 1.5rem;
 		margin: 0;
+	}
+
+	.pipeline-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.9rem;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.pipeline-toggle input[type='checkbox'] {
+		cursor: pointer;
+		width: 16px;
+		height: 16px;
 	}
 
 	header button {
@@ -230,6 +290,30 @@
 		border-radius: 3px;
 		margin: 0.2rem 0.2rem 0 0;
 		font-size: 0.75rem;
+	}
+
+	.pipeline-btn {
+		margin-top: 0.75rem;
+		padding: 0.5rem 1rem;
+		background: #e3f2fd;
+		color: #1976d2;
+		border: 1px solid #2196f3;
+		border-radius: 4px;
+		cursor: pointer;
+		font-size: 0.85rem;
+		font-weight: 500;
+		transition: all 0.2s ease;
+	}
+
+	.pipeline-btn:hover {
+		background: #bbdefb;
+		border-color: #1976d2;
+	}
+
+	.pipeline-btn.active {
+		background: #1976d2;
+		color: white;
+		border-color: #1565c0;
 	}
 
 	.error {
