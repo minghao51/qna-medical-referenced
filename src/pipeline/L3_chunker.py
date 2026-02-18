@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+"""
+L3: Text Chunker - Split documents into smaller chunks.
+"""
+
 from typing import List
 
 

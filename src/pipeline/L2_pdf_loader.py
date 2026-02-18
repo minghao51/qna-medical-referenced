@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+"""
+L2: PDF Loader - Load PDF documents from data/raw directory.
+"""
+
 from pathlib import Path
 from typing import List
 

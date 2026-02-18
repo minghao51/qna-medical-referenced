@@ -15,7 +15,7 @@ from src.models import (
     RetrievedDocument,
     RetrievalStage,
 )
-from src.rag import initialize_vector_store, retrieve_context, retrieve_context_with_trace
+from src.pipeline import initialize_vector_store, retrieve_context, retrieve_context_with_trace
 from src.storage import chat_store
 
 logging.basicConfig(level=logging.INFO)

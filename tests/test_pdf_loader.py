@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from src.ingest import PDFLoader, get_documents
+from src.pipeline.L2_pdf_loader import PDFLoader, get_documents
 
 
 class TestPDFLoader:

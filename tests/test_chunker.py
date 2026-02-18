@@ -1,5 +1,5 @@
 import pytest
-from src.processors.chunker import TextChunker, chunk_documents
+from src.pipeline.L3_chunker import TextChunker, chunk_documents
 
 
 class TestTextChunker:

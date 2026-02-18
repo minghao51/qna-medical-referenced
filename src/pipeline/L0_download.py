@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Script to download and extract relevant medical content from Singapore government health websites.
+L0: Download medical content from Singapore government health websites.
 Saves content to data/raw directory.
+Skips download if target file already exists.
 """
 
 import asyncio
@@ -18,7 +19,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_file_path(url: str, extension: str = "html") -> Path:
-    """Generate a filename from URL and check if it exists."""
+    """Generate a filename from URL."""
     url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
     safe_name = re.sub(r'[^\w\-]', '_', url.split('/')[-1][:50])
     if not safe_name or safe_name.endswith('_'):
@@ -88,14 +89,14 @@ async def extract_ace_clinical_guidelines() -> list[str]:
 
     downloaded = []
     for url, name in guidelines:
-        file_path = DATA_DIR / f"{name}.html"
-        if file_path.exists():
+        if file_exists(url, "html"):
             print(f"Skipping (already exists): {name}")
             continue
 
         print(f"Downloading: {name}")
         content = await download_url(url)
         if content:
+            file_path = get_file_path(url, "html")
             file_path.write_text(content, encoding='utf-8')
             downloaded.append(str(file_path))
             print(f"  Saved: {file_path.name}")
@@ -114,14 +115,14 @@ async def extract_healthhub_content() -> list[str]:
 
     downloaded = []
     for url, name in pages:
-        file_path = DATA_DIR / f"{name}.html"
-        if file_path.exists():
+        if file_exists(url, "html"):
             print(f"Skipping (already exists): {name}")
             continue
 
         print(f"Downloading: {name}")
         content = await download_url(url)
         if content:
+            file_path = get_file_path(url, "html")
             file_path.write_text(content, encoding='utf-8')
             downloaded.append(str(file_path))
             print(f"  Saved: {file_path.name}")
@@ -136,14 +137,14 @@ async def extract_hpp_guidelines() -> list[str]:
 
     downloaded = []
     for url, name in pages:
-        file_path = DATA_DIR / f"{name}.html"
-        if file_path.exists():
+        if file_exists(url, "html"):
             print(f"Skipping (already exists): {name}")
             continue
 
         print(f"Downloading: {name}")
         content = await download_url(url)
         if content:
+            file_path = get_file_path(url, "html")
             file_path.write_text(content, encoding='utf-8')
             downloaded.append(str(file_path))
             print(f"  Saved: {file_path.name}")
@@ -158,14 +159,14 @@ async def extract_moh_content() -> list[str]:
 
     downloaded = []
     for url, name in pages:
-        file_path = DATA_DIR / f"{name}.html"
-        if file_path.exists():
+        if file_exists(url, "html"):
             print(f"Skipping (already exists): {name}")
             continue
 
         print(f"Downloading: {name}")
         content = await download_url(url)
         if content:
+            file_path = get_file_path(url, "html")
             file_path.write_text(content, encoding='utf-8')
             downloaded.append(str(file_path))
             print(f"  Saved: {file_path.name}")
@@ -182,7 +183,7 @@ def list_downloaded_files() -> list[str]:
 async def main():
     """Main function to download all content."""
     print("=" * 60)
-    print("Medical Content Downloader - Singapore Health Websites")
+    print("L0: Medical Content Downloader")
     print("=" * 60)
     print(f"\nData directory: {DATA_DIR.absolute()}")
     print(f"Existing files: {len(list_downloaded_files())}")

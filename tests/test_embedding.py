@@ -2,7 +2,7 @@ import json
 import time
 import pytest
 from pathlib import Path
-from src.vectorstore.store import VectorStore
+from src.pipeline.L5_vector_store import VectorStore
 import os
 
 
