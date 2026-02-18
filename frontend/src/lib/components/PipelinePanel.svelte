@@ -90,7 +90,7 @@
 									</div>
 								</div>
 								<details class="doc-content">
-									summary>View Content</summary>
+									<summary>View Content</summary>
 									<pre>{doc.content}</pre>
 								</details>
 							</div>

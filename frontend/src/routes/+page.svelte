@@ -168,7 +168,7 @@
 			rows="2"
 			disabled={loading}
 		></textarea>
-		<button onclick={sendMessage} disabled={loading || !input.trim()}>
+		<button onclick={sendMessage} disabled={loading}>
 			Send
 		</button>
 	</div>
