@@ -106,7 +106,7 @@ def run_pipeline(
     step_count += 1
 
     print(f"[{step_count + 1}/{total_steps}] L6: Initializing RAG pipeline...")
-    initialize_vector_store(rebuild=force_rebuild)
+    initialize_vector_store(rebuild=False)
     print()
     step_count += 1
 
