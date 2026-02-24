@@ -8,6 +8,7 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
+RUN uv run python scripts/download_nltk_data.py
 
 COPY src/ ./src/
 COPY data/ ./data/
