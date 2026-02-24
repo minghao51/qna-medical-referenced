@@ -1,35 +1,82 @@
 import asyncio
-from collections import defaultdict
+import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
+from contextlib import contextmanager
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.middleware.auth import API_KEYS
+from src.middleware.auth import get_api_keys
+
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True)
+RATE_LIMIT_DB = DATA_DIR / "rate_limits.db"
+
+
+def _init_db():
+    with get_connection() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS rate_limits (
+                key TEXT PRIMARY KEY,
+                requests TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+
+
+@contextmanager
+def get_connection():
+    conn = sqlite3.connect(RATE_LIMIT_DB)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 class RateLimiter:
     def __init__(self, requests_per_minute: int = 60):
         self.requests_per_minute = requests_per_minute
-        self.requests: dict[str, list[datetime]] = defaultdict(list)
         self.lock = asyncio.Lock()
+        _init_db()
 
     async def check_rate_limit(self, key: str) -> bool:
         async with self.lock:
             now = datetime.now()
             cutoff = now - timedelta(minutes=1)
 
-            self.requests[key] = [
-                req_time for req_time in self.requests[key]
-                if req_time > cutoff
-            ]
+            with get_connection() as conn:
+                row = conn.execute(
+                    "SELECT requests FROM rate_limits WHERE key = ?", (key,)
+                ).fetchone()
 
-            if len(self.requests[key]) >= self.requests_per_minute:
-                return False
+                request_times = []
+                if row:
+                    try:
+                        timestamps = row["requests"].split(",")
+                        request_times = [
+                            datetime.fromisoformat(ts) for ts in timestamps if ts
+                        ]
+                    except (ValueError, AttributeError):
+                        request_times = []
 
-            self.requests[key].append(now)
-            return True
+                request_times = [t for t in request_times if t > cutoff]
+
+                if len(request_times) >= self.requests_per_minute:
+                    return False
+
+                request_times.append(now)
+
+                timestamps_str = ",".join(t.isoformat() for t in request_times)
+                conn.execute(
+                    "INSERT OR REPLACE INTO rate_limits (key, requests) VALUES (?, ?)",
+                    (key, timestamps_str)
+                )
+                conn.commit()
+
+                return True
 
 
 rate_limiter = RateLimiter(requests_per_minute=60)
@@ -42,7 +89,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         client_ip = request.client.host if request.client else "unknown"
 
-        if API_KEYS:
+        api_keys = get_api_keys()
+        if api_keys:
             api_key = request.headers.get("X-API-Key")
             rate_key = api_key if api_key else client_ip
         else:

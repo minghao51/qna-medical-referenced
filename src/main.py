@@ -1,57 +1,43 @@
 import logging
-import time
-from typing import Optional, Union
+from contextlib import asynccontextmanager
+from typing import Union
 
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
 
+from src.api.schemas import ChatRequest, ChatResponse
 from src.llm import get_client
 from src.middleware import APIKeyMiddleware, RateLimitMiddleware, RequestIDMiddleware
-from src.models import (
-    ChatResponseWithPipeline,
-    ContextStage,
-    GenerationStage,
-    PipelineTrace,
-    RetrievedDocument,
-    RetrievalStage,
-)
-from src.pipeline import initialize_vector_store, retrieve_context, retrieve_context_with_trace
+from src.models import ChatResponseWithPipeline
+from src.pipeline import initialize_vector_store
+from src.services.chat_service import process_chat_message
 from src.storage import chat_store
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="Health Screening Interpreter Chatbot",
-    description="An intelligent chatbot to help understand health screening results",
-    version="0.1.0"
-)
 
-app.add_middleware(RequestIDMiddleware)
-app.add_middleware(RateLimitMiddleware)
-app.add_middleware(APIKeyMiddleware)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.llm_client = get_client()
+    initialize_vector_store()
+    yield
 
 
-class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=2000)
-    session_id: Optional[str] = "default"
-    user_context: Optional[str] = None
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Health Screening Interpreter Chatbot",
+        description="An intelligent chatbot to help understand health screening results",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
 
-    @field_validator('message', mode='before')
-    @classmethod
-    def sanitize_message(cls, v):
-        if isinstance(v, str):
-            return v.strip()
-        return v
-
-
-class ChatResponse(BaseModel):
-    response: str
-    sources: list[str]
+    app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(APIKeyMiddleware)
+    return app
 
 
-llm_client = get_client()
-initialize_vector_store()
+app = create_app()
 
 
 @app.get("/")
@@ -70,59 +56,26 @@ def chat(
     include_pipeline: bool = Query(False, description="Include pipeline trace in response")
 ):
     try:
-        session_id = request.session_id or "default"
-        history = chat_store.get_history(session_id)
+        llm_client = getattr(app.state, "llm_client", None) or get_client()
+        result = process_chat_message(
+            llm_client=llm_client,
+            message=request.message,
+            session_id=request.session_id,
+            include_pipeline=include_pipeline,
+            top_k=5,
+        )
 
-        # Check if pipeline tracing is requested
         if include_pipeline:
-            import time
-            chat_start = time.time()
-
-            # Use enhanced retrieval with trace
-            context, sources, pipeline_trace = retrieve_context_with_trace(request.message, top_k=5)
-
-            history_context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
-            full_context = f"{history_context}\n\nContext: {context}" if history_context else context
-
-            # Generate response and track timing
-            gen_start = time.time()
-            response = llm_client.generate(
-                prompt=request.message,
-                context=full_context
-            )
-            gen_timing_ms = int((time.time() - gen_start) * 1000)
-
-            # Update generation stage in pipeline trace
-            pipeline_trace.generation.timing_ms = gen_timing_ms
-            pipeline_trace.total_time_ms = int((time.time() - chat_start) * 1000)
-
-            chat_store.save_message(session_id, "user", request.message)
-            chat_store.save_message(session_id, "assistant", response)
-
             return ChatResponseWithPipeline(
-                response=response,
-                sources=sources,
-                pipeline=pipeline_trace
-            )
-        else:
-            # Use normal retrieval (fast path)
-            context, sources = retrieve_context(request.message, top_k=5)
-
-            history_context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
-            full_context = f"{history_context}\n\nContext: {context}" if history_context else context
-
-            response = llm_client.generate(
-                prompt=request.message,
-                context=full_context
+                response=result["response"],
+                sources=result["sources"],
+                pipeline=result["pipeline"],
             )
 
-            chat_store.save_message(session_id, "user", request.message)
-            chat_store.save_message(session_id, "assistant", response)
-
-            return ChatResponse(
-                response=response,
-                sources=sources
-            )
+        return ChatResponse(
+            response=result["response"],
+            sources=result["sources"]
+        )
     except Exception as e:
         logger.error(f"Chat error: {type(e).__name__}: {str(e)}")
         raise HTTPException(status_code=500, detail="An error occurred processing your request")
