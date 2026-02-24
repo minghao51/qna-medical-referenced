@@ -2,78 +2,103 @@
 
 ## Data Flow Overview
 
-### Complete Pipeline (RAG + Keyword Search)
+### Complete Pipeline (L0-L6 + Query)
 
 ```mermaid
 flowchart TD
-    subgraph Input
-        PDF[PDF Files] --> Loader[PDFLoader]
-        CSV[CSV Reference Data] --> RefLoader[ReferenceDataLoader]
+    subgraph L0_Download["L0: Download"]
+        SGov["Singapore Gov Health Sites"] --> DL["download_url()"]
+        DL -->|"HTML"| Raw1["data/raw/*.html"]
     end
 
-    subgraph Extraction
-        Loader -->|"per-page text"| Extract[Extract Text]
-        Extract --> Pages[Pages Array]
+    subgraph L1_Convert["L1: HTML→Markdown"]
+        Raw1 --> HC["html_to_md()"]
+        HC -->|"Markdown"| Raw2["data/raw/*.md"]
     end
 
-    subgraph Chunking
-        Pages --> Chunker[TextChunker]
-        Chunker -->|800 chars, 150 overlap| Chunks[Text Chunks]
+    subgraph L2_Load["L2: Load PDFs"]
+        PDF["PDF Files"] --> PL["PDFLoader"]
+        PL -->|"per-page text"| Docs["Documents"]
     end
 
-    subgraph Indexing
-        Chunks --> AddDocs[add_documents]
+    subgraph L3_Chunk["L3: Chunk"]
+        Docs --> Chunker["TextChunker"]
+        Raw2 --> Chunker
+        Chunker -->|800 chars, 150 overlap| Chunks["Text Chunks"]
+    end
+
+    subgraph L4_Reference["L4: Reference Data"]
+        CSV["CSV Files"] --> RefLoad["ReferenceDataLoader"]
+        RefLoad -->|"reference docs"| RefDocs["Reference Docs"]
+    end
+
+    subgraph L5_Index["L5: Vector Store"]
+        Chunks --> AddDocs["add_documents"]
+        RefDocs --> AddDocs
         
         subgraph Embedding
-            AddDocs -->|"content"| Embed[_embed]
-            Embed -->|"3072-dim vector"| VecStore[Vector Store JSON]
+            AddDocs -->|"content"| Embed["Gemini Embeddings"]
+            Embed -->|"3072-dim"| VecStore["Vector Store JSON"]
         end
         
         subgraph KeywordIndex
-            AddDocs -->|"content"| Tokenize[_tokenize]
-            Tokenize -->|"tokenize"| Preprocess[Stop Words + Stemming]
-            Preprocess -->|"tokens"| TFIDF[TF-IDF Calculation]
-            TFIDF -->|"index"| KwIndex[Keyword Index]
+            AddDocs -->|"content"| Tokenize["Tokenize"]
+            Tokenize -->|"tokens"| TFIDF["TF-IDF"]
+            TFIDF -->|"index"| KwIndex["Keyword Index"]
         end
-        
-        KwIndex -.->|"rebuild on query"| Query[Query]
     end
 
-    subgraph Retrieval
-        Query -->|"query string"| Search[similarity_search]
-        
-        subgraph HybridScoring
-            Search -->|"original content"| Semantic[Semantic Score 60%]
-            Search -->|"preprocessed"| Keyword[Keyword Score 20%]
-            Search -->|"metadata"| Boost[Source Boost 20%]
-            Semantic --> Combine[Combined Score]
-            Keyword --> Combine
-            Boost --> Combine
-        end
-        
-        Combine --> Rank[Sort by Score]
-        Rank --> TopK[Top K Results]
+    subgraph L6_Init["L6: RAG Init"]
+        VecStore --> Init["initialize_vector_store"]
+        KwIndex --> Init
     end
 
-    subgraph LLM_Context
-        TopK -->|"original content"| Context[Build Context]
-        Context --> LLM[LLM for Answer Generation]
+    subgraph Query["Query Time"]
+        QueryStr["User Query"] --> Search["similarity_search"]
+        Init --> Search
+        Search --> Hybrid["Hybrid Scoring"]
+        Search --> LLM["LLM"]
+        Hybrid --> LLM
+        LLM --> Response["Response"]
     end
 
-    style Chunker fill:#f9f,stroke:#333
-    style Tokenize fill:#ff9,stroke:#333
-    style Preprocess fill:#ff9,stroke:#333
-    style KwIndex fill:#9ff,stroke:#333
-    style Semantic fill:#9f9,stroke:#333
-    style Keyword fill:#9f9,stroke:#333
-    style Context fill:#f99,stroke:#333
+    style L0_Download fill:#9cf,stroke:#333
+    style L1_Convert fill:#9cf,stroke:#333
+    style L2_Load fill:#f9f,stroke:#333
+    style L3_Chunk fill:#f9f,stroke:#333
+    style L4_Reference fill:#ff9,stroke:#333
+    style L5_Index fill:#9ff,stroke:#333
+    style L6_Init fill:#9f9,stroke:#333
+    style Query fill:#f99,stroke:#333
 ```
 
 ---
 
 ## Processing Stages Detail
 
-### 1. PDF Extraction (`src/ingest/__init__.py`)
+### L0: Web Content Download (`src/pipeline/L0_download.py`)
+
+| Source | Domain | Pages | Content Type |
+|--------|--------|-------|--------------|
+| ACE Clinical Guidelines | ace-hta.gov.sg | 11 | Clinical practice guidelines |
+| HealthHub | healthhub.sg | 5 | Public health information |
+| HPP Guidelines | hpp.moh.gov.sg | 1 | Guidelines index |
+| MOH Singapore | moh.gov.sg | 1 | Ministry portal |
+
+| Step | What Happens | Output |
+|------|--------------|--------|
+| HTTP Request | `httpx.AsyncClient` fetches URL | HTML response |
+| Error Handling | Skip on failure, log error | None |
+| File Save | Write to `data/raw/` with MD5-based filename | `.html` file |
+
+**Key Functions:**
+- `download_url(url)`: Async HTTP GET with follow redirects
+- `get_file_path(url)`: Generate unique filename from URL hash
+- `file_exists(url)`: Check if already downloaded (idempotent)
+
+---
+
+### L1: HTML to Markdown (`src/pipeline/L1_html_to_md.py`)
 
 | Step | What Happens | Output |
 |------|--------------|--------|
@@ -95,7 +120,29 @@ flowchart TD
 
 ---
 
-### 2. Text Chunking (`src/processors/chunker.py`)
+### L2: PDF Extraction (`src/pipeline/L2_pdf_loader.py`)
+
+| Step | What Happens | Output |
+|------|--------------|--------|
+| PDF Loading | `pypdf.PdfReader` reads each PDF | `PdfReader` object |
+| Page Extraction | `.extract_text()` per page | List of strings |
+| Metadata | Page numbers attached | `{"page": 1, "content": "..."}` |
+
+```python
+# Output structure
+{
+    "id": "lipid_management",
+    "source": "Lipid management.pdf",
+    "pages": [
+        {"page": 1, "content": "Hyperlipidaemia is characterized..."},
+        {"page": 2, "content": "LDL cholesterol target..."}
+    ]
+}
+```
+
+---
+
+### L3: Text Chunking (`src/pipeline/L3_chunker.py`)
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
@@ -121,7 +168,7 @@ flowchart TD
 
 ---
 
-### 3. Keyword Index Processing (`src/vectorstore/store.py`)
+### L4: Keyword Index Processing (`src/pipeline/L5_vector_store.py`)
 
 #### Tokenization Flow
 
@@ -184,7 +231,7 @@ objective, conclusion
 
 ---
 
-### 4. TF-IDF Scoring
+### L5: TF-IDF Scoring
 
 #### Formula
 
@@ -209,7 +256,7 @@ IDF = log((N + 1) / (df + 1)) + 1  (smoothed)
 
 ---
 
-### 5. Hybrid Search Weights
+### L6: Hybrid Search Weights
 
 | Component | Weight | Description |
 |-----------|--------|-------------|
@@ -334,21 +381,46 @@ Chunk 2: "over the lazy dog" (25-65)  ← 15 char overlap
 
 ```
 src/
-├── ingest/
-│   └── __init__.py          # PDFLoader - extract per page
-├── processors/
-│   └── chunker.py           # TextChunker - 800 char chunks
+├── pipeline/
+│   ├── L0_download.py         # Web content download (HTML)
+│   ├── L1_html_to_md.py      # HTML to Markdown conversion
+│   ├── L2_pdf_loader.py      # PDF loading
+│   ├── L3_chunker.py         # Text chunking (800-char)
+│   ├── L4_reference_loader.py# CSV reference data
+│   ├── L5_vector_store.py    # Vector embeddings + TF-IDF
+│   ├── L6_rag_pipeline.py   # RAG initialization
+│   └── run_pipeline.py      # Run full L0-L6 pipeline
 ├── vectorstore/
-│   └── store.py             # VectorStore - TF-IDF + embeddings
-└── rag/
-    └── retriever.py         # initialize_vector_store, retrieve_context
+│   └── store.py              # Hybrid search implementation
+└── llm/
+    └── client.py             # Gemini LLM client
 
 data/
 ├── raw/
-│   ├── *.pdf               # Source PDFs
-│   └── LabQAR/*.csv        # Reference data
+│   ├── *.html                # Downloaded web content
+│   ├── *.md                  # Converted Markdown
+│   ├── *.pdf                # Source PDFs
+│   └── LabQAR/*.csv         # Reference data
 └── vectors/
     └── medical_docs.json    # Indexed chunks + embeddings
+```
+
+---
+
+## Running the Pipeline
+
+```bash
+# Run full pipeline (L0-L6)
+uv run python -m src.pipeline.run_pipeline
+
+# Skip L0 download (use existing HTML)
+uv run python -m src.pipeline.run_pipeline --skip-download
+
+# Force rebuild vector store
+uv run python -m src.pipeline.run_pipeline --force
+
+# Force re-convert HTML to Markdown
+uv run python -m src.pipeline.run_pipeline --force-html
 ```
 
 ---
@@ -356,6 +428,9 @@ data/
 ## Testing Commands
 
 ```bash
+# Run full pipeline (L0-L6)
+uv run python -m src.pipeline.run_pipeline
+
 # Run all tests
 uv run pytest tests/ -v
 
@@ -363,11 +438,11 @@ uv run pytest tests/ -v
 uv run pytest tests/test_keyword_index.py -v
 
 # Rebuild vector store
-uv run python -c "from src.rag.retriever import initialize_vector_store; initialize_vector_store(rebuild=True)"
+uv run python -c "from src.pipeline.L6_rag_pipeline import initialize_vector_store; initialize_vector_store(rebuild=True)"
 
 # Test retrieval
 uv run python -c "
-from src.rag.retriever import retrieve_context
+from src.pipeline.L6_rag_pipeline import retrieve_context
 result, sources = retrieve_context('LDL target')
 print(sources)
 "

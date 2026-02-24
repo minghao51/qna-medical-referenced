@@ -3,13 +3,17 @@
 ## Running Tests
 
 ```bash
+# Run full pipeline first (L0-L6)
+uv run python -m src.pipeline.run_pipeline
+
+# Run all tests
 uv run pytest tests/ -v
 ```
 
 ## Test Files
 
 ### test_chunker.py
-Tests for `TextChunker` in `src/processors/chunker.py`
+Tests for `TextChunker` in `src/pipeline/L3_chunker.py`
 
 | Test | What it Checks |
 |------|----------------|
@@ -28,7 +32,7 @@ Tests for `TextChunker` in `src/processors/chunker.py`
 | `test_boundary_priority` | Priority: `\n\n` → `\n` → `. ` |
 
 ### test_keyword_index.py
-Tests for TF-IDF keyword search in `src/vectorstore/store.py`
+Tests for TF-IDF keyword search in `src/pipeline/L5_vector_store.py`
 
 | Test | What it Checks |
 |------|----------------|
@@ -47,7 +51,7 @@ Tests for TF-IDF keyword search in `src/vectorstore/store.py`
 | `test_case_insensitive_query` | Query case handled |
 
 ### test_retrieval.py
-Tests for hybrid search in `src/vectorstore/store.py`
+Tests for hybrid search in `src/pipeline/L5_vector_store.py`
 
 | Test | What it Checks |
 |------|----------------|
@@ -66,7 +70,7 @@ Tests for hybrid search in `src/vectorstore/store.py`
 | `test_weight_parameterization` | Custom weights work |
 
 ### test_embedding.py
-Tests for Gemini embeddings in `src/vectorstore/store.py`
+Tests for Gemini embeddings in `src/pipeline/L5_vector_store.py`
 
 | Test | What it Checks |
 |------|----------------|
@@ -83,7 +87,7 @@ Tests for Gemini embeddings in `src/vectorstore/store.py`
 | `test_medical_term_embedding` | Medical terms work |
 
 ### test_pdf_loader.py
-Tests for PDF loading in `src/ingest/__init__.py`
+Tests for PDF loading in `src/pipeline/L2_pdf_loader.py`
 
 | Test | What it Checks |
 |------|----------------|

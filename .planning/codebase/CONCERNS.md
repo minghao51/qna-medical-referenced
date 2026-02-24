@@ -1,63 +1,120 @@
-# Codebase Concerns
+# CONCERNS.md - Tech Debt, Bugs, Security
 
-## Resolved Issues
-
-- ✅ Tests now exist (64 tests across 6 files)
-- ✅ Configuration class added (`src/config/settings.py`)
-- ✅ Middleware added (auth, rate limit, request ID)
-- ✅ Retry logic added to LLM client
-- ✅ No longer using langchain (removed unused dependencies)
-
-## Remaining Concerns
+## Tech Debt
 
 ### High Priority
 
-**Hardcoded API Key**
-- `.env` contains `GEMINI_API_KEY`
-- Must not be committed to version control
+1. **Vector Store Duplicate Code**
+   - Location: `src/pipeline/L5_vector_store.py`, `src/vectorstore/store.py`
+   - Issue: Two implementations of vector store exist
+   - Fix: Consolidate into single implementation
 
-**No Authentication**
-- API endpoints publicly accessible
-- `APIKeyMiddleware` validates `X-API-Key` header but not enforced
+2. **Missing Type Hints**
+   - Location: Several pipeline files
+   - Issue: Some functions lack complete type annotations
+   - Fix: Add full type hints
 
-**No Rate Limiting (fully implemented)**
-- `RateLimitMiddleware` exists but needs tuning
+3. **No Database for Chat History**
+   - Location: `src/storage/chat_store.py`
+   - Issue: JSON file not suitable for production with concurrent writes
+   - Fix: Consider SQLite or PostgreSQL for chat history
+
+4. **Hardcoded Weights**
+   - Location: `src/pipeline/L5_vector_store.py`
+   - Issue: Semantic (0.6), keyword (0.2), boost (0.2) hardcoded
+   - Fix: Move to configuration
 
 ### Medium Priority
 
-**Global Mutable State**
-- `_vector_store_initialized` flag in `src/rag/retriever.py`
-- `_vector_store` singleton in `src/vectorstore/store.py`
-- Not thread-safe
+5. **In-Memory Vector Store Singleton**
+   - Location: `src/pipeline/L5_vector_store.py:379`
+   - Issue: Global singleton may cause memory issues with large datasets
+   - Fix: Implement LRU cache or chunked loading
 
-**JSON File Storage**
-- Entire vector store loaded into memory
-- No concurrent access protection
+6. **No Cache for Gemini API**
+   - Location: `src/llm/client.py`
+   - Issue: Repeated queries re-hit API
+   - Fix: Add response caching layer
 
-**Duplicate PDF Loading**
-- `PDFLoader.load_all_pdfs()` in `src/ingest/__init__.py`
-- `ReferenceDataLoader.load_pdfs_text()` in `src/rag/retriever.py`
+7. **Error Messages Expose Details**
+   - Location: `src/main.py:127`
+   - Issue: Logs internal errors but generic message to client
+   - Note: Current behavior is secure but could improve logging
 
-### Low Priority
+8. **No Input Sanitization Beyond Basic**
+   - Location: `src/main.py:40-45`
+   - Issue: Only strips whitespace
+   - Fix: Add more robust input validation
 
-**Missing Type Hints**
-- Some functions lack complete type annotations
+## Known Bugs
 
-**No Graceful Degradation**
-- If Gemini API fails, entire app fails
-- No fallback to keyword-only search
+### Open Issues
 
-**LSP Warnings**
-- NLTK imports show as unresolved (runtime works)
-- Possible None reference in store.py:184
+1. **LSP Type Errors in Vector Store**
+   - Severity: Low
+   - Location: `src/pipeline/L5_vector_store.py:194,248`
+   - Description: `Object of type "None" cannot be used as iterable value`
+   - Impact: Type checking warnings, no runtime impact
+
+2. **Duplicate Embedding on Restart**
+   - Severity: Medium
+   - Location: `src/pipeline/L5_vector_store.py`
+   - Description: Re-adding documents on each server restart
+   - Impact: Index grows with duplicates
+
+3. **Rate Limiter Race Condition**
+   - Severity: Low
+   - Location: `src/middleware/rate_limit.py`
+   - Description: SQLite + asyncio.Lock may have edge cases
+   - Impact: Potential rate limit bypass under high concurrency
+
+## Security
+
+### Current Security Measures
+
+1. **API Key Authentication**
+   - Middleware validates `X-API-Key` header
+   - Configurable via `API_KEYS` env var
+   - Bypassed for health/docs endpoints
+
+2. **Rate Limiting**
+   - Per-API-key or per-IP limit: 60 req/min
+   - SQLite-backed tracking
+
+3. **Input Validation**
+   - Pydantic models for request validation
+   - Max message length: 2000 chars
+
+4. **No PII in Logs**
+   - Error messages sanitized
+   - No stack traces exposed
+
+### Potential Security Improvements
+
+1. **HTTPS Only**
+   - Not enforced in development
+   - Add in production deployment
+
+2. **API Key Rotation**
+   - Not implemented
+   - Add key rotation mechanism
+
+3. **Request Size Limits**
+   - Max 2000 chars enforced
+   - Consider adding file upload limits
 
 ## Performance Concerns
 
-- No embedding caching for repeated queries
-- Batch size of 10 for embeddings is small
-- Index rebuilt on every document add (marked dirty flag helps)
+1. **Large Embedding Files**
+   - Vector store is JSON-based
+   - Loads entire index into memory
+   - Consider chunked loading for scale
 
-## Documentation Gaps
+2. **No Connection Pooling**
+   - Gemini API client created per-request
+   - Consider singleton client
 
-- No API documentation beyond FastAPI auto-docs
-- Some functions lack docstrings
+3. **Synchronous PDF Loading**
+   - L2 PDF loader is synchronous
+   - Blocks event loop on large PDFs
+   - Consider async implementation

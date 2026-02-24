@@ -1,104 +1,95 @@
-# Code Conventions
+# CONVENTIONS.md - Code Style, Patterns
 
-## Language and Style
+## Python Conventions
 
-- **Language**: Python 3.13+
-- **Formatter/Linter**: ruff (configured in pyproject.toml)
+### Linting
+- **Tool**: Ruff
+- **Config**: `pyproject.toml`
+- **Target**: Python 3.13
+- **Line Length**: 100 characters
 
-## Code Style Patterns
+```toml
+[tool.ruff]
+line-length = 100
+target-version = "py313"
 
-### Naming Conventions
-
-| Type | Convention | Example |
-|------|------------|---------|
-| Classes | PascalCase | `GeminiClient`, `VectorStore` |
-| Functions | snake_case | `get_client`, `chunk_documents` |
-| Variables | snake_case | `pdf_docs`, `query_embedding` |
-| Constants | SCREAMING_SNAKE_CASE | `EMBEDDING_MODEL`, `VECTOR_DIR` |
-| Private methods | Leading underscore | `_load`, `_save`, `_embed` |
-
-### File Organization
-
-- **Modules**: Single-purpose files in `src/<module>/`
-- **Package exports**: `src/<module>/__init__.py`
-- **Imports**: Absolute from `src` (e.g., `from src.llm import get_client`)
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]  # Line too long
+```
 
 ### Type Hints
+- Use Python 3.13+ syntax (e.g., `list[str]` instead of `List[str]`)
+- Use `Optional[X]` instead of `X | None` for compatibility
 
-- Return types annotated on public functions
-- Parameters typed in API layer
-- Internal functions may be minimally typed
+### Naming Conventions
+- **Classes**: `PascalCase` (e.g., `GeminiClient`)
+- **Functions/variables**: `snake_case` (e.g., `get_client`)
+- **Constants**: `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`)
 
-## Patterns
+### Import Order (per Ruff)
+1. Standard library
+2. Third-party
+3. Local application
 
-### Singleton Pattern
+## Svelte/TypeScript Conventions
 
+### Component Structure
+- Use Svelte 5 runes (`$state`, `$derived`)
+- Script at top, styles at bottom
+- Props via `let { prop } = $props()`
+
+### File Naming
+- Components: `PascalCase.svelte`
+- Types: `kebab-case.ts`
+
+### TypeScript
+- Strict mode enabled
+- Use explicit types for function parameters
+
+## API Design
+
+### REST Endpoints
+- `GET` - Retrieve data
+- `POST` - Create new resources
+- `DELETE` - Remove resources
+
+### Request/Response
+- Use Pydantic models for validation
+- Include `Union` types for optional fields
+
+## Pipeline Conventions
+
+### Stage Naming
+- Prefix pipeline stages with `L{0-6}_` (e.g., `L0_download.py`)
+- Each stage has clear single responsibility
+
+### Document Structure
 ```python
-_vector_store = None
-
-def get_vector_store() -> VectorStore:
-    global _vector_store
-    if _vector_store is None:
-        _vector_store = VectorStore()
-    return _vector_store
+{
+    "id": "unique_document_id",
+    "source": "source_filename.pdf",
+    "page": 1,  # optional
+    "content": "document text..."
+}
 ```
 
-### Factory Pattern
-
-```python
-def get_client() -> GeminiClient:
-    return GeminiClient()
-```
-
-### Pydantic Models
-
-```python
-class ChatRequest(BaseModel):
-    message: str
-    user_context: Optional[str] = None
-
-class ChatResponse(BaseModel):
-    response: str
-    sources: list[str]
-```
-
-### Settings Class
-
-```python
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", ...)
-    
-    gemini_api_key: str = ""
-    model_name: str = "gemini-2.0-flash"
-```
+## Middleware Order
+1. RequestIDMiddleware2. RateLimit (tracing)
+Middleware (throttling)
+3. APIKeyMiddleware (authentication)
 
 ## Error Handling
+- Return HTTP 500 for unexpected errors
+- Log errors with `logger.error()`
+- Never expose internal error details to clients
 
-- API endpoints: Try-catch with HTTPException(500)
-- File operations: Check existence first
-- Global state: Initialization checks
-- LLM client: Retry with exponential backoff
-
-## Documentation
-
-- Minimal inline comments (as per CLAUDE.md)
-- No docstrings unless explicitly requested
-
-## Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| fastapi | Web framework |
-| pydantic | Data validation |
-| google-genai | Gemini API |
-| pypdf | PDF extraction |
-| python-dotenv | Environment config |
-| pydantic-settings | Settings |
-| nltk | NLP (stop words, stemming) |
-| pytest | Testing |
-| ruff | Linting |
+## Testing Conventions
+- Test files: `test_*.py` in `tests/`
+- Fixtures: `conftest.py`
+- E2E tests: `*.spec.ts` in `frontend/tests/`
 
 ## Configuration
-
-- Environment variables via `.env`
-- Settings class with defaults in `src/config/settings.py`
+- Use Pydantic Settings for environment variables
+- Load `.env` file via `python-dotenv`
+- Sensible defaults with optional overrides

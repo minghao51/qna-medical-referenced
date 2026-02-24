@@ -1,123 +1,128 @@
-# Testing
+# TESTING.md - Framework, Structure
 
-## Test Framework
+## Testing Overview
 
-- **pytest** (>= 8.0.0) - Testing framework
-- **pytest configuration** in `pyproject.toml`
+| Type | Framework | Location |
+|------|-----------|----------|
+| Backend Unit Tests | pytest | `tests/` |
+| Frontend E2E | Playwright | `frontend/tests/` |
 
-## Running Tests
+## Backend Testing (pytest)
 
-```bash
-uv run pytest tests/ -v
+### Configuration
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 ```
 
-## Test Files
+### Test Files
+- `tests/test_chunker.py` - Text chunking
+- `tests/test_embedding.py` - Embedding functionality
+- `tests/test_keyword_index.py` - TF-IDF index
+- `tests/test_pdf_loader.py` - PDF loading
+- `tests/test_retrieval.py` - RAG retrieval
+- `tests/test_settings.py` - Configuration
+- `tests/conftest.py` - Shared fixtures
 
-### test_chunker.py (14 tests)
-Tests for `TextChunker` in `src/processors/chunker.py`
+### Running Backend Tests
+```bash
+uv run pytest
+```
 
-| Test | What it Checks |
-|------|----------------|
-| test_chunk_text_basic | Chunks created with required fields |
-| test_chunk_size_respected | No chunk exceeds chunk_size |
-| test_overlap_working | Consecutive chunks share content |
-| test_no_mid_sentence_cut_with_period | Breaks at sentence boundaries |
-| test_paragraph_boundary_detection | Respects paragraph breaks |
-| test_metadata_page_attached | Page number preserved |
-| test_metadata_source_attached | Source filename preserved |
-| test_chunk_documents_from_pages | Handles page-structured docs |
-| test_chunk_documents_without_pages | Handles flat content |
-| test_empty_text_handling | Empty input returns empty list |
-| test_short_text_single_chunk | Short text as single chunk |
-| test_chunk_id_unique | Each chunk has unique ID |
-| test_boundary_priority | Priority: \n\n → \n → . |
-| test_chunk_documents_function | Module function works |
+### Example Test Structure
+```python
+# tests/test_chunker.py
+import pytest
+from src.pipeline.L3_chunker import chunk_documents
 
-### test_keyword_index.py (13 tests)
-Tests for TF-IDF keyword search in `src/vectorstore/store.py`
+def test_chunk_text():
+    documents = [{"id": "doc1", "source": "test.pdf", "content": "..."}]
+    chunks = chunk_documents(documents)
+    assert len(chunks) > 0
+```
 
-| Test | What it Checks |
-|------|----------------|
-| test_keyword_index_built | Index is created |
-| test_keyword_lowercase_indexed | Case-insensitive indexing |
-| test_stop_words_filtered | Stop words not indexed |
-| test_content_words_indexed | Medical terms indexed |
-| test_keyword_score_basic | TF-IDF scoring works |
-| test_keyword_score_no_match | Zero score for no match |
-| test_multiple_documents_indexing | Multiple docs indexed |
-| test_stemming_implemented | Stemming works |
-| test_punctuation_handling | Punctuation handled |
-| test_numbers_not_indexed | Pure numbers excluded |
-| test_tfidf_ranking | Higher frequency = higher score |
-| test_acronyms_preserved | Acronyms preserved |
-| test_case_insensitive_query | Query case handled |
+## Frontend Testing (Playwright)
 
-### test_retrieval.py (16 tests)
-Tests for hybrid search in `src/vectorstore/store.py`
+### Configuration
+```typescript
+// playwright.config.ts (implicit in docker-compose)
+- Browser: Chromium
+- Base URL: http://localhost:5173
+- Headless: true (CI mode)
+```
 
-| Test | What it Checks |
-|------|----------------|
-| test_similarity_search_returns_results | Returns non-empty list |
-| test_recall_at_5 | Relevant doc in top 5 |
-| test_mean_reciprocal_rank | MRR > 0 |
-| test_hybrid_vs_keyword_only | Hybrid mode works |
-| test_hybrid_vs_semantic_only | Semantic-only works |
-| test_acronym_query_favors_keyword | Acronyms work |
-| test_synonym_query_favors_semantic | Synonyms work |
-| test_top_k_parameter | top_k respected |
-| test_results_have_required_fields | Required fields present |
-| test_score_ordering | Results sorted descending |
-| test_empty_query_handling | Empty query handled |
-| test_empty_store_handling | Empty store returns [] |
-| test_weight_parameterization | Custom weights work |
+### Test Files
+- `frontend/tests/chat.spec.ts` - Chat functionality
+- `frontend/tests/pipeline.spec.ts` - Pipeline panel display
 
-### test_embedding.py (11 tests)
-Tests for Gemini embeddings in `src/vectorstore/store.py`
+### Running Frontend Tests
+```bash
+# Via docker-compose
+docker-compose up test
 
-| Test | What it Checks |
-|------|----------------|
-| test_embedding_dimension | 3072-dim output |
-| test_batch_embedding_dimension | Batch size handled |
-| test_embedding_consistency | Same text = same embedding |
-| test_different_texts_different_embeddings | Different text differs |
-| test_batch_latency_100_chunks | 100 chunks < 60s |
-| test_add_documents_stores_embeddings | Embeddings persisted |
-| test_embedding_batch_size | Batch parameter works |
-| test_empty_text_list | Empty input handled |
-| test_single_char_embedding | Single char works |
-| test_medical_term_embedding | Medical terms work |
+# Or locally
+cd frontend && bunx playwright test
+```
 
-### test_pdf_loader.py (8 tests)
-Tests for PDF loading in `src/ingest/__init__.py`
+### Example Test
+```typescript
+// frontend/tests/chat.spec.ts
+import { test, expect } from '@playwright/test';
 
-| Test | What it Checks |
-|------|----------------|
-| test_load_all_pdfs_returns_list | Returns list |
-| test_pdf_document_structure | Has id, source, pages |
-| test_page_content_extraction | Page has page# and content |
-| test_metadata_attachment | Filename ends with .pdf |
-| test_extraction_integrity_sample | Lipid doc contains LDL |
-| test_page_numbers_sequential | Pages are ordered |
-| test_no_empty_pages | No empty content |
-| test_get_documents_function | Module function works |
+test('chat sends message', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('textarea', 'What is LDL?');
+  await page.click('button:has-text("Send")');
+  await expect(page.locator('.message.assistant')).toBeVisible();
+});
+```
 
-### test_settings.py (2 tests)
-Tests for configuration in `src/config/settings.py`
+## Test Fixtures
 
-| Test | What it Checks |
-|------|----------------|
-| test_settings_defaults | Default values correct |
-| test_settings_custom_values | Custom override works |
+### Backend Fixtures (`tests/conftest.py`)
+- Shared test data
+- Mock configurations
+- Helper functions
 
-## Test Requirements
+### Golden Files (`tests/fixtures/`)
+- `golden_queries.json` - Test query/response pairs
 
-- Valid `GEMINI_API_KEY` required for most tests
-- Tests skip if API key is `test-api-key`
-- Total: 64 tests
+## Docker Compose Testing
 
-## Key Test Features
+```bash
+# Run full test suite
+docker-compose up test
 
-- API key validation via fixture
-- Vector store cleanup between tests
-- Performance timing for embeddings
-- Recall@K and MRR metrics for retrieval
+# Services started
+# - backend: http://localhost:8001
+# - frontend: http://localhost:5174
+# - test: runs Playwright tests
+```
+
+## Coverage Areas
+
+### Backend
+- [x] PDF loading
+- [x] Text chunking
+- [x] Keyword indexing
+- [x] Vector search
+- [x] Settings validation
+
+### Frontend
+- [x] Chat message display
+- [x] Pipeline trace panel
+- [x] Error handling
+
+## Linting
+
+```bash
+# Python linting
+uv run ruff check .
+
+# Type checking
+cd frontend && bun run check
+```
