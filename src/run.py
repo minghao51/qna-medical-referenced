@@ -1,12 +1,14 @@
 #!/usr/bin/env python
-"""Simple script to run the FastAPI server."""
+"""Deprecated server runner wrapper."""
 
-import uvicorn
+import warnings
+
+from src.cli.serve import main
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "src.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
+    warnings.warn(
+        "src.run is deprecated; use 'python -m src.cli.serve'.",
+        DeprecationWarning,
+        stacklevel=2,
     )
+    main()

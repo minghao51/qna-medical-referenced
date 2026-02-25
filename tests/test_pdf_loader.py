@@ -1,6 +1,4 @@
-import json
-from pathlib import Path
-from src.pipeline.L2_pdf_loader import PDFLoader, get_documents
+from src.ingestion.steps.load_pdfs import PDFLoader, get_documents
 
 
 class TestPDFLoader:
@@ -13,7 +11,7 @@ class TestPDFLoader:
     def test_pdf_document_structure(self):
         loader = PDFLoader("data/raw")
         docs = loader.load_all_pdfs()
-        
+
         for doc in docs:
             assert "id" in doc
             assert "source" in doc
@@ -23,7 +21,7 @@ class TestPDFLoader:
     def test_page_content_extraction(self):
         loader = PDFLoader("data/raw")
         docs = loader.load_all_pdfs()
-        
+
         for doc in docs:
             for page in doc["pages"]:
                 assert "page" in page
@@ -34,7 +32,7 @@ class TestPDFLoader:
     def test_metadata_attachment(self):
         loader = PDFLoader("data/raw")
         docs = loader.load_all_pdfs()
-        
+
         for doc in docs:
             assert doc["source"].endswith(".pdf")
             for page in doc["pages"]:
@@ -44,7 +42,7 @@ class TestPDFLoader:
     def test_extraction_integrity_sample(self):
         loader = PDFLoader("data/raw")
         docs = loader.load_all_pdfs()
-        
+
         found_lipid = False
         for doc in docs:
             if "Lipid" in doc.get("source", ""):
@@ -57,7 +55,7 @@ class TestPDFLoader:
     def test_page_numbers_sequential(self):
         loader = PDFLoader("data/raw")
         docs = loader.load_all_pdfs()
-        
+
         for doc in docs:
             pages = doc["pages"]
             page_nums = [p["page"] for p in pages]
@@ -66,7 +64,7 @@ class TestPDFLoader:
     def test_no_empty_pages(self):
         loader = PDFLoader("data/raw")
         docs = loader.load_all_pdfs()
-        
+
         for doc in docs:
             for page in doc["pages"]:
                 assert len(page["content"].strip()) > 0, f"Empty content in {doc['id']} page {page['page']}"

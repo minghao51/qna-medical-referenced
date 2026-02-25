@@ -1,5 +1,4 @@
-import pytest
-from src.pipeline.L3_chunker import TextChunker, chunk_documents
+from src.ingestion.steps.chunk_text import TextChunker, chunk_documents
 
 
 class TestTextChunker:
@@ -7,7 +6,7 @@ class TestTextChunker:
         chunker = TextChunker(chunk_size=800, chunk_overlap=150)
         text = "This is a test document. " * 100
         chunks = chunker.chunk_text(text, "test.pdf", "doc1")
-        
+
         assert len(chunks) > 0
         assert all("content" in c for c in chunks)
         assert all("id" in c for c in chunks)
@@ -17,7 +16,7 @@ class TestTextChunker:
         chunker = TextChunker(chunk_size=100, chunk_overlap=20)
         text = "a" * 500
         chunks = chunker.chunk_text(text, "test.pdf", "doc1")
-        
+
         for chunk in chunks:
             assert len(chunk["content"]) <= 100
 
@@ -25,7 +24,7 @@ class TestTextChunker:
         chunker = TextChunker(chunk_size=100, chunk_overlap=20)
         text = "abcdefghij" * 50
         chunks = chunker.chunk_text(text, "test.pdf", "doc1")
-        
+
         if len(chunks) >= 2:
             second_chunk_start = chunks[1]["content"][:20]
             first_chunk_end = chunks[0]["content"][-20:]
@@ -36,7 +35,7 @@ class TestTextChunker:
         chunker = TextChunker(chunk_size=50, chunk_overlap=10)
         text = "This is sentence one. This is sentence two. This is sentence three."
         chunks = chunker.chunk_text(text, "test.pdf", "doc1")
-        
+
         for chunk in chunks:
             content = chunk["content"]
             if len(content) > 0:
@@ -50,7 +49,7 @@ class TestTextChunker:
         chunker = TextChunker(chunk_size=100, chunk_overlap=20)
         text = "Paragraph one here.\n\nParagraph two here.\n\nParagraph three here."
         chunks = chunker.chunk_text(text, "test.pdf", "doc1")
-        
+
         for chunk in chunks:
             assert "\n\n" in chunk["content"] or len(chunk["content"]) < 100
 
@@ -58,7 +57,7 @@ class TestTextChunker:
         chunker = TextChunker(chunk_size=800, chunk_overlap=150)
         text = "Test content"
         chunks = chunker.chunk_text(text, "test.pdf", "doc1", page=5)
-        
+
         assert all(c["page"] == 5 for c in chunks)
         assert all(c["source"] == "test.pdf" for c in chunks)
 
@@ -66,7 +65,7 @@ class TestTextChunker:
         chunker = TextChunker(chunk_size=800, chunk_overlap=150)
         text = "Test content"
         chunks = chunker.chunk_text(text, "my_document.pdf", "doc1")
-        
+
         assert all(c["source"] == "my_document.pdf" for c in chunks)
 
     def test_chunk_documents_from_pages(self):
@@ -81,9 +80,9 @@ class TestTextChunker:
                 ]
             }
         ]
-        
+
         chunks = chunker.chunk_documents(documents)
-        
+
         assert len(chunks) > 0
         page_numbers = [c["page"] for c in chunks]
         assert 1 in page_numbers
@@ -98,22 +97,22 @@ class TestTextChunker:
                 "content": "Full document content here. " * 50
             }
         ]
-        
+
         chunks = chunker.chunk_documents(documents)
-        
+
         assert len(chunks) > 0
 
     def test_empty_text_handling(self):
         chunker = TextChunker(chunk_size=800, chunk_overlap=150)
         chunks = chunker.chunk_text("", "test.pdf", "doc1")
-        
+
         assert len(chunks) == 0
 
     def test_short_text_single_chunk(self):
         chunker = TextChunker(chunk_size=800, chunk_overlap=150)
         text = "Short text"
         chunks = chunker.chunk_text(text, "test.pdf", "doc1")
-        
+
         assert len(chunks) == 1
         assert chunks[0]["content"] == "Short text"
 
@@ -121,7 +120,7 @@ class TestTextChunker:
         chunker = TextChunker(chunk_size=50, chunk_overlap=10)
         text = "word " * 100
         chunks = chunker.chunk_text(text, "test.pdf", "doc1")
-        
+
         ids = [c["id"] for c in chunks]
         assert len(ids) == len(set(ids)), "Chunk IDs should be unique"
 
@@ -129,7 +128,7 @@ class TestTextChunker:
         chunker = TextChunker(chunk_size=100, chunk_overlap=20)
         text = "First paragraph.\n\nSecond paragraph.\nThird sentence."
         chunks = chunker.chunk_text(text, "test.pdf", "doc1")
-        
+
         for chunk in chunks:
             content = chunk["content"]
             assert content.startswith("First") or content.startswith("Second") or content.startswith("Third")
@@ -139,5 +138,5 @@ class TestTextChunker:
             {"id": "doc1", "source": "test.pdf", "content": "Test content"}
         ]
         chunks = chunk_documents(documents)
-        
+
         assert len(chunks) > 0

@@ -1,1 +1,3 @@
-from src.storage import chat_store
+from src.infra.storage import chat_history_store as chat_store
+
+__all__ = ["chat_store"]

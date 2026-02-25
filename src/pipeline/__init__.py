@@ -1,28 +1,24 @@
-"""
-RAG Pipeline Module
+"""Deprecated compatibility exports for legacy `src.pipeline` imports."""
 
-L0: Download web content from health websites
-L1: Convert HTML to Markdown
-L2: Load PDF documents
-L3: Chunk documents into smaller pieces
-L4: Load reference data (CSV)
-L5: Embed and store in vector store
-L6: Initialize RAG and retrieve context
+import warnings
 
-Usage:
-    python -m src.pipeline.run_pipeline           # Run full pipeline
-    python -m src.pipeline.run_pipeline --help    # See options
-"""
-
-from src.pipeline.L6_rag_pipeline import (
+from src.rag import (
     get_context,
+    initialize_runtime_index,
     initialize_vector_store,
     retrieve_context,
     retrieve_context_with_trace,
 )
 
+warnings.warn(
+    "src.pipeline runtime imports are deprecated; use src.rag (runtime) or src.ingestion (offline pipeline).",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 __all__ = [
     "get_context",
+    "initialize_runtime_index",
     "initialize_vector_store",
     "retrieve_context",
     "retrieve_context_with_trace",

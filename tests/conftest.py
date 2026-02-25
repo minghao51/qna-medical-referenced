@@ -1,6 +1,7 @@
+import os
 import sys
 from pathlib import Path
-import os
+
 from dotenv import load_dotenv
 
 project_root = Path(__file__).parent.parent
