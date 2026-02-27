@@ -73,6 +73,79 @@ def get_evaluation_runs() -> list[dict[str, Any]]:
     return _get_all_runs()
 
 
+@router.get("/evaluation/history")
+def get_evaluation_history(limit: int = 10) -> dict[str, Any]:
+    """Get historical evaluation metrics for trending analysis."""
+    if not EVALS_DIR.exists():
+        return {"runs": [], "metrics": []}
+    
+    runs = sorted(EVALS_DIR.glob("??????T??????Z_*"), reverse=True)[:limit]
+    
+    result_runs = []
+    metrics_tracking = {
+        "hit_rate_at_k": [],
+        "mrr": [],
+        "ndcg_at_k": [],
+        "latency_p50_ms": [],
+        "latency_p95_ms": [],
+        "failed_thresholds": [],
+        "duration_s": []
+    }
+    
+    for run_dir in runs:
+        summary_path = run_dir / "summary.json"
+        retrieval_path = run_dir / "retrieval_metrics.json"
+        
+        run_data: dict[str, Any] = {
+            "run_dir": str(run_dir.name),
+            "timestamp": run_dir.name.split("_")[0] if "_" in run_dir.name else "",
+        }
+        
+        if summary_path.exists():
+            try:
+                summary = json.loads(summary_path.read_text())
+                run_data["status"] = summary.get("status")
+                run_data["duration_s"] = summary.get("duration_s", 0)
+                run_data["failed_thresholds_count"] = summary.get("failed_thresholds_count", 0)
+                
+                metrics_tracking["failed_thresholds"].append(summary.get("failed_thresholds_count", 0))
+                metrics_tracking["duration_s"].append(summary.get("duration_s", 0))
+            except Exception:
+                pass
+        
+        if retrieval_path.exists():
+            try:
+                retrieval = json.loads(retrieval_path.read_text())
+                run_data["retrieval_metrics"] = {
+                    "hit_rate_at_k": retrieval.get("hit_rate_at_k", 0),
+                    "mrr": retrieval.get("mrr", 0),
+                    "ndcg_at_k": retrieval.get("ndcg_at_k", 0),
+                    "latency_p50_ms": retrieval.get("latency_p50_ms", 0),
+                    "latency_p95_ms": retrieval.get("latency_p95_ms", 0),
+                }
+                
+                metrics_tracking["hit_rate_at_k"].append(retrieval.get("hit_rate_at_k", 0))
+                metrics_tracking["mrr"].append(retrieval.get("mrr", 0))
+                metrics_tracking["ndcg_at_k"].append(retrieval.get("ndcg_at_k", 0))
+                metrics_tracking["latency_p50_ms"].append(retrieval.get("latency_p50_ms", 0))
+                metrics_tracking["latency_p95_ms"].append(retrieval.get("latency_p95_ms", 0))
+            except Exception:
+                pass
+        
+        result_runs.append(run_data)
+    
+    return {
+        "runs": result_runs,
+        "summary": {
+            "total_runs": len(result_runs),
+            "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"]) / len(metrics_tracking["hit_rate_at_k"]) if metrics_tracking["hit_rate_at_k"] else 0,
+            "avg_mrr": sum(metrics_tracking["mrr"]) / len(metrics_tracking["mrr"]) if metrics_tracking["mrr"] else 0,
+            "avg_latency_p50": sum(metrics_tracking["latency_p50_ms"]) / len(metrics_tracking["latency_p50_ms"]) if metrics_tracking["latency_p50_ms"] else 0,
+            "avg_duration": sum(metrics_tracking["duration_s"]) / len(metrics_tracking["duration_s"]) if metrics_tracking["duration_s"] else 0,
+        }
+    }
+
+
 @router.get("/evaluation/steps/{stage}")
 def get_step_metrics(stage: str) -> dict[str, Any]:
     run_dir = _get_latest_run_dir()

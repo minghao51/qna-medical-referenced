@@ -7,12 +7,12 @@ export default defineConfig({
 	expect: {
 		timeout: 5000
 	},
-	fullyParallel: true,
+	fullyParallel: false,
 	forbidOnly: !!process.env.CI,
-	workers: process.env.CI ? 1 : undefined,
+	workers: 1,
 	reporter: 'list',
 	use: {
-		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
+		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5174',
 		trace: 'on-first-retry',
 	},
 	projects: [
@@ -22,8 +22,8 @@ export default defineConfig({
 		},
 	],
 	webServer: {
-		command: 'bun run dev',
-		url: 'http://localhost:5173',
+		command: 'bun run dev --port 5174',
+		url: 'http://localhost:5174',
 		reuseExistingServer: !process.env.CI,
 	},
 });

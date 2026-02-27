@@ -98,3 +98,96 @@ New code and docs should use canonical paths only.
 uv run python -m src.cli.serve
 uv run python -m src.cli.ingest
 ```
+
+---
+
+# Frontend Architecture
+
+The frontend is a SvelteKit application that provides the user interface for the medical Q&A system.
+
+## Technology Stack
+
+- **Framework:** SvelteKit 2.50.2 with Svelte 5
+- **Language:** TypeScript
+- **Build:** Vite 7.3.1
+- **Testing:** Playwright (E2E)
+- **Charts:** Chart.js 4.x
+
+## Routes
+
+| Route | Description |
+|-------|-------------|
+| `/` | Chat interface with pipeline toggle |
+| `/eval` | Evaluation dashboard with metrics and historical trending |
+
+## Key Components
+
+### Confidence Indicators (Phase 1)
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `ConfidenceBadge.svelte` | `frontend/src/lib/components/` | Color-coded confidence level badges (high/medium/low) |
+| `MetricBar.svelte` | `frontend/src/lib/components/` | Visual progress bar for scores |
+| `SourceQualityIndicator.svelte` | `frontend/src/lib/components/` | Domain credibility badges (.gov, .edu, .org, .com) |
+| `confidenceCalculator.ts` | `frontend/src/lib/` | Client-side confidence scoring logic |
+
+### Document Inspection (Phase 2)
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `DocumentInspector.svelte` | `frontend/src/lib/components/` | Modal for full document view with metadata |
+| `PipelinePanel.svelte` | `frontend/src/lib/components/` | Enhanced with clickable documents |
+
+### Visual Flow Diagrams (Phase 3)
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `FlowNode.svelte` | `frontend/src/lib/components/` | Individual pipeline stage node |
+| `PipelineFlowDiagram.svelte` | `frontend/src/lib/components/` | Animated pipeline flow visualization |
+
+### Historical Trending (Phase 4)
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `MetricChart.svelte` | `frontend/src/lib/components/` | Reusable Chart.js wrapper |
+| `eval/+page.svelte` | `frontend/src/routes/` | Enhanced with historical charts |
+
+## Data Flow
+
+```
+API Response → Confidence Calculator → Visual Components
+                                        ↓
+                              PipelinePanel → DocumentInspector
+                                        ↓
+                              PipelineFlowDiagram
+                                        ↓
+                              MetricChart (historical)
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/chat` | POST | Send chat message |
+| `/chat?include_pipeline=true` | POST | Chat with pipeline data |
+| `/history/{session_id}` | GET | Load chat history |
+| `/evaluation/latest` | GET | Latest evaluation metrics |
+| `/evaluation/history?limit=10` | GET | Historical evaluation data |
+
+## Confidence Calculation
+
+Client-side confidence scoring (0-100):
+
+- **Retrieval Score (40%)** - Average document similarity scores
+- **Source Quality (30%)** - .gov/.edu > .org > .com
+- **Context Relevance (20%)** - Chunk count and coverage
+- **Generation Success (10%)** - No errors, reasonable token count
+
+## Running the Frontend
+
+```bash
+cd frontend
+bun run dev    # Development server on http://localhost:5173
+bun run build  # Production build
+bun run test   # Playwright E2E tests
+```

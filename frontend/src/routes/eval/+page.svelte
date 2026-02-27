@@ -1,10 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { EvaluationResponse, RetrievalMetrics, StepMetrics } from '$lib/types';
+	import MetricChart from '$lib/components/MetricChart.svelte';
 
 	let loading = $state(true);
+	let refreshing = $state(false);
 	let error = $state('');
 	let data = $state<EvaluationResponse | null>(null);
+	let historyData = $state<{runs: any[]; summary: any} | null>(null);
+	let historyLoading = $state(true);
 
 	const API_URL = 'http://localhost:8000';
 
@@ -21,19 +25,43 @@
 		return value <= threshold;
 	}
 
-	onMount(async () => {
+	async function loadData() {
 		try {
 			const res = await fetch(`${API_URL}/evaluation/latest`);
 			if (!res.ok) {
 				throw new Error('Failed to fetch evaluation data');
 			}
 			data = await res.json();
+			error = '';
 		} catch (e) {
 			error = 'Failed to load evaluation data. Make sure the API is running.';
 			console.error(e);
 		} finally {
 			loading = false;
+			refreshing = false;
 		}
+	}
+
+	async function refresh() {
+		refreshing = true;
+		await loadData();
+	}
+
+	async function loadHistory() {
+		try {
+			const res = await fetch(`${API_URL}/evaluation/history?limit=10`);
+			if (res.ok) {
+				historyData = await res.json();
+			}
+		} catch (e) {
+			console.error('Failed to load history:', e);
+		} finally {
+			historyLoading = false;
+		}
+	}
+
+	onMount(async () => {
+		await Promise.all([loadData(), loadHistory()]);
 	});
 </script>
 
@@ -43,18 +71,94 @@
 		<a href="/eval" class="nav-link active">Pipeline Eval</a>
 	</nav>
 	<header>
-		<h1>Pipeline Quality Assessment</h1>
-		{#if data?.summary}
-			<span class="status-badge" style="background: {getStatusColor(data.summary.status)}">
-				{data.summary.status.toUpperCase()}
-			</span>
-		{/if}
+		<div class="header-left">
+			<h1>Pipeline Quality Assessment</h1>
+			{#if data?.summary}
+				<span class="status-badge" style="background: {getStatusColor(data.summary.status)}">
+					{data.summary.status.toUpperCase()}
+				</span>
+			{/if}
+		</div>
+		<button class="refresh-btn" onclick={refresh} disabled={refreshing}>
+			{refreshing ? 'Refreshing...' : 'Refresh'}
+		</button>
 	</header>
+
+	{#if historyData && historyData.runs && historyData.runs.length > 0 && !historyLoading}
+		<section class="history-section">
+			<h2>Historical Trending</h2>
+			<div class="history-summary">
+				<div class="summary-stat">
+					<span class="stat-label">Total Runs</span>
+					<span class="stat-value">{historyData.summary.total_runs}</span>
+				</div>
+				<div class="summary-stat">
+					<span class="stat-label">Avg Hit Rate</span>
+					<span class="stat-value">{(historyData.summary.avg_hit_rate * 100).toFixed(1)}%</span>
+				</div>
+				<div class="summary-stat">
+					<span class="stat-label">Avg MRR</span>
+					<span class="stat-value">{historyData.summary.avg_mrr.toFixed(3)}</span>
+				</div>
+				<div class="summary-stat">
+					<span class="stat-label">Avg Latency</span>
+					<span class="stat-value">{historyData.summary.avg_latency_p50.toFixed(0)}ms</span>
+				</div>
+			</div>
+			<div class="charts-grid">
+				<div class="chart-card">
+					<MetricChart
+						type="line"
+						title="Hit Rate & MRR Over Time"
+						data={{
+							labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
+							datasets: [
+								{
+									label: 'Hit Rate @k',
+									data: historyData.runs.map(r => (r.retrieval_metrics?.hit_rate_at_k || 0) * 100)
+								},
+								{
+									label: 'MRR',
+									data: historyData.runs.map(r => (r.retrieval_metrics?.mrr || 0) * 100)
+								}
+							]
+						}}
+						height={200}
+					/>
+				</div>
+				<div class="chart-card">
+					<MetricChart
+						type="bar"
+						title="Latency (ms)"
+						data={{
+							labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
+							datasets: [
+								{
+									label: 'p50',
+									data: historyData.runs.map(r => r.retrieval_metrics?.latency_p50_ms || 0)
+								},
+								{
+									label: 'p95',
+									data: historyData.runs.map(r => r.retrieval_metrics?.latency_p95_ms || 0)
+								}
+							]
+						}}
+						height={200}
+					/>
+				</div>
+			</div>
+		</section>
+	{/if}
 
 	{#if loading}
 		<div class="loading">Loading evaluation data...</div>
 	{:else if error}
 		<div class="error">{error}</div>
+	{:else if !data || (!data.summary && !data.step_metrics && !data.retrieval_metrics)}
+		<div class="empty-state">
+			<p>No evaluation data available.</p>
+			<p class="empty-hint">Run an evaluation to see pipeline metrics.</p>
+		</div>
 	{:else if data}
 		<div class="content">
 			{#if data.summary}
@@ -301,14 +405,41 @@
 
 	header {
 		display: flex;
+		justify-content: space-between;
 		align-items: center;
 		gap: 1rem;
 		margin-bottom: 2rem;
+		flex-wrap: wrap;
+	}
+
+	.header-left {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
 	}
 
 	header h1 {
 		font-size: 1.75rem;
 		margin: 0;
+	}
+
+	.refresh-btn {
+		padding: 0.5rem 1rem;
+		background: #f0f0f0;
+		border: none;
+		border-radius: 4px;
+		cursor: pointer;
+		font-weight: 500;
+		transition: background 0.2s;
+	}
+
+	.refresh-btn:hover:not(:disabled) {
+		background: #e0e0e0;
+	}
+
+	.refresh-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.status-badge {
@@ -319,10 +450,71 @@
 		font-weight: 600;
 	}
 
-	.loading, .error {
+	.history-section {
+		background: white;
+		border: 1px solid #e0e0e0;
+		border-radius: 8px;
+		padding: 1.5rem;
+		margin-bottom: 2rem;
+	}
+
+	.history-section h2 {
+		font-size: 1.25rem;
+		margin-bottom: 1rem;
+		color: #333;
+	}
+
+	.history-summary {
+		display: flex;
+		gap: 2rem;
+		margin-bottom: 1.5rem;
+		flex-wrap: wrap;
+	}
+
+	.summary-stat {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.stat-label {
+		font-size: 0.85rem;
+		color: #666;
+	}
+
+	.stat-value {
+		font-size: 1.5rem;
+		font-weight: 600;
+		color: #2196f3;
+	}
+
+	.charts-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+		gap: 1.5rem;
+	}
+
+	.chart-card {
+		background: #fafafa;
+		border-radius: 8px;
+		padding: 1rem;
+	}
+
+	.loading, .error, .empty-state {
 		text-align: center;
 		padding: 2rem;
 		color: #666;
+	}
+
+	.empty-state {
+		background: #f9f9f9;
+		border-radius: 8px;
+		margin-top: 2rem;
+	}
+
+	.empty-hint {
+		font-size: 0.9rem;
+		color: #999;
 	}
 
 	.error {

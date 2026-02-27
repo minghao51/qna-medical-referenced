@@ -26,7 +26,9 @@ test('can type in input field', async ({ page }) => {
   await page.goto(BASE_URL);
   
   const input = page.locator('textarea');
-  await input.fill('Test question');
+  await input.click();
+  await input.pressSequentially('Test question');
+  await page.waitForTimeout(300);
   
   await expect(input).toHaveValue('Test question');
 });
