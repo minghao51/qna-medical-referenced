@@ -3,7 +3,7 @@
 	import type { Message } from '$lib/types';
 	import PipelinePanel from '$lib/components/PipelinePanel.svelte';
 
-	const API_URL = 'http://localhost:8000';
+	const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 	let messages: Message[] = $state([]);
 	let input = $state('');

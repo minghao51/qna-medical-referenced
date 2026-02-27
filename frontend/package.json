@@ -9,7 +9,12 @@
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"test": "playwright test",
+		"test:ui": "playwright test --ui",
+		"test:headed": "playwright test --headed",
+		"test:debug": "playwright test --debug",
+		"test:report": "playwright show-report"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.58.2",

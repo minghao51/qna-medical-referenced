@@ -1,10 +1,8 @@
 <script lang="ts">
 	import type { PipelineTrace } from '$lib/types';
 	import StepCard from './StepCard.svelte';
-	import { flip } from 'svelte';
 
-	export let pipeline: PipelineTrace;
-	export let isOpen = false;
+	let { pipeline, isOpen = $bindable(false) }: { pipeline: PipelineTrace; isOpen?: boolean } = $props();
 
 	function formatScore(score: number): string {
 		return (score * 100).toFixed(1);

@@ -1,22 +1,17 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
-	import { flip } from 'svelte';
+	import type { Snippet } from 'svelte';
 	import { scale } from 'svelte/transition';
 
-	export let title: string;
-	export let timing: number;
-	export let expanded = false;
-
-	const dispatch = createEventDispatcher();
-
-	function toggle() {
-		expanded = !expanded;
-		dispatch('toggle', { expanded });
-	}
+	let { title, timing, expanded = $bindable(false), children }: { 
+		title: string; 
+		timing: number; 
+		expanded?: boolean;
+		children?: Snippet;
+	} = $props();
 </script>
 
 <div class="step-card">
-	<button class="step-header" onclick={toggle} aria-expanded={expanded}>
+	<button class="step-header" onclick={() => expanded = !expanded} aria-expanded={expanded}>
 		<span class="step-title">{title}</span>
 		{#if timing > 0}
 			<span class="step-timing">{timing}ms</span>
@@ -25,8 +20,8 @@
 	</button>
 
 	{#if expanded}
-		<div class="step-content" transition:scale|flip>
-			<slot />
+		<div class="step-content" transition:scale={{ duration: 200 }}>
+			{@render children?.()}
 		</div>
 	{/if}
 </div>
