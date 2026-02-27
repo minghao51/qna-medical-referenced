@@ -1,11 +1,33 @@
 <script lang="ts">
-	import type { PipelineTrace } from '$lib/types';
+	import type { PipelineTrace, RetrievedDocument } from '$lib/types';
+	import { calculateConfidence, getStageStatus } from '$lib/confidenceCalculator';
 	import StepCard from './StepCard.svelte';
+	import ConfidenceBadge from './ConfidenceBadge.svelte';
+	import MetricBar from './MetricBar.svelte';
+	import SourceQualityIndicator from './SourceQualityIndicator.svelte';
+	import DocumentInspector from './DocumentInspector.svelte';
+	import PipelineFlowDiagram from './PipelineFlowDiagram.svelte';
 
 	let { pipeline, isOpen = $bindable(false) }: { pipeline: PipelineTrace; isOpen?: boolean } = $props();
 
+	const confidence = $derived(calculateConfidence(pipeline));
+	const stageStatus = $derived(getStageStatus(pipeline.retrieval, pipeline.context, pipeline.generation));
+
+	let selectedDocument: RetrievedDocument | null = $state(null);
+	let activeFlowStage: 'retrieval' | 'context' | 'generation' | null = $state(null);
+
 	function formatScore(score: number): string {
 		return (score * 100).toFixed(1);
+	}
+
+	const statusIcons = {
+		success: '✓',
+		warning: '⚠',
+		error: '✗'
+	};
+
+	function handleFlowNodeClick(stage: 'retrieval' | 'context' | 'generation') {
+		activeFlowStage = activeFlowStage === stage ? null : stage;
 	}
 </script>
 
@@ -18,13 +40,35 @@
 			</button>
 		</div>
 
+		<div class="confidence-header">
+			<span class="confidence-label">Overall Confidence:</span>
+			<ConfidenceBadge level={confidence.level} score={confidence.overall} />
+			<div class="confidence-breakdown">
+				<MetricBar label="Retrieval" value={confidence.breakdown.retrieval} compact />
+				<MetricBar label="Sources" value={confidence.breakdown.sourceQuality} compact />
+				<MetricBar label="Context" value={confidence.breakdown.contextRelevance} compact />
+				<MetricBar label="Generation" value={confidence.breakdown.generationSuccess} compact />
+			</div>
+		</div>
+
+		<PipelineFlowDiagram 
+			pipeline={pipeline} 
+			activeStage={activeFlowStage}
+			onNodeClick={handleFlowNodeClick}
+		/>
+
 		<div class="panel-content">
 			<!-- Retrieval Stage -->
 			<StepCard
 				title="Retrieval"
 				timing={pipeline.retrieval.timing_ms}
-				expanded={true}
+				expanded={activeFlowStage === 'retrieval' || activeFlowStage === null}
 			>
+				<div class="stage-header">
+					<span class="stage-status status-{stageStatus.retrieval}" title="{stageStatus.retrieval}">
+						{statusIcons[stageStatus.retrieval]}
+					</span>
+				</div>
 				<div class="stage-details">
 					<div class="detail-row">
 						<span class="label">Query:</span>
@@ -44,19 +88,25 @@
 					</div>
 
 					<div class="documents-list">
-						<h4>Retrieved Documents</h4>
+						<h4>Retrieved Documents <span class="hint">(click to inspect)</span></h4>
 						{#each pipeline.retrieval.documents as doc}
-							<div class="doc-item">
+							<button 
+								class="doc-item clickable" 
+								onclick={() => selectedDocument = doc}
+								type="button"
+							>
 								<div class="doc-header">
 									<span class="doc-rank">#{doc.rank}</span>
 									<span class="doc-source">{doc.source}</span>
+									<SourceQualityIndicator source={doc.source} />
 									{#if doc.page}
 										<span class="doc-page">Page {doc.page}</span>
 									{/if}
 									<span class="doc-score">{formatScore(doc.combined_score)}%</span>
 								</div>
+								<div class="doc-preview">{doc.content.slice(0, 150)}...</div>
 								<div class="doc-scores">
-									<div class="score-bar">
+									<div class="score-bar" title="How well this document semantically matches your query">
 										<span class="score-label">Semantic:</span>
 										<div class="bar-container">
 											<div
@@ -66,7 +116,7 @@
 											<span class="score-value">{formatScore(doc.semantic_score)}%</span>
 										</div>
 									</div>
-									<div class="score-bar">
+									<div class="score-bar" title="How many keywords from your query appear in this document">
 										<span class="score-label">Keyword:</span>
 										<div class="bar-container">
 											<div
@@ -76,7 +126,7 @@
 											<span class="score-value">{formatScore(doc.keyword_score)}%</span>
 										</div>
 									</div>
-									<div class="score-bar">
+									<div class="score-bar" title="Trust score based on domain type (gov, edu, org, com)">
 										<span class="score-label">Boost:</span>
 										<div class="bar-container">
 											<div
@@ -87,11 +137,8 @@
 										</div>
 									</div>
 								</div>
-								<details class="doc-content">
-									<summary>View Content</summary>
-									<pre>{doc.content}</pre>
-								</details>
-							</div>
+								<div class="why-hint">Why retrieved?</div>
+							</button>
 						{/each}
 					</div>
 				</div>
@@ -100,9 +147,14 @@
 			<!-- Context Stage -->
 			<StepCard
 				title="Context Assembly"
-				timing={pipeline.context.total_chars < 1 ? 0 : pipeline.retrieval.timing_ms}
-				expanded={false}
+				timing={0}
+				expanded={activeFlowStage === 'context' || activeFlowStage === null}
 			>
+				<div class="stage-header">
+					<span class="stage-status status-{stageStatus.context}" title="{stageStatus.context}">
+						{statusIcons[stageStatus.context]}
+					</span>
+				</div>
 				<div class="stage-details">
 					<div class="detail-row">
 						<span class="label">Total Chunks:</span>
@@ -124,7 +176,16 @@
 			</StepCard>
 
 			<!-- Generation Stage -->
-			<StepCard title="Generation" timing={pipeline.generation.timing_ms} expanded={false}>
+			<StepCard 
+				title="Generation" 
+				timing={pipeline.generation.timing_ms} 
+				expanded={activeFlowStage === 'generation' || activeFlowStage === null}
+			>
+				<div class="stage-header">
+					<span class="stage-status status-{stageStatus.generation}" title="{stageStatus.generation}">
+						{statusIcons[stageStatus.generation]}
+					</span>
+				</div>
 				<div class="stage-details">
 					<div class="detail-row">
 						<span class="label">Model:</span>
@@ -149,6 +210,14 @@
 			</div>
 		</div>
 	</aside>
+{/if}
+
+{#if selectedDocument}
+	<DocumentInspector 
+		document={selectedDocument} 
+		query={pipeline.retrieval.query}
+		onclose={() => selectedDocument = null} 
+	/>
 {/if}
 
 <style>
@@ -252,12 +321,45 @@
 		color: #333;
 	}
 
+	.documents-list .hint {
+		font-size: 0.8rem;
+		font-weight: normal;
+		color: #888;
+	}
+
 	.doc-item {
 		background: #f9f9f9;
 		border: 1px solid #e0e0e0;
 		border-radius: 6px;
 		padding: 0.75rem;
 		margin-bottom: 0.75rem;
+		width: 100%;
+		text-align: left;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.doc-item:hover {
+		border-color: #2196f3;
+		box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+	}
+
+	.doc-item.clickable {
+		border-left: 3px solid #2196f3;
+	}
+
+	.doc-preview {
+		font-size: 0.8rem;
+		color: #666;
+		margin: 0.5rem 0;
+		line-height: 1.4;
+	}
+
+	.why-hint {
+		font-size: 0.75rem;
+		color: #2196f3;
+		margin-top: 0.5rem;
+		font-weight: 500;
 	}
 
 	.doc-header {
@@ -350,33 +452,6 @@
 		color: #333;
 	}
 
-	.doc-content {
-		margin-top: 0.5rem;
-	}
-
-	.doc-content summary {
-		cursor: pointer;
-		color: #2196f3;
-		font-size: 0.9rem;
-		user-select: none;
-	}
-
-	.doc-content summary:hover {
-		color: #1976d2;
-	}
-
-	.doc-content pre {
-		margin: 0.5rem 0 0 0;
-		padding: 0.75rem;
-		background: white;
-		border: 1px solid #e0e0e0;
-		border-radius: 4px;
-		font-size: 0.85rem;
-		overflow-x: auto;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-
 	.context-preview {
 		margin-top: 0.5rem;
 		padding: 0.75rem;
@@ -399,6 +474,61 @@
 		text-align: center;
 		font-size: 1rem;
 		color: #1976d2;
+	}
+
+	.confidence-header {
+		padding: 1rem;
+		background: #f8fafc;
+		border-bottom: 1px solid #e2e8f0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.confidence-label {
+		font-weight: 600;
+		color: #334155;
+		font-size: 0.9rem;
+	}
+
+	.confidence-breakdown {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid #e2e8f0;
+	}
+
+	.stage-header {
+		display: flex;
+		justify-content: flex-end;
+		margin-bottom: 0.5rem;
+	}
+
+	.stage-status {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		font-size: 0.75rem;
+		font-weight: bold;
+	}
+
+	.stage-status.status-success {
+		background: #dcfce7;
+		color: #22c55e;
+	}
+
+	.stage-status.status-warning {
+		background: #fef3c7;
+		color: #f59e0b;
+	}
+
+	.stage-status.status-error {
+		background: #fee2e2;
+		color: #ef4444;
 	}
 
 	/* Responsive design */

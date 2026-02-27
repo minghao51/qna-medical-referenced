@@ -42,6 +42,12 @@ export interface PipelineTrace {
 	context: ContextStage;
 	generation: GenerationStage;
 	total_time_ms: number;
+	overallConfidence?: number;
+	stageStatus?: {
+		retrieval: 'success' | 'warning' | 'error';
+		context: 'success' | 'warning' | 'error';
+		generation: 'success' | 'warning' | 'error';
+	};
 }
 
 export interface Message {
@@ -49,6 +55,7 @@ export interface Message {
 	content: string;
 	sources?: string[];
 	pipeline?: PipelineTrace;
+	timestamp?: number;
 }
 
 export interface EvaluationSummary {

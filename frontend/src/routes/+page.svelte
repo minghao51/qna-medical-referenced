@@ -1,7 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import type { Message } from '$lib/types';
 	import PipelinePanel from '$lib/components/PipelinePanel.svelte';
+	import ConfidenceBadge from '$lib/components/ConfidenceBadge.svelte';
+	import SourceQualityIndicator from '$lib/components/SourceQualityIndicator.svelte';
+	import { calculateConfidence } from '$lib/confidenceCalculator';
 
 	const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -12,6 +15,8 @@
 	let error = $state('');
 	let showPipeline = $state(false);
 	let includePipelineForSession = $state(false);
+	let messagesContainer: HTMLDivElement | undefined = $state();
+	let copiedIndex: number | null = $state(null);
 
 	function generateSessionId() {
 		let id = localStorage.getItem('chat_session_id');
@@ -28,9 +33,17 @@
 			if (res.ok) {
 				const data = await res.json();
 				messages = data.history;
+				await tick();
+				scrollToBottom();
 			}
 		} catch (e) {
 			console.error('Failed to load history:', e);
+		}
+	}
+
+	async function scrollToBottom() {
+		if (messagesContainer) {
+			messagesContainer.scrollTop = messagesContainer.scrollHeight;
 		}
 	}
 
@@ -42,10 +55,11 @@
 		loading = true;
 		error = '';
 
-		messages = [...messages, { role: 'user', content: userMessage }];
+		messages = [...messages, { role: 'user', content: userMessage, timestamp: Date.now() }];
+		await tick();
+		scrollToBottom();
 
 		try {
-			// Build URL with pipeline parameter if enabled
 			const url = new URL(`${API_URL}/chat`);
 			if (includePipelineForSession) {
 				url.searchParams.append('include_pipeline', 'true');
@@ -69,13 +83,15 @@
 				role: 'assistant',
 				content: data.response,
 				sources: data.sources,
-				pipeline: data.pipeline
+				pipeline: data.pipeline,
+				timestamp: Date.now()
 			}];
 
-			// Auto-open pipeline panel if data is available
 			if (data.pipeline && includePipelineForSession) {
 				showPipeline = true;
 			}
+			await tick();
+			scrollToBottom();
 		} catch (e) {
 			error = 'Failed to send message. Make sure the API is running.';
 			console.error(e);
@@ -93,8 +109,37 @@
 
 	function clearChat() {
 		messages = [];
+		loading = false;
 		showPipeline = false;
 		fetch(`${API_URL}/history/${sessionId}`, { method: 'DELETE' });
+	}
+
+	async function copyMessage(content: string, index: number) {
+		await navigator.clipboard.writeText(content);
+		copiedIndex = index;
+		setTimeout(() => { copiedIndex = null; }, 2000);
+	}
+
+	function formatTime(timestamp: number): string {
+		return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+	}
+
+	function escapeHtml(text: string): string {
+		return text
+			.replaceAll('&', '&amp;')
+			.replaceAll('<', '&lt;')
+			.replaceAll('>', '&gt;')
+			.replaceAll('"', '&quot;')
+			.replaceAll("'", '&#39;');
+	}
+
+	function renderMarkdown(text: string): string {
+		const escaped = escapeHtml(text);
+		return escaped
+			.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+			.replace(/\*(.*?)\*/g, '<em>$1</em>')
+			.replace(/`(.*?)`/g, '<code>$1</code>')
+			.replace(/\n/g, '<br>');
 	}
 
 	onMount(() => {
@@ -123,7 +168,7 @@
 		<button onclick={clearChat}>New Chat</button>
 	</header>
 
-	<div class="messages">
+	<div class="messages" bind:this={messagesContainer}>
 		{#if messages.length === 0}
 			<div class="welcome">
 				<p>Ask me anything about your health screening results.</p>
@@ -132,12 +177,34 @@
 
 		{#each messages as msg, index}
 			<div class="message {msg.role}">
-				<div class="content">{msg.content}</div>
+				<div class="message-header">
+					<span class="role-label">{msg.role === 'user' ? 'You' : 'Assistant'}</span>
+					{#if msg.timestamp}
+						<span class="timestamp">{formatTime(msg.timestamp)}</span>
+					{/if}
+					{#if msg.role === 'assistant' && msg.pipeline}
+						{@const conf = calculateConfidence(msg.pipeline)}
+						<ConfidenceBadge level={conf.level} score={conf.overall} showScore={false} />
+					{/if}
+					{#if msg.role === 'assistant'}
+						<button
+							class="copy-btn"
+							onclick={() => copyMessage(msg.content, index)}
+							title="Copy message"
+						>
+							{copiedIndex === index ? '✓ Copied' : 'Copy'}
+						</button>
+					{/if}
+				</div>
+				<div class="content">{@html msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}</div>
 				{#if msg.sources && msg.sources.length > 0}
 					<div class="sources">
 						<strong>Sources:</strong>
 						{#each msg.sources as source}
-							<span class="source">{source}</span>
+							<span class="source">
+								<SourceQualityIndicator {source} />
+								<span class="source-text">{source}</span>
+							</span>
 						{/each}
 					</div>
 				{/if}
@@ -155,7 +222,11 @@
 
 		{#if loading}
 			<div class="message assistant loading">
-				<div class="content">Thinking...</div>
+				<div class="typing-indicator">
+					<span></span>
+					<span></span>
+					<span></span>
+				</div>
 			</div>
 		{/if}
 
@@ -301,9 +372,91 @@
 		opacity: 0.6;
 	}
 
+	.message-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
+		font-size: 0.8rem;
+	}
+
+	.role-label {
+		font-weight: 600;
+		color: #666;
+	}
+
+	.timestamp {
+		color: #999;
+	}
+
+	.copy-btn {
+		margin-left: auto;
+		padding: 0.2rem 0.5rem;
+		background: transparent;
+		border: 1px solid #ddd;
+		border-radius: 3px;
+		cursor: pointer;
+		font-size: 0.75rem;
+		color: #666;
+		transition: all 0.2s;
+	}
+
+	.copy-btn:hover {
+		background: #e0e0e0;
+	}
+
+	.typing-indicator {
+		display: flex;
+		gap: 4px;
+		padding: 0.5rem;
+	}
+
+	.typing-indicator span {
+		width: 8px;
+		height: 8px;
+		background: #666;
+		border-radius: 50%;
+		animation: typing 1.4s infinite ease-in-out;
+	}
+
+	.typing-indicator span:nth-child(1) {
+		animation-delay: 0s;
+	}
+
+	.typing-indicator span:nth-child(2) {
+		animation-delay: 0.2s;
+	}
+
+	.typing-indicator span:nth-child(3) {
+		animation-delay: 0.4s;
+	}
+
+	@keyframes typing {
+		0%, 60%, 100% {
+			transform: translateY(0);
+			opacity: 0.4;
+		}
+		30% {
+			transform: translateY(-6px);
+			opacity: 1;
+		}
+	}
+
 	.content {
 		white-space: pre-wrap;
 		line-height: 1.5;
+	}
+
+	.content :global(code) {
+		background: #e0e0e0;
+		padding: 0.1rem 0.3rem;
+		border-radius: 3px;
+		font-family: monospace;
+		font-size: 0.9em;
+	}
+
+	.content :global(strong) {
+		font-weight: 600;
 	}
 
 	.sources {
@@ -313,12 +466,21 @@
 	}
 
 	.source {
-		display: inline-block;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		background: #e0e0e0;
 		padding: 0.2rem 0.5rem;
 		border-radius: 3px;
 		margin: 0.2rem 0.2rem 0 0;
 		font-size: 0.75rem;
+	}
+
+	.source-text {
+		max-width: 200px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.pipeline-btn {
