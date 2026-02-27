@@ -32,6 +32,7 @@ test.describe('Pipeline Visualization', () => {
 
 		// Type and send a message
 		await page.locator('textarea').fill('What is normal cholesterol?');
+		await page.waitForTimeout(100);
 		await page.locator('button:has-text("Send")').click();
 
 		// Wait for assistant response
@@ -56,6 +57,9 @@ test.describe('Pipeline Visualization', () => {
 
 		// Type text
 		await input.fill('Test question');
+
+		// Wait for Svelte reactivity to update
+		await page.waitForTimeout(100);
 
 		// Should be enabled
 		await expect(sendButton).toBeEnabled();
@@ -85,6 +89,7 @@ test.describe('Pipeline Panel', () => {
 	test('sources display correctly on response', async ({ page }) => {
 		// Send a message
 		await page.locator('textarea').fill('What is LDL cholesterol?');
+		await page.waitForTimeout(100);
 		await page.locator('button:has-text("Send")').click();
 
 		// Wait for response
@@ -205,6 +210,10 @@ test.describe('Chat with Pipeline Enabled', () => {
 });
 
 test.describe('Error Handling', () => {
+	test.beforeEach(async ({ page }) => {
+		await page.goto(BASE_URL);
+	});
+
 	test('handles empty input gracefully', async ({ page }) => {
 		const sendButton = page.locator('button:has-text("Send")');
 
@@ -215,6 +224,7 @@ test.describe('Error Handling', () => {
 	test('New Chat clears messages', async ({ page }) => {
 		// Send a message
 		await page.locator('textarea').fill('Test message');
+		await page.waitForTimeout(100);
 		await page.locator('button:has-text("Send")').click();
 
 		// Wait for message to appear

@@ -4,7 +4,7 @@
 
 ```bash
 # Run full pipeline first (L0-L6)
-uv run python -m src.pipeline.run_pipeline
+uv run python -m src.cli.ingest
 
 # Run all tests
 uv run pytest tests/ -v
@@ -13,7 +13,7 @@ uv run pytest tests/ -v
 ## Test Files
 
 ### test_chunker.py
-Tests for `TextChunker` in `src/pipeline/L3_chunker.py`
+Tests for `TextChunker` in `src/ingestion/steps/chunk_text.py`
 
 | Test | What it Checks |
 |------|----------------|
@@ -32,7 +32,7 @@ Tests for `TextChunker` in `src/pipeline/L3_chunker.py`
 | `test_boundary_priority` | Priority: `\n\n` → `\n` → `. ` |
 
 ### test_keyword_index.py
-Tests for TF-IDF keyword search in `src/pipeline/L5_vector_store.py`
+Tests for TF-IDF keyword search in `src/ingestion/indexing/vector_store.py`
 
 | Test | What it Checks |
 |------|----------------|
@@ -51,7 +51,7 @@ Tests for TF-IDF keyword search in `src/pipeline/L5_vector_store.py`
 | `test_case_insensitive_query` | Query case handled |
 
 ### test_retrieval.py
-Tests for hybrid search in `src/pipeline/L5_vector_store.py`
+Tests for hybrid search in `src/ingestion/indexing/vector_store.py`
 
 | Test | What it Checks |
 |------|----------------|
@@ -70,7 +70,7 @@ Tests for hybrid search in `src/pipeline/L5_vector_store.py`
 | `test_weight_parameterization` | Custom weights work |
 
 ### test_embedding.py
-Tests for Gemini embeddings in `src/pipeline/L5_vector_store.py`
+Tests for Gemini embeddings in `src/ingestion/indexing/vector_store.py`
 
 | Test | What it Checks |
 |------|----------------|
@@ -87,7 +87,7 @@ Tests for Gemini embeddings in `src/pipeline/L5_vector_store.py`
 | `test_medical_term_embedding` | Medical terms work |
 
 ### test_pdf_loader.py
-Tests for PDF loading in `src/pipeline/L2_pdf_loader.py`
+Tests for PDF loading in `src/ingestion/steps/load_pdfs.py`
 
 | Test | What it Checks |
 |------|----------------|

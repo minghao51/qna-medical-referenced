@@ -41,7 +41,7 @@ class TestTextChunker:
             if len(content) > 0:
                 last_char = content[-1]
                 if last_char not in '.!?':
-                    next_char_idx = text.find(content) + len(content)
+                    next_char_idx = chunk.get("end_char", text.find(content) + len(content))
                     if next_char_idx < len(text):
                         assert text[next_char_idx] in '.!?\n ', "Should break at sentence boundary"
 
@@ -87,6 +87,8 @@ class TestTextChunker:
         page_numbers = [c["page"] for c in chunks]
         assert 1 in page_numbers
         assert 2 in page_numbers
+        ids = [c["id"] for c in chunks]
+        assert len(ids) == len(set(ids)), "Chunk IDs should be unique across pages"
 
     def test_chunk_documents_without_pages(self):
         chunker = TextChunker(chunk_size=200, chunk_overlap=30)
@@ -123,6 +125,42 @@ class TestTextChunker:
 
         ids = [c["id"] for c in chunks]
         assert len(ids) == len(set(ids)), "Chunk IDs should be unique"
+
+    def test_chunker_supports_legacy_strategy(self):
+        chunker = TextChunker(chunk_size=80, chunk_overlap=10, strategy="legacy")
+        chunks = chunker.chunk_text("Sentence one. Sentence two. Sentence three.", "test.pdf", "doc1")
+
+        assert len(chunks) >= 1
+        assert all("chunk_index" in c for c in chunks)
+
+    def test_recursive_strategy_prefers_sentence_boundary(self):
+        chunker = TextChunker(chunk_size=60, chunk_overlap=10, strategy="recursive", min_chunk_size=20)
+        text = "A short first sentence. A second sentence that is a bit longer. Third sentence."
+        chunks = chunker.chunk_text(text, "test.pdf", "doc1")
+
+        assert len(chunks) >= 2
+        assert chunks[0]["end_char"] > chunks[0]["start_char"]
+
+    def test_markdown_heading_aware_chunking_preserves_offsets(self):
+        chunker = TextChunker(chunk_size=80, chunk_overlap=10, strategy="recursive")
+        md = "# H1\nAlpha section text.\n\n## H2\nBeta section text that is a little longer.\n"
+        chunks = chunker.chunk_documents([{"id": "md1", "source": "doc.md", "content": md}])
+
+        assert len(chunks) >= 2
+        assert all(c["source"] == "doc.md" for c in chunks)
+        assert all("start_char" in c and "end_char" in c for c in chunks)
+        starts = [c["start_char"] for c in chunks]
+        assert starts == sorted(starts)
+
+    def test_source_specific_chunk_configs_apply_to_markdown(self):
+        chunker = TextChunker(chunk_size=800, chunk_overlap=150, strategy="legacy")
+        md = "# H1\n" + ("alpha " * 200)
+        chunks = chunker.chunk_documents_with_configs(
+            [{"id": "md1", "source": "doc.md", "content": md}],
+            source_chunk_configs={"markdown": {"chunk_size": 120, "chunk_overlap": 20, "strategy": "recursive"}},
+        )
+        assert len(chunks) > 1
+        assert max(len(c["content"]) for c in chunks) <= 120
 
     def test_boundary_priority(self):
         chunker = TextChunker(chunk_size=100, chunk_overlap=20)

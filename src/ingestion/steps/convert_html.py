@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 from markdownify import markdownify as md
 
 from src.config import DATA_RAW_DIR
+from src.ingestion.steps.download_web import get_manifest_alias_filenames
 
 DATA_DIR = DATA_RAW_DIR
 
@@ -64,7 +65,8 @@ def convert_html_to_md(html_path: Path, force: bool = False) -> Path | None:
 
 def get_html_files() -> list[Path]:
     """Get all HTML files in data/raw."""
-    return list(DATA_DIR.glob("*.html"))
+    alias_names = get_manifest_alias_filenames()
+    return [p for p in DATA_DIR.glob("*.html") if p.name not in alias_names]
 
 
 def main(force: bool = False):

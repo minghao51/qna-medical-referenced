@@ -3,6 +3,7 @@
 Run Pipeline DAG - Execute the full data pipeline in sequence.
 
 L0: Download web content (if HTML files missing)
+L0b: Download PDF documents (if PDFs missing)
 L1: Convert HTML to Markdown (if MD files missing)
 L2: Load PDF documents
 L3: Chunk documents
@@ -42,6 +43,7 @@ def run_pipeline(
     print("STEP SUMMARY")
     print("=" * 70)
     print(f"L0: Download web content     {'[SKIPPED]' if skip_download else '[RUNNING]'}")
+    print(f"L0b: Download PDFs           {'[SKIPPED]' if skip_download else '[RUNNING]'}")
     print(f"L1: HTML → Markdown          {'[RUNNING]' if not skip_download else '[SKIPPED]'}")
     print("L2: Load PDF documents       [RUNNING]")
     print("L3: Chunk documents          [RUNNING]")
@@ -54,17 +56,25 @@ def run_pipeline(
     from src.ingestion.indexing.vector_store import get_vector_store
     from src.ingestion.steps.chunk_text import chunk_documents
     from src.ingestion.steps.convert_html import main as html_to_md_main
+    from src.ingestion.steps.download_pdfs import main as download_pdfs_main
     from src.ingestion.steps.download_web import main as download_main
+    from src.ingestion.steps.load_markdown import get_markdown_documents
     from src.ingestion.steps.load_pdfs import get_documents
     from src.ingestion.steps.load_reference_data import ReferenceDataLoader
     from src.rag.runtime import initialize_runtime_index
 
     step_count = 0
-    total_steps = 7 if not skip_download else 6
+    total_steps = 8 if not skip_download else 6
 
     if not skip_download:
         print(f"[{step_count + 1}/{total_steps}] L0: Downloading web content...")
         asyncio.run(download_main())
+        print()
+        step_count += 1
+
+    if not skip_download:
+        print(f"[{step_count + 1}/{total_steps}] L0b: Downloading PDFs...")
+        asyncio.run(download_pdfs_main())
         print()
         step_count += 1
 
@@ -86,6 +96,12 @@ def run_pipeline(
     print()
     step_count += 1
 
+    markdown_docs = get_markdown_documents()
+    markdown_chunks = chunk_documents(markdown_docs)
+    print(f"  Loaded {len(markdown_docs)} Markdown docs and created {len(markdown_chunks)} chunks")
+    chunks.extend(markdown_chunks)
+    print()
+
     print(f"[{step_count + 1}/{total_steps}] L4: Loading reference data...")
     ref_loader = ReferenceDataLoader()
     ref_docs = ref_loader.load_reference_ranges_as_docs()
@@ -100,8 +116,13 @@ def run_pipeline(
     if force_rebuild:
         print("  Force rebuild enabled - clearing vector store...")
         vector_store.clear()
-    vector_store.add_documents(all_docs)
-    print(f"  Stored {len(all_docs)} documents in vector store")
+    add_stats = vector_store.add_documents(all_docs)
+    print(
+        "  Vector store add stats: "
+        f"attempted={add_stats['attempted']} inserted={add_stats['inserted']} "
+        f"skipped_duplicate_id={add_stats['skipped_duplicate_id']} "
+        f"skipped_duplicate_content={add_stats['skipped_duplicate_content']}"
+    )
     print()
     step_count += 1
 
@@ -116,7 +137,7 @@ def run_pipeline(
     print("PIPELINE COMPLETE")
     print("=" * 70)
     print(f"  PDF documents processed: {len(pdf_docs)}")
-    print(f"  Chunks created: {len(chunks)}")
+    print(f"  Chunks created (PDF + Markdown): {len(chunks)}")
     print(f"  Reference docs loaded: {len(ref_docs)}")
     print(f"  Total vectors indexed: {len(all_docs)}")
     print(f"  Total time: {total_time:.2f}s")

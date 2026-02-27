@@ -37,7 +37,6 @@ These still work during the transition but are deprecated:
 
 ```bash
 uv run python -m src.main
-uv run python -m src.pipeline.run_pipeline
 uv run python -m src.run
 ```
 

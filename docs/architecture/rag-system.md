@@ -68,7 +68,7 @@ Defaults remain compatible:
 
 ## Compatibility and Migration Notes
 
-Legacy `src.pipeline.L0_*` ... `L6_*` modules are preserved as wrappers and are deprecated.
+Legacy `src.pipeline.L0_*` ... `L6_*` wrapper modules have been removed.
 Use the canonical modules above for all new development and documentation.
 
 ## Verification Checklist (Current Structure)
@@ -77,4 +77,4 @@ Use the canonical modules above for all new development and documentation.
 - Offline ingestion code lives under `src/ingestion`.
 - HTTP layer lives under `src/app`.
 - Config and paths live under `src/config`.
-- Legacy wrappers exist only for transition compatibility.
+- Some legacy wrappers still exist for transition compatibility, but not the old `src.pipeline.L0_*` ... `L6_*` stage modules.

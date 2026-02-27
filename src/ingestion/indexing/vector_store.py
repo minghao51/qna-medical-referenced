@@ -28,6 +28,17 @@ from src.ingestion.indexing.text_utils import content_hash, sanitize_text, token
 logger = logging.getLogger(__name__)
 
 
+def _source_type_for(source: str) -> str:
+    lowered = source.lower()
+    if lowered.endswith(".pdf"):
+        return "pdf"
+    if lowered.endswith(".csv"):
+        return "csv"
+    if lowered.endswith(".md") or lowered.endswith(".html"):
+        return "html"
+    return "other"
+
+
 class VectorStore:
     def __init__(
         self,
@@ -83,26 +94,45 @@ class VectorStore:
     def _embed(self, texts: List[str], batch_size: int = 10) -> List[List[float]]:
         return embed_texts(self.client, texts, batch_size=batch_size)
 
-    def add_documents(self, documents: List[dict], batch_size: int = 10):
+    def add_documents(self, documents: List[dict], batch_size: int = 10) -> dict:
         texts = [sanitize_text(doc["content"]) for doc in documents]
         ids = [doc["id"] for doc in documents]
         metadatas = []
         for doc in documents:
-            meta = {"source": doc["source"]}
+            source = doc["source"]
+            meta = {"source": source, "source_type": _source_type_for(source)}
             if "page" in doc:
                 meta["page"] = doc["page"]
+            if "chunk_index" in doc:
+                meta["chunk_index"] = doc["chunk_index"]
+            if "start_char" in doc:
+                meta["start_char"] = doc["start_char"]
+            if "end_char" in doc:
+                meta["end_char"] = doc["end_char"]
             metadatas.append(meta)
 
         embeddings = self._embed(texts, batch_size)
+        stats = {
+            "attempted": len(documents),
+            "inserted": 0,
+            "skipped_duplicate_id": 0,
+            "skipped_duplicate_content": 0,
+        }
 
         for i, doc_id in enumerate(ids):
             content_hash_value = content_hash(texts[i])
-            if doc_id not in self.documents["ids"] and content_hash_value not in self.content_hashes:
-                self.documents["ids"].append(doc_id)
-                self.documents["contents"].append(texts[i])
-                self.documents["embeddings"].append(embeddings[i])
-                self.documents["metadatas"].append(metadatas[i])
-                self.content_hashes.add(content_hash_value)
+            if doc_id in self.documents["ids"]:
+                stats["skipped_duplicate_id"] += 1
+                continue
+            if content_hash_value in self.content_hashes:
+                stats["skipped_duplicate_content"] += 1
+                continue
+            self.documents["ids"].append(doc_id)
+            self.documents["contents"].append(texts[i])
+            self.documents["embeddings"].append(embeddings[i])
+            self.documents["metadatas"].append(metadatas[i])
+            self.content_hashes.add(content_hash_value)
+            stats["inserted"] += 1
 
         self.documents["ids"] = list(self.documents["ids"])
         self.documents["contents"] = list(self.documents["contents"])
@@ -111,20 +141,34 @@ class VectorStore:
 
         self._save()
         self._index_dirty = True
+        return stats
 
-    def similarity_search(self, query: str, top_k: int = 5, hybrid: bool = True) -> List[dict]:
+    def similarity_search(
+        self,
+        query: str,
+        top_k: int = 5,
+        hybrid: bool = True,
+        search_mode: str | None = None,
+    ) -> List[dict]:
         if not self.documents["contents"]:
             return []
 
         self._rebuild_index_if_needed()
 
-        keyword_scores = self._keyword_score(query) if hybrid else {}
+        mode = (search_mode or ("hybrid" if hybrid else "semantic_only")).lower()
+        use_keyword = mode in {"hybrid", "keyword_only"}
+        use_hybrid = mode == "hybrid"
+        keyword_scores = self._keyword_score(query) if use_keyword else {}
+        query_embedding = None
 
-        try:
-            query_embedding = self._embed([query])[0]
-            use_semantic = True
-        except Exception as e:
-            logger.warning(f"Embedding failed, falling back to keyword-only search: {e}")
+        if mode != "keyword_only":
+            try:
+                query_embedding = self._embed([query])[0]
+                use_semantic = True
+            except Exception as e:
+                logger.warning(f"Embedding failed, falling back to keyword-only search: {e}")
+                use_semantic = False
+        else:
             use_semantic = False
 
         ranked = rank_documents(
@@ -132,7 +176,7 @@ class VectorStore:
             keyword_scores=keyword_scores,
             query_embedding=query_embedding if use_semantic else None,
             use_semantic=use_semantic,
-            hybrid=hybrid,
+            hybrid=use_hybrid,
             semantic_weight=self.semantic_weight,
             keyword_weight=self.keyword_weight,
             boost_weight=self.boost_weight,
@@ -154,11 +198,21 @@ class VectorStore:
     def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
         return cosine_similarity(a, b)
 
-    def similarity_search_with_trace(self, query: str, top_k: int = 5, hybrid: bool = True) -> tuple[List[dict], dict]:
+    def similarity_search_with_trace(
+        self,
+        query: str,
+        top_k: int = 5,
+        hybrid: bool = True,
+        search_mode: str | None = None,
+    ) -> tuple[List[dict], dict]:
         start_time = time.time()
+        mode = (search_mode or ("hybrid" if hybrid else "semantic_only")).lower()
+        use_keyword = mode in {"hybrid", "keyword_only"}
+        use_hybrid = mode == "hybrid"
         trace_info = {
             "query": query,
             "top_k": top_k,
+            "search_mode": mode,
             "score_weights": {
                 "semantic": self.semantic_weight,
                 "keyword": self.keyword_weight,
@@ -173,26 +227,30 @@ class VectorStore:
         self._rebuild_index_if_needed()
 
         keyword_start = time.time()
-        keyword_scores = self._keyword_score(query) if hybrid else {}
+        keyword_scores = self._keyword_score(query) if use_keyword else {}
         trace_info["keyword_timing_ms"] = int((time.time() - keyword_start) * 1000)
 
         semantic_start = time.time()
-        try:
-            query_embedding = self._embed([query])[0]
-            use_semantic = True
-            trace_info["semantic_timing_ms"] = int((time.time() - semantic_start) * 1000)
-        except Exception as e:
-            logger.warning(f"Embedding failed, falling back to keyword-only search: {e}")
+        query_embedding = None
+        if mode != "keyword_only":
+            try:
+                query_embedding = self._embed([query])[0]
+                use_semantic = True
+                trace_info["semantic_timing_ms"] = int((time.time() - semantic_start) * 1000)
+            except Exception as e:
+                logger.warning(f"Embedding failed, falling back to keyword-only search: {e}")
+                use_semantic = False
+                trace_info["semantic_timing_ms"] = 0
+        else:
             use_semantic = False
             trace_info["semantic_timing_ms"] = 0
-            query_embedding = None
 
         ranked = rank_documents(
             documents=self.documents,
             keyword_scores=keyword_scores,
             query_embedding=query_embedding,
             use_semantic=use_semantic,
-            hybrid=hybrid,
+            hybrid=use_hybrid,
             semantic_weight=self.semantic_weight,
             keyword_weight=self.keyword_weight,
             boost_weight=self.boost_weight,

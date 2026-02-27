@@ -7,9 +7,13 @@ Skips download if target file already exists.
 
 import asyncio
 import hashlib
+import json
 import re
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -17,6 +21,7 @@ from bs4 import BeautifulSoup
 from src.config import DATA_RAW_DIR
 
 DATA_DIR = DATA_RAW_DIR
+MANIFEST_PATH = DATA_DIR / "download_manifest.json"
 
 
 def get_file_path(url: str, extension: str = "html") -> Path:
@@ -29,8 +34,201 @@ def get_file_path(url: str, extension: str = "html") -> Path:
     return DATA_DIR / filename
 
 
+def normalize_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    scheme = (parsed.scheme or "https").lower()
+    netloc = parsed.netloc.lower()
+    path = parsed.path or "/"
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    # Drop fragment; retain query for safety since some pages are parameterized.
+    return urlunparse((scheme, netloc, path, "", parsed.query, ""))
+
+
+def _load_manifest() -> dict:
+    if MANIFEST_PATH.exists():
+        try:
+            return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return {"records": []}
+    return {"records": []}
+
+
+def _save_manifest(manifest: dict) -> None:
+    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _manifest_indexes(manifest: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
+    records = manifest.get("records", [])
+    by_url = {str(r.get("normalized_url")): r for r in records if r.get("normalized_url")}
+    by_hash: dict[str, list[dict]] = {}
+    for r in records:
+        ch = r.get("content_hash")
+        if not ch:
+            continue
+        by_hash.setdefault(str(ch), []).append(r)
+    return by_url, by_hash
+
+
+def get_manifest_alias_filenames(manifest: dict | None = None) -> set[str]:
+    manifest = manifest or _load_manifest()
+    aliases: set[str] = set()
+    for record in manifest.get("records", []):
+        status = str(record.get("status", ""))
+        filename = record.get("filename")
+        duplicate_of = record.get("duplicate_of")
+        if not filename or not isinstance(filename, str):
+            continue
+        # Only treat on-disk alias files as ignorable. Download-time alias records point
+        # filename at the canonical file (filename == duplicate_of), so they are not aliases on disk.
+        if status in {"duplicate_content_alias", "ignored_duplicate_alias"} and duplicate_of and filename != duplicate_of:
+            aliases.add(filename)
+    return aliases
+
+
+def migrate_existing_html_duplicates(
+    *,
+    archive_aliases: bool = False,
+    delete_aliases: bool = False,
+    dry_run: bool = True,
+    archive_dir_name: str = "_duplicate_html_archive",
+) -> dict:
+    """
+    Build manifest inventory for existing HTML files and mark duplicate aliases by content hash.
+
+    Returns a summary report. If `archive_aliases` is true, duplicate aliases are moved to
+    DATA_DIR/<archive_dir_name>. If `delete_aliases` is true, aliases are deleted.
+    """
+    if archive_aliases and delete_aliases:
+        raise ValueError("Choose either archive_aliases or delete_aliases, not both")
+
+    manifest = _load_manifest()
+    html_files = sorted(DATA_DIR.glob("*.html"))
+    grouped: dict[str, list[Path]] = {}
+    for path in html_files:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+        grouped.setdefault(digest, []).append(path)
+
+    archive_dir = DATA_DIR / archive_dir_name
+    inventory_records: list[dict] = []
+    alias_count = 0
+    canonical_count = 0
+    archived = 0
+    deleted = 0
+
+    for digest, files in grouped.items():
+        files_sorted = sorted(files, key=lambda p: (len(p.name), p.name))
+        canonical = files_sorted[0]
+        canonical_count += 1
+        inventory_records.append(
+            {
+                "url": None,
+                "normalized_url": None,
+                "logical_name": canonical.stem,
+                "filename": canonical.name,
+                "content_hash": digest,
+                "status": "inventory_canonical",
+                "duplicate_of": None,
+                "record_type": "file_inventory",
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        for alias in files_sorted[1:]:
+            alias_count += 1
+            status = "duplicate_content_alias"
+            target_name = alias.name
+            if archive_aliases:
+                status = "archived_duplicate_alias"
+                target_name = alias.name
+                if not dry_run:
+                    archive_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(alias), str(archive_dir / alias.name))
+                    archived += 1
+            elif delete_aliases:
+                status = "deleted_duplicate_alias"
+                if not dry_run:
+                    alias.unlink(missing_ok=True)
+                    deleted += 1
+            else:
+                status = "ignored_duplicate_alias"
+            inventory_records.append(
+                {
+                    "url": None,
+                    "normalized_url": None,
+                    "logical_name": alias.stem,
+                    "filename": target_name,
+                    "content_hash": digest,
+                    "status": status,
+                    "duplicate_of": canonical.name,
+                    "record_type": "file_inventory",
+                    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+    # Replace previous inventory records but retain download records.
+    manifest["records"] = [r for r in manifest.get("records", []) if r.get("record_type") != "file_inventory"]
+    manifest["records"].extend(inventory_records)
+    if not dry_run:
+        _save_manifest(manifest)
+
+    return {
+        "dry_run": dry_run,
+        "html_files_scanned": len(html_files),
+        "unique_content_hashes": len(grouped),
+        "canonical_count": canonical_count,
+        "alias_count": alias_count,
+        "archived_aliases": archived,
+        "deleted_aliases": deleted,
+        "archive_dir": str(archive_dir),
+    }
+
+
+def _register_manifest_record(
+    *,
+    manifest: dict,
+    url: str,
+    normalized_url: str,
+    logical_name: str,
+    file_path: Path | None,
+    content_hash: str | None,
+    status: str,
+    duplicate_of: str | None = None,
+) -> None:
+    records = manifest.setdefault("records", [])
+    records.append(
+        {
+            "url": url,
+            "normalized_url": normalized_url,
+            "logical_name": logical_name,
+            "filename": file_path.name if file_path else None,
+            "content_hash": content_hash,
+            "status": status,
+            "duplicate_of": duplicate_of,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
+def _find_existing_file_by_content_hash(content_hash_value: str) -> Path | None:
+    for html_file in DATA_DIR.glob("*.html"):
+        try:
+            digest = hashlib.sha256(html_file.read_bytes()).hexdigest()[:16]
+            if digest == content_hash_value:
+                return html_file
+        except Exception:
+            continue
+    return None
+
+
 def file_exists(url: str, extension: str = "html") -> bool:
     """Check if file already exists for this URL."""
+    normalized = normalize_url(url)
+    manifest = _load_manifest()
+    by_url, _ = _manifest_indexes(manifest)
+    if normalized in by_url and by_url[normalized].get("filename"):
+        existing = DATA_DIR / str(by_url[normalized]["filename"])
+        if existing.exists():
+            return True
     file_path = get_file_path(url, extension)
     return file_path.exists()
 
@@ -57,6 +255,83 @@ async def download_binary(url: str, timeout: int = 60) -> Optional[bytes]:
         except Exception as e:
             print(f"Error downloading {url}: {e}")
             return None
+
+
+async def _download_and_save_html(url: str, logical_name: str) -> Optional[str]:
+    normalized_url = normalize_url(url)
+    manifest = _load_manifest()
+    by_url, by_hash = _manifest_indexes(manifest)
+    prior = by_url.get(normalized_url)
+    if prior and prior.get("filename"):
+        file_path = DATA_DIR / str(prior["filename"])
+        if file_path.exists():
+            print(f"Skipping (manifest exists): {logical_name}")
+            return None
+
+    print(f"Downloading: {logical_name}")
+    content = await download_url(url)
+    if not content:
+        _register_manifest_record(
+            manifest=manifest,
+            url=url,
+            normalized_url=normalized_url,
+            logical_name=logical_name,
+            file_path=None,
+            content_hash=None,
+            status="download_failed",
+        )
+        _save_manifest(manifest)
+        return None
+
+    content_hash_value = hashlib.sha256(content.encode("utf-8", errors="ignore")).hexdigest()[:16]
+    duplicate_record = next(iter(by_hash.get(content_hash_value, [])), None)
+    if duplicate_record and duplicate_record.get("filename"):
+        duplicate_file = DATA_DIR / str(duplicate_record["filename"])
+        if duplicate_file.exists():
+            print(f"Skipping duplicate content: {logical_name} (same as {duplicate_file.name})")
+            _register_manifest_record(
+                manifest=manifest,
+                url=url,
+                normalized_url=normalized_url,
+                logical_name=logical_name,
+                file_path=duplicate_file,
+                content_hash=content_hash_value,
+                status="duplicate_content_alias",
+                duplicate_of=duplicate_file.name,
+            )
+            _save_manifest(manifest)
+            return None
+
+    existing_file = _find_existing_file_by_content_hash(content_hash_value)
+    if existing_file is not None:
+        print(f"Skipping duplicate content (filesystem): {logical_name} (same as {existing_file.name})")
+        _register_manifest_record(
+            manifest=manifest,
+            url=url,
+            normalized_url=normalized_url,
+            logical_name=logical_name,
+            file_path=existing_file,
+            content_hash=content_hash_value,
+            status="duplicate_content_alias",
+            duplicate_of=existing_file.name,
+        )
+        _save_manifest(manifest)
+        return None
+
+    file_path = get_file_path(url, "html")
+    file_path.write_text(content, encoding="utf-8")
+    _register_manifest_record(
+        manifest=manifest,
+        url=url,
+        normalized_url=normalized_url,
+        logical_name=logical_name,
+        file_path=file_path,
+        content_hash=content_hash_value,
+        status="downloaded",
+    )
+    _save_manifest(manifest)
+    print(f"  Saved: {file_path.name}")
+    return str(file_path)
 
 
 def clean_html_to_text(html: str) -> str:
@@ -90,17 +365,9 @@ async def extract_ace_clinical_guidelines() -> list[str]:
 
     downloaded = []
     for url, name in guidelines:
-        if file_exists(url, "html"):
-            print(f"Skipping (already exists): {name}")
-            continue
-
-        print(f"Downloading: {name}")
-        content = await download_url(url)
-        if content:
-            file_path = get_file_path(url, "html")
-            file_path.write_text(content, encoding='utf-8')
-            downloaded.append(str(file_path))
-            print(f"  Saved: {file_path.name}")
+        result = await _download_and_save_html(url, name)
+        if result:
+            downloaded.append(result)
     return downloaded
 
 
@@ -116,17 +383,9 @@ async def extract_healthhub_content() -> list[str]:
 
     downloaded = []
     for url, name in pages:
-        if file_exists(url, "html"):
-            print(f"Skipping (already exists): {name}")
-            continue
-
-        print(f"Downloading: {name}")
-        content = await download_url(url)
-        if content:
-            file_path = get_file_path(url, "html")
-            file_path.write_text(content, encoding='utf-8')
-            downloaded.append(str(file_path))
-            print(f"  Saved: {file_path.name}")
+        result = await _download_and_save_html(url, name)
+        if result:
+            downloaded.append(result)
     return downloaded
 
 
@@ -138,17 +397,9 @@ async def extract_hpp_guidelines() -> list[str]:
 
     downloaded = []
     for url, name in pages:
-        if file_exists(url, "html"):
-            print(f"Skipping (already exists): {name}")
-            continue
-
-        print(f"Downloading: {name}")
-        content = await download_url(url)
-        if content:
-            file_path = get_file_path(url, "html")
-            file_path.write_text(content, encoding='utf-8')
-            downloaded.append(str(file_path))
-            print(f"  Saved: {file_path.name}")
+        result = await _download_and_save_html(url, name)
+        if result:
+            downloaded.append(result)
     return downloaded
 
 
@@ -160,17 +411,9 @@ async def extract_moh_content() -> list[str]:
 
     downloaded = []
     for url, name in pages:
-        if file_exists(url, "html"):
-            print(f"Skipping (already exists): {name}")
-            continue
-
-        print(f"Downloading: {name}")
-        content = await download_url(url)
-        if content:
-            file_path = get_file_path(url, "html")
-            file_path.write_text(content, encoding='utf-8')
-            downloaded.append(str(file_path))
-            print(f"  Saved: {file_path.name}")
+        result = await _download_and_save_html(url, name)
+        if result:
+            downloaded.append(result)
     return downloaded
 
 
@@ -210,4 +453,21 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Download source HTML pages and manage duplicate aliases")
+    parser.add_argument("--cleanup-duplicates", action="store_true", help="Backfill manifest inventory for existing HTML duplicates")
+    parser.add_argument("--archive-aliases", action="store_true", help="Archive duplicate alias HTML files (used with --cleanup-duplicates)")
+    parser.add_argument("--delete-aliases", action="store_true", help="Delete duplicate alias HTML files (used with --cleanup-duplicates)")
+    parser.add_argument("--apply", action="store_true", help="Write changes (default is dry-run)")
+    args = parser.parse_args()
+
+    if args.cleanup_duplicates:
+        summary = migrate_existing_html_duplicates(
+            archive_aliases=args.archive_aliases,
+            delete_aliases=args.delete_aliases,
+            dry_run=not args.apply,
+        )
+        print(json.dumps(summary, indent=2))
+    else:
+        asyncio.run(main())
