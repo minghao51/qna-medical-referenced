@@ -16,6 +16,7 @@ import httpx
 from src.config import DATA_RAW_DIR
 from src.ingestion.steps.download_web import _load_manifest as _load_web_manifest
 from src.ingestion.steps.download_web import _save_manifest as _save_web_manifest
+from src.ingestion.steps.download_web import _manifest_indexes as _manifest_indexes_web
 from src.ingestion.steps.download_web import normalize_url as normalize_url_web
 
 MANIFEST_PATH = DATA_RAW_DIR / "download_manifest.json"
@@ -43,9 +44,8 @@ def _save_manifest(manifest: dict) -> None:
     _save_web_manifest(manifest)
 
 
-def _manifest_urls(manifest: dict) -> set:
-    records = manifest.get("records", [])
-    return {str(r.get("normalized_url")) for r in records if r.get("normalized_url")}
+def _manifest_indexes(manifest: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
+    return _manifest_indexes_web(manifest)
 
 
 def _register_manifest_record(
@@ -83,8 +83,10 @@ async def download_pdf(url: str, timeout: int = 60) -> bytes | None:
             response = await client.get(url)
             response.raise_for_status()
             content_type = response.headers.get("content-type", "")
-            if "pdf" not in content_type.lower() and not url.lower().endswith(".pdf"):
+            looks_like_pdf = response.content.startswith(b"%PDF")
+            if "pdf" not in content_type.lower() and not looks_like_pdf:
                 print(f"Warning: Expected PDF but got {content_type} for {url}")
+                return None
             return response.content
         except Exception as e:
             print(f"Error downloading {url}: {e}")
@@ -95,11 +97,13 @@ async def download_pdf_if_not_exists(url: str, logical_name: str) -> Path | None
     """Download PDF if it doesn't already exist."""
     normalized_url = normalize_url(url)
     manifest = _load_manifest()
-    existing_urls = _manifest_urls(manifest)
-
-    if normalized_url in existing_urls:
-        print(f"Skipping (already in manifest): {logical_name}")
-        return None
+    by_url, _ = _manifest_indexes(manifest)
+    prior = by_url.get(normalized_url)
+    if prior and prior.get("filename"):
+        prior_path = DATA_RAW_DIR / str(prior["filename"])
+        if prior_path.exists():
+            print(f"Skipping (manifest exists): {logical_name}")
+            return None
 
     file_path = get_file_path(url, "pdf")
     if file_path.exists():
