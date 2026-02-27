@@ -3,6 +3,8 @@
 	import type { Message } from '$lib/types';
 	import PipelinePanel from '$lib/components/PipelinePanel.svelte';
 
+	const API_URL = 'http://localhost:8000';
+
 	let messages: Message[] = $state([]);
 	let input = $state('');
 	let loading = $state(false);
@@ -10,8 +12,6 @@
 	let error = $state('');
 	let showPipeline = $state(false);
 	let includePipelineForSession = $state(false);
-
-	const API_URL = 'http://localhost:8000';
 
 	function generateSessionId() {
 		let id = localStorage.getItem('chat_session_id');
@@ -108,6 +108,10 @@
 </script>
 
 <div class="chat-container">
+	<nav class="nav-bar">
+		<a href="/" class="nav-link active">Chat</a>
+		<a href="/eval" class="nav-link">Pipeline Eval</a>
+	</nav>
 	<header>
 		<div class="header-left">
 			<h1>Health Screening Q&A</h1>
@@ -168,7 +172,7 @@
 			rows="2"
 			disabled={loading}
 		></textarea>
-		<button onclick={sendMessage} disabled={loading}>
+		<button onclick={sendMessage} disabled={loading || !input.trim()}>
 			Send
 		</button>
 	</div>
@@ -190,6 +194,31 @@
 		flex-direction: column;
 		padding: 1rem;
 		box-sizing: border-box;
+	}
+
+	.nav-bar {
+		display: flex;
+		gap: 1rem;
+		margin-bottom: 1rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid #eee;
+	}
+
+	.nav-link {
+		padding: 0.5rem 1rem;
+		text-decoration: none;
+		color: #666;
+		border-radius: 4px;
+		font-weight: 500;
+	}
+
+	.nav-link:hover {
+		background: #f0f0f0;
+	}
+
+	.nav-link.active {
+		background: #e3f2fd;
+		color: #1976d2;
 	}
 
 	header {

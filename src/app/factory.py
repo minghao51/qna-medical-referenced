@@ -2,9 +2,10 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.app.middleware import APIKeyMiddleware, RateLimitMiddleware, RequestIDMiddleware
-from src.app.routes import chat_router, health_router, history_router
+from src.app.routes import chat_router, health_router, history_router, evaluation_router
 from src.infra.llm import get_client
 from src.rag import initialize_runtime_index
 
@@ -27,6 +28,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(APIKeyMiddleware)
@@ -34,6 +42,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(chat_router)
     app.include_router(history_router)
+    app.include_router(evaluation_router)
     return app
 
 
