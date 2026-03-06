@@ -1,7 +1,7 @@
 """Data models for the health screening interpreter chatbot."""
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RetrievedDocument(BaseModel):
@@ -12,9 +12,17 @@ class RetrievedDocument(BaseModel):
     page: Optional[int] = None
     semantic_score: float
     keyword_score: float
-    source_boost: float
+    source_prior: float
+    source_boost: Optional[float] = None
     combined_score: float
     rank: int
+    semantic_rank: Optional[int] = None
+    bm25_rank: Optional[int] = None
+    fused_rank: Optional[int] = None
+    fused_score: Optional[float] = None
+    chunk_quality_score: Optional[float] = None
+    content_type: Optional[str] = None
+    section_path: list[str] = Field(default_factory=list)
 
 
 class RetrievalStage(BaseModel):

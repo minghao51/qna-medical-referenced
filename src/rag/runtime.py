@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Runtime RAG retrieval and index initialization."""
 
-from dataclasses import asdict, dataclass
 import logging
 import time
+from dataclasses import asdict, dataclass
 from typing import Any, List, Tuple
 
+from src.ingestion.indexing.text_utils import ACRONYM_EXPANSIONS, tokenize_text
 from src.ingestion.indexing.vector_store import get_vector_store
-from src.ingestion.indexing.text_utils import tokenize_text
 from src.ingestion.steps.chunk_text import chunk_documents
 from src.ingestion.steps.load_markdown import get_markdown_documents
 from src.ingestion.steps.load_pdfs import get_documents
@@ -22,6 +22,7 @@ _RETRIEVAL_OVERFETCH_MULTIPLIER = 4
 _MAX_CHUNKS_PER_SOURCE_PAGE = 2
 _MAX_CHUNKS_PER_SOURCE = 3
 _MMR_LAMBDA = 0.75
+_RRF_SEARCH_MODE = "rrf_hybrid"
 
 
 @dataclass
@@ -31,7 +32,7 @@ class RetrievalDiversityConfig:
     max_chunks_per_source: int = _MAX_CHUNKS_PER_SOURCE
     mmr_lambda: float = _MMR_LAMBDA
     enable_diversification: bool = True
-    search_mode: str = "hybrid"  # hybrid | semantic_only | keyword_only
+    search_mode: str = _RRF_SEARCH_MODE  # rrf_hybrid | semantic_only | bm25_only | legacy_hybrid
 
 
 def get_runtime_retrieval_config() -> dict[str, Any]:
@@ -51,9 +52,34 @@ def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> Retrie
     cfg.max_chunks_per_source = max(1, int(cfg.max_chunks_per_source))
     cfg.mmr_lambda = max(0.0, min(1.0, float(cfg.mmr_lambda)))
     cfg.search_mode = str(cfg.search_mode or "hybrid").lower()
-    if cfg.search_mode not in {"hybrid", "semantic_only", "keyword_only"}:
-        cfg.search_mode = "hybrid"
+    if cfg.search_mode not in {"rrf_hybrid", "hybrid", "semantic_only", "keyword_only", "bm25_only", "legacy_hybrid"}:
+        cfg.search_mode = _RRF_SEARCH_MODE
     return cfg
+
+
+def _expand_queries(query: str) -> list[str]:
+    query = str(query or "").strip()
+    if not query:
+        return []
+    outputs = [query]
+    lowered = query.lower()
+    outputs.append(" ".join(tokenize_text(query)))
+    expansion_terms: list[str] = []
+    for token in tokenize_text(query):
+        expansion_terms.extend(ACRONYM_EXPANSIONS.get(token, []))
+    if expansion_terms:
+        outputs.append(f"{query} {' '.join(expansion_terms)}")
+    keyword_focus = " ".join(dict.fromkeys(tokenize_text(lowered)))
+    if keyword_focus:
+        outputs.append(keyword_focus)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in outputs:
+        normalized = " ".join(item.split())
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            deduped.append(normalized)
+    return deduped
 
 
 def _build_index_from_sources(vector_store) -> None:
@@ -222,7 +248,7 @@ def retrieve_context(query: str, top_k: int = 5, retrieval_options: dict[str, An
 
     vector_store = get_vector_store()
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
-    results = vector_store.similarity_search(query, top_k=fetch_k, search_mode=cfg.search_mode)
+    results = _retrieve_candidates(vector_store, query, fetch_k, cfg.search_mode)
     results = _diversify_results(
         results,
         top_k=top_k,
@@ -261,11 +287,7 @@ def retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options: d
     vector_store = get_vector_store()
 
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
-    results, retrieval_trace = vector_store.similarity_search_with_trace(
-        query,
-        top_k=fetch_k,
-        search_mode=cfg.search_mode,
-    )
+    results, retrieval_trace = _retrieve_candidates_with_trace(vector_store, query, fetch_k, cfg.search_mode)
     results = _diversify_results(
         results,
         top_k=top_k,
@@ -285,9 +307,17 @@ def retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options: d
             page=r.get("page"),
             semantic_score=r["semantic_score"],
             keyword_score=r["keyword_score"],
-            source_boost=r["source_boost"],
+            source_prior=r.get("source_prior", 0.0),
+            source_boost=r.get("source_prior", 0.0),
             combined_score=r["combined_score"],
-            rank=r["rank"]
+            rank=r["rank"],
+            semantic_rank=r.get("semantic_rank"),
+            bm25_rank=r.get("bm25_rank"),
+            fused_rank=r.get("fused_rank"),
+            fused_score=r.get("fused_score"),
+            chunk_quality_score=r.get("quality_score"),
+            content_type=r.get("content_type"),
+            section_path=r.get("section_path", []),
         ))
 
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
@@ -298,6 +328,7 @@ def retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options: d
         score_weights={
             **retrieval_trace.get("score_weights", {}),
             "search_mode": cfg.search_mode,
+            "expanded_queries": retrieval_trace.get("expanded_queries", []),
             "enable_diversification": cfg.enable_diversification,
             "mmr_lambda": cfg.mmr_lambda,
             "overfetch_multiplier": cfg.overfetch_multiplier,
@@ -342,4 +373,50 @@ def get_full_context() -> str:
 def get_context(query: str | None = None) -> Tuple[str, List[str]]:
     if query:
         return retrieve_context(query)
+
+
+def _merge_result_sets(result_sets: list[list[dict]], top_k: int) -> list[dict]:
+    merged: dict[str, dict] = {}
+    for results in result_sets:
+        for item in results:
+            key = str(item.get("id"))
+            existing = merged.get(key)
+            if existing is None or float(item.get("score", item.get("combined_score", 0.0))) > float(existing.get("score", existing.get("combined_score", 0.0))):
+                merged[key] = dict(item)
+    ranked = list(merged.values())
+    ranked.sort(key=lambda row: float(row.get("score", row.get("combined_score", 0.0))), reverse=True)
+    for rank, row in enumerate(ranked, start=1):
+        row.setdefault("rank", rank)
+    return ranked[:top_k]
+
+
+def _merge_traced_result_sets(result_sets: list[list[dict]], top_k: int) -> list[dict]:
+    merged = _merge_result_sets(result_sets, top_k=top_k)
+    for rank, row in enumerate(merged, start=1):
+        row["rank"] = rank
+    return merged
+
+
+def _retrieve_candidates(vector_store, query: str, top_k: int, search_mode: str) -> list[dict]:
+    expanded_queries = _expand_queries(query)
+    result_sets = [
+        vector_store.similarity_search(expanded_query, top_k=top_k, search_mode=search_mode)
+        for expanded_query in expanded_queries
+    ]
+    return _merge_result_sets(result_sets, top_k=top_k)
+
+
+def _retrieve_candidates_with_trace(vector_store, query: str, top_k: int, search_mode: str) -> tuple[list[dict], dict]:
+    expanded_queries = _expand_queries(query)
+    result_sets: list[list[dict]] = []
+    traces: list[dict] = []
+    for expanded_query in expanded_queries:
+        results, trace = vector_store.similarity_search_with_trace(expanded_query, top_k=top_k, search_mode=search_mode)
+        result_sets.append(results)
+        traces.append(trace)
+    merged_results = _merge_traced_result_sets(result_sets, top_k=top_k)
+    merged_trace = traces[0] if traces else {}
+    merged_trace["expanded_queries"] = expanded_queries
+    merged_trace["candidate_traces"] = traces
+    return merged_results, merged_trace
     return get_full_context(), []

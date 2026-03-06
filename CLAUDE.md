@@ -12,7 +12,7 @@
      - Backend runs on http://localhost:8001
      - Frontend runs on http://localhost:5174
    - **Local development (for active development with hot reload):**
-     - Backend: `uv run python -m src.main` (runs on port 8000)
+     - Backend: `uv run python -m src.cli.serve` (runs on port 8000)
      - Frontend: `cd frontend && bun run dev` (runs on port 5173)
 8. Python environment
     - "Use uv for Python package management and to create a .venv if it is not present."

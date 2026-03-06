@@ -7,7 +7,7 @@ Medical Q&A system with a FastAPI backend, RAG retrieval, an offline ingestion/i
 ```bash
 uv sync
 cp .env.example .env
-# add GEMINI_API_KEY (and optionally API_KEYS) to .env
+# add DASHSCOPE_API_KEY (and optionally API_KEYS) to .env
 
 uv run python scripts/download_nltk_data.py
 uv run python -m src.cli.serve
@@ -31,15 +31,6 @@ uv run pytest
 uv run ruff check .
 ```
 
-## Compatibility Commands (Temporary)
-
-These still work during the transition but are deprecated:
-
-```bash
-uv run python -m src.main
-uv run python -m src.run
-```
-
 ## API Endpoints
 
 | Endpoint | Method | Description |
@@ -60,19 +51,9 @@ src/
   usecases/               Application orchestration (chat flow)
   rag/                    Runtime retrieval + trace models
   ingestion/              Offline data pipeline + indexing internals
-  infra/                  External integrations (Gemini client, local storage)
+  infra/                  External integrations (Qwen client, local storage)
   config/                 Settings and canonical paths
   cli/                    Canonical CLI entrypoints
-```
-
-### Legacy wrappers (temporary)
-
-```text
-src/main.py               Deprecated app entrypoint wrapper
-src/run.py                Deprecated server wrapper
-src/pipeline/             Deprecated import/CLI compatibility wrappers
-src/llm/, src/storage/, src/services/, src/middleware/, src/api/
-                         Compatibility wrappers for moved modules
 ```
 
 ### Frontend
@@ -93,4 +74,4 @@ frontend/                 Svelte app (separate dev/build commands)
 
 - Runtime retrieval code and offline ingestion/indexing code are now separated (`src/rag` vs `src/ingestion`).
 - Data paths remain compatible (`data/raw`, `data/vectors`, `data/chat_history.json`).
-- Historical reports may reference legacy paths under `src/pipeline/L*`.
+- Historical reports may reference paths or structures that changed later.

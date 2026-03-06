@@ -1,16 +1,13 @@
-import os
-
 import pytest
 
 from src.ingestion.indexing.vector_store import VectorStore
+
+pytestmark = pytest.mark.live_api
 
 
 class TestRetrieval:
     @pytest.fixture
     def vector_store(self):
-        if os.environ.get("GEMINI_API_KEY") == "test-api-key":
-            pytest.skip("Requires valid Gemini API key")
-
         store = VectorStore(
             collection_name="test_retrieval",
             semantic_weight=0.6,
@@ -31,20 +28,12 @@ class TestRetrieval:
         yield store
         store.clear()
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_similarity_search_returns_results(self, vector_store):
         results = vector_store.similarity_search("LDL cholesterol", top_k=3)
 
         assert len(results) > 0
         assert len(results) <= 3
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_recall_at_5(self, vector_store):
         test_queries = [
             {"query": "LDL cholesterol target", "expected_id": "lipid_doc"},
@@ -64,10 +53,6 @@ class TestRetrieval:
         print(f"\nRecall@5: {recall_at_5:.2f}")
         assert recall_at_5 >= 0.5, f"Recall@5 should be >= 0.5, got {recall_at_5}"
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_mean_reciprocal_rank(self, vector_store):
         test_queries = [
             {"query": "LDL cholesterol", "expected_id": "lipid_doc"},
@@ -91,10 +76,6 @@ class TestRetrieval:
         print(f"\nMRR: {mrr:.2f}")
         assert mrr > 0
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_hybrid_vs_keyword_only(self, vector_store):
         query = "LDL cholesterol"
 
@@ -104,10 +85,6 @@ class TestRetrieval:
         assert len(hybrid_results) > 0
         assert len(keyword_results) > 0
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_hybrid_vs_semantic_only(self, vector_store):
         store_no_hybrid = VectorStore(
             collection_name="test_retrieval",
@@ -129,10 +106,6 @@ class TestRetrieval:
 
         store_no_hybrid.clear()
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_acronym_query_favors_keyword(self, vector_store):
         store = VectorStore(
             collection_name="test_acronym",
@@ -154,19 +127,11 @@ class TestRetrieval:
 
         store.clear()
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_synonym_query_favors_semantic(self, vector_store):
         results = vector_store.similarity_search("heart disease prevention", top_k=3)
 
         assert len(results) > 0
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_top_k_parameter(self, vector_store):
         results_1 = vector_store.similarity_search("cholesterol", top_k=1)
         results_3 = vector_store.similarity_search("cholesterol", top_k=3)
@@ -174,10 +139,6 @@ class TestRetrieval:
         assert len(results_1) == 1
         assert len(results_3) == 3
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_results_have_required_fields(self, vector_store):
         results = vector_store.similarity_search("test", top_k=1)
 
@@ -187,10 +148,6 @@ class TestRetrieval:
             assert "source" in r
             assert "score" in r
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_score_ordering(self, vector_store):
         results = vector_store.similarity_search("cholesterol", top_k=5)
 
@@ -217,10 +174,6 @@ class TestRetrieval:
 
         store.clear()
 
-    @pytest.mark.skipif(
-        os.environ.get("GEMINI_API_KEY") == "test-api-key",
-        reason="Requires valid Gemini API key"
-    )
     def test_weight_parameterization(self, vector_store):
         store_semantic = VectorStore(
             collection_name="test_weights_sem",

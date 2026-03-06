@@ -7,8 +7,6 @@ import logging
 import time
 from typing import Dict, List
 
-import google.genai as genai
-
 from src.config import settings
 from src.ingestion.indexing.embedding import embed_texts
 from src.ingestion.indexing.keyword_index import (
@@ -22,7 +20,7 @@ from src.ingestion.indexing.persistence import (
     load_documents,
     save_documents,
 )
-from src.ingestion.indexing.search import cosine_similarity, rank_documents
+from src.ingestion.indexing.search import cosine_similarity, rank_documents, reciprocal_rank_fusion
 from src.ingestion.indexing.text_utils import content_hash, sanitize_text, tokenize_text
 
 logger = logging.getLogger(__name__)
@@ -39,6 +37,20 @@ def _source_type_for(source: str) -> str:
     return "other"
 
 
+def _source_class_for(source: str, metadata: dict | None = None) -> str:
+    lowered = source.lower()
+    page_type = str((metadata or {}).get("page_type", ""))
+    if lowered.endswith(".pdf"):
+        return "guideline_pdf"
+    if lowered.endswith(".csv"):
+        return "reference_csv"
+    if page_type in {"index/listing", "navigation-heavy"}:
+        return "index_page"
+    if lowered.endswith(".md") or lowered.endswith(".html"):
+        return "guideline_html"
+    return "unknown"
+
+
 class VectorStore:
     def __init__(
         self,
@@ -51,7 +63,6 @@ class VectorStore:
         self.semantic_weight = semantic_weight
         self.keyword_weight = keyword_weight
         self.boost_weight = boost_weight
-        self.client = genai.Client(api_key=settings.gemini_api_key)
         self.embeddings_file = VECTOR_DIR / f"{self.collection_name}.json"
         self.documents = self._load()
         self.content_hashes = set(self.documents.get("content_hashes", []))
@@ -92,7 +103,7 @@ class VectorStore:
         )
 
     def _embed(self, texts: List[str], batch_size: int = 10) -> List[List[float]]:
-        return embed_texts(self.client, texts, batch_size=batch_size)
+        return embed_texts(texts, batch_size=batch_size)
 
     def add_documents(self, documents: List[dict], batch_size: int = 10) -> dict:
         texts = [sanitize_text(doc["content"]) for doc in documents]
@@ -100,7 +111,15 @@ class VectorStore:
         metadatas = []
         for doc in documents:
             source = doc["source"]
-            meta = {"source": source, "source_type": _source_type_for(source)}
+            meta = {
+                "source": source,
+                "source_type": doc.get("source_type", _source_type_for(source)),
+                "source_class": doc.get("source_class") or _source_class_for(source, doc.get("metadata")),
+                "content_type": doc.get("content_type", "paragraph"),
+                "section_path": doc.get("section_path", []),
+                "quality_score": float(doc.get("quality_score", 1.0)),
+                "extractor": doc.get("extractor") or doc.get("metadata", {}).get("selected_extractor"),
+            }
             if "page" in doc:
                 meta["page"] = doc["page"]
             if "chunk_index" in doc:
@@ -109,6 +128,12 @@ class VectorStore:
                 meta["start_char"] = doc["start_char"]
             if "end_char" in doc:
                 meta["end_char"] = doc["end_char"]
+            if "previous_chunk_id" in doc:
+                meta["previous_chunk_id"] = doc["previous_chunk_id"]
+            if "next_chunk_id" in doc:
+                meta["next_chunk_id"] = doc["next_chunk_id"]
+            if "section_sibling_rank" in doc:
+                meta["section_sibling_rank"] = doc["section_sibling_rank"]
             metadatas.append(meta)
 
         embeddings = self._embed(texts, batch_size)
@@ -156,44 +181,101 @@ class VectorStore:
         self._rebuild_index_if_needed()
 
         mode = (search_mode or ("hybrid" if hybrid else "semantic_only")).lower()
-        use_keyword = mode in {"hybrid", "keyword_only"}
-        use_hybrid = mode == "hybrid"
-        keyword_scores = self._keyword_score(query) if use_keyword else {}
-        query_embedding = None
+        ranked, _ = self._search_ranked(query, search_mode=mode)
+        top_scores = ranked[:top_k]
 
-        if mode != "keyword_only":
+        results = []
+        for score_info in top_scores:
+            idx = score_info["idx"]
+            meta = self.documents["metadatas"][idx]
+            results.append({
+                "id": self.documents["ids"][idx],
+                "content": self.documents["contents"][idx],
+                "source": meta.get("source", "unknown"),
+                "page": meta.get("page"),
+                "score": score_info.get("combined_score", 0.0),
+                "semantic_rank": score_info.get("semantic_rank"),
+                "bm25_rank": score_info.get("bm25_rank"),
+                "fused_rank": score_info.get("fused_rank"),
+                "source_prior": score_info.get("source_prior", 0.0),
+                "quality_score": meta.get("quality_score", 1.0),
+            })
+        return results
+
+    def _search_ranked(self, query: str, search_mode: str) -> tuple[list[dict], dict]:
+        self._rebuild_index_if_needed()
+        mode = (search_mode or "rrf_hybrid").lower()
+        trace_info = {"search_mode": mode}
+
+        keyword_scores = self._keyword_score(query)
+        query_embedding = None
+        use_semantic = mode != "bm25_only"
+        if use_semantic:
             try:
                 query_embedding = self._embed([query])[0]
-                use_semantic = True
             except Exception as e:
-                logger.warning(f"Embedding failed, falling back to keyword-only search: {e}")
+                logger.warning(f"Embedding failed, falling back to BM25-only search: {e}")
                 use_semantic = False
-        else:
-            use_semantic = False
-
-        ranked = rank_documents(
+        semantic_ranked = rank_documents(
             documents=self.documents,
-            keyword_scores=keyword_scores,
+            keyword_scores={},
             query_embedding=query_embedding if use_semantic else None,
             use_semantic=use_semantic,
-            hybrid=use_hybrid,
+            hybrid=False,
             semantic_weight=self.semantic_weight,
             keyword_weight=self.keyword_weight,
             boost_weight=self.boost_weight,
         )
-        score_by_idx = {item["idx"]: item["combined_score"] for item in ranked}
-        top_indices = [item["idx"] for item in ranked[:top_k]]
+        keyword_ranked = rank_documents(
+            documents=self.documents,
+            keyword_scores=keyword_scores,
+            query_embedding=None,
+            use_semantic=False,
+            hybrid=False,
+            semantic_weight=self.semantic_weight,
+            keyword_weight=self.keyword_weight,
+            boost_weight=self.boost_weight,
+        )
 
-        results = []
-        for idx in top_indices:
-            results.append({
-                "id": self.documents["ids"][idx],
-                "content": self.documents["contents"][idx],
-                "source": self.documents["metadatas"][idx].get("source", "unknown"),
-                "page": self.documents["metadatas"][idx].get("page"),
-                "score": score_by_idx[idx]
-            })
-        return results
+        if mode == "semantic_only":
+            ranked = semantic_ranked
+            for rank, row in enumerate(ranked, start=1):
+                row["semantic_rank"] = rank
+                row["bm25_rank"] = None
+                row["fused_rank"] = rank
+                row["fused_score"] = row["combined_score"]
+        elif mode in {"bm25_only", "keyword_only"}:
+            ranked = keyword_ranked
+            for rank, row in enumerate(ranked, start=1):
+                row["semantic_rank"] = None
+                row["bm25_rank"] = rank
+                row["fused_rank"] = rank
+                row["fused_score"] = row["combined_score"]
+        elif mode == "legacy_hybrid":
+            ranked = rank_documents(
+                documents=self.documents,
+                keyword_scores=keyword_scores,
+                query_embedding=query_embedding if use_semantic else None,
+                use_semantic=use_semantic,
+                hybrid=True,
+                semantic_weight=self.semantic_weight,
+                keyword_weight=self.keyword_weight,
+                boost_weight=self.boost_weight,
+            )
+            for rank, row in enumerate(ranked, start=1):
+                row["semantic_rank"] = next((i for i, v in enumerate(semantic_ranked, start=1) if v["idx"] == row["idx"]), None)
+                row["bm25_rank"] = next((i for i, v in enumerate(keyword_ranked, start=1) if v["idx"] == row["idx"]), None)
+                row["fused_rank"] = rank
+                row["fused_score"] = row["combined_score"]
+        else:
+            ranked = reciprocal_rank_fusion(semantic_ranked, keyword_ranked)
+
+        trace_info["candidate_counts"] = {
+            "semantic": len(semantic_ranked),
+            "bm25": len(keyword_ranked),
+            "final": len(ranked),
+        }
+        return ranked, trace_info
 
     def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
         return cosine_similarity(a, b)
@@ -207,8 +289,6 @@ class VectorStore:
     ) -> tuple[List[dict], dict]:
         start_time = time.time()
         mode = (search_mode or ("hybrid" if hybrid else "semantic_only")).lower()
-        use_keyword = mode in {"hybrid", "keyword_only"}
-        use_hybrid = mode == "hybrid"
         trace_info = {
             "query": query,
             "top_k": top_k,
@@ -224,52 +304,40 @@ class VectorStore:
             trace_info["timing_ms"] = int((time.time() - start_time) * 1000)
             return [], trace_info
 
-        self._rebuild_index_if_needed()
-
         keyword_start = time.time()
-        keyword_scores = self._keyword_score(query) if use_keyword else {}
+        _ = self._keyword_score(query)
         trace_info["keyword_timing_ms"] = int((time.time() - keyword_start) * 1000)
 
         semantic_start = time.time()
-        query_embedding = None
-        if mode != "keyword_only":
-            try:
-                query_embedding = self._embed([query])[0]
-                use_semantic = True
-                trace_info["semantic_timing_ms"] = int((time.time() - semantic_start) * 1000)
-            except Exception as e:
-                logger.warning(f"Embedding failed, falling back to keyword-only search: {e}")
-                use_semantic = False
-                trace_info["semantic_timing_ms"] = 0
-        else:
-            use_semantic = False
+        ranked, search_trace = self._search_ranked(query, search_mode=mode)
+        trace_info.update(search_trace)
+        if mode in {"bm25_only", "keyword_only"}:
             trace_info["semantic_timing_ms"] = 0
-
-        ranked = rank_documents(
-            documents=self.documents,
-            keyword_scores=keyword_scores,
-            query_embedding=query_embedding,
-            use_semantic=use_semantic,
-            hybrid=use_hybrid,
-            semantic_weight=self.semantic_weight,
-            keyword_weight=self.keyword_weight,
-            boost_weight=self.boost_weight,
-        )
+        else:
+            trace_info["semantic_timing_ms"] = int((time.time() - semantic_start) * 1000)
         top_scores = ranked[:top_k]
 
         results = []
         for rank, score_info in enumerate(top_scores, start=1):
             idx = score_info["idx"]
+            meta = self.documents["metadatas"][idx]
             results.append({
                 "id": self.documents["ids"][idx],
                 "content": self.documents["contents"][idx],
-                "source": self.documents["metadatas"][idx].get("source", "unknown"),
-                "page": self.documents["metadatas"][idx].get("page"),
-                "semantic_score": round(score_info["semantic_score"], 4),
-                "keyword_score": round(score_info["keyword_score"], 4),
-                "source_boost": round(score_info["source_boost"], 4),
+                "source": meta.get("source", "unknown"),
+                "page": meta.get("page"),
+                "semantic_score": round(score_info.get("semantic_score", 0.0), 4),
+                "keyword_score": round(score_info.get("keyword_score", 0.0), 4),
+                "source_prior": round(score_info.get("source_prior", 0.0), 4),
                 "combined_score": round(score_info["combined_score"], 4),
-                "rank": rank
+                "rank": rank,
+                "semantic_rank": score_info.get("semantic_rank"),
+                "bm25_rank": score_info.get("bm25_rank"),
+                "fused_rank": score_info.get("fused_rank", rank),
+                "fused_score": round(score_info.get("fused_score", score_info["combined_score"]), 4),
+                "quality_score": round(float(meta.get("quality_score", 1.0)), 4),
+                "content_type": meta.get("content_type", "paragraph"),
+                "section_path": meta.get("section_path", []),
             })
 
         trace_info["timing_ms"] = int((time.time() - start_time) * 1000)

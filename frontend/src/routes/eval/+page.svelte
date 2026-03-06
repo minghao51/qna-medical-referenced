@@ -2,6 +2,16 @@
 	import { onMount } from 'svelte';
 	import type { EvaluationResponse, RetrievalMetrics, StepMetrics } from '$lib/types';
 	import MetricChart from '$lib/components/MetricChart.svelte';
+	import QualityDistributionChart from '$lib/components/QualityDistributionChart.svelte';
+	import HealthScoreBadge from '$lib/components/HealthScoreBadge.svelte';
+	import SourceDistributionChart from '$lib/components/SourceDistributionChart.svelte';
+	import CategoryBreakdownChart from '$lib/components/CategoryBreakdownChart.svelte';
+	import MultiSelect from '$lib/components/MultiSelect.svelte';
+	import DrillDownModal from '$lib/components/DrillDownModal.svelte';
+	import ThresholdEditor from '$lib/components/ThresholdEditor.svelte';
+	import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte';
+	import { calculateHealthScore, getHealthGrade } from '$lib/utils/health-score';
+	import { exportToCSV, exportToJSON, exportCharts } from '$lib/utils/export';
 
 	let loading = $state(true);
 	let refreshing = $state(false);
@@ -9,8 +19,37 @@
 	let data = $state<EvaluationResponse | null>(null);
 	let historyData = $state<{runs: any[]; summary: any} | null>(null);
 	let historyLoading = $state(true);
+	let selectedTrendMetric = $state<'hit_rate' | 'mrr' | 'latency'>('hit_rate');
 
-	const API_URL = 'http://localhost:8000';
+	// Comparison mode
+	let compareMode = $state(false);
+	let baselineRun = $state<string>('');
+	let compareRun = $state<string>('');
+	let comparisonData = $state<{ baseline: EvaluationResponse | null; comparison: EvaluationResponse | null }>({
+		baseline: null,
+		comparison: null
+	});
+
+	// Filtering
+	let searchQuery = $state('');
+	let selectedStages = $state<string[]>(['L0', 'L1', 'L2', 'L3', 'L4', 'L5']);
+	const allStages = ['L0', 'L1', 'L2', 'L3', 'L4', 'L5'];
+
+	// Drill-down modal
+	let drillDownModal = $state({
+		open: false,
+		metric: '',
+		stage: '',
+		currentValue: 0,
+		records: [] as any[],
+		historicalData: [] as Array<{ timestamp: string; value: number }>
+	});
+
+	// Ablation results
+	let ablationData = $state<{ ablation_runs: any[]; message?: string } | null>(null);
+	let ablationLoading = $state(false);
+
+	const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 	function formatPercent(value: number): string {
 		return (value * 100).toFixed(1) + '%';
@@ -49,7 +88,7 @@
 
 	async function loadHistory() {
 		try {
-			const res = await fetch(`${API_URL}/evaluation/history?limit=10`);
+			const res = await fetch(`${API_URL}/evaluation/history?limit=20`);
 			if (res.ok) {
 				historyData = await res.json();
 			}
@@ -60,8 +99,96 @@
 		}
 	}
 
+	async function loadAblationResults() {
+		try {
+			ablationLoading = true;
+			const res = await fetch(`${API_URL}/evaluation/ablation`);
+			if (res.ok) {
+				ablationData = await res.json();
+			}
+		} catch (e) {
+			console.error('Failed to load ablation results:', e);
+		} finally {
+			ablationLoading = false;
+		}
+	}
+
+	async function loadRun(runDir: string): Promise<EvaluationResponse | null> {
+		try {
+			const res = await fetch(`${API_URL}/evaluation/run/${runDir}`);
+			if (res.ok) {
+				return await res.json();
+			}
+		} catch (e) {
+			console.error('Failed to load run:', e);
+		}
+		return null;
+	}
+
+	async function loadComparisonData() {
+		if (baselineRun) {
+			comparisonData.baseline = await loadRun(baselineRun);
+		}
+		if (compareRun) {
+			comparisonData.comparison = await loadRun(compareRun);
+		}
+	}
+
+	async function handleExportCSV() {
+		if (data) {
+			await exportToCSV(data);
+		}
+	}
+
+	async function handleExportJSON() {
+		if (data) {
+			await exportToJSON(data);
+		}
+	}
+
+	async function handleExportCharts() {
+		await exportCharts();
+	}
+
+	function getMetricDelta(baseline: number, comparison: number): { value: number; positive: boolean | null } {
+		const delta = comparison - baseline;
+		if (delta > 0) return { value: delta, positive: true };
+		if (delta < 0) return { value: delta, positive: false };
+		return { value: 0, positive: null };
+	}
+
+	async function showMetricDrillDown(stage: string, metricName: string, currentValue: number) {
+		try {
+			const res = await fetch(`${API_URL}/evaluation/steps/${stage}/records?limit=100`);
+			if (res.ok) {
+				const data = await res.json();
+				drillDownModal = {
+					open: true,
+					metric: metricName,
+					stage: stage,
+					currentValue: currentValue,
+					records: data.records || [],
+					historicalData: historyData?.runs
+						.map((run) => {
+							const value = run.retrieval_metrics?.[metricName as keyof typeof run.retrieval_metrics];
+							if (value !== undefined) {
+								return {
+									timestamp: run.timestamp || run.run_dir?.slice(0, 8) || 'N/A',
+									value: typeof value === 'number' ? value : 0
+								};
+							}
+							return null;
+						})
+						.filter(Boolean) as Array<{ timestamp: string; value: number }>
+				};
+			}
+		} catch (e) {
+			console.error('Failed to load drill-down data:', e);
+		}
+	}
+
 	onMount(async () => {
-		await Promise.all([loadData(), loadHistory()]);
+		await Promise.all([loadData(), loadHistory(), loadAblationResults()]);
 	});
 </script>
 
@@ -79,14 +206,92 @@
 				</span>
 			{/if}
 		</div>
-		<button class="refresh-btn" onclick={refresh} disabled={refreshing}>
-			{refreshing ? 'Refreshing...' : 'Refresh'}
-		</button>
+		{#if data}
+			{@const healthScore = calculateHealthScore(data)}
+			{@const healthGrade = getHealthGrade(healthScore)}
+			<HealthScoreBadge score={healthScore} grade={healthGrade} />
+		{/if}
+		<div class="header-actions">
+			<button class="action-btn compare-btn" onclick={() => compareMode = !compareMode} class:active={compareMode}>
+				{compareMode ? 'Exit Compare' : 'Compare Runs'}
+			</button>
+			<button class="action-btn" onclick={handleExportCSV} disabled={!data}>Export CSV</button>
+			<button class="action-btn" onclick={handleExportJSON} disabled={!data}>Export JSON</button>
+			<button class="action-btn" onclick={handleExportCharts} disabled={!data}>Export Charts</button>
+			<button class="refresh-btn" onclick={refresh} disabled={refreshing}>
+				{refreshing ? 'Refreshing...' : 'Refresh'}
+			</button>
+		</div>
 	</header>
+
+	<!-- History Loading Skeleton -->
+	{#if historyLoading}
+		<section class="history-section">
+			<h2>Historical Trending</h2>
+			<div class="history-summary">
+				<LoadingSkeleton count={4} type="card" height="80px" />
+			</div>
+			<div class="charts-grid">
+				<LoadingSkeleton count={2} type="card" height="200px" />
+			</div>
+		</section>
+	{/if}
+
+	<!-- Comparison Controls -->
+	{#if compareMode && historyData?.runs}
+		<section class="comparison-controls-section">
+			<h3>Compare Runs</h3>
+			<div class="comparison-controls">
+				<div class="control-group">
+					<label>Baseline Run:</label>
+					<select bind:value={baselineRun} onchange={loadComparisonData}>
+						<option value="">Select baseline...</option>
+						{#each historyData.runs as run}
+							<option value={run.run_dir}>{run.timestamp || run.run_dir?.slice(0, 8) || 'N/A'}</option>
+						{/each}
+					</select>
+				</div>
+				<div class="control-group">
+					<label>Comparison Run:</label>
+					<select bind:value={compareRun} onchange={loadComparisonData}>
+						<option value="">Select comparison...</option>
+						{#each historyData.runs as run}
+							<option value={run.run_dir}>{run.timestamp || run.run_dir?.slice(0, 8) || 'N/A'}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+		</section>
+	{/if}
+
+	<!-- Filters -->
+	<section class="filters-section">
+		<div class="filter-group">
+			<input
+				type="text"
+				placeholder="Search metrics..."
+				bind:value={searchQuery}
+				class="search-input"
+			/>
+		</div>
+		<div class="filter-group">
+			<MultiSelect options={allStages} bind:value={selectedStages} label="Pipeline Stages" />
+		</div>
+	</section>
 
 	{#if historyData && historyData.runs && historyData.runs.length > 0 && !historyLoading}
 		<section class="history-section">
-			<h2>Historical Trending</h2>
+			<div class="section-header">
+				<h2>Historical Trending</h2>
+				<div class="metric-selector">
+					<label for="trend-metric">Metric:</label>
+					<select bind:value={selectedTrendMetric} id="trend-metric">
+						<option value="hit_rate">Hit Rate & MRR</option>
+						<option value="mrr">MRR Focus</option>
+						<option value="latency">Latency</option>
+					</select>
+				</div>
+			</div>
 			<div class="history-summary">
 				<div class="summary-stat">
 					<span class="stat-label">Total Runs</span>
@@ -106,52 +311,174 @@
 				</div>
 			</div>
 			<div class="charts-grid">
-				<div class="chart-card">
-					<MetricChart
-						type="line"
-						title="Hit Rate & MRR Over Time"
-						data={{
-							labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
-							datasets: [
-								{
-									label: 'Hit Rate @k',
-									data: historyData.runs.map(r => (r.retrieval_metrics?.hit_rate_at_k || 0) * 100)
-								},
-								{
-									label: 'MRR',
-									data: historyData.runs.map(r => (r.retrieval_metrics?.mrr || 0) * 100)
-								}
-							]
-						}}
-						height={200}
-					/>
+				{#if selectedTrendMetric === 'hit_rate'}
+					<div class="chart-card">
+						<MetricChart
+							type="line"
+							title="Hit Rate & MRR Over Time"
+							data={{
+								labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
+								datasets: [
+									{
+										label: 'Hit Rate @k',
+										data: historyData.runs.map(r => (r.retrieval_metrics?.hit_rate_at_k || 0) * 100)
+									},
+									{
+										label: 'MRR',
+										data: historyData.runs.map(r => (r.retrieval_metrics?.mrr || 0) * 100)
+									}
+								]
+							}}
+							height={200}
+						/>
+					</div>
+				{:else if selectedTrendMetric === 'mrr'}
+					<div class="chart-card">
+						<MetricChart
+							type="line"
+							title="MRR & Precision Over Time"
+							data={{
+								labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
+								datasets: [
+									{
+										label: 'MRR',
+										data: historyData.runs.map(r => (r.retrieval_metrics?.mrr || 0) * 100)
+									},
+									{
+										label: 'Precision @k',
+										data: historyData.runs.map(r => (r.retrieval_metrics?.precision_at_k || 0) * 100)
+									},
+									{
+										label: 'Recall @k',
+										data: historyData.runs.map(r => (r.retrieval_metrics?.recall_at_k || 0) * 100)
+									}
+								]
+							}}
+							height={200}
+						/>
+					</div>
+				{:else if selectedTrendMetric === 'latency'}
+					<div class="chart-card">
+						<MetricChart
+							type="bar"
+							title="Latency Over Time (ms)"
+							data={{
+								labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
+								datasets: [
+									{
+										label: 'p50',
+										data: historyData.runs.map(r => r.retrieval_metrics?.latency_p50_ms || 0)
+									},
+									{
+										label: 'p95',
+										data: historyData.runs.map(r => r.retrieval_metrics?.latency_p95_ms || 0)
+									}
+								]
+							}}
+							height={200}
+						/>
+					</div>
+				{/if}
+			</div>
+		</section>
+	{/if}
+
+	<!-- Comparison View -->
+	{#if compareMode && comparisonData.baseline && comparisonData.comparison}
+		<section class="comparison-view">
+			<h2>Run Comparison</h2>
+			<div class="comparison-grid">
+				<div class="comparison-col">
+					<h3>Baseline</h3>
+					<p class="run-id">{comparisonData.baseline.run_dir}</p>
+					{#if comparisonData.baseline.retrieval_metrics}
+						<div class="metrics-grid compact">
+							<div class="metric-card">
+								<span class="metric-label">Hit Rate</span>
+								<span class="metric-value">{formatPercent(comparisonData.baseline.retrieval_metrics.hit_rate_at_k)}</span>
+							</div>
+							<div class="metric-card">
+								<span class="metric-label">MRR</span>
+								<span class="metric-value">{comparisonData.baseline.retrieval_metrics.mrr.toFixed(3)}</span>
+							</div>
+							<div class="metric-card">
+								<span class="metric-label">Latency p50</span>
+								<span class="metric-value">{comparisonData.baseline.retrieval_metrics.latency_p50_ms.toFixed(0)}ms</span>
+							</div>
+						</div>
+					{/if}
 				</div>
-				<div class="chart-card">
-					<MetricChart
-						type="bar"
-						title="Latency (ms)"
-						data={{
-							labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
-							datasets: [
-								{
-									label: 'p50',
-									data: historyData.runs.map(r => r.retrieval_metrics?.latency_p50_ms || 0)
-								},
-								{
-									label: 'p95',
-									data: historyData.runs.map(r => r.retrieval_metrics?.latency_p95_ms || 0)
-								}
-							]
-						}}
-						height={200}
-					/>
+				<div class="comparison-col">
+					<h3>Comparison</h3>
+					<p class="run-id">{comparisonData.comparison.run_dir}</p>
+					{#if comparisonData.comparison.retrieval_metrics}
+						<div class="metrics-grid compact">
+							<div class="metric-card">
+								<span class="metric-label">Hit Rate</span>
+								<span class="metric-value">{formatPercent(comparisonData.comparison.retrieval_metrics.hit_rate_at_k)}</span>
+							</div>
+							<div class="metric-card">
+								<span class="metric-label">MRR</span>
+								<span class="metric-value">{comparisonData.comparison.retrieval_metrics.mrr.toFixed(3)}</span>
+							</div>
+							<div class="metric-card">
+								<span class="metric-label">Latency p50</span>
+								<span class="metric-value">{comparisonData.comparison.retrieval_metrics.latency_p50_ms.toFixed(0)}ms</span>
+							</div>
+						</div>
+					{/if}
+				</div>
+				<div class="comparison-col">
+					<h3>Delta</h3>
+					<p class="run-id">Change</p>
+					{#if comparisonData.baseline.retrieval_metrics && comparisonData.comparison.retrieval_metrics}
+						<div class="metrics-grid compact">
+							<div class="metric-card">
+								<span class="metric-label">Hit Rate</span>
+								{@const hitRateDelta = getMetricDelta(
+									comparisonData.baseline.retrieval_metrics.hit_rate_at_k,
+									comparisonData.comparison.retrieval_metrics.hit_rate_at_k
+								)}
+								<span class="metric-value delta" class:positive={hitRateDelta.positive === true} class:negative={hitRateDelta.positive === false}>
+									{hitRateDelta.positive === true ? '+' : ''}{(hitRateDelta.value * 100).toFixed(1)}%
+								</span>
+							</div>
+							<div class="metric-card">
+								<span class="metric-label">MRR</span>
+								{@const mrrDelta = getMetricDelta(
+									comparisonData.baseline.retrieval_metrics.mrr,
+									comparisonData.comparison.retrieval_metrics.mrr
+								)}
+								<span class="metric-value delta" class:positive={mrrDelta.positive === true} class:negative={mrrDelta.positive === false}>
+									{mrrDelta.positive === true ? '+' : ''}{mrrDelta.value.toFixed(3)}
+								</span>
+							</div>
+							<div class="metric-card">
+								<span class="metric-label">Latency p50</span>
+								{@const latencyDelta = getMetricDelta(
+									comparisonData.baseline.retrieval_metrics.latency_p50_ms,
+									comparisonData.comparison.retrieval_metrics.latency_p50_ms
+								)}
+								<span class="metric-value delta" class:positive={latencyDelta.positive === false} class:negative={latencyDelta.positive === true}>
+									{latencyDelta.positive === true ? '+' : ''}{latencyDelta.value.toFixed(0)}ms
+								</span>
+							</div>
+						</div>
+					{/if}
 				</div>
 			</div>
 		</section>
 	{/if}
 
 	{#if loading}
-		<div class="loading">Loading evaluation data...</div>
+		<div class="skeleton-wrapper">
+			<h2>Loading evaluation data...</h2>
+			<div class="skeleton-grid">
+				<LoadingSkeleton count={3} type="card" />
+				<LoadingSkeleton count={3} type="card" />
+				<LoadingSkeleton count={3} type="card" />
+			</div>
+		</div>
 	{:else if error}
 		<div class="error">{error}</div>
 	{:else if !data || (!data.summary && !data.step_metrics && !data.retrieval_metrics)}
@@ -188,8 +515,18 @@
 			{#if data.step_metrics}
 				<section class="steps-section">
 					<h2>Pipeline Steps (L0-L5)</h2>
+					{@const filteredSteps = Object.entries(data.step_metrics).filter(([stage]) =>
+						selectedStages.includes(stage.toUpperCase())
+					)}
+					{@const searchedSteps = searchQuery
+						? filteredSteps.filter(([_, metrics]) =>
+								Object.keys(metrics.aggregate || {}).some((key) =>
+									key.toLowerCase().includes(searchQuery.toLowerCase())
+								)
+							)
+						: filteredSteps}
 					<div class="steps-grid">
-						{#each Object.entries(data.step_metrics) as [stage, metrics]: [string, any] (stage)}
+						{#each searchedSteps as [stage, metrics]: [string, any] (stage)}
 							{@const agg = metrics.aggregate}
 							{@const findings = metrics.findings || []}
 							<div class="step-card">
@@ -215,6 +552,16 @@
 											<span>Duplicate Rate</span>
 											<span>{formatPercent(agg.duplicate_file_rate || 0)}</span>
 										</div>
+										<div class="metric-row">
+											<span>Small File Rate</span>
+											<span class:warning={agg.small_file_rate > 0.1}>
+												{formatPercent(agg.small_file_rate || 0)}
+											</span>
+										</div>
+										<div class="metric-row">
+											<span>Manifest Records</span>
+											<span>{agg.manifest_inventory_record_count || 0}</span>
+										</div>
 									{:else if stage === 'l1'}
 										<div class="metric-row">
 											<span>Pairs Evaluated</span>
@@ -230,6 +577,32 @@
 											<span>Retention Ratio</span>
 											<span>{formatPercent(agg.retention_ratio_mean || 0)}</span>
 										</div>
+										<div class="metric-row">
+											<span>Content Density</span>
+											<span>{(agg.content_density_mean * 100).toFixed(1)}%</span>
+										</div>
+										<div class="metric-row">
+											<span>Boilerplate Ratio</span>
+											<span class:warning={agg.boilerplate_ratio_mean > 0.1}>
+												{(agg.boilerplate_ratio_mean * 100).toFixed(1)}%
+											</span>
+										</div>
+										<div class="metric-row">
+											<span>Heading Preservation</span>
+											<span>{formatPercent(agg.heading_preservation_rate_mean || 0)}</span>
+										</div>
+										<div class="metric-row">
+											<span>Table Preservation</span>
+											<span>{formatPercent(agg.table_preservation_rate_mean || 0)}</span>
+										</div>
+										<div class="metric-row">
+											<span>Page Types</span>
+											<span class="page-types">
+												{#each Object.entries(agg.page_classification_distribution || {}) as [type, count]}
+													<span class="page-type-badge">{type}: {count}</span>
+												{/each}
+											</span>
+										</div>
 									{:else if stage === 'l2'}
 										<div class="metric-row">
 											<span>PDF Files</span>
@@ -244,6 +617,20 @@
 											<span class:warning={agg.empty_page_rate > 0.2}>
 												{formatPercent(agg.empty_page_rate || 0)}
 											</span>
+										</div>
+										<div class="metric-row">
+											<span>Extractor Fallback Rate</span>
+											<span>{formatPercent(agg.extractor_fallback_rate || 0)}</span>
+										</div>
+										<div class="metric-row">
+											<span>Low Confidence Rate</span>
+											<span class:warning={agg.low_confidence_page_rate > 0.1}>
+												{formatPercent(agg.low_confidence_page_rate || 0)}
+											</span>
+										</div>
+										<div class="metric-row">
+											<span>OCR Required Rate</span>
+											<span>{formatPercent(agg.ocr_required_rate || 0)}</span>
 										</div>
 									{:else if stage === 'l3'}
 										<div class="metric-row">
@@ -263,6 +650,32 @@
 										<div class="metric-row">
 											<span>Boundary Cut Rate</span>
 											<span>{formatPercent(agg.boundary_cut_rate || 0)}</span>
+										</div>
+										<div class="metric-row">
+											<span>Observed Overlap</span>
+											<span>{(agg.observed_overlap_mean * 100).toFixed(1)}%</span>
+										</div>
+										<div class="metric-row">
+											<span>Table Row Split Violations</span>
+											<span class:warning={(agg.table_row_split_violations || 0) > 0}>
+												{agg.table_row_split_violations || 0}
+											</span>
+										</div>
+										<div class="metric-row">
+											<span>Quality Distribution</span>
+											<QualityDistributionChart
+												high={agg.chunk_quality_histogram?.high || 0}
+												medium={agg.chunk_quality_histogram?.medium || 0}
+												low={agg.chunk_quality_histogram?.low || 0}
+											/>
+										</div>
+										<div class="metric-row">
+											<span>Section Integrity</span>
+											<span>{formatPercent(agg.section_integrity_rate || 0)}</span>
+										</div>
+										<div class="metric-row">
+											<span>Low Quality Filtered</span>
+											<span>{formatPercent(agg.low_quality_chunk_exclusion_rate || 0)}</span>
 										</div>
 									{:else if stage === 'l4'}
 										<div class="metric-row">
@@ -290,6 +703,29 @@
 											<span>Dims Consistent</span>
 											<span>{agg.embedding_dim_consistent ? 'Yes' : 'No'}</span>
 										</div>
+										<div class="metric-row">
+											<span>Short Content Rate</span>
+											<span class:warning={agg.short_content_rate > 0.1}>
+												{formatPercent(agg.short_content_rate || 0)}
+											</span>
+										</div>
+										<div class="metric-row">
+											<span>Index File Size</span>
+											<span>{(agg.index_file_size_bytes / 1024 / 1024).toFixed(2)} MB</span>
+										</div>
+										{#if agg.source_distribution}
+											<div class="metric-row">
+												<span>Source Distribution</span>
+												<span class="source-dist-mini">
+													{#each Object.entries(agg.source_distribution).slice(0, 3) as [source, count]}
+														<span class="source-badge">{source}: {count}</span>
+													{/each}
+													{#if Object.keys(agg.source_distribution).length > 3}
+														<span class="source-badge">+{Object.keys(agg.source_distribution).length - 3} more</span>
+													{/if}
+												</span>
+											</div>
+										{/if}
 									{/if}
 								</div>
 								{#if findings.length > 0}
@@ -316,13 +752,27 @@
 							<span class="metric-label">Query Count</span>
 							<span class="metric-value">{rm.query_count}</span>
 						</div>
-						<div class="metric-card">
+						<div
+							class="metric-card clickable"
+							onclick={() => showMetricDrillDown('l6', 'hit_rate_at_k', rm.hit_rate_at_k)}
+						>
 							<span class="metric-label">Hit Rate @k</span>
 							<span class="metric-value highlight">{formatPercent(rm.hit_rate_at_k)}</span>
 						</div>
-						<div class="metric-card">
+						<div
+							class="metric-card clickable"
+							onclick={() => showMetricDrillDown('l6', 'mrr', rm.mrr)}
+						>
 							<span class="metric-label">MRR</span>
 							<span class="metric-value highlight">{rm.mrr.toFixed(3)}</span>
+						</div>
+						<div class="metric-card">
+							<span class="metric-label">Precision @k</span>
+							<span class="metric-value">{formatPercent(rm.precision_at_k)}</span>
+						</div>
+						<div class="metric-card">
+							<span class="metric-label">Recall @k</span>
+							<span class="metric-value">{formatPercent(rm.recall_at_k)}</span>
 						</div>
 						<div class="metric-card">
 							<span class="metric-label">nDCG @k</span>
@@ -349,6 +799,125 @@
 							<span class="metric-value">{rm.latency_p95_ms.toFixed(0)}ms</span>
 						</div>
 					</div>
+					{#if rm.dedup_hit_rate_at_k !== undefined || rm.unique_source_hit_rate_at_k !== undefined}
+						<section class="retrieval-subsection">
+							<h3>Deduplication & Diversity</h3>
+							<div class="metrics-grid">
+								{#if rm.dedup_hit_rate_at_k !== undefined}
+									<div class="metric-card">
+										<span class="metric-label">Dedup Hit Rate</span>
+										<span class="metric-value">{formatPercent(rm.dedup_hit_rate_at_k)}</span>
+									</div>
+								{/if}
+								{#if rm.dedup_mrr !== undefined}
+									<div class="metric-card">
+										<span class="metric-label">Dedup MRR</span>
+										<span class="metric-value">{(rm.dedup_mrr || 0).toFixed(3)}</span>
+									</div>
+								{/if}
+								{#if rm.unique_source_hit_rate_at_k !== undefined}
+									<div class="metric-card">
+										<span class="metric-label">Unique Source Hit</span>
+										<span class="metric-value">{formatPercent(rm.unique_source_hit_rate_at_k)}</span>
+									</div>
+								{/if}
+								{#if rm.duplicate_source_ratio_mean !== undefined}
+									<div class="metric-card">
+										<span class="metric-label">Duplicate Source Ratio</span>
+										<span class="metric-value">{(rm.duplicate_source_ratio_mean * 100).toFixed(1)}%</span>
+									</div>
+								{/if}
+							</div>
+						</section>
+					{/if}
+					{#if rm.hit_rate_at_k_high_conf !== undefined || rm.exact_chunk_hit_rate_high_conf !== undefined}
+						<section class="retrieval-subsection">
+							<h3>High-Confidence Subset</h3>
+							<div class="metrics-grid">
+								{#if rm.hit_rate_at_k_high_conf !== undefined}
+									<div class="metric-card">
+										<span class="metric-label">Hit Rate (High Conf)</span>
+										<span class="metric-value highlight">{formatPercent(rm.hit_rate_at_k_high_conf)}</span>
+									</div>
+								{/if}
+								{#if rm.mrr_high_conf !== undefined}
+									<div class="metric-card">
+										<span class="metric-label">MRR (High Conf)</span>
+										<span class="metric-value highlight">{(rm.mrr_high_conf || 0).toFixed(3)}</span>
+									</div>
+								{/if}
+								{#if rm.exact_chunk_hit_rate_high_conf !== undefined}
+									<div class="metric-card">
+										<span class="metric-label">Exact Chunk (High Conf)</span>
+										<span class="metric-value">{formatPercent(rm.exact_chunk_hit_rate_high_conf)}</span>
+									</div>
+								{/if}
+								{#if rm.topic_false_positive_rate !== undefined}
+									<div class="metric-card">
+										<span class="metric-label">Topic False Positive</span>
+										<span class="metric-value">{(rm.topic_false_positive_rate * 100).toFixed(1)}%</span>
+									</div>
+								{/if}
+							</div>
+						</section>
+					{/if}
+				</section>
+			{/if}
+
+			{#if ablationData?.ablation_runs && ablationData.ablation_runs.length > 0}
+				<section class="ablation-section">
+					<h2>Retrieval Strategy Comparison (Ablation Study)</h2>
+					<div class="ablation-table-wrapper">
+						<table class="ablation-table">
+							<thead>
+								<tr>
+									<th>Strategy</th>
+									<th>Hit Rate</th>
+									<th>MRR</th>
+									<th>nDCG</th>
+									<th>Latency (p50)</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each ablationData.ablation_runs as run}
+									<tr class:highlighted={run.is_baseline}>
+										<td>
+											<span class="strategy-name">{run.strategy}</span>
+											{#if run.is_baseline}
+												<span class="baseline-badge">Baseline</span>
+											{/if}
+										</td>
+										<td class:good={run.hit_rate_at_k >= 0.7}>
+											{(run.hit_rate_at_k * 100).toFixed(1)}%
+										</td>
+										<td class:good={run.mrr >= 0.6}>{run.mrr.toFixed(3)}</td>
+										<td class:good={run.ndcg_at_k >= 0.7}>
+											{(run.ndcg_at_k * 100).toFixed(1)}%
+										</td>
+										<td>{run.latency_p50_ms?.toFixed(0) || 'N/A'}ms</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					{#if ablationData.message}
+						<p class="ablation-message">{ablationData.message}</p>
+					{/if}
+				</section>
+			{/if}
+
+			{#if data.step_metrics?.l5?.aggregate?.source_distribution}
+				<section class="data-quality-section">
+					<h2>Data Quality Overview</h2>
+					<div class="charts-grid">
+						<div class="chart-card">
+							<SourceDistributionChart
+								distribution={data.step_metrics.l5.aggregate.source_distribution}
+								title="Source Distribution"
+								height={220}
+							/>
+						</div>
+					</div>
 				</section>
 			{/if}
 
@@ -369,6 +938,17 @@
 			{/if}
 		</div>
 	{/if}
+
+	<!-- Drill-Down Modal -->
+	<DrillDownModal
+		open={drillDownModal.open}
+		onclose={() => (drillDownModal.open = false)}
+		metric={drillDownModal.metric}
+		stage={drillDownModal.stage}
+		currentValue={drillDownModal.currentValue}
+		records={drillDownModal.records}
+		historicalData={drillDownModal.historicalData}
+	/>
 </div>
 
 <style>
@@ -464,6 +1044,40 @@
 		color: #333;
 	}
 
+	.section-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1rem;
+		flex-wrap: wrap;
+		gap: 1rem;
+	}
+
+	.metric-selector {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.9rem;
+	}
+
+	.metric-selector label {
+		color: #666;
+		font-weight: 500;
+	}
+
+	.metric-selector select {
+		padding: 0.4rem 0.75rem;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		font-size: 0.9rem;
+		background: white;
+		cursor: pointer;
+	}
+
+	.metric-selector select:hover {
+		border-color: #2196f3;
+	}
+
 	.history-summary {
 		display: flex;
 		gap: 2rem;
@@ -506,6 +1120,26 @@
 		color: #666;
 	}
 
+	.skeleton-wrapper {
+		background: white;
+		border: 1px solid #e0e0e0;
+		border-radius: 8px;
+		padding: 1.5rem;
+		margin-bottom: 2rem;
+	}
+
+	.skeleton-wrapper h2 {
+		font-size: 1.25rem;
+		margin-bottom: 1rem;
+		color: #333;
+	}
+
+	.skeleton-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		gap: 1rem;
+	}
+
 	.empty-state {
 		background: #f9f9f9;
 		border-radius: 8px;
@@ -525,6 +1159,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2rem;
+		animation: fadeIn 0.4s ease-in;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	section h2 {
@@ -574,6 +1220,11 @@
 		border: 1px solid #e0e0e0;
 		border-radius: 8px;
 		overflow: hidden;
+		transition: box-shadow 0.2s ease, transform 0.2s ease;
+	}
+
+	.step-card:hover {
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
 
 	.step-header {
@@ -664,6 +1315,12 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+		position: relative;
+		transition: box-shadow 0.2s ease, border-color 0.2s ease;
+	}
+
+	.metric-card:hover {
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 	}
 
 	.metric-label {
@@ -675,9 +1332,424 @@
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: #333;
+		transition: color 0.3s ease, transform 0.3s ease;
 	}
 
 	.metric-value.highlight {
 		color: #2196f3;
+	}
+
+	.metric-value.updated {
+		animation: valueUpdate 0.5s ease;
+	}
+
+	@keyframes valueUpdate {
+		0% {
+			transform: scale(1);
+		}
+		50% {
+			transform: scale(1.1);
+			color: #2196f3;
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+
+	.page-types {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+	}
+
+	.page-type-badge {
+		font-size: 0.75rem;
+		padding: 0.15rem 0.4rem;
+		background: #e0e0e0;
+		border-radius: 3px;
+		color: #555;
+		font-weight: 500;
+	}
+
+	.retrieval-subsection {
+		margin-top: 1.5rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid #e0e0e0;
+	}
+
+	.retrieval-subsection h3 {
+		font-size: 1rem;
+		margin-bottom: 0.75rem;
+		color: #555;
+		font-weight: 500;
+	}
+
+	.source-dist-mini {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+	}
+
+	.source-badge {
+		font-size: 0.7rem;
+		padding: 0.15rem 0.4rem;
+		background: #e0e0e0;
+		border-radius: 3px;
+		color: #555;
+		font-weight: 500;
+	}
+
+	.data-quality-section {
+		background: white;
+		border: 1px solid #e0e0e0;
+		border-radius: 8px;
+		padding: 1.5rem;
+		margin-bottom: 2rem;
+	}
+
+	/* Header Actions */
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.action-btn {
+		padding: 0.5rem 1rem;
+		background: white;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		cursor: pointer;
+		font-weight: 500;
+		font-size: 0.9rem;
+		transition: all 0.2s;
+	}
+
+	.action-btn:hover:not(:disabled) {
+		background: #f5f5f5;
+		border-color: #2196f3;
+	}
+
+	.action-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.compare-btn.active {
+		background: #e3f2fd;
+		border-color: #2196f3;
+		color: #1976d2;
+	}
+
+	/* Filters Section */
+	.filters-section {
+		background: white;
+		border: 1px solid #e0e0e0;
+		border-radius: 8px;
+		padding: 1rem 1.5rem;
+		margin-bottom: 1.5rem;
+		display: flex;
+		gap: 2rem;
+		flex-wrap: wrap;
+		align-items: flex-end;
+	}
+
+	.filter-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		flex: 1;
+		min-width: 200px;
+	}
+
+	.search-input {
+		padding: 0.5rem 0.75rem;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		font-size: 0.9rem;
+		width: 100%;
+	}
+
+	.search-input:focus {
+		outline: none;
+		border-color: #2196f3;
+		box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+	}
+
+	/* Comparison Controls */
+	.comparison-controls-section {
+		background: #e3f2fd;
+		border: 1px solid #bbdefb;
+		border-radius: 8px;
+		padding: 1rem 1.5rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.comparison-controls-section h3 {
+		font-size: 1.1rem;
+		margin: 0 0 1rem 0;
+		color: #1976d2;
+	}
+
+	.comparison-controls {
+		display: flex;
+		gap: 2rem;
+		flex-wrap: wrap;
+	}
+
+	.control-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		min-width: 250px;
+	}
+
+	.control-group label {
+		font-size: 0.85rem;
+		color: #555;
+		font-weight: 500;
+	}
+
+	.control-group select {
+		padding: 0.5rem 0.75rem;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		font-size: 0.9rem;
+		background: white;
+	}
+
+	/* Comparison View */
+	.comparison-view {
+		background: white;
+		border: 1px solid #e0e0e0;
+		border-radius: 8px;
+		padding: 1.5rem;
+		margin-bottom: 2rem;
+	}
+
+	.comparison-view h2 {
+		font-size: 1.25rem;
+		margin-bottom: 1rem;
+		color: #333;
+	}
+
+	.comparison-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 1.5rem;
+	}
+
+	.comparison-col h3 {
+		font-size: 1rem;
+		margin-bottom: 0.5rem;
+		color: #555;
+	}
+
+	.run-id {
+		font-size: 0.8rem;
+		color: #999;
+		margin-bottom: 1rem;
+		font-family: monospace;
+	}
+
+	.metrics-grid.compact {
+		grid-template-columns: 1fr;
+		gap: 0.5rem;
+	}
+
+	.metric-value.delta {
+		font-weight: 700;
+	}
+
+	.metric-value.delta.positive {
+		color: #4caf50;
+	}
+
+	.metric-value.delta.negative {
+		color: #f44336;
+	}
+
+	/* Responsive adjustments */
+	@media (max-width: 768px) {
+		.eval-container {
+			padding: 0.5rem;
+		}
+
+		header {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 1rem;
+		}
+
+		.header-left {
+			width: 100%;
+		}
+
+		.header-actions {
+			width: 100%;
+			justify-content: stretch;
+			flex-wrap: wrap;
+		}
+
+		.action-btn {
+			flex: 1;
+			min-width: 120px;
+			font-size: 0.85rem;
+			padding: 0.4rem 0.75rem;
+		}
+
+		.filters-section {
+			flex-direction: column;
+			gap: 1rem;
+		}
+
+		.comparison-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.steps-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.metrics-grid {
+			grid-template-columns: repeat(2, 1fr);
+		}
+
+		.charts-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.history-summary {
+			grid-template-columns: repeat(2, 1fr);
+		}
+
+		.summary-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.metric-value {
+			font-size: 1.1rem;
+		}
+	}
+
+	@media (max-width: 480px) {
+		header h1 {
+			font-size: 1.4rem;
+		}
+
+		.metrics-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.history-summary {
+			grid-template-columns: 1fr;
+		}
+
+		.skeleton-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.action-btn {
+			font-size: 0.8rem;
+			padding: 0.35rem 0.65rem;
+		}
+	}
+
+	/* Ablation Section */
+	.ablation-section {
+		background: white;
+		border: 1px solid #e0e0e0;
+		border-radius: 8px;
+		padding: 1.5rem;
+		margin-bottom: 2rem;
+	}
+
+	.ablation-section h2 {
+		font-size: 1.25rem;
+		margin-bottom: 1rem;
+		color: #333;
+	}
+
+	.ablation-table-wrapper {
+		overflow-x: auto;
+	}
+
+	.ablation-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+	}
+
+	.ablation-table th,
+	.ablation-table td {
+		padding: 0.75rem 1rem;
+		text-align: left;
+		border-bottom: 1px solid #f0f0f0;
+	}
+
+	.ablation-table th {
+		background: #f9f9f9;
+		font-weight: 600;
+		color: #555;
+	}
+
+	.ablation-table tr.highlighted {
+		background: #e3f2fd;
+		font-weight: 500;
+	}
+
+	.ablation-table td.good {
+		color: #4caf50;
+		font-weight: 600;
+	}
+
+	.strategy-name {
+		font-weight: 500;
+	}
+
+	.baseline-badge {
+		display: inline-block;
+		margin-left: 0.5rem;
+		padding: 0.2rem 0.5rem;
+		background: #2196f3;
+		color: white;
+		font-size: 0.75rem;
+		border-radius: 3px;
+		font-weight: 600;
+	}
+
+	.ablation-message {
+		margin-top: 1rem;
+		color: #666;
+		font-style: italic;
+		font-size: 0.9rem;
+	}
+
+	/* Clickable metric cards */
+	.metric-card.clickable {
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.metric-card.clickable:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+		border-color: #2196f3;
+	}
+
+	.metric-card.clickable::after {
+		content: '↓';
+		position: absolute;
+		bottom: 0.5rem;
+		right: 0.75rem;
+		font-size: 0.8rem;
+		color: #2196f3;
+		opacity: 0;
+		transition: opacity 0.2s;
+	}
+
+	.metric-card.clickable:hover::after {
+		opacity: 1;
 	}
 </style>

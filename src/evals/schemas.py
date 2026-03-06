@@ -22,6 +22,13 @@ class AssessmentConfig:
     fail_on_thresholds: bool = False
     thresholds: dict[str, Any] = field(default_factory=dict)
     retrieval_options: dict[str, Any] = field(default_factory=dict)
+    dataset_split: str | None = None
+    min_label_confidence: str = "low"
+    retrieval_mode: str = "rrf_hybrid"
+    disable_page_classification: bool = False
+    disable_structured_chunking: bool = False
+    disable_bm25: bool = False
+    export_failed_generations: bool = False
     run_retrieval_ablations: bool = False
     run_diversity_sweep: bool = False
     diversity_sweep: dict[str, Any] = field(default_factory=dict)

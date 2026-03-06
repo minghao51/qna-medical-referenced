@@ -36,13 +36,13 @@ def judge_answer(
     context: str,
     max_retries: int = 2,
 ) -> dict[str, Any]:
-    if not settings.gemini_api_key or settings.gemini_api_key == "test-api-key":
-        return {"status": "skipped", "reason": "missing_gemini_api_key"}
+    if not settings.dashscope_api_key or settings.dashscope_api_key == "test-api-key":
+        return {"status": "skipped", "reason": "missing_dashscope_api_key"}
 
     try:
-        import google.genai as genai
+        from openai import OpenAI
     except Exception as exc:  # pragma: no cover
-        return {"status": "skipped", "reason": f"genai_import_error: {exc}"}
+        return {"status": "skipped", "reason": f"openai_import_error: {exc}"}
 
     prompt = f"""
 You are an evaluator for a medical RAG system.
@@ -63,13 +63,17 @@ Answer:
 {answer[:4000]}
 """.strip()
 
-    client = genai.Client(api_key=settings.gemini_api_key)
+    client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url)
     last_error = None
     raw_response = ""
     for _ in range(max_retries + 1):
         try:
-            response = client.models.generate_content(model=settings.model_name, contents=prompt)
-            raw_response = (response.text or "").strip()
+            response = client.chat.completions.create(
+                model=settings.model_name,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+            )
+            raw_response = (response.choices[0].message.content or "").strip()
             parsed = _extract_json(raw_response)
             return {"status": "ok", "parsed": parsed, "raw_response": raw_response}
         except Exception as exc:

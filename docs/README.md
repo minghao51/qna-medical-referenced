@@ -14,4 +14,3 @@ This folder is organized into stable reference docs and dated reports.
 
 Notes:
 - Files in `reports/` are preserved as historical snapshots and may reference paths or structures that changed later.
-- Legacy compatibility wrappers remain in `src/pipeline/` for a transition period, but docs use the canonical paths.

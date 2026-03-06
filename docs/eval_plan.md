@@ -2,14 +2,13 @@
 
 ## Summary
 
-- `src/pipeline/run_pipeline.py` is only a deprecated wrapper. The real pipeline orchestration is `src/ingestion/pipeline.py`.
+- The real pipeline orchestration is `src/ingestion/pipeline.py`.
 - Current pipeline executes L0-L6 successfully but only reports counts/timing; it does not produce structured quality metrics, regression baselines, or preserved evaluation artifacts.
 - Implement a new evaluation subsystem and CLI that assesses each stage (download, HTML conversion, PDF extraction, chunking, reference loading, indexing, retrieval, optional answer generation) and writes versioned artifacts to disk.
 - Use a hybrid evaluation dataset strategy (user-selected): merge existing deterministic golden queries (`tests/fixtures/golden_queries.json`) with Gemini-generated synthetic queries/QA pairs, while preserving all generated artifacts and raw judge outputs.
 
 ## Current Code Review Findings (What Exists / Gaps)
 
-- `src/pipeline/run_pipeline.py`: deprecated wrapper only; no linked step logic to review beyond forwarding.
 - `src/ingestion/pipeline.py`: runs L0-L6 sequentially and prints summary, but no structured metrics capture or quality thresholds.
 - `src/ingestion/indexing/vector_store.py`: already exposes `similarity_search_with_trace()` with useful retrieval score decomposition and timings.
 - `src/rag/runtime.py`: already exposes `retrieve_context_with_trace()` suitable for retrieval evaluation artifacts.
@@ -36,7 +35,6 @@
 
 - Add new CLI entrypoint: `python -m src.cli.eval_pipeline`
 - Add new module-level runner function: `src.evals.pipeline_assessment.run_assessment(...)`
-- No changes to the deprecated wrapper `src/pipeline/run_pipeline.py`
 - No required changes to existing ingestion CLI behavior (`src.cli.ingest`) in first pass
 
 ### Proposed CLI arguments (decision-complete)
@@ -282,4 +280,3 @@
 - Generated synthetic questions and judge outputs are always preserved to disk (even if low quality or rejected).
 - If Gemini is unavailable, evaluation still runs in offline mode using deterministic dataset and heuristic metrics.
 - First-pass RAG answer evaluation is optional and non-blocking; retrieval metrics are the primary release gate.
-

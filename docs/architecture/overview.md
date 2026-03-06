@@ -6,8 +6,7 @@ This document describes the current backend structure after the package cleanup.
 
 - Make responsibilities obvious to a new contributor.
 - Separate runtime query serving from offline ingestion/indexing.
-- Keep behavior and data paths stable during the transition.
-- Preserve old import paths/commands temporarily via compatibility wrappers.
+- Keep behavior and data paths stable.
 
 ## Current Backend Package Map
 
@@ -44,7 +43,6 @@ src/
     serve.py
     ingest.py
 
-  compat/                 # Transitional compatibility exports (optional)
 ```
 
 ## Runtime vs Offline Responsibilities
@@ -80,17 +78,6 @@ Flow:
 - `src.config.settings` is the source of runtime settings (API keys, model names, limits, data dirs).
 - `src.config.paths` is the source of filesystem paths (`data/raw`, `data/vectors`, `data/chat_history.json`, rate limit DB).
 - Canonical modules should not read environment variables directly with `os.getenv()`.
-
-## Compatibility Wrappers (Transition)
-
-The following are preserved temporarily so external scripts do not break immediately:
-
-- `src.main`
-- `src.run`
-- `src.pipeline.*`
-- legacy package paths such as `src.llm`, `src.storage`, `src.services`, `src.middleware`, `src.api`
-
-New code and docs should use canonical paths only.
 
 ## Canonical Commands
 

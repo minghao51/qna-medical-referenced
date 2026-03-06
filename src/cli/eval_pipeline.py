@@ -32,7 +32,14 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--fail-on-thresholds", action="store_true")
     parser.add_argument("--thresholds-file", default=None)
-    parser.add_argument("--search-mode", default="hybrid", choices=["hybrid", "semantic_only", "keyword_only"])
+    parser.add_argument("--dataset-split", default=None, choices=["dev", "test", "regression"])
+    parser.add_argument("--min-label-confidence", default="low", choices=["low", "medium", "high"])
+    parser.add_argument("--retrieval-mode", default="rrf_hybrid", choices=["rrf_hybrid", "legacy_hybrid", "semantic_only", "bm25_only"])
+    parser.add_argument("--disable-page-classification", action="store_true")
+    parser.add_argument("--disable-structured-chunking", action="store_true")
+    parser.add_argument("--disable-bm25", action="store_true")
+    parser.add_argument("--export-failed-generations", action="store_true")
+    parser.add_argument("--search-mode", default="rrf_hybrid", choices=["rrf_hybrid", "legacy_hybrid", "semantic_only", "bm25_only", "keyword_only", "hybrid"])
     parser.add_argument("--no-diversification", action="store_true")
     parser.add_argument("--mmr-lambda", type=float, default=None)
     parser.add_argument("--overfetch-multiplier", type=int, default=None)
@@ -79,6 +86,13 @@ def main() -> None:
         seed=args.seed,
         fail_on_thresholds=args.fail_on_thresholds,
         thresholds_file=args.thresholds_file,
+        dataset_split=args.dataset_split,
+        min_label_confidence=args.min_label_confidence,
+        retrieval_mode=args.retrieval_mode,
+        disable_page_classification=args.disable_page_classification,
+        disable_structured_chunking=args.disable_structured_chunking,
+        disable_bm25=args.disable_bm25,
+        export_failed_generations=args.export_failed_generations,
         retrieval_options=retrieval_options,
         run_retrieval_ablations=args.run_retrieval_ablations,
         run_diversity_sweep=args.run_diversity_sweep,

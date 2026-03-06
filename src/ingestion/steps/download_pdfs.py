@@ -15,8 +15,8 @@ import httpx
 
 from src.config import DATA_RAW_DIR
 from src.ingestion.steps.download_web import _load_manifest as _load_web_manifest
-from src.ingestion.steps.download_web import _save_manifest as _save_web_manifest
 from src.ingestion.steps.download_web import _manifest_indexes as _manifest_indexes_web
+from src.ingestion.steps.download_web import _save_manifest as _save_web_manifest
 from src.ingestion.steps.download_web import normalize_url as normalize_url_web
 
 MANIFEST_PATH = DATA_RAW_DIR / "download_manifest.json"

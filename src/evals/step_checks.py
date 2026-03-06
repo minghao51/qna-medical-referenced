@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 from pypdf import PdfReader
 
 from src.config import DATA_RAW_DIR, VECTOR_DIR, settings
+from src.ingestion.artifacts import load_source_artifact
 from src.ingestion.steps.chunk_text import TextChunker
 from src.ingestion.steps.download_web import _load_manifest, get_manifest_alias_filenames
 from src.ingestion.steps.load_pdfs import get_documents
@@ -110,6 +111,9 @@ def assess_l1_html_markdown_quality(data_raw_dir: Path | None = None) -> dict[st
         html_visible = soup.get_text("\n", strip=True)
         html_chars = len(html_visible)
         md_text = md_path.read_text(encoding="utf-8", errors="ignore") if md_path.exists() else ""
+        artifact = load_source_artifact("html", html_path.stem) or {}
+        artifact_meta = artifact.get("metadata", {})
+        structured_blocks = artifact.get("structured_blocks", [])
         md_chars = len(md_text.strip())
         retention = (md_chars / html_chars) if html_chars > 0 else 0.0
         retention_ratios.append(retention)
@@ -129,6 +133,16 @@ def assess_l1_html_markdown_quality(data_raw_dir: Path | None = None) -> dict[st
                 "markdown_link_count": md_text.count("]("),
                 "boilerplate_hits": boilerplate_hits,
                 "boilerplate_suspicion": (boilerplate_hits / max(1, md_chars)),
+                "content_density": artifact_meta.get("text_density", 0.0),
+                "page_type": artifact_meta.get("page_type"),
+                "heading_preservation_rate": (
+                    len(re.findall(r"^#{1,6}\s", md_text, flags=re.MULTILINE))
+                    / max(1, sum(1 for block in structured_blocks if block.get("block_type") == "heading"))
+                ),
+                "table_preservation_rate": (
+                    md_text.count("| --- |")
+                    / max(1, sum(1 for block in structured_blocks if block.get("block_type") == "table"))
+                ),
             }
         )
 
@@ -139,6 +153,11 @@ def assess_l1_html_markdown_quality(data_raw_dir: Path | None = None) -> dict[st
         "retention_ratio_median": _safe_median(retention_ratios),
         "retention_ratio_mean": _safe_mean(retention_ratios),
         "low_retention_rate": (sum(1 for r in retention_ratios if r < 0.05) / len(retention_ratios)) if retention_ratios else 0.0,
+        "content_density_mean": _safe_mean([float(r.get("content_density", 0.0)) for r in records]),
+        "boilerplate_ratio_mean": _safe_mean([float(r.get("boilerplate_suspicion", 0.0)) for r in records]),
+        "heading_preservation_rate_mean": _safe_mean([float(r.get("heading_preservation_rate", 0.0)) for r in records]),
+        "table_preservation_rate_mean": _safe_mean([float(r.get("table_preservation_rate", 0.0)) for r in records]),
+        "page_classification_distribution": dict(Counter(str(r.get("page_type", "unknown")) for r in records)),
     }
     findings = []
     if aggregate["markdown_empty_rate"] > 0.1:
@@ -165,9 +184,15 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
         except Exception as exc:
             findings.append({"severity": "error", "stage": "L2", "file": pdf_path.name, "message": str(exc)})
             continue
+        artifact = load_source_artifact("pdf", pdf_path.stem) or {}
+        artifact_meta = artifact.get("metadata", {})
 
         per_page_chars: list[int] = []
         replacement_chars = 0
+        fallback_pages = 0
+        low_conf_pages = 0
+        ocr_required_pages = 0
+        suspected_tables = 0
         for page in reader.pages:
             total_pages += 1
             text = page.extract_text() or ""
@@ -178,6 +203,15 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
                 extracted_pages += 1
             else:
                 empty_pages += 1
+        for page_data in artifact.get("best_output", {}).get("pages", []):
+            if page_data.get("extractor") == "pdfplumber":
+                fallback_pages += 1
+        for page_data in artifact.get("best_output", {}).get("pages", []):
+            if page_data.get("confidence") == "low":
+                low_conf_pages += 1
+            if page_data.get("ocr_required"):
+                ocr_required_pages += 1
+            suspected_tables += int(page_data.get("suspected_table_count", 0))
         records.append(
             {
                 "file": pdf_path.name,
@@ -188,6 +222,10 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
                 "chars_per_page_min": min(per_page_chars) if per_page_chars else 0,
                 "chars_per_page_max": max(per_page_chars) if per_page_chars else 0,
                 "replacement_char_count": replacement_chars,
+                "fallback_page_count": artifact_meta.get("fallback_used_pages", fallback_pages),
+                "low_confidence_page_count": artifact_meta.get("low_confidence_pages", low_conf_pages),
+                "ocr_required_page_count": artifact_meta.get("ocr_required_pages", ocr_required_pages),
+                "suspected_table_count": suspected_tables,
             }
         )
 
@@ -197,6 +235,18 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
         "extracted_pages": extracted_pages,
         "page_extraction_coverage": (extracted_pages / total_pages) if total_pages else 0.0,
         "empty_page_rate": (empty_pages / total_pages) if total_pages else 0.0,
+        "extractor_fallback_rate": (
+            sum(int(r.get("fallback_page_count", 0)) for r in records) / total_pages
+        ) if total_pages else 0.0,
+        "low_confidence_page_rate": (
+            sum(int(r.get("low_confidence_page_count", 0)) for r in records) / total_pages
+        ) if total_pages else 0.0,
+        "ocr_required_rate": (
+            sum(int(r.get("ocr_required_page_count", 0)) for r in records) / total_pages
+        ) if total_pages else 0.0,
+        "table_extraction_success_proxy": (
+            sum(1 for r in records if int(r.get("suspected_table_count", 0)) > 0) / len(records)
+        ) if records else 0.0,
     }
     if aggregate["empty_page_rate"] > 0.2:
         findings.append({"severity": "warning", "message": "High empty page rate in PDF extraction", "stage": "L2"})
@@ -252,6 +302,7 @@ def assess_l3_chunking_quality(
 
     lengths = [r["length_chars"] for r in records]
     duplicate_chunks = sum(count - 1 for count in duplicate_hashes.values() if count > 1)
+    low_quality_excluded = 0
     aggregate = {
         "document_count": len(docs),
         "chunk_count": len(chunks),
@@ -262,6 +313,20 @@ def assess_l3_chunking_quality(
         "duplicate_chunk_rate": (duplicate_chunks / len(chunks)) if chunks else 0.0,
         "boundary_cut_rate": (boundary_cut_count / len(chunks)) if chunks else 0.0,
         "observed_overlap_mean": _safe_mean([float(x) for x in overlap_values]),
+        "section_integrity_rate": (
+            sum(1 for c in chunks if c.get("section_path")) / len(chunks)
+        ) if chunks else 0.0,
+        "table_row_split_violations": sum(
+            1 for c in chunks if c.get("content_type") == "table" and len(str(c.get("content", "")).splitlines()) == 1
+        ),
+        "low_quality_chunk_exclusion_rate": (
+            low_quality_excluded / max(1, len(chunks) + low_quality_excluded)
+        ),
+        "chunk_quality_histogram": {
+            "high": sum(1 for c in chunks if float(c.get("quality_score", 1.0)) >= 0.8),
+            "medium": sum(1 for c in chunks if 0.55 <= float(c.get("quality_score", 1.0)) < 0.8),
+            "low": sum(1 for c in chunks if float(c.get("quality_score", 1.0)) < 0.55),
+        },
     }
     findings = []
     if aggregate["duplicate_chunk_rate"] > 0.05:

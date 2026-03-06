@@ -77,4 +77,3 @@ Use the canonical modules above for all new development and documentation.
 - Offline ingestion code lives under `src/ingestion`.
 - HTTP layer lives under `src/app`.
 - Config and paths live under `src/config`.
-- Some legacy wrappers still exist for transition compatibility, but not the old `src.pipeline.L0_*` ... `L6_*` stage modules.

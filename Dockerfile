@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
+COPY scripts/ ./scripts/
 RUN uv sync --frozen --no-dev
 RUN uv run python scripts/download_nltk_data.py
 
@@ -17,4 +18,4 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8000
 
-CMD ["uv", "run", "python", "-m", "src.main"]
+CMD ["uv", "run", "python", "-m", "src.cli.serve"]

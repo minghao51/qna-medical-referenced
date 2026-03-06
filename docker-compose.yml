@@ -4,10 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8001:8000"
+      - "8000:8000"
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI__MODEL=${GEMINI__MODEL:-models/gemini-2.5-flash}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - MODEL_NAME=${MODEL_NAME:-qwen3.5-flash}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -19,9 +19,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
-      - "5174:5173"
+      - "5173:5173"
     environment:
-      - PUBLIC_API_URL=http://localhost:8001
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       backend:
         condition: service_healthy

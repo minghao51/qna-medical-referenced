@@ -35,9 +35,12 @@ class TestPDFLoader:
 
         for doc in docs:
             assert doc["source"].endswith(".pdf")
+            assert doc["source_type"] == "pdf"
             for page in doc["pages"]:
                 assert page["page"] >= 1
-                assert len(page["content"]) > 0
+                assert "extractor" in page
+                assert "confidence" in page
+                assert "ocr_required" in page
 
     def test_extraction_integrity_sample(self):
         loader = PDFLoader("data/raw")
@@ -61,13 +64,14 @@ class TestPDFLoader:
             page_nums = [p["page"] for p in pages]
             assert page_nums == sorted(page_nums), "Pages should be sequential"
 
-    def test_no_empty_pages(self):
+    def test_empty_pages_are_explicitly_marked(self):
         loader = PDFLoader("data/raw")
         docs = loader.load_all_pdfs()
 
         for doc in docs:
             for page in doc["pages"]:
-                assert len(page["content"].strip()) > 0, f"Empty content in {doc['id']} page {page['page']}"
+                if len(page["content"].strip()) == 0:
+                    assert page["ocr_required"] is True
 
     def test_get_documents_function(self):
         docs = get_documents()

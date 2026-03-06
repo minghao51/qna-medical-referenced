@@ -1,4 +1,4 @@
-from src.infra.llm.gemini_client import GeminiClient, get_client
+from src.infra.llm.qwen_client import QwenClient, get_client
 
-__all__ = ["GeminiClient", "get_client"]
+__all__ = ["QwenClient", "get_client"]
 

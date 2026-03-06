@@ -81,6 +81,18 @@ export interface RetrievalMetrics {
 	latency_p95_ms: number;
 	hit_rate_at_k_high_conf: number;
 	mrr_high_conf: number;
+	// Advanced deduplication & diversity metrics
+	dedup_hit_rate_at_k?: number;
+	dedup_precision_at_k?: number;
+	dedup_mrr?: number;
+	unique_source_hit_rate_at_k?: number;
+	unique_source_precision_at_k?: number;
+	duplicate_source_ratio_mean?: number;
+	duplicate_doc_ratio_mean?: number;
+	// High-confidence subset metrics
+	exact_chunk_hit_rate_high_conf?: number;
+	evidence_hit_rate_high_conf?: number;
+	topic_false_positive_rate?: number;
 }
 
 export interface RagMetrics {
@@ -93,12 +105,38 @@ export interface RagMetrics {
 
 export interface StepMetrics {
 	aggregate: Record<string, any>;
+	// L0: html_file_count, html_parse_success_rate, duplicate_file_rate, small_file_rate
+	// L1: pairs_evaluated, markdown_empty_rate, retention_ratio_mean, content_density_mean,
+	//      boilerplate_ratio_mean, heading_preservation_rate_mean, table_preservation_rate_mean,
+	//      page_classification_distribution
+	// L2: pdf_file_count, page_extraction_coverage, empty_page_rate, extractor_fallback_rate,
+	//      low_confidence_page_rate, ocr_required_rate, replacement_char_count
+	// L3: document_count, chunk_count, duplicate_chunk_rate, boundary_cut_rate,
+	//      chunk_quality_histogram, section_integrity_rate, low_quality_chunk_exclusion_rate,
+	//      table_row_split_violations
+	// L4: csv_exists, row_count, row_completeness_rate, duplicate_test_name_rate,
+	//      normal_range_parseable_rate
+	// L5: ids_count, embedding_dim, embedding_dim_consistent, short_content_rate
 	records: any[];
 	findings: Array<{
 		severity: 'warning' | 'error';
 		stage: string;
 		message: string;
 	}>;
+}
+
+export interface ChunkQualityHistogram {
+	high: number;
+	medium: number;
+	low: number;
+}
+
+export interface PageClassificationDistribution {
+	article?: number;
+	faq?: number;
+	'navigation-heavy'?: number;
+	'index/listing'?: number;
+	unknown?: number;
 }
 
 export interface EvaluationResponse {

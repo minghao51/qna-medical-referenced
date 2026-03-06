@@ -11,7 +11,7 @@ def test_extract_json_parses_fenced_json():
 
 
 def test_judge_answer_skips_without_valid_key(monkeypatch):
-    monkeypatch.setattr(llm_judges.settings, "gemini_api_key", "test-api-key")
+    monkeypatch.setattr(llm_judges.settings, "dashscope_api_key", "test-api-key")
     result = llm_judges.judge_answer(query="q", answer="a", context="c")
     assert result["status"] == "skipped"
 

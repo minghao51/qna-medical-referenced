@@ -38,10 +38,11 @@ DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
     "l2.empty_page_rate": {"op": "max", "value": 0.20},
     "l3.duplicate_chunk_rate": {"op": "max", "value": 0.05},
     "l5.embedding_dim_consistent": {"op": "min", "value": 1.0},
+    "l6.exact_chunk_hit_rate_high_conf": {"op": "min", "value": 0.40},
+    "l6.evidence_hit_rate_high_conf": {"op": "min", "value": 0.50},
     "l6.hit_rate_at_k_high_conf": {"op": "min", "value": 0.70},
     "l6.mrr_high_conf": {"op": "min", "value": 0.40},
-    "l6.exact_chunk_hit_rate": {"op": "min", "value": 0.40},
-    "l6.evidence_hit_rate": {"op": "min", "value": 0.50},
+    "l6.topic_false_positive_rate": {"op": "max", "value": 0.35},
     "l6.duplicate_source_ratio_mean": {"op": "max", "value": 0.60},
 }
 
@@ -192,9 +193,18 @@ def _evaluate_retrieval(
     latencies: list[float] = []
     high_conf_hit_values: list[float] = []
     high_conf_mrr_values: list[float] = []
+    high_conf_exact_chunk_values: list[float] = []
+    high_conf_evidence_values: list[float] = []
+    topic_false_positive_values: list[float] = []
     by_query_category: dict[str, list[dict[str, float]]] = {}
     by_task_type: dict[str, list[dict[str, float]]] = {}
     by_expected_source_type: dict[str, list[dict[str, float]]] = {}
+    by_difficulty: dict[str, list[dict[str, float]]] = {}
+    retrieval_contribution = {
+        "semantic_ranked_hits": 0,
+        "bm25_ranked_hits": 0,
+        "fused_ranked_hits": 0,
+    }
 
     for item in dataset:
         query = item["query"]
@@ -221,6 +231,14 @@ def _evaluate_retrieval(
         evidence_hit = 0.0
         if evidence_phrase:
             evidence_hit = 1.0 if any(evidence_phrase in str(doc.get("content", "")).lower() for doc in retrieved_docs) else 0.0
+        topic_false_positive_rate = 0.0
+        if retrieved_docs and expected_sources:
+            mismatches = 0
+            for doc in retrieved_docs:
+                source_name = str(doc.get("source", "")).lower()
+                if not any(es in source_name for es in expected_sources):
+                    mismatches += 1
+            topic_false_positive_rate = mismatches / len(retrieved_docs)
         unique_sources = {(str(doc.get("source", "")), doc.get("page")) for doc in retrieved_docs}
         unique_doc_ids = {str(doc.get("id", "")) for doc in retrieved_docs}
         duplicate_source_ratio = 1.0 - (len(unique_sources) / len(retrieved_docs)) if retrieved_docs else 0.0
@@ -241,10 +259,13 @@ def _evaluate_retrieval(
             "duplicate_doc_ratio": duplicate_doc_ratio,
             "exact_chunk_hit": exact_chunk_hit,
             "evidence_hit": evidence_hit,
+            "topic_false_positive_rate": topic_false_positive_rate,
         }
         if item.get("label_confidence") == "high":
             high_conf_hit_values.append(row_metrics["hit_rate_at_k"])
             high_conf_mrr_values.append(row_metrics["mrr"])
+            high_conf_exact_chunk_values.append(row_metrics["exact_chunk_hit"])
+            high_conf_evidence_values.append(row_metrics["evidence_hit"])
         hit_values.append(row_metrics["hit_rate_at_k"])
         precision_values.append(row_metrics["precision_at_k"])
         recall_values.append(row_metrics["recall_at_k"])
@@ -260,13 +281,22 @@ def _evaluate_retrieval(
         duplicate_doc_ratio_values.append(row_metrics["duplicate_doc_ratio"])
         exact_chunk_hit_values.append(row_metrics["exact_chunk_hit"])
         evidence_hit_values.append(row_metrics["evidence_hit"])
+        topic_false_positive_values.append(row_metrics["topic_false_positive_rate"])
         latencies.append(float(trace.total_time_ms))
         category = str(item.get("query_category") or "uncategorized")
         task_type = str(item.get("task_type") or "unspecified")
         source_type = _expected_source_type_for_item(item)
+        difficulty = str(item.get("difficulty") or "unspecified")
         by_query_category.setdefault(category, []).append(row_metrics)
         by_task_type.setdefault(task_type, []).append(row_metrics)
         by_expected_source_type.setdefault(source_type, []).append(row_metrics)
+        by_difficulty.setdefault(difficulty, []).append(row_metrics)
+        if any(doc.get("semantic_rank") for doc in retrieved_docs):
+            retrieval_contribution["semantic_ranked_hits"] += int(exact_chunk_hit)
+        if any(doc.get("bm25_rank") for doc in retrieved_docs):
+            retrieval_contribution["bm25_ranked_hits"] += int(exact_chunk_hit)
+        if any(doc.get("fused_rank") for doc in retrieved_docs):
+            retrieval_contribution["fused_ranked_hits"] += int(exact_chunk_hit)
         rows.append(
             {
                 "query_id": item.get("query_id"),
@@ -318,17 +348,22 @@ def _evaluate_retrieval(
         "latency_p95_ms": percentile(latencies, 95),
         "hit_rate_at_k_high_conf": mean(high_conf_hit_values) if high_conf_hit_values else mean(hit_values),
         "mrr_high_conf": mean(high_conf_mrr_values) if high_conf_mrr_values else mean(mrr_values),
+        "exact_chunk_hit_rate_high_conf": mean(high_conf_exact_chunk_values) if high_conf_exact_chunk_values else mean(exact_chunk_hit_values),
+        "evidence_hit_rate_high_conf": mean(high_conf_evidence_values) if high_conf_evidence_values else mean(evidence_hit_values),
+        "topic_false_positive_rate": mean(topic_false_positive_values),
         "retrieval_options": dict(retrieval_options or {}),
         "by_query_category": {k: _slice_aggregate(v) for k, v in sorted(by_query_category.items())},
         "by_task_type": {k: _slice_aggregate(v) for k, v in sorted(by_task_type.items())},
         "by_expected_source_type": {k: _slice_aggregate(v) for k, v in sorted(by_expected_source_type.items())},
+        "by_difficulty": {k: _slice_aggregate(v) for k, v in sorted(by_difficulty.items())},
+        "contribution_analysis": retrieval_contribution,
     }
     return rows, aggregate
 
 
 def _evaluate_answers(dataset: list[dict[str, Any]], top_k: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    if not settings.gemini_api_key or settings.gemini_api_key == "test-api-key":
-        return [], {"status": "skipped", "reason": "missing_gemini_api_key"}
+    if not settings.dashscope_api_key or settings.dashscope_api_key == "test-api-key":
+        return [], {"status": "skipped", "reason": "missing_dashscope_api_key"}
 
     from src.infra.llm import get_client
     from src.rag.runtime import retrieve_context_with_trace
@@ -380,10 +415,11 @@ def _evaluate_answers(dataset: list[dict[str, Any]], top_k: int) -> tuple[list[d
 def _retrieval_ablation_configs(base_options: dict[str, Any] | None = None) -> list[tuple[str, dict[str, Any]]]:
     base = dict(base_options or {})
     return [
-        ("hybrid_diversified", {**base, "search_mode": "hybrid", "enable_diversification": True}),
-        ("hybrid_no_diversification", {**base, "search_mode": "hybrid", "enable_diversification": False}),
+        ("legacy_hybrid", {**base, "search_mode": "legacy_hybrid", "enable_diversification": True}),
         ("semantic_only_diversified", {**base, "search_mode": "semantic_only", "enable_diversification": True}),
-        ("keyword_only_diversified", {**base, "search_mode": "keyword_only", "enable_diversification": True}),
+        ("bm25_only_diversified", {**base, "search_mode": "bm25_only", "enable_diversification": True}),
+        ("rrf_hybrid", {**base, "search_mode": "rrf_hybrid", "enable_diversification": False}),
+        ("rrf_hybrid_mmr", {**base, "search_mode": "rrf_hybrid", "enable_diversification": True}),
     ]
 
 
@@ -422,7 +458,7 @@ def _run_diversity_sweep(
                 for per_source in per_source_caps:
                     opts = {
                         **base,
-                        "search_mode": "hybrid",
+                        "search_mode": "rrf_hybrid",
                         "enable_diversification": True,
                         "mmr_lambda": mmr_lambda,
                         "overfetch_multiplier": overfetch,
@@ -507,18 +543,35 @@ def run_assessment(
     seed: int = 42,
     fail_on_thresholds: bool = False,
     thresholds_file: str | Path | None = None,
+    dataset_split: str | None = None,
+    min_label_confidence: str = "low",
+    retrieval_mode: str = "rrf_hybrid",
+    disable_page_classification: bool = False,
+    disable_structured_chunking: bool = False,
+    disable_bm25: bool = False,
+    export_failed_generations: bool = False,
     retrieval_options: dict[str, Any] | None = None,
     run_retrieval_ablations: bool = False,
     run_diversity_sweep: bool = False,
     diversity_sweep: dict[str, Any] | None = None,
 ) -> AssessmentResult:
     start = time.time()
+    from src.ingestion.steps.chunk_text import set_structured_chunking_enabled
+    from src.ingestion.steps.convert_html import set_page_classification_enabled
+    from src.ingestion.steps.load_markdown import set_index_only_classified_pages
+
     thresholds = dict(DEFAULT_THRESHOLDS)
     if thresholds_file:
         thresholds.update(json.loads(Path(thresholds_file).read_text(encoding="utf-8")))
 
-    key_available = bool(settings.gemini_api_key) and settings.gemini_api_key != "test-api-key"
+    key_available = bool(settings.dashscope_api_key) and settings.dashscope_api_key != "test-api-key"
     resolved_include_answer_eval = bool(include_answer_eval) if include_answer_eval is not None else key_available
+    resolved_retrieval_options = {"search_mode": retrieval_mode, **dict(retrieval_options or {})}
+    if disable_bm25:
+        resolved_retrieval_options["search_mode"] = "semantic_only"
+    set_page_classification_enabled(not disable_page_classification)
+    set_index_only_classified_pages(not disable_page_classification)
+    set_structured_chunking_enabled(not disable_structured_chunking)
     config = AssessmentConfig(
         artifact_dir=Path(artifact_dir),
         name=name,
@@ -532,7 +585,14 @@ def run_assessment(
         seed=seed,
         fail_on_thresholds=fail_on_thresholds,
         thresholds=thresholds,
-        retrieval_options=dict(retrieval_options or {}),
+        retrieval_options=resolved_retrieval_options,
+        dataset_split=dataset_split,
+        min_label_confidence=min_label_confidence,
+        retrieval_mode=retrieval_mode,
+        disable_page_classification=disable_page_classification,
+        disable_structured_chunking=disable_structured_chunking,
+        disable_bm25=disable_bm25,
+        export_failed_generations=export_failed_generations,
         run_retrieval_ablations=run_retrieval_ablations,
         run_diversity_sweep=run_diversity_sweep,
         diversity_sweep=dict(diversity_sweep or {}),
@@ -565,6 +625,8 @@ def run_assessment(
         max_synthetic_questions=config.max_synthetic_questions,
         sample_docs_per_source_type=config.sample_docs_per_source_type,
         seed=config.seed,
+        dataset_split=config.dataset_split,
+        min_label_confidence=config.min_label_confidence,
     )
     dataset = dataset_bundle["dataset"]
     generation_attempts = dataset_bundle.get("generation_attempts", [])
@@ -631,7 +693,13 @@ def run_assessment(
     store.write_json("reference_metrics.json", step_metrics["l4"])
     store.write_json("index_metrics.json", step_metrics["l5"])
     store.write_json("retrieval_dataset.json", dataset)
-    store.write_jsonl("retrieval_dataset_generation.jsonl", generation_attempts)
+    if config.export_failed_generations:
+        store.write_jsonl("retrieval_dataset_generation.jsonl", generation_attempts)
+    else:
+        store.write_jsonl(
+            "retrieval_dataset_generation.jsonl",
+            [row for row in generation_attempts if row.get("status") == "accepted"],
+        )
     store.write_jsonl("retrieval_results.jsonl", retrieval_rows)
     store.write_json("retrieval_metrics.json", retrieval_metrics)
     store.write_json("retrieval_ablations.json", retrieval_ablations)
