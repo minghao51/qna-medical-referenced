@@ -428,41 +428,41 @@
 						</div>
 					{/if}
 				</div>
-				<div class="comparison-col">
-					<h3>Delta</h3>
-					<p class="run-id">Change</p>
-					{#if comparisonData.baseline.retrieval_metrics && comparisonData.comparison.retrieval_metrics}
-						<div class="metrics-grid compact">
-							<div class="metric-card">
-								<span class="metric-label">Hit Rate</span>
-								{@const hitRateDelta = getMetricDelta(
-									comparisonData.baseline.retrieval_metrics.hit_rate_at_k,
-									comparisonData.comparison.retrieval_metrics.hit_rate_at_k
-								)}
-								<span class="metric-value delta" class:positive={hitRateDelta.positive === true} class:negative={hitRateDelta.positive === false}>
-									{hitRateDelta.positive === true ? '+' : ''}{(hitRateDelta.value * 100).toFixed(1)}%
-								</span>
-							</div>
-							<div class="metric-card">
-								<span class="metric-label">MRR</span>
-								{@const mrrDelta = getMetricDelta(
-									comparisonData.baseline.retrieval_metrics.mrr,
-									comparisonData.comparison.retrieval_metrics.mrr
-								)}
-								<span class="metric-value delta" class:positive={mrrDelta.positive === true} class:negative={mrrDelta.positive === false}>
-									{mrrDelta.positive === true ? '+' : ''}{mrrDelta.value.toFixed(3)}
-								</span>
-							</div>
-							<div class="metric-card">
-								<span class="metric-label">Latency p50</span>
-								{@const latencyDelta = getMetricDelta(
-									comparisonData.baseline.retrieval_metrics.latency_p50_ms,
-									comparisonData.comparison.retrieval_metrics.latency_p50_ms
-								)}
-								<span class="metric-value delta" class:positive={latencyDelta.positive === false} class:negative={latencyDelta.positive === true}>
-									{latencyDelta.positive === true ? '+' : ''}{latencyDelta.value.toFixed(0)}ms
-								</span>
-							</div>
+					<div class="comparison-col">
+						<h3>Delta</h3>
+						<p class="run-id">Change</p>
+						{#if comparisonData.baseline.retrieval_metrics && comparisonData.comparison.retrieval_metrics}
+							{@const hitRateDelta = getMetricDelta(
+								comparisonData.baseline.retrieval_metrics.hit_rate_at_k,
+								comparisonData.comparison.retrieval_metrics.hit_rate_at_k
+							)}
+							{@const mrrDelta = getMetricDelta(
+								comparisonData.baseline.retrieval_metrics.mrr,
+								comparisonData.comparison.retrieval_metrics.mrr
+							)}
+							{@const latencyDelta = getMetricDelta(
+								comparisonData.baseline.retrieval_metrics.latency_p50_ms,
+								comparisonData.comparison.retrieval_metrics.latency_p50_ms
+							)}
+							<div class="metrics-grid compact">
+								<div class="metric-card">
+									<span class="metric-label">Hit Rate</span>
+									<span class="metric-value delta" class:positive={hitRateDelta.positive === true} class:negative={hitRateDelta.positive === false}>
+										{hitRateDelta.positive === true ? '+' : ''}{(hitRateDelta.value * 100).toFixed(1)}%
+									</span>
+								</div>
+								<div class="metric-card">
+									<span class="metric-label">MRR</span>
+									<span class="metric-value delta" class:positive={mrrDelta.positive === true} class:negative={mrrDelta.positive === false}>
+										{mrrDelta.positive === true ? '+' : ''}{mrrDelta.value.toFixed(3)}
+									</span>
+								</div>
+								<div class="metric-card">
+									<span class="metric-label">Latency p50</span>
+									<span class="metric-value delta" class:positive={latencyDelta.positive === false} class:negative={latencyDelta.positive === true}>
+										{latencyDelta.positive === true ? '+' : ''}{latencyDelta.value.toFixed(0)}ms
+									</span>
+								</div>
 						</div>
 					{/if}
 				</div>
@@ -510,11 +510,9 @@
 						</div>
 					</div>
 				</section>
-			{/if}
+				{/if}
 
-			{#if data.step_metrics}
-				<section class="steps-section">
-					<h2>Pipeline Steps (L0-L5)</h2>
+				{#if data.step_metrics}
 					{@const filteredSteps = Object.entries(data.step_metrics).filter(([stage]) =>
 						selectedStages.includes(stage.toUpperCase())
 					)}
@@ -525,7 +523,9 @@
 								)
 							)
 						: filteredSteps}
-					<div class="steps-grid">
+					<section class="steps-section">
+						<h2>Pipeline Steps (L0-L5)</h2>
+						<div class="steps-grid">
 						{#each searchedSteps as [stage, metrics]: [string, any] (stage)}
 							{@const agg = metrics.aggregate}
 							{@const findings = metrics.findings || []}
