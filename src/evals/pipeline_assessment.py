@@ -566,9 +566,11 @@ def run_assessment(
 
     key_available = bool(settings.dashscope_api_key) and settings.dashscope_api_key != "test-api-key"
     resolved_include_answer_eval = bool(include_answer_eval) if include_answer_eval is not None else key_available
-    resolved_retrieval_options = {"search_mode": retrieval_mode, **dict(retrieval_options or {})}
+    resolved_retrieval_options = dict(retrieval_options or {})
     if disable_bm25:
         resolved_retrieval_options["search_mode"] = "semantic_only"
+    elif retrieval_mode != "rrf_hybrid":
+        resolved_retrieval_options["search_mode"] = retrieval_mode
     set_page_classification_enabled(not disable_page_classification)
     set_index_only_classified_pages(not disable_page_classification)
     set_structured_chunking_enabled(not disable_structured_chunking)
@@ -585,7 +587,7 @@ def run_assessment(
         seed=seed,
         fail_on_thresholds=fail_on_thresholds,
         thresholds=thresholds,
-        retrieval_options=resolved_retrieval_options,
+        retrieval_options=resolved_retrieval_options or None,
         dataset_split=dataset_split,
         min_label_confidence=min_label_confidence,
         retrieval_mode=retrieval_mode,
@@ -602,7 +604,7 @@ def run_assessment(
     manifest = {
         "config": asdict(config),
         "git_head": _git_head(),
-        "gemini_key_present": key_available,
+        "dashscope_key_present": key_available,
         "started_at_epoch_s": start,
     }
     store.write_json("manifest.json", manifest)

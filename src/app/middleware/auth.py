@@ -22,7 +22,7 @@ Example:
         API_KEYS=key1,key2,key3
 
     Client request with authentication:
-        curl -X POST http://localhost:8001/chat \\
+        curl -X POST http://localhost:8000/chat \\
           -H "X-API-Key: key1" \\
           -H "Content-Type: application/json" \\
           -d '{"message": "Hello"}'

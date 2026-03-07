@@ -13,7 +13,7 @@ HTTP POST /chat
   -> src.usecases.chat.process_chat_message
   -> src.rag.runtime.retrieve_context(...) or retrieve_context_with_trace(...)
   -> src.ingestion.indexing.vector_store.VectorStore.similarity_search(...)
-  -> src.infra.llm.gemini_client.GeminiClient.generate(...)
+  -> src.infra.llm.qwen_client.QwenClient.generate(...)
   -> response + sources (+ optional pipeline trace)
 ```
 
@@ -24,7 +24,7 @@ HTTP POST /chat
 - `src.usecases.chat` - orchestration and history persistence
 - `src.rag.runtime` - retrieval, runtime index initialization, trace assembly
 - `src.rag.trace_models` - Pydantic models for the pipeline trace response
-- `src.infra.llm.gemini_client` - Gemini generation client
+- `src.infra.llm.qwen_client` - Qwen generation client
 - `src.infra.storage.chat_history_store` - local JSON chat history storage
 
 ## Offline Ingestion / Indexing Flow
@@ -52,7 +52,7 @@ src.cli.ingest
 - `src.ingestion.indexing.persistence` - JSON persistence under `data/vectors`
 - `src.ingestion.indexing.search` - ranking and scoring helpers
 - `src.ingestion.indexing.keyword_index` - keyword/TF-IDF helpers
-- `src.ingestion.indexing.embedding` - embedding helper wrapper around Gemini embed API
+- `src.ingestion.indexing.embedding` - embedding helper wrapper around Qwen embed API
 - `src.ingestion.indexing.text_utils` - tokenization/sanitization helpers
 
 ## Data and Path Ownership

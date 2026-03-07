@@ -251,7 +251,7 @@ def _try_generate_synthetic_questions(
                     "query_category": "synthetic",
                     "task_type": f"{_source_type(str(doc.get('source', '')))}_{doc.get('content_type', 'paragraph')}",
                     "label_confidence": "high" if doc.get("content_type") != "mixed" else "medium",
-                    "dataset_origin": "synthetic_gemini",
+                    "dataset_origin": "synthetic_qwen",
                     "dataset_split": _assign_split(str(doc.get("source", ""))),
                     "difficulty": _difficulty_for_chunk(doc),
                     "negative_query": candidate["negative_query"],

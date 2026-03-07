@@ -80,7 +80,7 @@ def process_chat_message(
     tracks timing information for monitoring and debugging.
 
     Args:
-        llm_client: LLM client instance (GeminiClient or compatible)
+        llm_client: LLM client instance (QwenClient or compatible)
         message: User's question or message
         session_id: Session identifier for history persistence.
                    If None, uses "default" session

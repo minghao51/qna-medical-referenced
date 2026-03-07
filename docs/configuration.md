@@ -17,9 +17,9 @@ The application uses [Pydantic BaseSettings](https://docs.pydantic.dev/latest/co
    cp .env.example .env
    ```
 
-2. Edit `.env` and add your Gemini API key:
+2. Edit `.env` and add your Dashscope API key:
    ```
-   GEMINI_API_KEY=your_api_key_here
+   DASHSCOPE_API_KEY=your_api_key_here
    ```
 
 3. Start the application:
@@ -31,16 +31,17 @@ The application uses [Pydantic BaseSettings](https://docs.pydantic.dev/latest/co
 
 ### LLM Configuration
 
-#### `GEMINI_API_KEY` (required)
+#### `DASHSCOPE_API_KEY` (required)
 **Default:** (empty string)
 
-Google Gemini API key for text generation and embeddings.
+Alibaba Dashscope API key for Qwen text generation and embeddings.
 
 **How to get it:**
-1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
-2. Sign in with your Google account
-3. Click "Create API Key"
-4. Copy the key and paste it into your `.env` file
+1. Visit [Dashscope Console](https://dashscope-intl.aliyuncs.com/)
+2. Sign in with your Alibaba account
+3. Navigate to API Keys section
+4. Create a new API key
+5. Copy the key and paste it into your `.env` file
 
 **Security:**
 - Never commit this key to version control
@@ -48,23 +49,24 @@ Google Gemini API key for text generation and embeddings.
 - Use separate keys for development and production
 
 #### `MODEL_NAME`
-**Default:** `gemini-2.0-flash`
+**Default:** `qwen3.5-flash`
 
-Gemini model to use for text generation.
+Qwen model to use for text generation.
 
 **Options:**
-- `gemini-2.0-flash` - Fast, good for real-time chat (default)
-- `gemini-2.5-flash` - Newer, faster variant
-- `gemini-2.5-pro` - Higher quality, slower
+- `qwen3.5-flash` - Fast, cost-effective, good for real-time chat (default)
+- `qwen3.5-plus` - Balanced performance and quality
+- `qwen-plus` - Higher quality
+- `qwen-max` - Highest quality, slower
 
 **When to change:**
-- Use `gemini-2.5-pro` for complex medical queries requiring more accuracy
-- Use `gemini-2.0-flash` for faster responses in production
+- Use `qwen-plus` or `qwen-max` for complex medical queries requiring more accuracy
+- Use `qwen3.5-flash` for faster responses in production
 
 #### `EMBEDDING_MODEL`
-**Default:** `gemini-embedding-001`
+**Default:** `text-embedding-v4`
 
-Model for generating text embeddings (vector representations).
+Qwen model for generating text embeddings (vector representations).
 
 **Note:** This should rarely need to be changed. Different embedding models have different vector dimensions, requiring re-indexing.
 
@@ -143,7 +145,7 @@ API_KEYS=key1,key2,key3
 **How clients use it:**
 Clients must include the key in the `X-API-Key` header:
 ```bash
-curl -X POST http://localhost:8001/chat \\
+curl -X POST http://localhost:8000/chat \\
   -H "X-API-Key: key1" \\
   -H "Content-Type: application/json" \\
   -d '{"message": "Hello"}'
@@ -218,8 +220,8 @@ delay = RETRY_DELAY * (2 ^ attempt_number)
 ### Development (.env.development)
 ```bash
 # LLM
-GEMINI_API_KEY=dev_key_xyz
-MODEL_NAME=gemini-2.0-flash
+DASHSCOPE_API_KEY=dev_key_xyz
+MODEL_NAME=qwen3.5-flash
 
 # Storage
 COLLECTION_NAME=medical_docs_dev
@@ -243,8 +245,8 @@ RETRY_DELAY=1.0
 ### Production (.env.production)
 ```bash
 # LLM
-GEMINI_API_KEY=prod_key_secure_random
-MODEL_NAME=gemini-2.5-pro
+DASHSCOPE_API_KEY=prod_key_secure_random
+MODEL_NAME=qwen-plus
 
 # Storage
 COLLECTION_NAME=medical_docs_prod
@@ -268,8 +270,8 @@ RETRY_DELAY=2.0
 ### Testing (.env.test)
 ```bash
 # LLM
-GEMINI_API_KEY=test_key
-MODEL_NAME=gemini-2.0-flash
+DASHSCOPE_API_KEY=test_key
+MODEL_NAME=qwen3.5-flash
 
 # Storage (use test collections)
 COLLECTION_NAME=medical_docs_test
@@ -292,13 +294,13 @@ RETRY_DELAY=0.1
 
 ## Troubleshooting
 
-### "Empty response from Gemini API" error
+### "Empty response from Qwen API" error
 
 **Cause:** API key is invalid or missing.
 
 **Solution:**
-1. Verify `GEMINI_API_KEY` is set in `.env`
-2. Check the key is valid at [Google AI Studio](https://aistudio.google.com/app/apikey)
+1. Verify `DASHSCOPE_API_KEY` is set in `.env`
+2. Check the key is valid at [Dashscope Console](https://dashscope-intl.aliyuncs.com/)
 3. Ensure the key has not been rotated or revoked
 
 ### Rate limit errors during testing
@@ -312,10 +314,10 @@ RETRY_DELAY=0.1
 **Cause:** Model is too slow or retry delays are too long.
 
 **Solutions:**
-1. Use `MODEL_NAME=gemini-2.0-flash` for faster responses
+1. Use `MODEL_NAME=qwen3.5-flash` for faster responses
 2. Reduce `MAX_RETRIES` to fail faster
 3. Reduce `RETRY_DELAY` for quicker retries
-4. Check network latency to Google API
+4. Check network latency to Dashscope API
 
 ### "Collection not found" error
 
@@ -335,7 +337,7 @@ RETRY_DELAY=0.1
 
 **Solutions:**
 1. Reduce `MAX_MESSAGE_LENGTH` to truncate longer prompts
-2. Use `MODEL_NAME=gemini-2.0-flash` instead of `gemini-2.5-pro`
+2. Use `MODEL_NAME=qwen3.5-flash` instead of `qwen-plus`
 3. Implement caching for common queries
 4. Monitor usage and set up cost alerts
 
@@ -343,7 +345,7 @@ RETRY_DELAY=0.1
 
 Before deploying to production, ensure:
 
-- [ ] `GEMINI_API_KEY` is set from environment variable, not in code
+- [ ] `DASHSCOPE_API_KEY` is set from environment variable, not in code
 - [ ] `API_KEYS` is set with strong, unique keys for each client
 - [ ] `.env` file is NOT committed to version control
 - [ ] `.env` file has restricted permissions (chmod 600)

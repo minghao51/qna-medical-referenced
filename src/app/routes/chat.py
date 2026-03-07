@@ -8,7 +8,7 @@ Endpoints:
     - POST /chat - Process a chat message with RAG
 
 Example request:
-    curl -X POST http://localhost:8001/chat \\
+    curl -X POST http://localhost:8000/chat \\
       -H "Content-Type: application/json" \\
       -d '{
         "message": "What is a normal cholesterol level?",
@@ -50,7 +50,7 @@ def chat(
     This endpoint:
     1. Retrieves the user's session history (if session_id provided)
     2. Searches the vector database for relevant medical documents
-    3. Generates a response using Gemini LLM with retrieved context
+    3. Generates a response using Qwen LLM with retrieved context
     4. Saves the conversation to history
     5. Returns the response with source citations
 
@@ -139,4 +139,3 @@ def chat(
     except Exception as e:
         logger.error("Chat error: %s: %s", type(e).__name__, str(e))
         raise HTTPException(status_code=500, detail="An error occurred processing your request")
-

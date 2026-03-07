@@ -5,7 +5,7 @@
 - The real pipeline orchestration is `src/ingestion/pipeline.py`.
 - Current pipeline executes L0-L6 successfully but only reports counts/timing; it does not produce structured quality metrics, regression baselines, or preserved evaluation artifacts.
 - Implement a new evaluation subsystem and CLI that assesses each stage (download, HTML conversion, PDF extraction, chunking, reference loading, indexing, retrieval, optional answer generation) and writes versioned artifacts to disk.
-- Use a hybrid evaluation dataset strategy (user-selected): merge existing deterministic golden queries (`tests/fixtures/golden_queries.json`) with Gemini-generated synthetic queries/QA pairs, while preserving all generated artifacts and raw judge outputs.
+- Use a hybrid evaluation dataset strategy (user-selected): merge existing deterministic golden queries (`tests/fixtures/golden_queries.json`) with Qwen-generated synthetic queries/QA pairs, while preserving all generated artifacts and raw judge outputs.
 
 ## Current Code Review Findings (What Exists / Gaps)
 
@@ -28,7 +28,7 @@
 - Full-stack evaluation for L0-L6 plus RAG retrieval and optional answer generation metrics.
 - Hybrid LLM mode by default:
 - Deterministic base dataset from fixture(s).
-- Optional Gemini-generated synthetic questions/QA pairs enabled by default.
+- Optional Qwen-generated synthetic questions/QA pairs enabled by default.
 - CLI flag to disable all LLM-based generation/judging for offline runs.
 
 ## Public Interfaces / CLI Changes
@@ -45,7 +45,7 @@
 - `--max-synthetic-questions` (default: `40`)
 - `--disable-llm-generation` (disable synthetic question generation)
 - `--disable-llm-judging` (disable answer faithfulness/relevance judging)
-- `--include-answer-eval` (default on if Gemini key present; off otherwise)
+- `--include-answer-eval` (default on if Dashscope key present; off otherwise)
 - `--sample-docs-per-source-type` (default: `10`)
 - `--seed` (default: `42`)
 - `--fail-on-thresholds` (non-zero exit if key metrics fall below thresholds)
@@ -258,7 +258,7 @@
 
 ### Optional live tests (skip without key)
 - `tests/test_pipeline_assessment_live.py`
-- Gemini-backed synthetic generation and/or judge path using existing skip pattern (`GEMINI_API_KEY` absent)
+- Qwen-backed synthetic generation and/or judge path using existing skip pattern (`DASHSCOPE_API_KEY` absent)
 
 ## Implementation Sequence (Order of Work)
 

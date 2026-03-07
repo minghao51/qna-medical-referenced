@@ -6,6 +6,7 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any, List, Tuple
 
+from src.config import settings
 from src.ingestion.indexing.text_utils import ACRONYM_EXPANSIONS, tokenize_text
 from src.ingestion.indexing.vector_store import get_vector_store
 from src.ingestion.steps.chunk_text import chunk_documents
@@ -347,7 +348,7 @@ def retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options: d
     )
 
     generation_stage = GenerationStage(
-        model="models/gemini-2.5-flash",
+        model=settings.model_name,
         timing_ms=0,
         tokens_estimate=None
     )

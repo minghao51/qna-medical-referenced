@@ -10,7 +10,7 @@
 | Package | Version | Purpose |
 |---------|---------|---------|
 | fastapi | >=0.129.0 | Web framework |
-| google-genai | >=1.63.0 | Gemini LLM client |
+| openai | >=1.0.0 | OpenAI-compatible client (for Qwen/Dashscope) |
 | pypdf | >=6.7.0 | PDF parsing |
 | nltk | >=3.9.2 | Text processing (stemming, stopwords) |
 | httpx | >=0.28.1 | Async HTTP client |
@@ -45,9 +45,9 @@
 - **Docker Compose**: Multi-service deployment (backend, frontend, test)
 
 ### External Services
-- **Google Gemini API**: LLM generation and embeddings
-  - Model: `gemini-2.0-flash` (generation)
-  - Embedding: `gemini-embedding-001`
+- **Alibaba Dashscope API**: LLM generation and embeddings (Qwen models)
+  - Model: `qwen3.5-flash` (generation)
+  - Embedding: `text-embedding-v4`
 
 ### Data Storage
 - **Vector Store**: JSON file-based (`data/vectors/`)
@@ -58,7 +58,7 @@
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| GEMINI_API_KEY | Google Gemini API key | Yes |
+| DASHSCOPE_API_KEY | Alibaba Dashscope API key | Yes |
 | API_KEYS | Comma-separated API keys for auth | No |
-| MODEL_NAME | LLM model name | No (default: gemini-2.0-flash) |
-| EMBEDDING_MODEL | Embedding model | No (default: gemini-embedding-001) |
+| MODEL_NAME | LLM model name | No (default: qwen3.5-flash) |
+| EMBEDDING_MODEL | Embedding model | No (default: text-embedding-v4) |

@@ -70,7 +70,7 @@ Tests for hybrid search in `src/ingestion/indexing/vector_store.py`
 | `test_weight_parameterization` | Custom weights work |
 
 ### test_embedding.py
-Tests for Gemini embeddings in `src/ingestion/indexing/vector_store.py`
+Tests for Qwen embeddings in `src/ingestion/indexing/vector_store.py`
 
 | Test | What it Checks |
 |------|----------------|
@@ -110,4 +110,4 @@ Tests for configuration in `src/config/settings.py`
 
 ## API Key Requirement
 
-Most tests require a valid `GEMINI_API_KEY` and will skip if set to `test-api-key`.
+Most tests require a valid `DASHSCOPE_API_KEY` and will skip if set to `test-api-key`.

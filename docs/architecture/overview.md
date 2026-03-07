@@ -32,7 +32,7 @@ src/
     indexing/             # vector store + embedding/search/persistence helpers
 
   infra/                  # External systems/infrastructure adapters
-    llm/gemini_client.py
+    llm/qwen_client.py
     storage/chat_history_store.py
 
   config/                 # Settings and path ownership
@@ -56,7 +56,7 @@ Flow:
 1. `src.app.routes.chat` receives the request.
 2. `src.usecases.chat.process_chat_message` orchestrates retrieval + generation + history persistence.
 3. `src.rag.runtime` retrieves context from the vector store.
-4. `src.infra.llm.gemini_client.GeminiClient` generates the answer.
+4. `src.infra.llm.qwen_client.QwenClient` generates the answer.
 5. `src.infra.storage.chat_history_store` stores conversation history.
 
 ### Offline ingestion (`src.ingestion`)
@@ -116,7 +116,7 @@ The frontend is a SvelteKit application that provides the user interface for the
 | `ConfidenceBadge.svelte` | `frontend/src/lib/components/` | Color-coded confidence level badges (high/medium/low) |
 | `MetricBar.svelte` | `frontend/src/lib/components/` | Visual progress bar for scores |
 | `SourceQualityIndicator.svelte` | `frontend/src/lib/components/` | Domain credibility badges (.gov, .edu, .org, .com) |
-| `confidenceCalculator.ts` | `frontend/src/lib/` | Client-side confidence scoring logic |
+| `health-score.ts` | `frontend/src/lib/utils/` | Client-side confidence scoring logic |
 
 ### Document Inspection (Phase 2)
 

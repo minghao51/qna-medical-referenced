@@ -7,7 +7,13 @@ Start here:
 - `docs/architecture/overview.md` - repository/backend structure map
 - `docs/architecture/rag-system.md` - runtime retrieval + offline ingestion data flow
 
-Compatibility note:
+Architecture note:
 
-- Legacy modules under `src/pipeline/`, `src/main.py`, and `src/run.py` are preserved as temporary wrappers.
-- Canonical backend code now lives under `src/app`, `src/usecases`, `src/rag`, `src/ingestion`, `src/infra`, and `src/config`.
+- The codebase has been reorganized into clear layers:
+  - `src/app` - HTTP layer (FastAPI routes, middleware, schemas)
+  - `src/usecases` - Business logic orchestration
+  - `src/rag` - Runtime retrieval and context generation
+  - `src/ingestion` - Offline data pipeline and indexing
+  - `src/infra` - External integrations (LLM clients, storage)
+  - `src/config` - Settings and path configuration
+  - `src/cli` - Command-line entry points

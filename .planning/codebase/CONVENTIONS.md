@@ -23,7 +23,7 @@ ignore = ["E501"]  # Line too long
 - Use `Optional[X]` instead of `X | None` for compatibility
 
 ### Naming Conventions
-- **Classes**: `PascalCase` (e.g., `GeminiClient`)
+- **Classes**: `PascalCase` (e.g., `QwenClient`)
 - **Functions/variables**: `snake_case` (e.g., `get_client`)
 - **Constants**: `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`)
 

@@ -9,8 +9,8 @@
      - Start both backend and frontend with: `docker-compose up`
      - Rebuild if code changes: `docker-compose up --build`
      - Stop services: `docker-compose down`
-     - Backend runs on http://localhost:8001
-     - Frontend runs on http://localhost:5174
+     - Backend runs on http://localhost:8000
+     - Frontend runs on http://localhost:5173
    - **Local development (for active development with hot reload):**
      - Backend: `uv run python -m src.cli.serve` (runs on port 8000)
      - Frontend: `cd frontend && bun run dev` (runs on port 5173)
