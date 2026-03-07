@@ -29,6 +29,9 @@ uv run python -m src.cli.ingest --force
 # Tests and lint
 uv run pytest
 uv run ruff check .
+
+# Docs consistency
+bash scripts/check_docs_consistency.sh
 ```
 
 ## API Endpoints

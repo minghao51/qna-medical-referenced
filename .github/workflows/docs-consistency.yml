@@ -1,0 +1,21 @@
+name: Docs Consistency
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  docs-consistency:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Run docs consistency check
+        run: bash scripts/check_docs_consistency.sh
