@@ -77,7 +77,9 @@ def _is_threshold_pass(metric_value: Any, threshold_spec: Any) -> tuple[bool, st
         op = "min"
         threshold_value = float(threshold_spec)
     try:
-        metric_num = 1.0 if metric_value is True else 0.0 if metric_value is False else float(metric_value)
+        metric_num = (
+            1.0 if metric_value is True else 0.0 if metric_value is False else float(metric_value)
+        )
         if op == "max":
             return metric_num <= threshold_value, op, threshold_value
         return metric_num >= threshold_value, op, threshold_value
@@ -85,7 +87,9 @@ def _is_threshold_pass(metric_value: Any, threshold_spec: Any) -> tuple[bool, st
         return False, op, threshold_value
 
 
-def _evaluate_thresholds(step_metrics: dict[str, Any], retrieval_metrics: dict[str, Any], thresholds: dict[str, Any]) -> list[dict[str, Any]]:
+def _evaluate_thresholds(
+    step_metrics: dict[str, Any], retrieval_metrics: dict[str, Any], thresholds: dict[str, Any]
+) -> list[dict[str, Any]]:
     failed: list[dict[str, Any]] = []
     lookup = _flatten_stage_aggregates(step_metrics)
     for key, value in retrieval_metrics.items():
@@ -97,7 +101,14 @@ def _evaluate_thresholds(step_metrics: dict[str, Any], retrieval_metrics: dict[s
         metric_value = lookup[key]
         passed, op, threshold_value = _is_threshold_pass(metric_value, threshold)
         if not passed:
-            failed.append({"metric": key, "value": metric_value, "threshold_op": op, "threshold_value": threshold_value})
+            failed.append(
+                {
+                    "metric": key,
+                    "value": metric_value,
+                    "threshold_op": op,
+                    "threshold_value": threshold_value,
+                }
+            )
     return failed
 
 
@@ -155,7 +166,9 @@ def _doc_is_relevant(doc: dict[str, Any], item: dict[str, Any]) -> bool:
     return False
 
 
-def _binary_unique_by_key(retrieved_docs: list[dict[str, Any]], item: dict[str, Any], key_fn) -> list[int]:
+def _binary_unique_by_key(
+    retrieved_docs: list[dict[str, Any]], item: dict[str, Any], key_fn
+) -> list[int]:
     seen = set()
     out: list[int] = []
     for doc in retrieved_docs:
@@ -209,10 +222,15 @@ def _evaluate_retrieval(
     for item in dataset:
         query = item["query"]
         if retrieval_options:
-            context, sources, trace = retrieve_context_with_trace(query, top_k=top_k, retrieval_options=retrieval_options)
+            context, sources, trace = retrieve_context_with_trace(
+                query, top_k=top_k, retrieval_options=retrieval_options
+            )
         else:
             context, sources, trace = retrieve_context_with_trace(query, top_k=top_k)
-        retrieved_docs = [doc.model_dump() if hasattr(doc, "model_dump") else doc for doc in trace.retrieval.documents]
+        retrieved_docs = [
+            doc.model_dump() if hasattr(doc, "model_dump") else doc
+            for doc in trace.retrieval.documents
+        ]
         binary_relevance = [1 if _doc_is_relevant(doc, item) else 0 for doc in retrieved_docs]
         dedup_doc_binary = _binary_unique_by_key(retrieved_docs, item, lambda d: d.get("id"))
         unique_source_binary = _binary_unique_by_key(
@@ -223,14 +241,31 @@ def _evaluate_retrieval(
         expected_sources = [str(s).lower() for s in item.get("expected_sources", [])]
         source_hit = 0.0
         if expected_sources:
-            source_hit = 1.0 if any(any(es in str(s).lower() for es in expected_sources) for s in sources) else 0.0
+            source_hit = (
+                1.0
+                if any(any(es in str(s).lower() for es in expected_sources) for s in sources)
+                else 0.0
+            )
         total_relevant = max(1, len(expected_sources)) if expected_sources else 1
         exact_chunk_id = item.get("expected_chunk_id")
-        exact_chunk_hit = 1.0 if (exact_chunk_id and any(str(doc.get("id")) == str(exact_chunk_id) for doc in retrieved_docs)) else 0.0
+        exact_chunk_hit = (
+            1.0
+            if (
+                exact_chunk_id
+                and any(str(doc.get("id")) == str(exact_chunk_id) for doc in retrieved_docs)
+            )
+            else 0.0
+        )
         evidence_phrase = str(item.get("evidence_phrase", "")).strip().lower()
         evidence_hit = 0.0
         if evidence_phrase:
-            evidence_hit = 1.0 if any(evidence_phrase in str(doc.get("content", "")).lower() for doc in retrieved_docs) else 0.0
+            evidence_hit = (
+                1.0
+                if any(
+                    evidence_phrase in str(doc.get("content", "")).lower() for doc in retrieved_docs
+                )
+                else 0.0
+            )
         topic_false_positive_rate = 0.0
         if retrieved_docs and expected_sources:
             mismatches = 0
@@ -241,8 +276,12 @@ def _evaluate_retrieval(
             topic_false_positive_rate = mismatches / len(retrieved_docs)
         unique_sources = {(str(doc.get("source", "")), doc.get("page")) for doc in retrieved_docs}
         unique_doc_ids = {str(doc.get("id", "")) for doc in retrieved_docs}
-        duplicate_source_ratio = 1.0 - (len(unique_sources) / len(retrieved_docs)) if retrieved_docs else 0.0
-        duplicate_doc_ratio = 1.0 - (len(unique_doc_ids) / len(retrieved_docs)) if retrieved_docs else 0.0
+        duplicate_source_ratio = (
+            1.0 - (len(unique_sources) / len(retrieved_docs)) if retrieved_docs else 0.0
+        )
+        duplicate_doc_ratio = (
+            1.0 - (len(unique_doc_ids) / len(retrieved_docs)) if retrieved_docs else 0.0
+        )
         row_metrics = {
             "hit_rate_at_k": hit_rate_at_k(binary_relevance),
             "precision_at_k": precision_at_k(binary_relevance, top_k),
@@ -251,10 +290,14 @@ def _evaluate_retrieval(
             "ndcg_at_k": ndcg_at_k(binary_relevance, top_k),
             "source_hit": source_hit,
             "dedup_hit_rate_at_k": hit_rate_at_k(dedup_doc_binary),
-            "dedup_precision_at_k": precision_at_k(dedup_doc_binary, min(top_k, len(dedup_doc_binary))),
+            "dedup_precision_at_k": precision_at_k(
+                dedup_doc_binary, min(top_k, len(dedup_doc_binary))
+            ),
             "dedup_mrr": reciprocal_rank(dedup_doc_binary),
             "unique_source_hit_rate_at_k": hit_rate_at_k(unique_source_binary),
-            "unique_source_precision_at_k": precision_at_k(unique_source_binary, min(top_k, len(unique_source_binary))),
+            "unique_source_precision_at_k": precision_at_k(
+                unique_source_binary, min(top_k, len(unique_source_binary))
+            ),
             "duplicate_source_ratio": duplicate_source_ratio,
             "duplicate_doc_ratio": duplicate_doc_ratio,
             "exact_chunk_hit": exact_chunk_hit,
@@ -346,22 +389,32 @@ def _evaluate_retrieval(
         "evidence_hit_rate": mean(evidence_hit_values),
         "latency_p50_ms": percentile(latencies, 50),
         "latency_p95_ms": percentile(latencies, 95),
-        "hit_rate_at_k_high_conf": mean(high_conf_hit_values) if high_conf_hit_values else mean(hit_values),
+        "hit_rate_at_k_high_conf": mean(high_conf_hit_values)
+        if high_conf_hit_values
+        else mean(hit_values),
         "mrr_high_conf": mean(high_conf_mrr_values) if high_conf_mrr_values else mean(mrr_values),
-        "exact_chunk_hit_rate_high_conf": mean(high_conf_exact_chunk_values) if high_conf_exact_chunk_values else mean(exact_chunk_hit_values),
-        "evidence_hit_rate_high_conf": mean(high_conf_evidence_values) if high_conf_evidence_values else mean(evidence_hit_values),
+        "exact_chunk_hit_rate_high_conf": mean(high_conf_exact_chunk_values)
+        if high_conf_exact_chunk_values
+        else mean(exact_chunk_hit_values),
+        "evidence_hit_rate_high_conf": mean(high_conf_evidence_values)
+        if high_conf_evidence_values
+        else mean(evidence_hit_values),
         "topic_false_positive_rate": mean(topic_false_positive_values),
         "retrieval_options": dict(retrieval_options or {}),
         "by_query_category": {k: _slice_aggregate(v) for k, v in sorted(by_query_category.items())},
         "by_task_type": {k: _slice_aggregate(v) for k, v in sorted(by_task_type.items())},
-        "by_expected_source_type": {k: _slice_aggregate(v) for k, v in sorted(by_expected_source_type.items())},
+        "by_expected_source_type": {
+            k: _slice_aggregate(v) for k, v in sorted(by_expected_source_type.items())
+        },
         "by_difficulty": {k: _slice_aggregate(v) for k, v in sorted(by_difficulty.items())},
         "contribution_analysis": retrieval_contribution,
     }
     return rows, aggregate
 
 
-def _evaluate_answers(dataset: list[dict[str, Any]], top_k: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _evaluate_answers(
+    dataset: list[dict[str, Any]], top_k: int
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not settings.dashscope_api_key or settings.dashscope_api_key == "test-api-key":
         return [], {"status": "skipped", "reason": "missing_dashscope_api_key"}
 
@@ -412,12 +465,20 @@ def _evaluate_answers(dataset: list[dict[str, Any]], top_k: int) -> tuple[list[d
     return rows, aggregate
 
 
-def _retrieval_ablation_configs(base_options: dict[str, Any] | None = None) -> list[tuple[str, dict[str, Any]]]:
+def _retrieval_ablation_configs(
+    base_options: dict[str, Any] | None = None,
+) -> list[tuple[str, dict[str, Any]]]:
     base = dict(base_options or {})
     return [
         ("legacy_hybrid", {**base, "search_mode": "legacy_hybrid", "enable_diversification": True}),
-        ("semantic_only_diversified", {**base, "search_mode": "semantic_only", "enable_diversification": True}),
-        ("bm25_only_diversified", {**base, "search_mode": "bm25_only", "enable_diversification": True}),
+        (
+            "semantic_only_diversified",
+            {**base, "search_mode": "semantic_only", "enable_diversification": True},
+        ),
+        (
+            "bm25_only_diversified",
+            {**base, "search_mode": "bm25_only", "enable_diversification": True},
+        ),
         ("rrf_hybrid", {**base, "search_mode": "rrf_hybrid", "enable_diversification": False}),
         ("rrf_hybrid_mmr", {**base, "search_mode": "rrf_hybrid", "enable_diversification": True}),
     ]
@@ -473,7 +534,9 @@ def _run_diversity_sweep(
                             "exact_chunk_hit_rate": metrics.get("exact_chunk_hit_rate", 0.0),
                             "evidence_hit_rate": metrics.get("evidence_hit_rate", 0.0),
                             "mrr": metrics.get("mrr", 0.0),
-                            "duplicate_source_ratio_mean": metrics.get("duplicate_source_ratio_mean", 0.0),
+                            "duplicate_source_ratio_mean": metrics.get(
+                                "duplicate_source_ratio_mean", 0.0
+                            ),
                             "tradeoff_score": (
                                 float(metrics.get("exact_chunk_hit_rate", 0.0))
                                 + float(metrics.get("evidence_hit_rate", 0.0))
@@ -481,7 +544,10 @@ def _run_diversity_sweep(
                             ),
                         }
                     )
-    rows.sort(key=lambda r: (r["tradeoff_score"], r["exact_chunk_hit_rate"], r["evidence_hit_rate"]), reverse=True)
+    rows.sort(
+        key=lambda r: (r["tradeoff_score"], r["exact_chunk_hit_rate"], r["evidence_hit_rate"]),
+        reverse=True,
+    )
     return rows
 
 
@@ -564,8 +630,12 @@ def run_assessment(
     if thresholds_file:
         thresholds.update(json.loads(Path(thresholds_file).read_text(encoding="utf-8")))
 
-    key_available = bool(settings.dashscope_api_key) and settings.dashscope_api_key != "test-api-key"
-    resolved_include_answer_eval = bool(include_answer_eval) if include_answer_eval is not None else key_available
+    key_available = (
+        bool(settings.dashscope_api_key) and settings.dashscope_api_key != "test-api-key"
+    )
+    resolved_include_answer_eval = (
+        bool(include_answer_eval) if include_answer_eval is not None else key_available
+    )
     resolved_retrieval_options = dict(retrieval_options or {})
     if disable_bm25:
         resolved_retrieval_options["search_mode"] = "semantic_only"
@@ -635,12 +705,16 @@ def run_assessment(
     dataset_stats = dataset_bundle.get("stats", {})
 
     if config.retrieval_options:
-        retrieval_rows, retrieval_metrics = _evaluate_retrieval(dataset, config.top_k, retrieval_options=config.retrieval_options)
+        retrieval_rows, retrieval_metrics = _evaluate_retrieval(
+            dataset, config.top_k, retrieval_options=config.retrieval_options
+        )
     else:
         retrieval_rows, retrieval_metrics = _evaluate_retrieval(dataset, config.top_k)
     retrieval_ablations: dict[str, Any] = {}
     if config.run_retrieval_ablations:
-        retrieval_ablations = _run_retrieval_ablations(dataset, config.top_k, base_options=config.retrieval_options)
+        retrieval_ablations = _run_retrieval_ablations(
+            dataset, config.top_k, base_options=config.retrieval_options
+        )
     diversity_sweep_rows: list[dict[str, Any]] = []
     if config.run_diversity_sweep:
         diversity_sweep_rows = _run_diversity_sweep(
@@ -649,7 +723,9 @@ def run_assessment(
             base_options=config.retrieval_options,
             mmr_lambda_values=config.diversity_sweep.get("mmr_lambda_values"),
             overfetch_multipliers=config.diversity_sweep.get("overfetch_multipliers"),
-            max_chunks_per_source_page_values=config.diversity_sweep.get("max_chunks_per_source_page_values"),
+            max_chunks_per_source_page_values=config.diversity_sweep.get(
+                "max_chunks_per_source_page_values"
+            ),
             max_chunks_per_source_values=config.diversity_sweep.get("max_chunks_per_source_values"),
         )
     rag_rows: list[dict[str, Any]] = []
@@ -661,7 +737,12 @@ def run_assessment(
 
     failed_thresholds = _evaluate_thresholds(step_metrics, retrieval_metrics, config.thresholds)
     step_findings.extend(
-        {"severity": "error", "stage": "threshold", "message": f"{f['metric']} below threshold", **f}
+        {
+            "severity": "error",
+            "stage": "threshold",
+            "message": f"{f['metric']} below threshold",
+            **f,
+        }
         for f in failed_thresholds
     )
 
@@ -677,7 +758,9 @@ def run_assessment(
     manifest["index_provenance"] = {
         "collection_name": settings.collection_name,
         "vector_path": vector_path,
-        "vector_file_mtime_epoch_s": Path(vector_path).stat().st_mtime if vector_path and Path(vector_path).exists() else None,
+        "vector_file_mtime_epoch_s": Path(vector_path).stat().st_mtime
+        if vector_path and Path(vector_path).exists()
+        else None,
         "doc_counts_by_source_type": l5_agg.get("source_distribution", {}),
         "dedupe_effect_estimate": l5_agg.get("dedupe_effect_estimate"),
     }
@@ -733,4 +816,6 @@ def run_assessment(
     store.write_latest_pointer()
 
     status = "failed" if (failed_thresholds and config.fail_on_thresholds) else "ok"
-    return AssessmentResult(run_dir=store.run_dir, status=status, failed_thresholds=failed_thresholds, summary=summary)
+    return AssessmentResult(
+        run_dir=store.run_dir, status=status, failed_thresholds=failed_thresholds, summary=summary
+    )

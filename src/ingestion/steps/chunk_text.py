@@ -44,8 +44,12 @@ class TextChunker:
         self.strategy = strategy
         self.min_chunk_size = min_chunk_size
 
-    def chunk_text(self, text: str, source: str = "unknown", doc_id: str = "doc", page: int = 1) -> List[dict]:
-        return self._chunk_text_with_base_index(text, source, doc_id, page=page, start_chunk_index=0)
+    def chunk_text(
+        self, text: str, source: str = "unknown", doc_id: str = "doc", page: int = 1
+    ) -> List[dict]:
+        return self._chunk_text_with_base_index(
+            text, source, doc_id, page=page, start_chunk_index=0
+        )
 
     def _chunk_text_with_base_index(
         self,
@@ -86,22 +90,24 @@ class TextChunker:
             chunk_text = raw_chunk.strip()
             if chunk_text:
                 chunk_index = start_chunk_index + len(chunks)
-                chunks.append({
-                    "id": f"{doc_id}_p{page}_chunk_{chunk_index}",
-                    "source": source,
-                    "page": page,
-                    "content": chunk_text,
-                    "content_type": content_type,
-                    "section_path": list(section_path or []),
-                    "chunk_index": chunk_index,
-                    "start_char": trimmed_start,
-                    "end_char": trimmed_end,
-                    "char_count": len(chunk_text),
-                    "token_count_estimate": len(chunk_text.split()),
-                    "quality_score": quality_score,
-                    "parent_block_ids": list(parent_block_ids or []),
-                    "extractor": extractor,
-                })
+                chunks.append(
+                    {
+                        "id": f"{doc_id}_p{page}_chunk_{chunk_index}",
+                        "source": source,
+                        "page": page,
+                        "content": chunk_text,
+                        "content_type": content_type,
+                        "section_path": list(section_path or []),
+                        "chunk_index": chunk_index,
+                        "start_char": trimmed_start,
+                        "end_char": trimmed_end,
+                        "char_count": len(chunk_text),
+                        "token_count_estimate": len(chunk_text.split()),
+                        "quality_score": quality_score,
+                        "parent_block_ids": list(parent_block_ids or []),
+                        "extractor": extractor,
+                    }
+                )
 
             start = end - self.chunk_overlap if end < text_length else text_length
 
@@ -161,7 +167,9 @@ class TextChunker:
         score = 1.0
         if len(text.strip()) < self.min_chunk_size:
             score -= 0.35
-        boilerplate_hits = sum(lowered.count(term) for term in ("cookie", "privacy", "navigation", "subscribe"))
+        boilerplate_hits = sum(
+            lowered.count(term) for term in ("cookie", "privacy", "navigation", "subscribe")
+        )
         if boilerplate_hits:
             score -= min(0.4, 0.08 * boilerplate_hits)
         confidence = str(block.get("metadata", {}).get("confidence", "high"))
@@ -313,7 +321,9 @@ class TextChunker:
         total_chunks = len(chunks)
         for chunk in chunks:
             content = str(chunk.get("content", "")).strip()
-            content_hash = hashlib.sha256(content.lower().encode("utf-8")).hexdigest()[:16] if content else ""
+            content_hash = (
+                hashlib.sha256(content.lower().encode("utf-8")).hexdigest()[:16] if content else ""
+            )
             keep_short = (
                 total_chunks <= 2
                 or str(chunk.get("content_type")) in {"list", "table"}
@@ -402,17 +412,25 @@ class TextChunker:
             doc_chunk_index = 0
             source_key = self._source_kind(source)
             active_cfg = cfg_map.get(source_key, cfg_map.get("default", {}))
-            doc_chunker = self if self._matches_self_config(active_cfg) else TextChunker(
-                chunk_size=int(active_cfg.get("chunk_size", self.chunk_size)),
-                chunk_overlap=int(active_cfg.get("chunk_overlap", self.chunk_overlap)),
-                strategy=str(active_cfg.get("strategy", self.strategy)),
-                min_chunk_size=int(active_cfg.get("min_chunk_size", self.min_chunk_size)),
+            doc_chunker = (
+                self
+                if self._matches_self_config(active_cfg)
+                else TextChunker(
+                    chunk_size=int(active_cfg.get("chunk_size", self.chunk_size)),
+                    chunk_overlap=int(active_cfg.get("chunk_overlap", self.chunk_overlap)),
+                    strategy=str(active_cfg.get("strategy", self.strategy)),
+                    min_chunk_size=int(active_cfg.get("min_chunk_size", self.min_chunk_size)),
+                )
             )
 
             if "pages" in doc:
                 for page_data in doc["pages"]:
                     page_num = page_data.get("page", 1)
-                    blocks = (page_data.get("structured_blocks") or []) if STRUCTURED_CHUNKING_ENABLED else []
+                    blocks = (
+                        (page_data.get("structured_blocks") or [])
+                        if STRUCTURED_CHUNKING_ENABLED
+                        else []
+                    )
                     text = page_data.get("content", "")
                     if blocks:
                         chunks = doc_chunker._chunk_structured_blocks(
@@ -492,7 +510,9 @@ class TextChunker:
 
 def chunk_documents(documents: List[dict], source_chunk_configs: dict | None = None) -> List[dict]:
     chunker = TextChunker()
-    return chunker.chunk_documents_with_configs(documents, source_chunk_configs=source_chunk_configs)
+    return chunker.chunk_documents_with_configs(
+        documents, source_chunk_configs=source_chunk_configs
+    )
 
 
 def set_structured_chunking_enabled(enabled: bool) -> None:

@@ -40,10 +40,10 @@ class TestTextChunker:
             content = chunk["content"]
             if len(content) > 0:
                 last_char = content[-1]
-                if last_char not in '.!?':
+                if last_char not in ".!?":
                     next_char_idx = chunk.get("end_char", text.find(content) + len(content))
                     if next_char_idx < len(text):
-                        assert text[next_char_idx] in '.!?\n ', "Should break at sentence boundary"
+                        assert text[next_char_idx] in ".!?\n ", "Should break at sentence boundary"
 
     def test_paragraph_boundary_detection(self):
         chunker = TextChunker(chunk_size=100, chunk_overlap=20)
@@ -76,8 +76,8 @@ class TestTextChunker:
                 "source": "test.pdf",
                 "pages": [
                     {"page": 1, "content": "Page one content here. " * 20},
-                    {"page": 2, "content": "Page two content here. " * 20}
-                ]
+                    {"page": 2, "content": "Page two content here. " * 20},
+                ],
             }
         ]
 
@@ -93,11 +93,7 @@ class TestTextChunker:
     def test_chunk_documents_without_pages(self):
         chunker = TextChunker(chunk_size=200, chunk_overlap=30)
         documents = [
-            {
-                "id": "doc1",
-                "source": "test.pdf",
-                "content": "Full document content here. " * 50
-            }
+            {"id": "doc1", "source": "test.pdf", "content": "Full document content here. " * 50}
         ]
 
         chunks = chunker.chunk_documents(documents)
@@ -128,13 +124,17 @@ class TestTextChunker:
 
     def test_chunker_supports_legacy_strategy(self):
         chunker = TextChunker(chunk_size=80, chunk_overlap=10, strategy="legacy")
-        chunks = chunker.chunk_text("Sentence one. Sentence two. Sentence three.", "test.pdf", "doc1")
+        chunks = chunker.chunk_text(
+            "Sentence one. Sentence two. Sentence three.", "test.pdf", "doc1"
+        )
 
         assert len(chunks) >= 1
         assert all("chunk_index" in c for c in chunks)
 
     def test_recursive_strategy_prefers_sentence_boundary(self):
-        chunker = TextChunker(chunk_size=60, chunk_overlap=10, strategy="recursive", min_chunk_size=20)
+        chunker = TextChunker(
+            chunk_size=60, chunk_overlap=10, strategy="recursive", min_chunk_size=20
+        )
         text = "A short first sentence. A second sentence that is a bit longer. Third sentence."
         chunks = chunker.chunk_text(text, "test.pdf", "doc1")
 
@@ -157,7 +157,9 @@ class TestTextChunker:
         md = "# H1\n" + ("alpha " * 200)
         chunks = chunker.chunk_documents_with_configs(
             [{"id": "md1", "source": "doc.md", "content": md}],
-            source_chunk_configs={"markdown": {"chunk_size": 120, "chunk_overlap": 20, "strategy": "recursive"}},
+            source_chunk_configs={
+                "markdown": {"chunk_size": 120, "chunk_overlap": 20, "strategy": "recursive"}
+            },
         )
         assert len(chunks) > 1
         assert max(len(c["content"]) for c in chunks) <= 120
@@ -169,12 +171,14 @@ class TestTextChunker:
 
         for chunk in chunks:
             content = chunk["content"]
-            assert content.startswith("First") or content.startswith("Second") or content.startswith("Third")
+            assert (
+                content.startswith("First")
+                or content.startswith("Second")
+                or content.startswith("Third")
+            )
 
     def test_chunk_documents_function(self):
-        documents = [
-            {"id": "doc1", "source": "test.pdf", "content": "Test content"}
-        ]
+        documents = [{"id": "doc1", "source": "test.pdf", "content": "Test content"}]
         chunks = chunk_documents(documents)
 
         assert len(chunks) > 0

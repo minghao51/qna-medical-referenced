@@ -20,7 +20,9 @@ def _parse_csv_ints(value: str | None) -> list[int] | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate ingestion + retrieval pipeline quality")
-    parser.add_argument("--artifact-dir", default="data/evals", help="Base directory for saved evaluation artifacts")
+    parser.add_argument(
+        "--artifact-dir", default="data/evals", help="Base directory for saved evaluation artifacts"
+    )
     parser.add_argument("--name", default=None, help="Optional run label")
     parser.add_argument("--dataset-path", default=None, help="Optional JSON dataset path")
     parser.add_argument("--top-k", type=int, default=5, help="Retrieval top-k")
@@ -34,12 +36,27 @@ def main() -> None:
     parser.add_argument("--thresholds-file", default=None)
     parser.add_argument("--dataset-split", default=None, choices=["dev", "test", "regression"])
     parser.add_argument("--min-label-confidence", default="low", choices=["low", "medium", "high"])
-    parser.add_argument("--retrieval-mode", default="rrf_hybrid", choices=["rrf_hybrid", "legacy_hybrid", "semantic_only", "bm25_only"])
+    parser.add_argument(
+        "--retrieval-mode",
+        default="rrf_hybrid",
+        choices=["rrf_hybrid", "legacy_hybrid", "semantic_only", "bm25_only"],
+    )
     parser.add_argument("--disable-page-classification", action="store_true")
     parser.add_argument("--disable-structured-chunking", action="store_true")
     parser.add_argument("--disable-bm25", action="store_true")
     parser.add_argument("--export-failed-generations", action="store_true")
-    parser.add_argument("--search-mode", default="rrf_hybrid", choices=["rrf_hybrid", "legacy_hybrid", "semantic_only", "bm25_only", "keyword_only", "hybrid"])
+    parser.add_argument(
+        "--search-mode",
+        default="rrf_hybrid",
+        choices=[
+            "rrf_hybrid",
+            "legacy_hybrid",
+            "semantic_only",
+            "bm25_only",
+            "keyword_only",
+            "hybrid",
+        ],
+    )
     parser.add_argument("--no-diversification", action="store_true")
     parser.add_argument("--mmr-lambda", type=float, default=None)
     parser.add_argument("--overfetch-multiplier", type=int, default=None)
@@ -47,9 +64,13 @@ def main() -> None:
     parser.add_argument("--max-chunks-per-source", type=int, default=None)
     parser.add_argument("--run-retrieval-ablations", action="store_true")
     parser.add_argument("--run-diversity-sweep", action="store_true")
-    parser.add_argument("--sweep-mmr-lambdas", default=None, help="Comma-separated, e.g. 0.5,0.75,0.9")
+    parser.add_argument(
+        "--sweep-mmr-lambdas", default=None, help="Comma-separated, e.g. 0.5,0.75,0.9"
+    )
     parser.add_argument("--sweep-overfetch-multipliers", default=None, help="Comma-separated ints")
-    parser.add_argument("--sweep-max-chunks-per-source-page", default=None, help="Comma-separated ints")
+    parser.add_argument(
+        "--sweep-max-chunks-per-source-page", default=None, help="Comma-separated ints"
+    )
     parser.add_argument("--sweep-max-chunks-per-source", default=None, help="Comma-separated ints")
     args = parser.parse_args()
 
@@ -102,7 +123,7 @@ def main() -> None:
     print(f"Status: {result.status}")
     if result.failed_thresholds:
         print(f"Threshold failures: {len(result.failed_thresholds)}")
-    raise SystemExit(1 if result.status == 'failed' else 0)
+    raise SystemExit(1 if result.status == "failed" else 0)
 
 
 if __name__ == "__main__":

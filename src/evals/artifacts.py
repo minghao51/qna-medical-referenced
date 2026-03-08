@@ -69,4 +69,3 @@ class ArtifactStore:
         pointer = self.base_dir / "latest_run.txt"
         pointer.write_text(str(self.run_dir), encoding="utf-8")
         return pointer
-

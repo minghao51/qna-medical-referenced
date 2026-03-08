@@ -33,7 +33,9 @@ def test_download_and_save_html_skips_duplicate_content(monkeypatch, tmp_path: P
     assert "duplicate_content_alias" in statuses
 
 
-def test_migrate_existing_html_duplicates_marks_aliases_and_convert_skips(monkeypatch, tmp_path: Path):
+def test_migrate_existing_html_duplicates_marks_aliases_and_convert_skips(
+    monkeypatch, tmp_path: Path
+):
     monkeypatch.setattr(dw, "DATA_DIR", tmp_path)
     monkeypatch.setattr(dw, "MANIFEST_PATH", tmp_path / "download_manifest.json")
     monkeypatch.setattr(convert_html, "DATA_DIR", tmp_path)

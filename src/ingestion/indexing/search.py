@@ -37,7 +37,11 @@ def rank_documents(
     ranked: list[dict[str, Any]] = []
 
     for i, emb in enumerate(documents["embeddings"]):
-        semantic_score = cosine_similarity(query_embedding, emb) if (use_semantic and query_embedding is not None) else 0.0
+        semantic_score = (
+            cosine_similarity(query_embedding, emb)
+            if (use_semantic and query_embedding is not None)
+            else 0.0
+        )
         metadata = documents["metadatas"][i]
         source_class = metadata.get("source_class", "unknown")
         source_prior = source_prior_for(source_class)
@@ -78,7 +82,9 @@ def reciprocal_rank_fusion(
 
     for rank, row in enumerate(semantic_ranked, start=1):
         idx = int(row["idx"])
-        entry = by_idx.setdefault(idx, {"idx": idx, "semantic_rank": None, "bm25_rank": None, "fused_score": 0.0})
+        entry = by_idx.setdefault(
+            idx, {"idx": idx, "semantic_rank": None, "bm25_rank": None, "fused_score": 0.0}
+        )
         entry["semantic_rank"] = rank
         entry["semantic_score"] = row.get("semantic_score", 0.0)
         entry["source_prior"] = row.get("source_prior", 0.0)
@@ -87,7 +93,9 @@ def reciprocal_rank_fusion(
 
     for rank, row in enumerate(keyword_ranked, start=1):
         idx = int(row["idx"])
-        entry = by_idx.setdefault(idx, {"idx": idx, "semantic_rank": None, "bm25_rank": None, "fused_score": 0.0})
+        entry = by_idx.setdefault(
+            idx, {"idx": idx, "semantic_rank": None, "bm25_rank": None, "fused_score": 0.0}
+        )
         entry["bm25_rank"] = rank
         entry["semantic_score"] = entry.get("semantic_score", row.get("semantic_score", 0.0))
         entry["keyword_score"] = row.get("keyword_score", 0.0)
@@ -95,7 +103,14 @@ def reciprocal_rank_fusion(
         entry["fused_score"] += 1.0 / (k + rank)
 
     fused = list(by_idx.values())
-    fused.sort(key=lambda item: (item["fused_score"], item.get("semantic_score", 0.0), item.get("keyword_score", 0.0)), reverse=True)
+    fused.sort(
+        key=lambda item: (
+            item["fused_score"],
+            item.get("semantic_score", 0.0),
+            item.get("keyword_score", 0.0),
+        ),
+        reverse=True,
+    )
     for rank, row in enumerate(fused, start=1):
         row["fused_rank"] = rank
         row["combined_score"] = row["fused_score"] + row.get("source_prior", 0.0)

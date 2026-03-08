@@ -23,7 +23,11 @@ class MarkdownLoader:
             if not text:
                 continue
             artifact = load_source_artifact("html", md_file.stem)
-            if INDEX_ONLY_CLASSIFIED_PAGES and artifact and not artifact.get("metadata", {}).get("indexable", True):
+            if (
+                INDEX_ONLY_CLASSIFIED_PAGES
+                and artifact
+                and not artifact.get("metadata", {}).get("indexable", True)
+            ):
                 continue
             documents.append(
                 {

@@ -15,4 +15,3 @@ __all__ = [
     "retrieve_context",
     "retrieve_context_with_trace",
 ]
-

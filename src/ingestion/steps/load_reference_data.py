@@ -36,7 +36,7 @@ class ReferenceDataLoader:
             return ""
 
         lines = []
-        with open(csv_path, 'r') as f:
+        with open(csv_path, "r") as f:
             reader = csv.DictReader(f)
             if not self._validate_csv_columns(reader, csv_path):
                 return ""
@@ -53,21 +53,20 @@ class ReferenceDataLoader:
             return []
 
         docs = []
-        with open(csv_path, 'r') as f:
+        with open(csv_path, "r") as f:
             reader = csv.DictReader(f)
             if not self._validate_csv_columns(reader, csv_path):
                 return []
             for i, row in enumerate(reader):
                 content = f"{row['test_name']}: {row['normal_range']} {row['unit']} ({row['category']}) - {row['notes']}"
-                docs.append({
-                    "id": f"ref_range_{i}",
-                    "source": "reference_ranges.csv",
-                    "content": content
-                })
+                docs.append(
+                    {"id": f"ref_range_{i}", "source": "reference_ranges.csv", "content": content}
+                )
         return docs
 
     def load_pdfs_text(self) -> str:
         from pypdf import PdfReader
+
         texts = []
         for pdf_file in self.data_dir.glob("*.pdf"):
             reader = PdfReader(str(pdf_file))

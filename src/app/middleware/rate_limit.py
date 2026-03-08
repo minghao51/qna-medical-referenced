@@ -135,9 +135,7 @@ class RateLimiter:
                 if row:
                     try:
                         timestamps = row["requests"].split(",")
-                        request_times = [
-                            datetime.fromisoformat(ts) for ts in timestamps if ts
-                        ]
+                        request_times = [datetime.fromisoformat(ts) for ts in timestamps if ts]
                     except (ValueError, AttributeError):
                         request_times = []
 
@@ -155,7 +153,7 @@ class RateLimiter:
                 timestamps_str = ",".join(t.isoformat() for t in request_times)
                 conn.execute(
                     "INSERT OR REPLACE INTO rate_limits (key, requests) VALUES (?, ?)",
-                    (key, timestamps_str)
+                    (key, timestamps_str),
                 )
                 conn.commit()
 
@@ -212,8 +210,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Check rate limit
         if not await rate_limiter.check_rate_limit(rate_key):
             return JSONResponse(
-                status_code=429,
-                content={"detail": "Rate limit exceeded. Please try again later."}
+                status_code=429, content={"detail": "Rate limit exceeded. Please try again later."}
             )
 
         return await call_next(request)

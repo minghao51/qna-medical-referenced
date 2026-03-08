@@ -22,4 +22,3 @@ def test_percentile_interpolates():
     assert percentile(vals, 0) == 10
     assert percentile(vals, 50) == 25
     assert percentile(vals, 100) == 40
-

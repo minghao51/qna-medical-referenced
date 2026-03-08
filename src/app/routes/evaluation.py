@@ -70,12 +70,14 @@ def _get_all_runs() -> list[dict[str, Any]]:
         if summary_path.exists():
             try:
                 summary = json.loads(summary_path.read_text())
-                result.append({
-                    "run_dir": str(run_dir.name),
-                    "status": summary.get("status"),
-                    "duration_s": summary.get("duration_s"),
-                    "failed_thresholds_count": summary.get("failed_thresholds_count"),
-                })
+                result.append(
+                    {
+                        "run_dir": str(run_dir.name),
+                        "status": summary.get("status"),
+                        "duration_s": summary.get("duration_s"),
+                        "failed_thresholds_count": summary.get("failed_thresholds_count"),
+                    }
+                )
             except Exception:
                 result.append({"run_dir": str(run_dir.name), "status": "error"})
     return result
@@ -241,7 +243,7 @@ def get_evaluation_history(limit: int = 10) -> dict[str, Any]:
         "latency_p50_ms": [],
         "latency_p95_ms": [],
         "failed_thresholds": [],
-        "duration_s": []
+        "duration_s": [],
     }
 
     for run_dir in runs:
@@ -260,7 +262,9 @@ def get_evaluation_history(limit: int = 10) -> dict[str, Any]:
                 run_data["duration_s"] = summary.get("duration_s", 0)
                 run_data["failed_thresholds_count"] = summary.get("failed_thresholds_count", 0)
 
-                metrics_tracking["failed_thresholds"].append(summary.get("failed_thresholds_count", 0))
+                metrics_tracking["failed_thresholds"].append(
+                    summary.get("failed_thresholds_count", 0)
+                )
                 metrics_tracking["duration_s"].append(summary.get("duration_s", 0))
             except Exception:
                 pass
@@ -290,14 +294,23 @@ def get_evaluation_history(limit: int = 10) -> dict[str, Any]:
         "runs": result_runs,
         "summary": {
             "total_runs": len(result_runs),
-            "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"]) / len(metrics_tracking["hit_rate_at_k"]) if metrics_tracking["hit_rate_at_k"] else 0,
-            "avg_mrr": sum(metrics_tracking["mrr"]) / len(metrics_tracking["mrr"]) if metrics_tracking["mrr"] else 0,
-            "avg_latency_p50": sum(metrics_tracking["latency_p50_ms"]) / len(metrics_tracking["latency_p50_ms"]) if metrics_tracking["latency_p50_ms"] else 0,
-            "avg_duration": sum(metrics_tracking["duration_s"]) / len(metrics_tracking["duration_s"]) if metrics_tracking["duration_s"] else 0,
-        }
+            "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"])
+            / len(metrics_tracking["hit_rate_at_k"])
+            if metrics_tracking["hit_rate_at_k"]
+            else 0,
+            "avg_mrr": sum(metrics_tracking["mrr"]) / len(metrics_tracking["mrr"])
+            if metrics_tracking["mrr"]
+            else 0,
+            "avg_latency_p50": sum(metrics_tracking["latency_p50_ms"])
+            / len(metrics_tracking["latency_p50_ms"])
+            if metrics_tracking["latency_p50_ms"]
+            else 0,
+            "avg_duration": sum(metrics_tracking["duration_s"])
+            / len(metrics_tracking["duration_s"])
+            if metrics_tracking["duration_s"]
+            else 0,
+        },
     }
-
-
 
 
 @router.get(
@@ -443,7 +456,9 @@ def get_step_records(stage: str, limit: int = 100) -> dict[str, Any]:
 
     valid_stages = ["l0", "l1", "l2", "l3", "l4", "l5"]
     if stage.lower() not in valid_stages:
-        raise HTTPException(status_code=400, detail=f"Invalid stage. Must be one of: {valid_stages}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid stage. Must be one of: {valid_stages}"
+        )
 
     step_metrics_path = run_dir / "step_metrics.json"
     if not step_metrics_path.exists():
@@ -453,11 +468,7 @@ def get_step_records(stage: str, limit: int = 100) -> dict[str, Any]:
     stage_data = step_metrics.get(stage.lower(), {})
     records = stage_data.get("records", [])
 
-    return {
-        "stage": stage,
-        "records": records[:limit],
-        "total_count": len(records)
-    }
+    return {"stage": stage, "records": records[:limit], "total_count": len(records)}
 
 
 @router.get(
@@ -500,7 +511,9 @@ def get_step_metrics(stage: str) -> dict[str, Any]:
 
     valid_stages = ["l0", "l1", "l2", "l3", "l4", "l5"]
     if stage.lower() not in valid_stages:
-        raise HTTPException(status_code=400, detail=f"Invalid stage. Must be one of: {valid_stages}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid stage. Must be one of: {valid_stages}"
+        )
 
     step_metrics_path = run_dir / "step_metrics.json"
     if not step_metrics_path.exists():

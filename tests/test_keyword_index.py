@@ -12,7 +12,7 @@ class TestKeywordIndex:
             collection_name="test_keyword",
             semantic_weight=0.6,
             keyword_weight=0.2,
-            boost_weight=0.2
+            boost_weight=0.2,
         )
         store.clear()
         yield store
@@ -38,7 +38,11 @@ class TestKeywordIndex:
 
     def test_stop_words_filtered(self, vector_store):
         documents = [
-            {"id": "doc1", "content": "The quick brown fox jumps over the lazy dog", "source": "test.pdf"},
+            {
+                "id": "doc1",
+                "content": "The quick brown fox jumps over the lazy dog",
+                "source": "test.pdf",
+            },
         ]
         vector_store.add_documents(documents)
         vector_store._rebuild_index_if_needed()
@@ -100,7 +104,9 @@ class TestKeywordIndex:
         scores_run = vector_store._keyword_score("run")
         scores_running = vector_store._keyword_score("running")
 
-        assert 0 in scores_run or 0 in scores_running, "Stemming should work - 'run' should match 'running'"
+        assert 0 in scores_run or 0 in scores_running, (
+            "Stemming should work - 'run' should match 'running'"
+        )
 
     def test_punctuation_handling(self, vector_store):
         documents = [
@@ -135,7 +141,11 @@ class TestKeywordIndex:
 
     def test_acronyms_preserved(self, vector_store):
         documents = [
-            {"id": "doc1", "content": "LDL-C is familial hypercholesterolemia", "source": "test.pdf"},
+            {
+                "id": "doc1",
+                "content": "LDL-C is familial hypercholesterolemia",
+                "source": "test.pdf",
+            },
         ]
         vector_store.add_documents(documents)
         vector_store._rebuild_index_if_needed()
@@ -151,4 +161,6 @@ class TestKeywordIndex:
         scores_upper = vector_store._keyword_score("CHOLESTEROL")
         scores_lower = vector_store._keyword_score("cholesterol")
 
-        assert scores_upper == scores_lower or (scores_upper.get(0, 0) > 0 and scores_lower.get(0, 0) > 0)
+        assert scores_upper == scores_lower or (
+            scores_upper.get(0, 0) > 0 and scores_lower.get(0, 0) > 0
+        )

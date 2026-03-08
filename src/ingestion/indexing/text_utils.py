@@ -9,10 +9,30 @@ from nltk.stem.snowball import SnowballStemmer
 ENGLISH_STOPWORDS = set(stopwords.words("english"))
 
 MEDICAL_STOPWORDS = {
-    "patient", "patients", "year", "years", "month", "months",
-    "old", "male", "female", "gender", "age", "case", "cases",
-    "study", "group", "result", "results", "data", "analysis",
-    "method", "methods", "background", "objective", "conclusion",
+    "patient",
+    "patients",
+    "year",
+    "years",
+    "month",
+    "months",
+    "old",
+    "male",
+    "female",
+    "gender",
+    "age",
+    "case",
+    "cases",
+    "study",
+    "group",
+    "result",
+    "results",
+    "data",
+    "analysis",
+    "method",
+    "methods",
+    "background",
+    "objective",
+    "conclusion",
 }
 ALL_STOPWORDS = ENGLISH_STOPWORDS | MEDICAL_STOPWORDS
 

@@ -59,6 +59,7 @@ def retry_with_backoff(func):
             # Might fail transiently
             return requests.get("https://api.example.com")
     """
+
     def wrapper(*args, **kwargs):
         last_exception: Exception | None = None
         for attempt in range(MAX_RETRIES):
@@ -67,7 +68,7 @@ def retry_with_backoff(func):
             except Exception as e:
                 last_exception = e
                 if attempt < MAX_RETRIES - 1:
-                    delay = INITIAL_DELAY * (2 ** attempt)
+                    delay = INITIAL_DELAY * (2**attempt)
                     logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {delay}s...")
                     time.sleep(delay)
                 else:
@@ -75,6 +76,7 @@ def retry_with_backoff(func):
         if last_exception:
             raise last_exception
         raise RuntimeError("Unexpected error in retry logic")
+
     return wrapper
 
 
@@ -156,8 +158,8 @@ Instructions:
             config=types.GenerateContentConfig(
                 temperature=0.7,
                 max_output_tokens=2048,
-                system_instruction="You are a medical information assistant that provides educational information about lab tests and health screening results."
-            )
+                system_instruction="You are a medical information assistant that provides educational information about lab tests and health screening results.",
+            ),
         )
 
         text = response.text

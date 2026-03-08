@@ -16,7 +16,7 @@ class TestEmbedding:
             collection_name="test_embedding",
             semantic_weight=0.6,
             keyword_weight=0.2,
-            boost_weight=0.2
+            boost_weight=0.2,
         )
         store.clear()
         yield store
@@ -28,7 +28,9 @@ class TestEmbedding:
         embeddings = vector_store._embed(texts)
 
         assert len(embeddings) == 1
-        assert len(embeddings[0]) == GEMINI_EMBEDDING_DIM, f"Expected {GEMINI_EMBEDDING_DIM} dimensions"
+        assert len(embeddings[0]) == GEMINI_EMBEDDING_DIM, (
+            f"Expected {GEMINI_EMBEDDING_DIM} dimensions"
+        )
 
     @requires_live_api
     def test_batch_embedding_dimension(self, vector_store):
@@ -57,7 +59,10 @@ class TestEmbedding:
 
     @requires_live_api
     def test_batch_latency_100_chunks(self, vector_store):
-        texts = [f"Medical document chunk number {i} with relevant content about lipid management and cardiovascular risk." for i in range(100)]
+        texts = [
+            f"Medical document chunk number {i} with relevant content about lipid management and cardiovascular risk."
+            for i in range(100)
+        ]
 
         start = time.time()
         embeddings = vector_store._embed(texts)
@@ -69,7 +74,10 @@ class TestEmbedding:
 
     @requires_live_api
     def test_batch_latency_1000_chunks(self, vector_store):
-        texts = [f"Medical document chunk number {i} about diabetes prevention and treatment." for i in range(1000)]
+        texts = [
+            f"Medical document chunk number {i} about diabetes prevention and treatment."
+            for i in range(1000)
+        ]
 
         start = time.time()
         embeddings = vector_store._embed(texts)
@@ -82,7 +90,7 @@ class TestEmbedding:
     def test_add_documents_stores_embeddings(self, vector_store):
         documents = [
             {"id": "doc1", "content": "LDL cholesterol test", "source": "test.pdf", "page": 1},
-            {"id": "doc2", "content": "Pre-diabetes management", "source": "test.pdf", "page": 1}
+            {"id": "doc2", "content": "Pre-diabetes management", "source": "test.pdf", "page": 1},
         ]
 
         vector_store.add_documents(documents)
@@ -111,10 +119,7 @@ class TestEmbedding:
 
     @requires_live_api
     def test_medical_term_embedding(self, vector_store):
-        texts = [
-            "Hyperlipidaemia LDL cholesterol ASCVD",
-            "Pre-diabetes metformin BMI glycemic"
-        ]
+        texts = ["Hyperlipidaemia LDL cholesterol ASCVD", "Pre-diabetes metformin BMI glycemic"]
         embeddings = vector_store._embed(texts)
 
         assert len(embeddings) == 2

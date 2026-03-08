@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import Tooltip from '$lib/components/Tooltip.svelte';
+	import { stageNames, metricDefinitions } from '$lib/utils/metric-definitions';
+
 	import type { EvaluationResponse, RetrievalMetrics, StepMetrics } from '$lib/types';
 	import MetricChart from '$lib/components/MetricChart.svelte';
 	import QualityDistributionChart from '$lib/components/QualityDistributionChart.svelte';
@@ -243,8 +246,8 @@
 			<h3>Compare Runs</h3>
 			<div class="comparison-controls">
 				<div class="control-group">
-					<label>Baseline Run:</label>
-					<select bind:value={baselineRun} onchange={loadComparisonData}>
+					<label for="baseline-run">Baseline Run:</label>
+					<select id="baseline-run" bind:value={baselineRun} onchange={loadComparisonData}>
 						<option value="">Select baseline...</option>
 						{#each historyData.runs as run}
 							<option value={run.run_dir}>{run.timestamp || run.run_dir?.slice(0, 8) || 'N/A'}</option>
@@ -252,8 +255,8 @@
 					</select>
 				</div>
 				<div class="control-group">
-					<label>Comparison Run:</label>
-					<select bind:value={compareRun} onchange={loadComparisonData}>
+					<label for="comparison-run">Comparison Run:</label>
+					<select id="comparison-run" bind:value={compareRun} onchange={loadComparisonData}>
 						<option value="">Select comparison...</option>
 						{#each historyData.runs as run}
 							<option value={run.run_dir}>{run.timestamp || run.run_dir?.slice(0, 8) || 'N/A'}</option>
@@ -398,11 +401,11 @@
 								<span class="metric-value">{formatPercent(comparisonData.baseline.retrieval_metrics.hit_rate_at_k)}</span>
 							</div>
 							<div class="metric-card">
-								<span class="metric-label">MRR</span>
+								<Tooltip text={metricDefinitions['mrr']}><span class="metric-label">MRR</span></Tooltip>
 								<span class="metric-value">{comparisonData.baseline.retrieval_metrics.mrr.toFixed(3)}</span>
 							</div>
 							<div class="metric-card">
-								<span class="metric-label">Latency p50</span>
+								<Tooltip text={metricDefinitions['latency_p50_ms']}><span class="metric-label">Latency p50</span></Tooltip>
 								<span class="metric-value">{comparisonData.baseline.retrieval_metrics.latency_p50_ms.toFixed(0)}ms</span>
 							</div>
 						</div>
@@ -418,11 +421,11 @@
 								<span class="metric-value">{formatPercent(comparisonData.comparison.retrieval_metrics.hit_rate_at_k)}</span>
 							</div>
 							<div class="metric-card">
-								<span class="metric-label">MRR</span>
+								<Tooltip text={metricDefinitions['mrr']}><span class="metric-label">MRR</span></Tooltip>
 								<span class="metric-value">{comparisonData.comparison.retrieval_metrics.mrr.toFixed(3)}</span>
 							</div>
 							<div class="metric-card">
-								<span class="metric-label">Latency p50</span>
+								<Tooltip text={metricDefinitions['latency_p50_ms']}><span class="metric-label">Latency p50</span></Tooltip>
 								<span class="metric-value">{comparisonData.comparison.retrieval_metrics.latency_p50_ms.toFixed(0)}ms</span>
 							</div>
 						</div>
@@ -452,13 +455,13 @@
 									</span>
 								</div>
 								<div class="metric-card">
-									<span class="metric-label">MRR</span>
+									<Tooltip text={metricDefinitions['mrr']}><span class="metric-label">MRR</span></Tooltip>
 									<span class="metric-value delta" class:positive={mrrDelta.positive === true} class:negative={mrrDelta.positive === false}>
 										{mrrDelta.positive === true ? '+' : ''}{mrrDelta.value.toFixed(3)}
 									</span>
 								</div>
 								<div class="metric-card">
-									<span class="metric-label">Latency p50</span>
+									<Tooltip text={metricDefinitions['latency_p50_ms']}><span class="metric-label">Latency p50</span></Tooltip>
 									<span class="metric-value delta" class:positive={latencyDelta.positive === false} class:negative={latencyDelta.positive === true}>
 										{latencyDelta.positive === true ? '+' : ''}{latencyDelta.value.toFixed(0)}ms
 									</span>
@@ -531,7 +534,7 @@
 							{@const findings = metrics.findings || []}
 							<div class="step-card">
 								<div class="step-header">
-									<span class="stage-name">{stage.toUpperCase()}</span>
+									<span class="stage-name">{stageNames[stage.toUpperCase()] || stage.toUpperCase()}</span>
 									{#if findings.length > 0}
 										<span class="finding-badge" class:error={findings.some(f => f.severity === 'error')}>
 											{findings.length} issue(s)
@@ -541,58 +544,58 @@
 								<div class="step-content">
 									{#if stage === 'l0'}
 										<div class="metric-row">
-											<span>HTML Files</span>
+											<Tooltip text={metricDefinitions['html_file_count']}><span>HTML Files</span></Tooltip>
 											<span>{agg.html_file_count || 0}</span>
 										</div>
 										<div class="metric-row">
-											<span>Parse Success Rate</span>
+											<Tooltip text={metricDefinitions['html_parse_success_rate']}><span>Parse Success Rate</span></Tooltip>
 											<span>{formatPercent(agg.html_parse_success_rate || 0)}</span>
 										</div>
 										<div class="metric-row">
-											<span>Duplicate Rate</span>
+											<Tooltip text={metricDefinitions['duplicate_file_rate']}><span>Duplicate Rate</span></Tooltip>
 											<span>{formatPercent(agg.duplicate_file_rate || 0)}</span>
 										</div>
 										<div class="metric-row">
-											<span>Small File Rate</span>
+											<Tooltip text={metricDefinitions['small_file_rate']}><span>Small File Rate</span></Tooltip>
 											<span class:warning={agg.small_file_rate > 0.1}>
 												{formatPercent(agg.small_file_rate || 0)}
 											</span>
 										</div>
 										<div class="metric-row">
-											<span>Manifest Records</span>
+											<Tooltip text={metricDefinitions['manifest_inventory_record_count']}><span>Manifest Records</span></Tooltip>
 											<span>{agg.manifest_inventory_record_count || 0}</span>
 										</div>
 									{:else if stage === 'l1'}
 										<div class="metric-row">
-											<span>Pairs Evaluated</span>
+											<Tooltip text={metricDefinitions['pairs_evaluated']}><span>Pairs Evaluated</span></Tooltip>
 											<span>{agg.pairs_evaluated || 0}</span>
 										</div>
 										<div class="metric-row">
-											<span>Empty Markdown Rate</span>
+											<Tooltip text={metricDefinitions['markdown_empty_rate']}><span>Empty Markdown Rate</span></Tooltip>
 											<span class:warning={agg.markdown_empty_rate > 0.1}>
 												{formatPercent(agg.markdown_empty_rate || 0)}
 											</span>
 										</div>
 										<div class="metric-row">
-											<span>Retention Ratio</span>
+											<Tooltip text={metricDefinitions['retention_ratio_mean']}><span>Retention Ratio</span></Tooltip>
 											<span>{formatPercent(agg.retention_ratio_mean || 0)}</span>
 										</div>
 										<div class="metric-row">
-											<span>Content Density</span>
+											<Tooltip text={metricDefinitions['content_density_mean']}><span>Content Density</span></Tooltip>
 											<span>{(agg.content_density_mean * 100).toFixed(1)}%</span>
 										</div>
 										<div class="metric-row">
-											<span>Boilerplate Ratio</span>
+											<Tooltip text={metricDefinitions['boilerplate_ratio_mean']}><span>Boilerplate Ratio</span></Tooltip>
 											<span class:warning={agg.boilerplate_ratio_mean > 0.1}>
 												{(agg.boilerplate_ratio_mean * 100).toFixed(1)}%
 											</span>
 										</div>
 										<div class="metric-row">
-											<span>Heading Preservation</span>
+											<Tooltip text={metricDefinitions['heading_preservation_rate_mean']}><span>Heading Preservation</span></Tooltip>
 											<span>{formatPercent(agg.heading_preservation_rate_mean || 0)}</span>
 										</div>
 										<div class="metric-row">
-											<span>Table Preservation</span>
+											<Tooltip text={metricDefinitions['table_preservation_rate_mean']}><span>Table Preservation</span></Tooltip>
 											<span>{formatPercent(agg.table_preservation_rate_mean || 0)}</span>
 										</div>
 										<div class="metric-row">
@@ -605,58 +608,58 @@
 										</div>
 									{:else if stage === 'l2'}
 										<div class="metric-row">
-											<span>PDF Files</span>
+											<Tooltip text={metricDefinitions['pdf_file_count']}><span>PDF Files</span></Tooltip>
 											<span>{agg.pdf_file_count || 0}</span>
 										</div>
 										<div class="metric-row">
-											<span>Page Extraction Coverage</span>
+											<Tooltip text={metricDefinitions['page_extraction_coverage']}><span>Page Extraction Coverage</span></Tooltip>
 											<span>{formatPercent(agg.page_extraction_coverage || 0)}</span>
 										</div>
 										<div class="metric-row">
-											<span>Empty Page Rate</span>
+											<Tooltip text={metricDefinitions['empty_page_rate']}><span>Empty Page Rate</span></Tooltip>
 											<span class:warning={agg.empty_page_rate > 0.2}>
 												{formatPercent(agg.empty_page_rate || 0)}
 											</span>
 										</div>
 										<div class="metric-row">
-											<span>Extractor Fallback Rate</span>
+											<Tooltip text={metricDefinitions['extractor_fallback_rate']}><span>Extractor Fallback Rate</span></Tooltip>
 											<span>{formatPercent(agg.extractor_fallback_rate || 0)}</span>
 										</div>
 										<div class="metric-row">
-											<span>Low Confidence Rate</span>
+											<Tooltip text={metricDefinitions['low_confidence_page_rate']}><span>Low Confidence Rate</span></Tooltip>
 											<span class:warning={agg.low_confidence_page_rate > 0.1}>
 												{formatPercent(agg.low_confidence_page_rate || 0)}
 											</span>
 										</div>
 										<div class="metric-row">
-											<span>OCR Required Rate</span>
+											<Tooltip text={metricDefinitions['ocr_required_rate']}><span>OCR Required Rate</span></Tooltip>
 											<span>{formatPercent(agg.ocr_required_rate || 0)}</span>
 										</div>
 									{:else if stage === 'l3'}
 										<div class="metric-row">
-											<span>Documents</span>
+											<Tooltip text={metricDefinitions['document_count']}><span>Documents</span></Tooltip>
 											<span>{agg.document_count || 0}</span>
 										</div>
 										<div class="metric-row">
-											<span>Chunks</span>
+											<Tooltip text={metricDefinitions['chunk_count']}><span>Chunks</span></Tooltip>
 											<span>{agg.chunk_count || 0}</span>
 										</div>
 										<div class="metric-row">
-											<span>Duplicate Chunk Rate</span>
+											<Tooltip text={metricDefinitions['duplicate_chunk_rate']}><span>Duplicate Chunk Rate</span></Tooltip>
 											<span class:warning={agg.duplicate_chunk_rate > 0.05}>
 												{formatPercent(agg.duplicate_chunk_rate || 0)}
 											</span>
 										</div>
 										<div class="metric-row">
-											<span>Boundary Cut Rate</span>
+											<Tooltip text={metricDefinitions['boundary_cut_rate']}><span>Boundary Cut Rate</span></Tooltip>
 											<span>{formatPercent(agg.boundary_cut_rate || 0)}</span>
 										</div>
 										<div class="metric-row">
-											<span>Observed Overlap</span>
+											<Tooltip text={metricDefinitions['observed_overlap_mean']}><span>Observed Overlap</span></Tooltip>
 											<span>{(agg.observed_overlap_mean * 100).toFixed(1)}%</span>
 										</div>
 										<div class="metric-row">
-											<span>Table Row Split Violations</span>
+											<Tooltip text={metricDefinitions['table_row_split_violations']}><span>Table Row Split Violations</span></Tooltip>
 											<span class:warning={(agg.table_row_split_violations || 0) > 0}>
 												{agg.table_row_split_violations || 0}
 											</span>
@@ -670,47 +673,47 @@
 											/>
 										</div>
 										<div class="metric-row">
-											<span>Section Integrity</span>
+											<Tooltip text={metricDefinitions['section_integrity_rate']}><span>Section Integrity</span></Tooltip>
 											<span>{formatPercent(agg.section_integrity_rate || 0)}</span>
 										</div>
 										<div class="metric-row">
-											<span>Low Quality Filtered</span>
+											<Tooltip text={metricDefinitions['low_quality_chunk_exclusion_rate']}><span>Low Quality Filtered</span></Tooltip>
 											<span>{formatPercent(agg.low_quality_chunk_exclusion_rate || 0)}</span>
 										</div>
 									{:else if stage === 'l4'}
 										<div class="metric-row">
-											<span>CSV Exists</span>
+											<Tooltip text={metricDefinitions['csv_exists']}><span>CSV Exists</span></Tooltip>
 											<span>{agg.csv_exists ? 'Yes' : 'No'}</span>
 										</div>
 										<div class="metric-row">
-											<span>Row Count</span>
+											<Tooltip text={metricDefinitions['row_count']}><span>Row Count</span></Tooltip>
 											<span>{agg.row_count || 0}</span>
 										</div>
 										<div class="metric-row">
-											<span>Completeness Rate</span>
+											<Tooltip text={metricDefinitions['row_completeness_rate']}><span>Completeness Rate</span></Tooltip>
 											<span>{formatPercent(agg.row_completeness_rate || 0)}</span>
 										</div>
 									{:else if stage === 'l5'}
 										<div class="metric-row">
-											<span>Vector Count</span>
+											<Tooltip text={metricDefinitions['ids_count']}><span>Vector Count</span></Tooltip>
 											<span>{agg.ids_count || 0}</span>
 										</div>
 										<div class="metric-row">
-											<span>Embedding Dim</span>
+											<Tooltip text={metricDefinitions['embedding_dim']}><span>Embedding Dim</span></Tooltip>
 											<span>{agg.embedding_dim || 'N/A'}</span>
 										</div>
 										<div class="metric-row">
-											<span>Dims Consistent</span>
+											<Tooltip text={metricDefinitions['embedding_dim_consistent']}><span>Dims Consistent</span></Tooltip>
 											<span>{agg.embedding_dim_consistent ? 'Yes' : 'No'}</span>
 										</div>
 										<div class="metric-row">
-											<span>Short Content Rate</span>
+											<Tooltip text={metricDefinitions['short_content_rate']}><span>Short Content Rate</span></Tooltip>
 											<span class:warning={agg.short_content_rate > 0.1}>
 												{formatPercent(agg.short_content_rate || 0)}
 											</span>
 										</div>
 										<div class="metric-row">
-											<span>Index File Size</span>
+											<Tooltip text={metricDefinitions['index_file_size_bytes']}><span>Index File Size</span></Tooltip>
 											<span>{(agg.index_file_size_bytes / 1024 / 1024).toFixed(2)} MB</span>
 										</div>
 										{#if agg.source_distribution}
@@ -746,56 +749,58 @@
 			{#if data.retrieval_metrics}
 				{@const rm = data.retrieval_metrics}
 				<section class="retrieval-section">
-					<h2>Retrieval Metrics (L6)</h2>
+					<h2>{stageNames["L6"] || "Retrieval Metrics"}</h2>
 					<div class="metrics-grid">
 						<div class="metric-card">
-							<span class="metric-label">Query Count</span>
+							<Tooltip text={metricDefinitions['query_count']}><span class="metric-label">Query Count</span></Tooltip>
 							<span class="metric-value">{rm.query_count}</span>
 						</div>
-						<div
-							class="metric-card clickable"
+						<button
+							type="button"
+							class="metric-card clickable metric-card-button"
 							onclick={() => showMetricDrillDown('l6', 'hit_rate_at_k', rm.hit_rate_at_k)}
 						>
-							<span class="metric-label">Hit Rate @k</span>
+							<Tooltip text={metricDefinitions['hit_rate_at_k']}><span class="metric-label">Hit Rate @k</span></Tooltip>
 							<span class="metric-value highlight">{formatPercent(rm.hit_rate_at_k)}</span>
-						</div>
-						<div
-							class="metric-card clickable"
+						</button>
+						<button
+							type="button"
+							class="metric-card clickable metric-card-button"
 							onclick={() => showMetricDrillDown('l6', 'mrr', rm.mrr)}
 						>
-							<span class="metric-label">MRR</span>
+							<Tooltip text={metricDefinitions['mrr']}><span class="metric-label">MRR</span></Tooltip>
 							<span class="metric-value highlight">{rm.mrr.toFixed(3)}</span>
-						</div>
+						</button>
 						<div class="metric-card">
-							<span class="metric-label">Precision @k</span>
+							<Tooltip text={metricDefinitions['precision_at_k']}><span class="metric-label">Precision @k</span></Tooltip>
 							<span class="metric-value">{formatPercent(rm.precision_at_k)}</span>
 						</div>
 						<div class="metric-card">
-							<span class="metric-label">Recall @k</span>
+							<Tooltip text={metricDefinitions['recall_at_k']}><span class="metric-label">Recall @k</span></Tooltip>
 							<span class="metric-value">{formatPercent(rm.recall_at_k)}</span>
 						</div>
 						<div class="metric-card">
-							<span class="metric-label">nDCG @k</span>
+							<Tooltip text={metricDefinitions['ndcg_at_k']}><span class="metric-label">nDCG @k</span></Tooltip>
 							<span class="metric-value">{formatPercent(rm.ndcg_at_k)}</span>
 						</div>
 						<div class="metric-card">
-							<span class="metric-label">Source Hit Rate</span>
+							<Tooltip text={metricDefinitions['source_hit_rate']}><span class="metric-label">Source Hit Rate</span></Tooltip>
 							<span class="metric-value">{formatPercent(rm.source_hit_rate)}</span>
 						</div>
 						<div class="metric-card">
-							<span class="metric-label">Exact Chunk Hit</span>
+							<Tooltip text={metricDefinitions['exact_chunk_hit_rate']}><span class="metric-label">Exact Chunk Hit</span></Tooltip>
 							<span class="metric-value">{formatPercent(rm.exact_chunk_hit_rate)}</span>
 						</div>
 						<div class="metric-card">
-							<span class="metric-label">Evidence Hit</span>
+							<Tooltip text={metricDefinitions['evidence_hit_rate']}><span class="metric-label">Evidence Hit</span></Tooltip>
 							<span class="metric-value">{formatPercent(rm.evidence_hit_rate)}</span>
 						</div>
 						<div class="metric-card">
-							<span class="metric-label">Latency p50</span>
+							<Tooltip text={metricDefinitions['latency_p50_ms']}><span class="metric-label">Latency p50</span></Tooltip>
 							<span class="metric-value">{rm.latency_p50_ms.toFixed(0)}ms</span>
 						</div>
 						<div class="metric-card">
-							<span class="metric-label">Latency p95</span>
+							<Tooltip text={metricDefinitions['latency_p95_ms']}><span class="metric-label">Latency p95</span></Tooltip>
 							<span class="metric-value">{rm.latency_p95_ms.toFixed(0)}ms</span>
 						</div>
 					</div>
@@ -1321,6 +1326,13 @@
 
 	.metric-card:hover {
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+	}
+
+	.metric-card-button {
+		font: inherit;
+		color: inherit;
+		text-align: left;
+		width: 100%;
 	}
 
 	.metric-label {

@@ -106,13 +106,17 @@ def _sample_candidate_docs(sample_docs_per_source_type: int, seed: int) -> list[
     return sampled
 
 
-def _build_seed_context(seed: dict[str, Any], chunk_map: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _build_seed_context(
+    seed: dict[str, Any], chunk_map: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
     context_chunks = [seed]
     for related_key in ("previous_chunk_id", "next_chunk_id"):
         related = chunk_map.get(str(seed.get(related_key)))
         if related:
             context_chunks.append(related)
-    context_text = "\n\n".join(str(item.get("content", ""))[:900] for item in context_chunks if item.get("content"))
+    context_text = "\n\n".join(
+        str(item.get("content", ""))[:900] for item in context_chunks if item.get("content")
+    )
     return {
         "target_chunk": seed,
         "neighbor_chunks": [item for item in context_chunks if item.get("id") != seed.get("id")],
@@ -135,8 +139,12 @@ def _looks_copied(question: str, evidence_span: str) -> bool:
     return overlap > 0.8
 
 
-def _validate_synthetic_record(candidate: dict[str, Any], seed: dict[str, Any], context_text: str) -> tuple[bool, str]:
-    evidence_span = str(candidate.get("evidence_span") or candidate.get("evidence_phrase") or "").strip()
+def _validate_synthetic_record(
+    candidate: dict[str, Any], seed: dict[str, Any], context_text: str
+) -> tuple[bool, str]:
+    evidence_span = str(
+        candidate.get("evidence_span") or candidate.get("evidence_phrase") or ""
+    ).strip()
     answer_summary = str(candidate.get("answer_summary") or candidate.get("answer") or "").strip()
     query = str(candidate.get("query") or candidate.get("question") or "").strip()
     if not query:
@@ -147,7 +155,10 @@ def _validate_synthetic_record(candidate: dict[str, Any], seed: dict[str, Any], 
         return False, "source_title_leakage"
     if _looks_copied(query, evidence_span):
         return False, "question_too_copied"
-    if answer_summary and not any(token in context_text.lower() for token in re.findall(r"[a-z0-9]+", answer_summary.lower())[:3]):
+    if answer_summary and not any(
+        token in context_text.lower()
+        for token in re.findall(r"[a-z0-9]+", answer_summary.lower())[:3]
+    ):
         return False, "answer_not_grounded"
     return True, "accepted"
 
@@ -227,7 +238,9 @@ def _try_generate_synthetic_questions(
                 "evidence_span": str(parsed.get("evidence_span", "")).strip(),
                 "evidence_phrase": str(parsed.get("evidence_span", "")).strip(),
                 "answer_summary": str(parsed.get("answer_summary", "")).strip(),
-                "expected_keywords": [str(k).strip() for k in parsed.get("expected_keywords", []) if str(k).strip()],
+                "expected_keywords": [
+                    str(k).strip() for k in parsed.get("expected_keywords", []) if str(k).strip()
+                ],
             }
             valid, reason = _validate_synthetic_record(candidate, doc, seed_context["context_text"])
             if not valid:
@@ -288,8 +301,7 @@ def _bootstrap_precise_labels(records: list[dict[str, Any]]) -> list[dict[str, A
             chunk_family = _source_family(chunk_source)
             if target_sources:
                 if not any(
-                    source in chunk_source
-                    or _source_family(source) == chunk_family
+                    source in chunk_source or _source_family(source) == chunk_family
                     for source in target_sources
                 ):
                     continue
@@ -304,10 +316,14 @@ def _bootstrap_precise_labels(records: list[dict[str, Any]]) -> list[dict[str, A
         item["expected_page"] = best.get("page")
         item.setdefault("expected_source_types", [_source_type(str(best.get("source", "")))])
         if not item.get("evidence_span"):
-            item["evidence_span"] = _extract_evidence_phrase(str(best.get("content", "")), expected_keywords)
+            item["evidence_span"] = _extract_evidence_phrase(
+                str(best.get("content", "")), expected_keywords
+            )
         if not item.get("evidence_phrase"):
             item["evidence_phrase"] = item.get("evidence_span")
-        item["label_confidence"] = "high" if best_score >= 2 else item.get("label_confidence", "medium")
+        item["label_confidence"] = (
+            "high" if best_score >= 2 else item.get("label_confidence", "medium")
+        )
         item.setdefault("source_family", _source_family(str(best.get("source", ""))))
         item.setdefault("dataset_split", _assign_split(str(best.get("source", ""))))
         item.setdefault("difficulty", _difficulty_for_chunk(best))
@@ -348,12 +364,18 @@ def _filter_records(
 ) -> list[dict[str, Any]]:
     minimum = _CONFIDENCE_ORDER.get(min_label_confidence, _CONFIDENCE_ORDER["low"])
     filtered = [
-        item for item in records
+        item
+        for item in records
         if _CONFIDENCE_ORDER.get(str(item.get("label_confidence", "low")), 0) >= minimum
     ]
     if dataset_split:
         filtered = [item for item in filtered if str(item.get("dataset_split")) == dataset_split]
-    filtered.sort(key=lambda item: (_SPLIT_ORDER.get(str(item.get("dataset_split", "dev")), 0), item.get("query_id", "")))
+    filtered.sort(
+        key=lambda item: (
+            _SPLIT_ORDER.get(str(item.get("dataset_split", "dev")), 0),
+            item.get("query_id", ""),
+        )
+    )
     return filtered
 
 
@@ -383,7 +405,9 @@ def build_retrieval_dataset(
 
     merged = _dedupe_queries(base_records + synthetic_records)
     merged = _bootstrap_precise_labels(merged)
-    filtered = _filter_records(merged, dataset_split=dataset_split, min_label_confidence=min_label_confidence)
+    filtered = _filter_records(
+        merged, dataset_split=dataset_split, min_label_confidence=min_label_confidence
+    )
     return {
         "dataset": filtered,
         "generation_attempts": attempts,

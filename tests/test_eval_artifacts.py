@@ -14,4 +14,3 @@ def test_artifact_store_writes_json_jsonl_text(tmp_path: Path):
     assert (store.run_dir / "b.jsonl").exists()
     assert (store.run_dir / "c.txt").read_text(encoding="utf-8") == "hello"
     assert Path(pointer).read_text(encoding="utf-8").strip() == str(store.run_dir)
-

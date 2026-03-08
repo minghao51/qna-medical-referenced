@@ -69,4 +69,3 @@ def ndcg_at_k(binary_relevance: list[int], k: int | None = None) -> float:
     for i in range(1, ideal_count + 1):
         idcg += 1.0 / math.log2(i + 1)
     return dcg / idcg if idcg else 0.0
-

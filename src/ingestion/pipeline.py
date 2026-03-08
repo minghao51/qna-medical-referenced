@@ -27,9 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 def run_pipeline(
-    skip_download: bool = False,
-    force_rebuild: bool = False,
-    force_html_convert: bool = False
+    skip_download: bool = False, force_rebuild: bool = False, force_html_convert: bool = False
 ):
     """Run the full data pipeline in sequence."""
     print("=" * 70)
@@ -146,27 +144,23 @@ def run_pipeline(
 
 def main():
     parser = argparse.ArgumentParser(description="Run the RAG data pipeline")
-    parser.add_argument(
-        "--skip-download",
-        action="store_true",
-        help="Skip L0 web content download"
-    )
+    parser.add_argument("--skip-download", action="store_true", help="Skip L0 web content download")
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Force rebuild of vector store (clear and re-embed all)"
+        help="Force rebuild of vector store (clear and re-embed all)",
     )
     parser.add_argument(
         "--force-html",
         action="store_true",
-        help="Force re-convert HTML to Markdown (overwrite existing)"
+        help="Force re-convert HTML to Markdown (overwrite existing)",
     )
     args = parser.parse_args()
 
     run_pipeline(
         skip_download=args.skip_download,
         force_rebuild=args.force,
-        force_html_convert=args.force_html
+        force_html_convert=args.force_html,
     )
 
 

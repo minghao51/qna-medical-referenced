@@ -4,7 +4,9 @@ import math
 from typing import Callable
 
 
-def build_term_frequencies(contents: list[str], tokenize: Callable[[str], list[str]]) -> dict[int, dict[str, int]]:
+def build_term_frequencies(
+    contents: list[str], tokenize: Callable[[str], list[str]]
+) -> dict[int, dict[str, int]]:
     term_freqs: dict[int, dict[str, int]] = {}
     for idx, content in enumerate(contents):
         tf: dict[str, int] = {}
@@ -14,7 +16,9 @@ def build_term_frequencies(contents: list[str], tokenize: Callable[[str], list[s
     return term_freqs
 
 
-def build_keyword_index(contents: list[str], tokenize: Callable[[str], list[str]]) -> dict[str, list[int]]:
+def build_keyword_index(
+    contents: list[str], tokenize: Callable[[str], list[str]]
+) -> dict[str, list[int]]:
     index: dict[str, list[int]] = {}
     for idx, content in enumerate(contents):
         for token in set(tokenize(content)):
@@ -38,10 +42,7 @@ def keyword_score(
     if total_docs == 0:
         return {}
 
-    doc_lengths = {
-        idx: sum(freqs.values())
-        for idx, freqs in doc_term_freqs.items()
-    }
+    doc_lengths = {idx: sum(freqs.values()) for idx, freqs in doc_term_freqs.items()}
     avg_doc_length = (sum(doc_lengths.values()) / total_docs) if total_docs else 0.0
     k1 = 1.5
     b = 0.75

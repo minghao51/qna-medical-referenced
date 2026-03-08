@@ -139,16 +139,15 @@ class PDFLoader:
             ocr_required_pages = 0
 
             for page_num, primary_text in enumerate(primary_texts, 1):
-                fallback_text = fallback_texts[page_num - 1] if page_num - 1 < len(fallback_texts) else ""
+                fallback_text = (
+                    fallback_texts[page_num - 1] if page_num - 1 < len(fallback_texts) else ""
+                )
                 replacement_chars = primary_text.count("\ufffd")
                 primary_lines = _normalize_lines(primary_text)
-                use_fallback = (
-                    bool(fallback_text)
-                    and (
-                        len(primary_text.strip()) < 120
-                        or replacement_chars > 2
-                        or len(primary_lines) < 2
-                    )
+                use_fallback = bool(fallback_text) and (
+                    len(primary_text.strip()) < 120
+                    or replacement_chars > 2
+                    or len(primary_lines) < 2
                 )
                 selected_text = fallback_text if use_fallback else primary_text
                 extractor = "pdfplumber" if use_fallback else "pypdf"

@@ -1,4 +1,5 @@
 """Data models for the health screening interpreter chatbot."""
+
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -6,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class RetrievedDocument(BaseModel):
     """A retrieved document with individual scores."""
+
     id: str
     content: str
     source: str
@@ -27,6 +29,7 @@ class RetrievedDocument(BaseModel):
 
 class RetrievalStage(BaseModel):
     """Metadata about the retrieval stage."""
+
     query: str
     top_k: int
     documents: list[RetrievedDocument]
@@ -36,6 +39,7 @@ class RetrievalStage(BaseModel):
 
 class ContextStage(BaseModel):
     """Metadata about the context assembly stage."""
+
     total_chunks: int
     total_chars: int
     sources: list[str]
@@ -44,6 +48,7 @@ class ContextStage(BaseModel):
 
 class GenerationStage(BaseModel):
     """Metadata about the LLM generation stage."""
+
     model: str
     timing_ms: int
     tokens_estimate: Optional[int] = None
@@ -51,6 +56,7 @@ class GenerationStage(BaseModel):
 
 class PipelineTrace(BaseModel):
     """Complete pipeline trace from query to response."""
+
     retrieval: RetrievalStage
     context: ContextStage
     generation: GenerationStage
@@ -59,6 +65,7 @@ class PipelineTrace(BaseModel):
 
 class ChatResponseWithPipeline(BaseModel):
     """Chat response with optional pipeline trace."""
+
     response: str
     sources: list[str]
     pipeline: Optional[PipelineTrace] = None

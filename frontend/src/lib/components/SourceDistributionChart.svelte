@@ -15,9 +15,6 @@
 	let canvas: HTMLCanvasElement;
 	let chart: Chart | null = null;
 
-	const labels = Object.keys(distribution);
-	const data = Object.values(distribution);
-
 	function createChart() {
 		if (chart) {
 			chart.destroy();
@@ -26,25 +23,29 @@
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
+		const labels = Object.keys(distribution);
+		const values = Object.values(distribution);
+		const backgroundColors = [
+			'#2196f3',
+			'#4caf50',
+			'#ff9800',
+			'#9c27b0',
+			'#f44336',
+			'#00bcd4',
+			'#ffeb3b',
+			'#795548',
+			'#607d8b',
+			'#8bc34a'
+		];
+
 		chart = new Chart(ctx, {
 			type: 'doughnut',
 			data: {
-				labels: labels,
+				labels,
 				datasets: [
 					{
-						data: data,
-						backgroundColor: [
-							'#2196f3',
-							'#4caf50',
-							'#ff9800',
-							'#9c27b0',
-							'#f44336',
-							'#00bcd4',
-							'#ffeb3b',
-							'#795548',
-							'#607d8b',
-							'#8bc34a'
-						],
+						data: values,
+						backgroundColor: backgroundColors,
 						borderWidth: 2,
 						borderColor: '#fff'
 					}
@@ -61,16 +62,17 @@
 							usePointStyle: true,
 							font: { size: 11 },
 							generateLabels: (chart) => {
-								const data = chart.data;
-								if (data.labels && data.datasets.length > 0) {
-									const dataset = data.datasets[0];
-									const total = dataset.data.reduce((a, b) => a + b, 0);
-									return data.labels.map((label, i) => {
-										const value = dataset.data[i];
+								const chartData = chart.data;
+								if (chartData.labels && chartData.datasets.length > 0) {
+									const dataset = chartData.datasets[0];
+									const numericData = dataset.data.map((value) => Number(value ?? 0));
+									const total = numericData.reduce((sum, value) => sum + value, 0);
+									return chartData.labels.map((label, i) => {
+										const value = numericData[i] ?? 0;
 										const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
 										return {
 											text: `${label}: ${value} (${percentage}%)`,
-											fillStyle: dataset.backgroundColor[i],
+											fillStyle: backgroundColors[i % backgroundColors.length],
 											hidden: false,
 											index: i
 										};
@@ -92,8 +94,11 @@
 						callbacks: {
 							label: (context) => {
 								const label = context.label || '';
-								const value = context.parsed;
-								const total = context.dataset.data.reduce((a, b) => a + b, 0);
+								const value = Number(context.parsed ?? 0);
+								const total = context.dataset.data.reduce(
+									(sum, item) => sum + Number(item ?? 0),
+									0
+								);
 								const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
 								return `${label}: ${value} (${percentage}%)`;
 							}

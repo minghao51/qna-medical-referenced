@@ -24,12 +24,29 @@
 			onclose();
 		}
 	}
+
+	function handleOverlayKeydown(e: KeyboardEvent) {
+		if (
+			(e.key === 'Enter' || e.key === ' ') &&
+			(e.target as HTMLElement).classList.contains('modal-overlay')
+		) {
+			e.preventDefault();
+			onclose();
+		}
+	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-	<div class="modal-overlay" onclick={handleClickOutside}>
+	<div
+		class="modal-overlay"
+		role="button"
+		tabindex="0"
+		aria-label="Close dialog"
+		onclick={handleClickOutside}
+		onkeydown={handleOverlayKeydown}
+	>
 		<div class="modal-content">
 			<div class="modal-header">
 				<h2>{metric} Details</h2>

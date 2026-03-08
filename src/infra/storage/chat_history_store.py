@@ -121,10 +121,7 @@ def save_message(session_id: str, role: str, content: str) -> None:
     history = _load_history()
     if session_id not in history:
         history[session_id] = []
-    history[session_id].append({
-        "role": role,
-        "content": content
-    })
+    history[session_id].append({"role": role, "content": content})
     _save_history(history)
 
 

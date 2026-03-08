@@ -15,10 +15,7 @@ def get_embedding_client() -> OpenAI:
     Returns:
         OpenAI client configured for Dashscope API
     """
-    return OpenAI(
-        api_key=settings.dashscope_api_key,
-        base_url=settings.qwen_base_url
-    )
+    return OpenAI(api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url)
 
 
 def embed_texts(texts: List[str], batch_size: int = 10) -> List[List[float]]:
@@ -38,11 +35,8 @@ def embed_texts(texts: List[str], batch_size: int = 10) -> List[List[float]]:
     all_embeddings: List[List[float]] = []
 
     for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        response = client.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=batch
-        )
+        batch = texts[i : i + batch_size]
+        response = client.embeddings.create(model=EMBEDDING_MODEL, input=batch)
         all_embeddings.extend([e.embedding for e in response.data])
 
     return all_embeddings

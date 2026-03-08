@@ -56,7 +56,11 @@ def test_run_assessment_smoke(monkeypatch, tmp_path: Path):
             },
         ),
     )
-    monkeypatch.setattr(pa, "_evaluate_answers", lambda dataset, top_k: ([], {"status": "skipped", "reason": "test"}))
+    monkeypatch.setattr(
+        pa,
+        "_evaluate_answers",
+        lambda dataset, top_k: ([], {"status": "skipped", "reason": "test"}),
+    )
     monkeypatch.setattr(pa, "_git_head", lambda: "deadbeef")
 
     result = pa.run_assessment(

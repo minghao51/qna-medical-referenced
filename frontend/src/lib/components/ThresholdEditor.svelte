@@ -14,9 +14,17 @@
 
 	let { thresholds, onSave, readonly = false }: Props = $props();
 
+	const cloneThresholds = () => thresholds.map((threshold) => ({ ...threshold }));
+
 	let editing = $state(false);
-	let localThresholds = $state<Threshold[]>([...thresholds]);
+	let localThresholds = $state<Threshold[]>([]);
 	let saving = $state(false);
+
+	$effect(() => {
+		if (!editing) {
+			localThresholds = cloneThresholds();
+		}
+	});
 
 	function getStatus(threshold: Threshold): 'pass' | 'fail' {
 		const { op, value, current } = threshold;
@@ -26,13 +34,13 @@
 
 	function startEditing() {
 		if (readonly) return;
-		localThresholds = thresholds.map((t) => ({ ...t }));
+		localThresholds = cloneThresholds();
 		editing = true;
 	}
 
 	function cancelEditing() {
 		editing = false;
-		localThresholds = [...thresholds];
+		localThresholds = cloneThresholds();
 	}
 
 	async function handleSave() {
@@ -47,7 +55,6 @@
 				saving = false;
 			}
 		} else {
-			thresholds = localThresholds;
 			editing = false;
 		}
 	}
@@ -79,14 +86,19 @@
 	<div class="thresholds-grid">
 		{#each localThresholds as threshold, index (index)}
 			{@const status = getStatus(threshold)}
-			<div class="threshold-card" class:status-{status}>
+			<div class={`threshold-card status-${status}`}>
 				<div class="threshold-metric">{threshold.metric}</div>
 				<div class="threshold-config">
 					{#if editing}
 						<select
 							bind:value={localThresholds[index].op}
 							class="op-select"
-							onchange={(e) => updateThreshold(index, 'op', e.target.value)}
+							onchange={(e) =>
+								updateThreshold(
+									index,
+									'op',
+									(e.currentTarget as HTMLSelectElement).value as Threshold['op']
+								)}
 						>
 							<option value="min">≥ Min</option>
 							<option value="max">≤ Max</option>
@@ -96,7 +108,12 @@
 							bind:value={localThresholds[index].value}
 							step="0.01"
 							class="value-input"
-							onchange={(e) => updateThreshold(index, 'value', parseFloat(e.target.value))}
+							onchange={(e) =>
+								updateThreshold(
+									index,
+									'value',
+									parseFloat((e.currentTarget as HTMLInputElement).value)
+								)}
 						/>
 					{:else}
 						<span class="threshold-value">{threshold.op === 'min' ? '≥' : '≤'} {threshold.value}</span>
@@ -104,11 +121,11 @@
 				</div>
 				<div class="threshold-current">
 					<span class="current-label">Current:</span>
-					<span class="current-value" class:status-{status}>
+					<span class={`current-value status-${status}`}>
 						{typeof threshold.current === 'number' ? threshold.current.toFixed(3) : threshold.current}
 					</span>
 				</div>
-				<div class="threshold-status" class:status-{status}>
+				<div class={`threshold-status status-${status}`}>
 					{#if status === 'pass'}
 						✓ PASS
 					{:else}

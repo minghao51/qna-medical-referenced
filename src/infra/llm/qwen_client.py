@@ -58,6 +58,7 @@ def retry_with_backoff(func):
             # Might fail transiently
             return requests.get("https://api.example.com")
     """
+
     def wrapper(*args, **kwargs):
         last_exception: Exception | None = None
         for attempt in range(MAX_RETRIES):
@@ -66,7 +67,7 @@ def retry_with_backoff(func):
             except Exception as e:
                 last_exception = e
                 if attempt < MAX_RETRIES - 1:
-                    delay = INITIAL_DELAY * (2 ** attempt)
+                    delay = INITIAL_DELAY * (2**attempt)
                     logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {delay}s...")
                     time.sleep(delay)
                 else:
@@ -74,6 +75,7 @@ def retry_with_backoff(func):
         if last_exception:
             raise last_exception
         raise RuntimeError("Unexpected error in retry logic")
+
     return wrapper
 
 
@@ -104,10 +106,7 @@ class QwenClient:
             model: Model identifier (e.g., "qwen3.5-flash", "qwen3.5-plus")
                    If None, uses the model from settings.model_name
         """
-        self.client = OpenAI(
-            api_key=settings.dashscope_api_key,
-            base_url=settings.qwen_base_url
-        )
+        self.client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url)
         self.model = model or settings.model_name
 
     @retry_with_backoff
@@ -141,7 +140,7 @@ class QwenClient:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a medical information assistant that provides educational information about lab tests and health screening results."
+                    "content": "You are a medical information assistant that provides educational information about lab tests and health screening results.",
                 },
                 {
                     "role": "user",
@@ -159,8 +158,8 @@ Instructions:
 - Include relevant reference ranges when applicable
 - Mention potential controversies or limitations of tests
 - Do not provide medical diagnoses
-"""
-                }
+""",
+                },
             ],
             temperature=0.7,
             max_tokens=2048,

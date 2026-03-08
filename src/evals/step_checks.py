@@ -85,14 +85,22 @@ def audit_l0_download(data_raw_dir: Path | None = None) -> dict[str, Any]:
         "html_file_count": len(html_files),
         "small_file_rate": (small_count / len(html_files)) if html_files else 0.0,
         "duplicate_file_rate": (duplicate_files / len(html_files)) if html_files else 0.0,
-        "duplicate_alias_file_rate": (alias_duplicate_count / len(html_files)) if html_files else 0.0,
+        "duplicate_alias_file_rate": (alias_duplicate_count / len(html_files))
+        if html_files
+        else 0.0,
         "true_duplicate_file_rate": (true_duplicate_files / len(html_files)) if html_files else 0.0,
-        "html_parse_success_rate": ((len(html_files) - parse_failures) / len(html_files)) if html_files else 0.0,
-        "manifest_inventory_record_count": sum(1 for r in manifest.get("records", []) if r.get("record_type") == "file_inventory"),
+        "html_parse_success_rate": ((len(html_files) - parse_failures) / len(html_files))
+        if html_files
+        else 0.0,
+        "manifest_inventory_record_count": sum(
+            1 for r in manifest.get("records", []) if r.get("record_type") == "file_inventory"
+        ),
     }
     findings = []
     if aggregate["small_file_rate"] > 0.2:
-        findings.append({"severity": "warning", "message": "High small HTML file rate", "stage": "L0"})
+        findings.append(
+            {"severity": "warning", "message": "High small HTML file rate", "stage": "L0"}
+        )
     return {"aggregate": aggregate, "records": records, "findings": findings}
 
 
@@ -128,7 +136,9 @@ def assess_l1_html_markdown_quality(data_raw_dir: Path | None = None) -> dict[st
                 "html_visible_chars": html_chars,
                 "md_chars": md_chars,
                 "retention_ratio": retention,
-                "markdown_heading_count": len(re.findall(r"^#{1,6}\s", md_text, flags=re.MULTILINE)),
+                "markdown_heading_count": len(
+                    re.findall(r"^#{1,6}\s", md_text, flags=re.MULTILINE)
+                ),
                 "markdown_list_lines": len(re.findall(r"^\s*[-*]\s", md_text, flags=re.MULTILINE)),
                 "markdown_link_count": md_text.count("]("),
                 "boilerplate_hits": boilerplate_hits,
@@ -137,31 +147,53 @@ def assess_l1_html_markdown_quality(data_raw_dir: Path | None = None) -> dict[st
                 "page_type": artifact_meta.get("page_type"),
                 "heading_preservation_rate": (
                     len(re.findall(r"^#{1,6}\s", md_text, flags=re.MULTILINE))
-                    / max(1, sum(1 for block in structured_blocks if block.get("block_type") == "heading"))
+                    / max(
+                        1,
+                        sum(
+                            1 for block in structured_blocks if block.get("block_type") == "heading"
+                        ),
+                    )
                 ),
                 "table_preservation_rate": (
                     md_text.count("| --- |")
-                    / max(1, sum(1 for block in structured_blocks if block.get("block_type") == "table"))
+                    / max(
+                        1,
+                        sum(1 for block in structured_blocks if block.get("block_type") == "table"),
+                    )
                 ),
             }
         )
 
     aggregate = {
         "pairs_evaluated": len(records),
-        "markdown_missing_rate": (_count_false(records, "md_exists") / len(records)) if records else 0.0,
+        "markdown_missing_rate": (_count_false(records, "md_exists") / len(records))
+        if records
+        else 0.0,
         "markdown_empty_rate": (empty_md / len(records)) if records else 0.0,
         "retention_ratio_median": _safe_median(retention_ratios),
         "retention_ratio_mean": _safe_mean(retention_ratios),
-        "low_retention_rate": (sum(1 for r in retention_ratios if r < 0.05) / len(retention_ratios)) if retention_ratios else 0.0,
+        "low_retention_rate": (sum(1 for r in retention_ratios if r < 0.05) / len(retention_ratios))
+        if retention_ratios
+        else 0.0,
         "content_density_mean": _safe_mean([float(r.get("content_density", 0.0)) for r in records]),
-        "boilerplate_ratio_mean": _safe_mean([float(r.get("boilerplate_suspicion", 0.0)) for r in records]),
-        "heading_preservation_rate_mean": _safe_mean([float(r.get("heading_preservation_rate", 0.0)) for r in records]),
-        "table_preservation_rate_mean": _safe_mean([float(r.get("table_preservation_rate", 0.0)) for r in records]),
-        "page_classification_distribution": dict(Counter(str(r.get("page_type", "unknown")) for r in records)),
+        "boilerplate_ratio_mean": _safe_mean(
+            [float(r.get("boilerplate_suspicion", 0.0)) for r in records]
+        ),
+        "heading_preservation_rate_mean": _safe_mean(
+            [float(r.get("heading_preservation_rate", 0.0)) for r in records]
+        ),
+        "table_preservation_rate_mean": _safe_mean(
+            [float(r.get("table_preservation_rate", 0.0)) for r in records]
+        ),
+        "page_classification_distribution": dict(
+            Counter(str(r.get("page_type", "unknown")) for r in records)
+        ),
     }
     findings = []
     if aggregate["markdown_empty_rate"] > 0.1:
-        findings.append({"severity": "warning", "message": "High empty markdown rate", "stage": "L1"})
+        findings.append(
+            {"severity": "warning", "message": "High empty markdown rate", "stage": "L1"}
+        )
     return {"aggregate": aggregate, "records": records, "findings": findings}
 
 
@@ -182,7 +214,9 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
         try:
             reader = PdfReader(str(pdf_path))
         except Exception as exc:
-            findings.append({"severity": "error", "stage": "L2", "file": pdf_path.name, "message": str(exc)})
+            findings.append(
+                {"severity": "error", "stage": "L2", "file": pdf_path.name, "message": str(exc)}
+            )
             continue
         artifact = load_source_artifact("pdf", pdf_path.stem) or {}
         artifact_meta = artifact.get("metadata", {})
@@ -223,8 +257,12 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
                 "chars_per_page_max": max(per_page_chars) if per_page_chars else 0,
                 "replacement_char_count": replacement_chars,
                 "fallback_page_count": artifact_meta.get("fallback_used_pages", fallback_pages),
-                "low_confidence_page_count": artifact_meta.get("low_confidence_pages", low_conf_pages),
-                "ocr_required_page_count": artifact_meta.get("ocr_required_pages", ocr_required_pages),
+                "low_confidence_page_count": artifact_meta.get(
+                    "low_confidence_pages", low_conf_pages
+                ),
+                "ocr_required_page_count": artifact_meta.get(
+                    "ocr_required_pages", ocr_required_pages
+                ),
                 "suspected_table_count": suspected_tables,
             }
         )
@@ -237,19 +275,33 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
         "empty_page_rate": (empty_pages / total_pages) if total_pages else 0.0,
         "extractor_fallback_rate": (
             sum(int(r.get("fallback_page_count", 0)) for r in records) / total_pages
-        ) if total_pages else 0.0,
+        )
+        if total_pages
+        else 0.0,
         "low_confidence_page_rate": (
             sum(int(r.get("low_confidence_page_count", 0)) for r in records) / total_pages
-        ) if total_pages else 0.0,
+        )
+        if total_pages
+        else 0.0,
         "ocr_required_rate": (
             sum(int(r.get("ocr_required_page_count", 0)) for r in records) / total_pages
-        ) if total_pages else 0.0,
+        )
+        if total_pages
+        else 0.0,
         "table_extraction_success_proxy": (
             sum(1 for r in records if int(r.get("suspected_table_count", 0)) > 0) / len(records)
-        ) if records else 0.0,
+        )
+        if records
+        else 0.0,
     }
     if aggregate["empty_page_rate"] > 0.2:
-        findings.append({"severity": "warning", "message": "High empty page rate in PDF extraction", "stage": "L2"})
+        findings.append(
+            {
+                "severity": "warning",
+                "message": "High empty page rate in PDF extraction",
+                "stage": "L2",
+            }
+        )
     return {"aggregate": aggregate, "records": records, "findings": findings}
 
 
@@ -313,11 +365,13 @@ def assess_l3_chunking_quality(
         "duplicate_chunk_rate": (duplicate_chunks / len(chunks)) if chunks else 0.0,
         "boundary_cut_rate": (boundary_cut_count / len(chunks)) if chunks else 0.0,
         "observed_overlap_mean": _safe_mean([float(x) for x in overlap_values]),
-        "section_integrity_rate": (
-            sum(1 for c in chunks if c.get("section_path")) / len(chunks)
-        ) if chunks else 0.0,
+        "section_integrity_rate": (sum(1 for c in chunks if c.get("section_path")) / len(chunks))
+        if chunks
+        else 0.0,
         "table_row_split_violations": sum(
-            1 for c in chunks if c.get("content_type") == "table" and len(str(c.get("content", "")).splitlines()) == 1
+            1
+            for c in chunks
+            if c.get("content_type") == "table" and len(str(c.get("content", "")).splitlines()) == 1
         ),
         "low_quality_chunk_exclusion_rate": (
             low_quality_excluded / max(1, len(chunks) + low_quality_excluded)
@@ -330,7 +384,9 @@ def assess_l3_chunking_quality(
     }
     findings = []
     if aggregate["duplicate_chunk_rate"] > 0.05:
-        findings.append({"severity": "warning", "message": "Duplicate chunk rate exceeds 5%", "stage": "L3"})
+        findings.append(
+            {"severity": "warning", "message": "Duplicate chunk rate exceeds 5%", "stage": "L3"}
+        )
     return {"aggregate": aggregate, "records": records, "findings": findings}
 
 
@@ -341,7 +397,9 @@ def assess_l4_reference_quality(data_raw_dir: Path | None = None) -> dict[str, A
         return {
             "aggregate": {"csv_exists": False, "row_count": 0},
             "records": [],
-            "findings": [{"severity": "warning", "message": "Reference CSV missing", "stage": "L4"}],
+            "findings": [
+                {"severity": "warning", "message": "Reference CSV missing", "stage": "L4"}
+            ],
         }
 
     records: list[dict[str, Any]] = []
@@ -355,7 +413,9 @@ def assess_l4_reference_quality(data_raw_dir: Path | None = None) -> dict[str, A
         fieldnames = reader.fieldnames or []
         missing_cols = sorted(REQUIRED_CSV_COLUMNS - set(fieldnames))
         if missing_cols:
-            findings.append({"severity": "error", "message": f"Missing columns: {missing_cols}", "stage": "L4"})
+            findings.append(
+                {"severity": "error", "message": f"Missing columns: {missing_cols}", "stage": "L4"}
+            )
         for idx, row in enumerate(reader):
             test_name = (row.get("test_name") or "").strip()
             duplicate_names[test_name.lower()] += 1
@@ -376,7 +436,9 @@ def assess_l4_reference_quality(data_raw_dir: Path | None = None) -> dict[str, A
             )
 
     row_count = len(records)
-    duplicate_entries = sum(count - 1 for name, count in duplicate_names.items() if name and count > 1)
+    duplicate_entries = sum(
+        count - 1 for name, count in duplicate_names.items() if name and count > 1
+    )
     aggregate = {
         "csv_exists": True,
         "row_count": row_count,
@@ -400,7 +462,9 @@ def assess_l5_index_quality(
         return {
             "aggregate": {"index_exists": False, "vector_path": str(vector_path)},
             "records": [],
-            "findings": [{"severity": "warning", "message": "Vector index file missing", "stage": "L5"}],
+            "findings": [
+                {"severity": "warning", "message": "Vector index file missing", "stage": "L5"}
+            ],
         }
 
     data = json.loads(vector_path.read_text(encoding="utf-8"))
@@ -414,19 +478,29 @@ def assess_l5_index_quality(
     records = [
         {
             "id": ids[i] if i < len(ids) else None,
-            "source": (metadatas[i] or {}).get("source", "unknown") if i < len(metadatas) else "unknown",
-            "content_chars": len(contents[i]) if i < len(contents) and isinstance(contents[i], str) else 0,
-            "embedding_dim": len(embeddings[i]) if i < len(embeddings) and isinstance(embeddings[i], list) else 0,
+            "source": (metadatas[i] or {}).get("source", "unknown")
+            if i < len(metadatas)
+            else "unknown",
+            "content_chars": len(contents[i])
+            if i < len(contents) and isinstance(contents[i], str)
+            else 0,
+            "embedding_dim": len(embeddings[i])
+            if i < len(embeddings) and isinstance(embeddings[i], list)
+            else 0,
         }
         for i in range(min(len(ids), len(contents), len(embeddings), len(metadatas)))
     ]
     findings = []
     lengths_equal = len(ids) == len(contents) == len(embeddings) == len(metadatas)
     if not lengths_equal:
-        findings.append({"severity": "error", "message": "Vector arrays have mismatched lengths", "stage": "L5"})
+        findings.append(
+            {"severity": "error", "message": "Vector arrays have mismatched lengths", "stage": "L5"}
+        )
     unique_dims = sorted(set(lengths))
     if len(unique_dims) > 1:
-        findings.append({"severity": "error", "message": "Embedding dimensions are inconsistent", "stage": "L5"})
+        findings.append(
+            {"severity": "error", "message": "Embedding dimensions are inconsistent", "stage": "L5"}
+        )
 
     aggregate = {
         "index_exists": True,
@@ -439,7 +513,11 @@ def assess_l5_index_quality(
         "lengths_consistent": lengths_equal,
         "embedding_dim_consistent": len(unique_dims) <= 1,
         "embedding_dim": unique_dims[0] if len(unique_dims) == 1 else None,
-        "short_content_rate": (sum(1 for c in contents if isinstance(c, str) and len(c.strip()) < 20) / len(contents)) if contents else 0.0,
+        "short_content_rate": (
+            sum(1 for c in contents if isinstance(c, str) and len(c.strip()) < 20) / len(contents)
+        )
+        if contents
+        else 0.0,
         "source_distribution": dict(source_counter),
         "dedupe_effect_estimate": max(0, len(content_hashes) - len(contents)),
         "index_file_size_bytes": vector_path.stat().st_size,

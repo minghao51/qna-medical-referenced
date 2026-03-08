@@ -4,4 +4,3 @@ from src.app.routes.health import router as health_router
 from src.app.routes.history import router as history_router
 
 __all__ = ["chat_router", "evaluation_router", "health_router", "history_router"]
-

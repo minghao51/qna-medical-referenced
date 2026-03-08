@@ -30,4 +30,3 @@ def test_build_retrieval_dataset_offline_disable_llm(tmp_path: Path):
     assert bundle["stats"]["fixture_records"] == 3
     assert bundle["stats"]["merged_records"] == 2
     assert bundle["generation_attempts"][0]["status"] == "skipped"
-

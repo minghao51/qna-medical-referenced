@@ -7,7 +7,7 @@
 	};
 
 	let { score, grade }: Props = $props();
-	const color = getHealthColor(grade);
+	const color = $derived(getHealthColor(grade));
 </script>
 
 <div class="health-score-badge" style="background: {color}">

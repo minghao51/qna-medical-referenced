@@ -17,4 +17,3 @@ def build_context_and_sources(results: list[dict]) -> tuple[str, list[str]]:
         context_parts.append(f"[Source: {source_name}]\n{result['content']}")
 
     return "\n\n".join(context_parts), sources
-

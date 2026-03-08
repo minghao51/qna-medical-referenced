@@ -28,8 +28,8 @@ def normalize_url(url: str) -> str:
 
 def get_file_path(url: str, extension: str = "pdf") -> Path:
     url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
-    safe_name = re.sub(r'[^\w\-]', '_', url.split('/')[-1][:50])
-    if not safe_name or safe_name.endswith('_'):
+    safe_name = re.sub(r"[^\w\-]", "_", url.split("/")[-1][:50])
+    if not safe_name or safe_name.endswith("_"):
         safe_name = f"content_{url_hash}"
     if not safe_name.endswith(f".{extension}"):
         safe_name = f"{safe_name}.{extension}"
@@ -157,23 +157,23 @@ async def extract_ace_guidelines_pdfs() -> list[Path]:
     pdfs = [
         (
             "https://isomer-user-content.by.gov.sg/68/f6d8c12c-8f8f-45ac-9d3a-65a7de2d03d0/promoting-smoking-cessation-and-treating-tobacco-dependence-(feb-2025).pdf",
-            "ace_smoking_cessation_2025"
+            "ace_smoking_cessation_2025",
         ),
         (
             "https://isomer-user-content.by.gov.sg/68/9f17c634-63fc-4ac4-80ea-76333821e03c/chronic-obstructive-pulmonary-disease-diagnosis-and-management-(dec-2024).pdf",
-            "ace_copd_2024"
+            "ace_copd_2024",
         ),
         (
             "https://www.diabetes.org.sg/wp-content/uploads/2025/06/initiating-basal-insulin-in-type-2-diabetes-mellitus-nov-2024.pdf",
-            "ace_diabetes_insulin_2024"
+            "ace_diabetes_insulin_2024",
         ),
         (
             "https://isomer-user-content.by.gov.sg/68/28e76ffa-36bf-4eaf-93fd-3d656f27a598/triple-therapy-inhalers-for-treating-asthma-or-chronic-obstructive-pulmonary-disease-(17-feb-2025).pdf",
-            "ace_triple_therapy_inhalers_2025"
+            "ace_triple_therapy_inhalers_2025",
         ),
         (
             "https://isomer-user-content.by.gov.sg/68/6b7c42ca-5e21-4913-b9ed-6ed0d313e1f4/guidance_pneumococcal_conjugate_vaccines_prevention_of_pneumococcal_disease_adults_(10_feb_2025).pdf",
-            "ace_pcv20_vaccine_2025"
+            "ace_pcv20_vaccine_2025",
         ),
     ]
 
@@ -190,15 +190,15 @@ async def extract_healthhub_pdfs() -> list[Path]:
     pdfs = [
         (
             "https://ch-api.healthhub.sg/api/public/content/98f52be9ace040148af419218c9966f8",
-            "healthhub_child_health_checklist"
+            "healthhub_child_health_checklist",
         ),
         (
             "https://ch-api.healthhub.sg/api/public/content/241f1578608d41258bb67f02edc678f0",
-            "healthhub_nutrient_guidelines"
+            "healthhub_nutrient_guidelines",
         ),
         (
             "https://ch-api.healthhub.sg/api/public/content/dcd8a51e125b4faf90b467013eae7e73",
-            "healthhub_healthy365_faq"
+            "healthhub_healthy365_faq",
         ),
     ]
 

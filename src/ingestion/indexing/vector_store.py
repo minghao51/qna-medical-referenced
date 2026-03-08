@@ -57,7 +57,7 @@ class VectorStore:
         collection_name: str | None = None,
         semantic_weight: float = 0.6,
         keyword_weight: float = 0.2,
-        boost_weight: float = 0.2
+        boost_weight: float = 0.2,
     ):
         self.collection_name = collection_name or settings.collection_name
         self.semantic_weight = semantic_weight
@@ -114,11 +114,13 @@ class VectorStore:
             meta = {
                 "source": source,
                 "source_type": doc.get("source_type", _source_type_for(source)),
-                "source_class": doc.get("source_class") or _source_class_for(source, doc.get("metadata")),
+                "source_class": doc.get("source_class")
+                or _source_class_for(source, doc.get("metadata")),
                 "content_type": doc.get("content_type", "paragraph"),
                 "section_path": doc.get("section_path", []),
                 "quality_score": float(doc.get("quality_score", 1.0)),
-                "extractor": doc.get("extractor") or doc.get("metadata", {}).get("selected_extractor"),
+                "extractor": doc.get("extractor")
+                or doc.get("metadata", {}).get("selected_extractor"),
             }
             if "page" in doc:
                 meta["page"] = doc["page"]
@@ -188,18 +190,20 @@ class VectorStore:
         for score_info in top_scores:
             idx = score_info["idx"]
             meta = self.documents["metadatas"][idx]
-            results.append({
-                "id": self.documents["ids"][idx],
-                "content": self.documents["contents"][idx],
-                "source": meta.get("source", "unknown"),
-                "page": meta.get("page"),
-                "score": score_info.get("combined_score", 0.0),
-                "semantic_rank": score_info.get("semantic_rank"),
-                "bm25_rank": score_info.get("bm25_rank"),
-                "fused_rank": score_info.get("fused_rank"),
-                "source_prior": score_info.get("source_prior", 0.0),
-                "quality_score": meta.get("quality_score", 1.0),
-            })
+            results.append(
+                {
+                    "id": self.documents["ids"][idx],
+                    "content": self.documents["contents"][idx],
+                    "source": meta.get("source", "unknown"),
+                    "page": meta.get("page"),
+                    "score": score_info.get("combined_score", 0.0),
+                    "semantic_rank": score_info.get("semantic_rank"),
+                    "bm25_rank": score_info.get("bm25_rank"),
+                    "fused_rank": score_info.get("fused_rank"),
+                    "source_prior": score_info.get("source_prior", 0.0),
+                    "quality_score": meta.get("quality_score", 1.0),
+                }
+            )
         return results
 
     def _search_ranked(self, query: str, search_mode: str) -> tuple[list[dict], dict]:
@@ -263,8 +267,14 @@ class VectorStore:
                 boost_weight=self.boost_weight,
             )
             for rank, row in enumerate(ranked, start=1):
-                row["semantic_rank"] = next((i for i, v in enumerate(semantic_ranked, start=1) if v["idx"] == row["idx"]), None)
-                row["bm25_rank"] = next((i for i, v in enumerate(keyword_ranked, start=1) if v["idx"] == row["idx"]), None)
+                row["semantic_rank"] = next(
+                    (i for i, v in enumerate(semantic_ranked, start=1) if v["idx"] == row["idx"]),
+                    None,
+                )
+                row["bm25_rank"] = next(
+                    (i for i, v in enumerate(keyword_ranked, start=1) if v["idx"] == row["idx"]),
+                    None,
+                )
                 row["fused_rank"] = rank
                 row["fused_score"] = row["combined_score"]
         else:
@@ -296,8 +306,8 @@ class VectorStore:
             "score_weights": {
                 "semantic": self.semantic_weight,
                 "keyword": self.keyword_weight,
-                "source": self.boost_weight
-            }
+                "source": self.boost_weight,
+            },
         }
 
         if not self.documents["contents"]:
@@ -321,24 +331,28 @@ class VectorStore:
         for rank, score_info in enumerate(top_scores, start=1):
             idx = score_info["idx"]
             meta = self.documents["metadatas"][idx]
-            results.append({
-                "id": self.documents["ids"][idx],
-                "content": self.documents["contents"][idx],
-                "source": meta.get("source", "unknown"),
-                "page": meta.get("page"),
-                "semantic_score": round(score_info.get("semantic_score", 0.0), 4),
-                "keyword_score": round(score_info.get("keyword_score", 0.0), 4),
-                "source_prior": round(score_info.get("source_prior", 0.0), 4),
-                "combined_score": round(score_info["combined_score"], 4),
-                "rank": rank,
-                "semantic_rank": score_info.get("semantic_rank"),
-                "bm25_rank": score_info.get("bm25_rank"),
-                "fused_rank": score_info.get("fused_rank", rank),
-                "fused_score": round(score_info.get("fused_score", score_info["combined_score"]), 4),
-                "quality_score": round(float(meta.get("quality_score", 1.0)), 4),
-                "content_type": meta.get("content_type", "paragraph"),
-                "section_path": meta.get("section_path", []),
-            })
+            results.append(
+                {
+                    "id": self.documents["ids"][idx],
+                    "content": self.documents["contents"][idx],
+                    "source": meta.get("source", "unknown"),
+                    "page": meta.get("page"),
+                    "semantic_score": round(score_info.get("semantic_score", 0.0), 4),
+                    "keyword_score": round(score_info.get("keyword_score", 0.0), 4),
+                    "source_prior": round(score_info.get("source_prior", 0.0), 4),
+                    "combined_score": round(score_info["combined_score"], 4),
+                    "rank": rank,
+                    "semantic_rank": score_info.get("semantic_rank"),
+                    "bm25_rank": score_info.get("bm25_rank"),
+                    "fused_rank": score_info.get("fused_rank", rank),
+                    "fused_score": round(
+                        score_info.get("fused_score", score_info["combined_score"]), 4
+                    ),
+                    "quality_score": round(float(meta.get("quality_score", 1.0)), 4),
+                    "content_type": meta.get("content_type", "paragraph"),
+                    "section_path": meta.get("section_path", []),
+                }
+            )
 
         trace_info["timing_ms"] = int((time.time() - start_time) * 1000)
         return results, trace_info

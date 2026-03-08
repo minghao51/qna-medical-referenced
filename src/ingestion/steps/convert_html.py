@@ -72,13 +72,16 @@ def _hash_text(text: str) -> str:
 def _trafilatura_extract(html_content: str) -> tuple[str, dict[str, Any]]:
     if trafilatura is None:
         return "", {"extractor": "trafilatura", "available": False}
-    markdown = trafilatura.extract(
-        html_content,
-        output_format="markdown",
-        include_links=True,
-        include_tables=True,
-        no_fallback=False,
-    ) or ""
+    markdown = (
+        trafilatura.extract(
+            html_content,
+            output_format="markdown",
+            include_links=True,
+            include_tables=True,
+            no_fallback=False,
+        )
+        or ""
+    )
     return markdown.strip(), {"extractor": "trafilatura", "available": True}
 
 
@@ -110,7 +113,9 @@ def _collect_structured_blocks(soup: BeautifulSoup) -> list[dict[str, Any]]:
     section_stack: list[str] = []
     block_index = 0
 
-    for node in body.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "table"], recursive=True):
+    for node in body.find_all(
+        ["h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "table"], recursive=True
+    ):
         tag = node.name or ""
         text = ""
         content_type = "paragraph"
@@ -123,7 +128,10 @@ def _collect_structured_blocks(soup: BeautifulSoup) -> list[dict[str, Any]]:
             section_stack.append(text)
             content_type = "heading"
         elif tag in {"ul", "ol"}:
-            items = [_normalize_text(li.get_text(" ", strip=True)) for li in node.find_all("li", recursive=False)]
+            items = [
+                _normalize_text(li.get_text(" ", strip=True))
+                for li in node.find_all("li", recursive=False)
+            ]
             items = [item for item in items if item]
             if not items:
                 continue
@@ -132,7 +140,10 @@ def _collect_structured_blocks(soup: BeautifulSoup) -> list[dict[str, Any]]:
         elif tag == "table":
             rows = []
             for row in node.find_all("tr"):
-                cols = [_normalize_text(col.get_text(" ", strip=True)) for col in row.find_all(["th", "td"])]
+                cols = [
+                    _normalize_text(col.get_text(" ", strip=True))
+                    for col in row.find_all(["th", "td"])
+                ]
                 cols = [col for col in cols if col]
                 if cols:
                     rows.append(cols)
@@ -223,7 +234,10 @@ def _should_use_fallback(primary_markdown: str, page_type: str, html_content: st
         return True
     if _boilerplate_ratio(primary_markdown) > 0.02:
         return True
-    if len(re.findall(r"^#{1,6}\s", primary_markdown, flags=re.MULTILINE)) == 0 and len(primary_markdown) > 250:
+    if (
+        len(re.findall(r"^#{1,6}\s", primary_markdown, flags=re.MULTILINE)) == 0
+        and len(primary_markdown) > 250
+    ):
         return True
     return False
 
@@ -243,7 +257,9 @@ def _compute_global_boilerplate_hashes(html_files: list[Path]) -> set[str]:
     return {key for key, count in counts.items() if count >= threshold}
 
 
-def _drop_repeated_boilerplate(blocks: list[dict[str, Any]], repeated_hashes: set[str]) -> list[dict[str, Any]]:
+def _drop_repeated_boilerplate(
+    blocks: list[dict[str, Any]], repeated_hashes: set[str]
+) -> list[dict[str, Any]]:
     filtered = []
     for block in blocks:
         text = str(block.get("text", ""))
@@ -253,7 +269,9 @@ def _drop_repeated_boilerplate(blocks: list[dict[str, Any]], repeated_hashes: se
     return filtered
 
 
-def convert_html_to_md(html_path: Path, force: bool = False, repeated_hashes: set[str] | None = None) -> Path | None:
+def convert_html_to_md(
+    html_path: Path, force: bool = False, repeated_hashes: set[str] | None = None
+) -> Path | None:
     """Convert one HTML file to markdown and persist its artifact."""
     md_path = html_path.with_suffix(".md")
     if md_path.exists() and not force:

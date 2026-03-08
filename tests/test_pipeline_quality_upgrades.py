@@ -39,7 +39,9 @@ def test_article_html_preserves_headings_and_lists():
 def test_duplicate_boilerplate_hashes_detected(tmp_path: Path):
     shared = "<p>Privacy policy and cookie preferences</p>"
     for idx in range(3):
-        (tmp_path / f"file_{idx}.html").write_text(f"<html><body>{shared}<p>Unique {idx}</p></body></html>", encoding="utf-8")
+        (tmp_path / f"file_{idx}.html").write_text(
+            f"<html><body>{shared}<p>Unique {idx}</p></body></html>", encoding="utf-8"
+        )
 
     repeated = _compute_global_boilerplate_hashes(sorted(tmp_path.glob("*.html")))
 
@@ -57,8 +59,20 @@ def test_chunker_preserves_section_and_neighbor_metadata():
                     "page": 1,
                     "content": "Header\nBullet one\nBullet two",
                     "structured_blocks": [
-                        {"id": "b0", "block_type": "heading", "text": "Header", "section_path": ["Header"], "metadata": {"page": 1}},
-                        {"id": "b1", "block_type": "list", "text": "- Bullet one\n- Bullet two", "section_path": ["Header"], "metadata": {"page": 1}},
+                        {
+                            "id": "b0",
+                            "block_type": "heading",
+                            "text": "Header",
+                            "section_path": ["Header"],
+                            "metadata": {"page": 1},
+                        },
+                        {
+                            "id": "b1",
+                            "block_type": "list",
+                            "text": "- Bullet one\n- Bullet two",
+                            "section_path": ["Header"],
+                            "metadata": {"page": 1},
+                        },
                     ],
                 }
             ],

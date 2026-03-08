@@ -53,7 +53,14 @@ def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> Retrie
     cfg.max_chunks_per_source = max(1, int(cfg.max_chunks_per_source))
     cfg.mmr_lambda = max(0.0, min(1.0, float(cfg.mmr_lambda)))
     cfg.search_mode = str(cfg.search_mode or "hybrid").lower()
-    if cfg.search_mode not in {"rrf_hybrid", "hybrid", "semantic_only", "keyword_only", "bm25_only", "legacy_hybrid"}:
+    if cfg.search_mode not in {
+        "rrf_hybrid",
+        "hybrid",
+        "semantic_only",
+        "keyword_only",
+        "bm25_only",
+        "legacy_hybrid",
+    }:
         cfg.search_mode = _RRF_SEARCH_MODE
     return cfg
 
@@ -113,7 +120,10 @@ def initialize_vector_store(rebuild: bool = False):
 
     if vector_store.documents.get("contents"):
         _vector_store_initialized = True
-        logger.info("Loaded existing vector store with %d documents", len(vector_store.documents["contents"]))
+        logger.info(
+            "Loaded existing vector store with %d documents",
+            len(vector_store.documents["contents"]),
+        )
         return
 
     _build_index_from_sources(vector_store)
@@ -263,7 +273,9 @@ def retrieve_context(query: str, top_k: int = 5, retrieval_options: dict[str, An
     return build_context_and_sources(results)
 
 
-def retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None):
+def retrieve_context_with_trace(
+    query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None
+):
     """
     Retrieve context with detailed pipeline trace information.
 
@@ -288,7 +300,9 @@ def retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options: d
     vector_store = get_vector_store()
 
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
-    results, retrieval_trace = _retrieve_candidates_with_trace(vector_store, query, fetch_k, cfg.search_mode)
+    results, retrieval_trace = _retrieve_candidates_with_trace(
+        vector_store, query, fetch_k, cfg.search_mode
+    )
     results = _diversify_results(
         results,
         top_k=top_k,
@@ -301,25 +315,27 @@ def retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options: d
 
     retrieved_docs = []
     for r in results:
-        retrieved_docs.append(RetrievedDocument(
-            id=r["id"],
-            content=r["content"],
-            source=r["source"],
-            page=r.get("page"),
-            semantic_score=r["semantic_score"],
-            keyword_score=r["keyword_score"],
-            source_prior=r.get("source_prior", 0.0),
-            source_boost=r.get("source_prior", 0.0),
-            combined_score=r["combined_score"],
-            rank=r["rank"],
-            semantic_rank=r.get("semantic_rank"),
-            bm25_rank=r.get("bm25_rank"),
-            fused_rank=r.get("fused_rank"),
-            fused_score=r.get("fused_score"),
-            chunk_quality_score=r.get("quality_score"),
-            content_type=r.get("content_type"),
-            section_path=r.get("section_path", []),
-        ))
+        retrieved_docs.append(
+            RetrievedDocument(
+                id=r["id"],
+                content=r["content"],
+                source=r["source"],
+                page=r.get("page"),
+                semantic_score=r["semantic_score"],
+                keyword_score=r["keyword_score"],
+                source_prior=r.get("source_prior", 0.0),
+                source_boost=r.get("source_prior", 0.0),
+                combined_score=r["combined_score"],
+                rank=r["rank"],
+                semantic_rank=r.get("semantic_rank"),
+                bm25_rank=r.get("bm25_rank"),
+                fused_rank=r.get("fused_rank"),
+                fused_score=r.get("fused_score"),
+                chunk_quality_score=r.get("quality_score"),
+                content_type=r.get("content_type"),
+                section_path=r.get("section_path", []),
+            )
+        )
 
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
     retrieval_stage = RetrievalStage(
@@ -336,7 +352,7 @@ def retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options: d
             "max_chunks_per_source_page": cfg.max_chunks_per_source_page,
             "max_chunks_per_source": cfg.max_chunks_per_source,
         },
-        timing_ms=retrieval_timing_ms
+        timing_ms=retrieval_timing_ms,
     )
 
     context, sources = build_context_and_sources(results)
@@ -344,21 +360,17 @@ def retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options: d
         total_chunks=len(results),
         total_chars=len(context),
         sources=sources,
-        preview=context[:200] + "..." if len(context) > 200 else context
+        preview=context[:200] + "..." if len(context) > 200 else context,
     )
 
-    generation_stage = GenerationStage(
-        model=settings.model_name,
-        timing_ms=0,
-        tokens_estimate=None
-    )
+    generation_stage = GenerationStage(model=settings.model_name, timing_ms=0, tokens_estimate=None)
 
     total_time_ms = int((time.time() - total_start) * 1000)
     pipeline_trace = PipelineTrace(
         retrieval=retrieval_stage,
         context=context_stage,
         generation=generation_stage,
-        total_time_ms=total_time_ms
+        total_time_ms=total_time_ms,
     )
 
     return context, sources, pipeline_trace
@@ -382,10 +394,14 @@ def _merge_result_sets(result_sets: list[list[dict]], top_k: int) -> list[dict]:
         for item in results:
             key = str(item.get("id"))
             existing = merged.get(key)
-            if existing is None or float(item.get("score", item.get("combined_score", 0.0))) > float(existing.get("score", existing.get("combined_score", 0.0))):
+            if existing is None or float(
+                item.get("score", item.get("combined_score", 0.0))
+            ) > float(existing.get("score", existing.get("combined_score", 0.0))):
                 merged[key] = dict(item)
     ranked = list(merged.values())
-    ranked.sort(key=lambda row: float(row.get("score", row.get("combined_score", 0.0))), reverse=True)
+    ranked.sort(
+        key=lambda row: float(row.get("score", row.get("combined_score", 0.0))), reverse=True
+    )
     for rank, row in enumerate(ranked, start=1):
         row.setdefault("rank", rank)
     return ranked[:top_k]
@@ -407,12 +423,16 @@ def _retrieve_candidates(vector_store, query: str, top_k: int, search_mode: str)
     return _merge_result_sets(result_sets, top_k=top_k)
 
 
-def _retrieve_candidates_with_trace(vector_store, query: str, top_k: int, search_mode: str) -> tuple[list[dict], dict]:
+def _retrieve_candidates_with_trace(
+    vector_store, query: str, top_k: int, search_mode: str
+) -> tuple[list[dict], dict]:
     expanded_queries = _expand_queries(query)
     result_sets: list[list[dict]] = []
     traces: list[dict] = []
     for expanded_query in expanded_queries:
-        results, trace = vector_store.similarity_search_with_trace(expanded_query, top_k=top_k, search_mode=search_mode)
+        results, trace = vector_store.similarity_search_with_trace(
+            expanded_query, top_k=top_k, search_mode=search_mode
+        )
         result_sets.append(results)
         traces.append(trace)
     merged_results = _merge_traced_result_sets(result_sets, top_k=top_k)

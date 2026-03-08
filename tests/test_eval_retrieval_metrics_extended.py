@@ -26,11 +26,25 @@ class _Trace:
 def test_evaluate_retrieval_reports_dedup_and_unique_source_metrics(monkeypatch):
     def fake_retrieve_context_with_trace(query: str, top_k: int = 5, retrieval_options=None):
         docs = [
-            _Doc(id="c1", content="LDL target 1.8 mmol/L secondary prevention", source="lipid.pdf", page=2),
-            _Doc(id="c1", content="LDL target 1.8 mmol/L secondary prevention", source="lipid.pdf", page=2),
+            _Doc(
+                id="c1",
+                content="LDL target 1.8 mmol/L secondary prevention",
+                source="lipid.pdf",
+                page=2,
+            ),
+            _Doc(
+                id="c1",
+                content="LDL target 1.8 mmol/L secondary prevention",
+                source="lipid.pdf",
+                page=2,
+            ),
             _Doc(id="c2", content="More lipid info", source="lipid.pdf", page=3),
         ]
-        return "ctx", ["lipid.pdf page 2", "lipid.pdf page 2", "lipid.pdf page 3"], _Trace(docs, total_time_ms=120)
+        return (
+            "ctx",
+            ["lipid.pdf page 2", "lipid.pdf page 2", "lipid.pdf page 3"],
+            _Trace(docs, total_time_ms=120),
+        )
 
     import src.rag.runtime as runtime
 

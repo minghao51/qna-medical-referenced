@@ -12,16 +12,41 @@ class TestRetrieval:
             collection_name="test_retrieval",
             semantic_weight=0.6,
             keyword_weight=0.2,
-            boost_weight=0.2
+            boost_weight=0.2,
         )
         store.clear()
 
         test_docs = [
-            {"id": "lipid_doc", "content": "LDL cholesterol target for secondary prevention is less than 1.8 mmol/L. Statins are first-line therapy.", "source": "lipid.pdf", "page": 1},
-            {"id": "diabetes_doc", "content": "Pre-diabetes management includes lifestyle modification. Metformin may be considered if BMI is 23 or higher.", "source": "diabetes.pdf", "page": 1},
-            {"id": "cv_risk_doc", "content": "Cardiovascular risk assessment includes risk enhancers. Family history is an important factor.", "source": "cv.pdf", "page": 1},
-            {"id": "diet_doc", "content": "Dietary recommendations include vegetables, fruits, and whole grains. Avoid saturated fats.", "source": "diet.pdf", "page": 1},
-            {"id": "generic_doc", "content": "General health information about various medical conditions and treatments.", "source": "general.pdf", "page": 1},
+            {
+                "id": "lipid_doc",
+                "content": "LDL cholesterol target for secondary prevention is less than 1.8 mmol/L. Statins are first-line therapy.",
+                "source": "lipid.pdf",
+                "page": 1,
+            },
+            {
+                "id": "diabetes_doc",
+                "content": "Pre-diabetes management includes lifestyle modification. Metformin may be considered if BMI is 23 or higher.",
+                "source": "diabetes.pdf",
+                "page": 1,
+            },
+            {
+                "id": "cv_risk_doc",
+                "content": "Cardiovascular risk assessment includes risk enhancers. Family history is an important factor.",
+                "source": "cv.pdf",
+                "page": 1,
+            },
+            {
+                "id": "diet_doc",
+                "content": "Dietary recommendations include vegetables, fruits, and whole grains. Avoid saturated fats.",
+                "source": "diet.pdf",
+                "page": 1,
+            },
+            {
+                "id": "generic_doc",
+                "content": "General health information about various medical conditions and treatments.",
+                "source": "general.pdf",
+                "page": 1,
+            },
         ]
         store.add_documents(test_docs)
 
@@ -90,7 +115,7 @@ class TestRetrieval:
             collection_name="test_retrieval",
             semantic_weight=1.0,
             keyword_weight=0.0,
-            boost_weight=0.0
+            boost_weight=0.0,
         )
         store_no_hybrid.clear()
 
@@ -111,12 +136,16 @@ class TestRetrieval:
             collection_name="test_acronym",
             semantic_weight=0.3,
             keyword_weight=0.5,
-            boost_weight=0.2
+            boost_weight=0.2,
         )
         store.clear()
 
         test_docs = [
-            {"id": "fh_doc", "content": "FH is familial hypercholesterolemia. Genetic testing is recommended.", "source": "test.pdf"},
+            {
+                "id": "fh_doc",
+                "content": "FH is familial hypercholesterolemia. Genetic testing is recommended.",
+                "source": "test.pdf",
+            },
             {"id": "other_doc", "content": "General health information", "source": "test.pdf"},
         ]
         store.add_documents(test_docs)
@@ -161,10 +190,7 @@ class TestRetrieval:
 
     def test_empty_store_handling(self):
         store = VectorStore(
-            collection_name="test_empty",
-            semantic_weight=0.6,
-            keyword_weight=0.2,
-            boost_weight=0.2
+            collection_name="test_empty", semantic_weight=0.6, keyword_weight=0.2, boost_weight=0.2
         )
         store.clear()
 
@@ -179,14 +205,16 @@ class TestRetrieval:
             collection_name="test_weights_sem",
             semantic_weight=1.0,
             keyword_weight=0.0,
-            boost_weight=0.0
+            boost_weight=0.0,
         )
         store_semantic.clear()
 
-        store_semantic.add_documents([
-            {"id": "match", "content": "exact match keyword", "source": "test.pdf"},
-            {"id": "semantic", "content": "similar meaning text", "source": "test.pdf"},
-        ])
+        store_semantic.add_documents(
+            [
+                {"id": "match", "content": "exact match keyword", "source": "test.pdf"},
+                {"id": "semantic", "content": "similar meaning text", "source": "test.pdf"},
+            ]
+        )
 
         results = store_semantic.similarity_search("keyword", top_k=2, hybrid=True)
 

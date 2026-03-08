@@ -1,0 +1,12 @@
+node_modules/
+build/
+.svelte-kit/
+.vscode/
+.idea/
+tests/
+playwright-report/
+test-results/
+.env.*
+!.env.example
+*.md
+.git/

@@ -84,4 +84,3 @@ def clear_history(session_id: str):
     """
     chat_history_store.clear_history(session_id)
     return {"status": "cleared"}
-

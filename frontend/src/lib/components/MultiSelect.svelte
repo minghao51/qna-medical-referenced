@@ -1,11 +1,11 @@
 <script lang="ts">
 	type Props = {
 		options: string[];
-		value: string[];
+		value?: string[];
 		label?: string;
 	};
 
-	let { options, value, label }: Props = $props();
+	let { options, value = $bindable([]), label }: Props = $props();
 
 	let isOpen = $state(false);
 
@@ -28,21 +28,30 @@
 		isOpen = false;
 	}
 
-	const displayText = value.length === options.length ? 'All' : value.length === 0 ? 'None' : `${value.length} selected`;
+	const displayText = $derived(
+		value.length === options.length ? 'All' : value.length === 0 ? 'None' : `${value.length} selected`
+	);
 </script>
 
 <div class="multiselect">
 	{#if label}
-		<label>{label}</label>
+		<span class="multiselect-label">{label}</span>
 	{/if}
-	<div class="multiselect-trigger" onclick={toggleDropdown} onblur={closeDropdown} tabindex="0">
+	<button
+		type="button"
+		class="multiselect-trigger"
+		aria-expanded={isOpen}
+		onclick={toggleDropdown}
+		onblur={closeDropdown}
+	>
 		<span class="multiselect-text">{displayText}</span>
 		<span class="multiselect-arrow" class:open={isOpen}>▼</span>
-	</div>
+	</button>
 	{#if isOpen}
 		<div class="multiselect-options">
 			{#each options as option}
-				<div
+				<button
+					type="button"
 					class="multiselect-option"
 					class:selected={value.includes(option)}
 					onclick={(e) => {
@@ -52,7 +61,7 @@
 				>
 					<span class="checkbox">{value.includes(option) ? '☑' : '☐'}</span>
 					<span>{option}</span>
-				</div>
+				</button>
 			{/each}
 		</div>
 	{/if}
@@ -66,7 +75,7 @@
 		gap: 0.25rem;
 	}
 
-	.multiselect label {
+	.multiselect-label {
 		font-size: 0.85rem;
 		color: #666;
 		font-weight: 500;
@@ -83,6 +92,7 @@
 		cursor: pointer;
 		user-select: none;
 		min-width: 150px;
+		width: 100%;
 	}
 
 	.multiselect-trigger:hover {
@@ -124,8 +134,12 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.5rem 0.75rem;
+		border: none;
+		background: white;
+		width: 100%;
 		cursor: pointer;
 		transition: background 0.15s;
+		text-align: left;
 	}
 
 	.multiselect-option:hover {

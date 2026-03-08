@@ -16,11 +16,6 @@
 	let canvas: HTMLCanvasElement;
 	let chart: Chart | null = null;
 
-	const categories = Object.entries(breakdown).sort((a, b) => b[1].count - a[1].count);
-	const labels = categories.map(([cat]) => cat);
-	const values = categories.map(([, data]) => (data[metric] || 0) * 100);
-	const counts = categories.map(([, data]) => data.count);
-
 	function createChart() {
 		if (chart) {
 			chart.destroy();
@@ -28,6 +23,11 @@
 
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
+
+		const categories = Object.entries(breakdown).sort((a, b) => b[1].count - a[1].count);
+		const labels = categories.map(([category]) => category);
+		const values = categories.map(([, data]) => (data[metric] || 0) * 100);
+		const counts = categories.map(([, data]) => data.count);
 
 		chart = new Chart(ctx, {
 			type: 'bar',
@@ -64,8 +64,8 @@
 						callbacks: {
 							label: (context) => {
 								const idx = context.dataIndex;
-								const value = context.parsed.x;
-								const count = counts[idx];
+								const value = Number(context.parsed.x ?? 0);
+								const count = counts[idx] ?? 0;
 								return `${metric === 'hit_rate' ? 'Hit Rate' : 'MRR'}: ${value.toFixed(1)}% (n=${count})`;
 							}
 						}
