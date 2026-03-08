@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM oven/bun:1-alpine AS builder
+FROM oven/bun:1.2.5-alpine AS builder
 
 WORKDIR /app
 
@@ -11,13 +11,16 @@ COPY frontend/ ./
 RUN bun run build
 
 # Stage 2: Runtime
-FROM oven/bun:1-alpine AS runtime
+FROM node:20-alpine AS runtime
 
 WORKDIR /app
 
-COPY --from=builder /app /app
+ENV HOST=0.0.0.0
+ENV PORT=5173
+ENV NODE_ENV=production
+
+COPY --from=builder /app/build ./build
 
 EXPOSE 5173
 
-# Production preview server
-CMD ["bun", "run", "preview", "--host", "0.0.0.0", "--port", "5173"]
+CMD ["node", "build"]
