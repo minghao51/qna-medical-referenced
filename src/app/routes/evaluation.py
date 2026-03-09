@@ -109,6 +109,33 @@ def _read_json_if_exists(path: Path) -> dict[str, Any]:
         return {}
 
 
+def _read_failed_thresholds(run_dir: Path) -> list[dict[str, Any]]:
+    summary = _read_json_if_exists(run_dir / "summary.json")
+    explicit = summary.get("failed_thresholds")
+    if isinstance(explicit, list):
+        return [item for item in explicit if isinstance(item, dict)]
+
+    step_findings = _read_json_if_exists(run_dir / "step_findings.json")
+    findings = step_findings if isinstance(step_findings, list) else []
+    threshold_findings = []
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        if finding.get("stage") != "threshold":
+            continue
+        threshold_findings.append(
+            {
+                "metric": finding.get("metric"),
+                "value": finding.get("value"),
+                "threshold_op": finding.get("threshold_op"),
+                "threshold_value": finding.get("threshold_value"),
+                "message": finding.get("message"),
+                "severity": finding.get("severity"),
+            }
+        )
+    return threshold_findings
+
+
 def _normalize_ablation_payload(payload: Any) -> dict[str, Any]:
     """Convert ablation data into the frontend's expected response shape."""
     if isinstance(payload, dict) and isinstance(payload.get("ablation_runs"), list):
@@ -308,6 +335,7 @@ def get_latest_evaluation() -> dict[str, Any]:
         result["retrieval_metrics"] = json.loads(retrieval_metrics_path.read_text())
     if manifest_path.exists():
         result["manifest"] = json.loads(manifest_path.read_text())
+    result["failed_thresholds"] = _read_failed_thresholds(run_dir)
 
     return result
 
@@ -530,6 +558,7 @@ def get_evaluation_run(run_dir: str) -> dict[str, Any]:
         result["retrieval_metrics"] = json.loads(retrieval_metrics_path.read_text())
     if manifest_path.exists():
         result["manifest"] = json.loads(manifest_path.read_text())
+    result["failed_thresholds"] = _read_failed_thresholds(target_dir)
 
     return result
 
