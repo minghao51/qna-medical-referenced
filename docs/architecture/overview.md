@@ -32,6 +32,14 @@ src/
     steps/                # download/convert/load/chunk/reference steps
     indexing/             # vector store + embedding/search/persistence helpers
 
+  evals/                  # Pipeline quality assessment
+    pipeline_assessment.py # full-pipeline evaluation orchestration
+    step_checks.py        # stage-specific quality metrics
+    metrics.py            # ranked IR metrics (HitRate@k, MRR, nDCG)
+    dataset_builder.py    # evaluation dataset construction
+    artifacts.py          # artifact persistence and retrieval
+    schemas.py            # evaluation data models
+
   infra/                  # External systems/infrastructure adapters
     llm/qwen_client.py
     storage/chat_history_store.py
@@ -43,6 +51,7 @@ src/
   cli/                    # Canonical command entrypoints
     serve.py
     ingest.py
+    eval_pipeline.py      # evaluation CLI
 
 ```
 
@@ -75,6 +84,38 @@ Flow:
 7. `src.ingestion.indexing.vector_store` (embedding + persistence)
 8. `src.rag.runtime.initialize_runtime_index()` confirms runtime index availability
 
+### Evaluation system (`src.evals`, `src.app.routes.evaluation`)
+
+Used for assessing pipeline quality and tracking metrics over time.
+
+Components:
+- `src.evals.pipeline_assessment` - orchestrates quality assessment across all pipeline stages
+- `src.evals.step_checks` - stage-specific quality metrics (download, HTML conversion, PDF extraction, chunking, indexing, retrieval)
+- `src.evals.metrics` - ranked IR metrics (HitRate@k, Recall@k, MRR, nDCG)
+- `src.evals.dataset_builder` - builds evaluation datasets from fixtures and synthetic generation
+- `src.evals.artifacts` - manages versioned evaluation artifacts on disk
+- `src.cli.eval_pipeline` - CLI entrypoint for running evaluations
+
+Evaluation CLI:
+```bash
+uv run python -m src.cli.eval_pipeline
+uv run python -m src.cli.eval_pipeline --variant ablation-test
+```
+
+Evaluation API endpoints:
+- `GET /evaluation/latest` - latest evaluation run results
+- `GET /evaluation/runs` - list all evaluation runs
+- `GET /evaluation/history` - historical trending metrics
+- `GET /evaluation/steps/{stage}` - metrics for specific pipeline stage
+
+Artifacts are stored in `data/evals/<timestamp>_<slug>/` with:
+- `summary.json` - aggregate metrics and findings
+- `step_metrics.json` - per-stage quality metrics
+- `retrieval_results.jsonl` - per-query retrieval traces
+- Other stage-specific metrics files
+
+See `docs/plans/pipeline-quality-assessment-plan.md` for design details.
+
 ## Configuration Ownership
 
 - `src.config.settings` is the source of runtime settings (API keys, model names, limits, data dirs).
@@ -84,8 +125,9 @@ Flow:
 ## Canonical Commands
 
 ```bash
-uv run python -m src.cli.serve
-uv run python -m src.cli.ingest
+uv run python -m src.cli.serve          # Start API server
+uv run python -m src.cli.ingest         # Run ingestion pipeline
+uv run python -m src.cli.eval_pipeline  # Run evaluation assessment
 ```
 
 ---
