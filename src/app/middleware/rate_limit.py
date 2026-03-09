@@ -122,6 +122,9 @@ class RateLimiter:
         Returns:
             True if request is allowed, False if limit exceeded
         """
+        if self.requests_per_minute <= 0:
+            return True
+
         async with self.lock:
             now = datetime.now()
             cutoff = now - timedelta(minutes=1)
@@ -193,6 +196,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         Returns:
             Response from next handler, or 429 error if rate limited
         """
+        if rate_limiter.requests_per_minute <= 0:
+            return await call_next(request)
+
         # Skip rate limiting for public endpoints
         if request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
             return await call_next(request)

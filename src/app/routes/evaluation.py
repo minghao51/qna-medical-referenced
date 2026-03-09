@@ -109,6 +109,38 @@ def _read_json_if_exists(path: Path) -> dict[str, Any]:
         return {}
 
 
+def _normalize_ablation_payload(payload: Any) -> dict[str, Any]:
+    """Convert ablation data into the frontend's expected response shape."""
+    if isinstance(payload, dict) and isinstance(payload.get("ablation_runs"), list):
+        return payload
+
+    if not isinstance(payload, dict):
+        return {"ablation_runs": [], "message": "No ablation results available"}
+
+    preferred_baselines = ("legacy_hybrid", "hybrid_rrf", "rrf_hybrid")
+    baseline_strategy = next(
+        (strategy for strategy in preferred_baselines if strategy in payload),
+        next(iter(payload), None),
+    )
+
+    ablation_runs = []
+    for strategy, metrics in payload.items():
+        if not isinstance(metrics, dict):
+            continue
+        ablation_runs.append(
+            {
+                "strategy": strategy,
+                "hit_rate_at_k": metrics.get("hit_rate_at_k", 0),
+                "mrr": metrics.get("mrr", 0),
+                "ndcg_at_k": metrics.get("ndcg_at_k", 0),
+                "latency_p50_ms": metrics.get("latency_p50_ms"),
+                "is_baseline": strategy == baseline_strategy,
+            }
+        )
+
+    return {"ablation_runs": ablation_runs}
+
+
 def _tracking_target_from_latest_local() -> tuple[str | None, str | None]:
     run_dir = _get_latest_run_dir()
     if not run_dir:
@@ -119,9 +151,8 @@ def _tracking_target_from_latest_local() -> tuple[str | None, str | None]:
     if summary_tracking.get("project"):
         return summary_tracking.get("project"), summary_tracking.get("entity")
     experiment_cfg = (
-        (((manifest.get("config") or {}).get("experiment_config") or {}).get("tracking") or {}).get("wandb")
-        or {}
-    )
+        ((manifest.get("config") or {}).get("experiment_config") or {}).get("tracking") or {}
+    ).get("wandb") or {}
     if experiment_cfg.get("project"):
         return experiment_cfg.get("project"), experiment_cfg.get("entity")
     return None, None
@@ -156,7 +187,9 @@ def _local_history_runs(limit: int) -> list[dict[str, Any]]:
                 "variant_name": experiment_cfg.get("variant_name"),
                 "index_config_hash": (manifest.get("experiment") or {}).get("index_config_hash"),
                 "wandb_url": (((summary.get("tracking") or {}).get("wandb") or {}).get("run_url")),
-                "wandb_run_id": (((summary.get("tracking") or {}).get("wandb") or {}).get("run_id")),
+                "wandb_run_id": (
+                    ((summary.get("tracking") or {}).get("wandb") or {}).get("run_id")
+                ),
                 "tracking": summary.get("tracking", {}),
             }
         )
@@ -186,7 +219,8 @@ def _aggregate_history_summary(runs: list[dict[str, Any]]) -> dict[str, Any]:
             metrics_tracking["duration_s"].append(duration)
     return {
         "total_runs": len(runs),
-        "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"]) / len(metrics_tracking["hit_rate_at_k"])
+        "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"])
+        / len(metrics_tracking["hit_rate_at_k"])
         if metrics_tracking["hit_rate_at_k"]
         else 0,
         "avg_mrr": sum(metrics_tracking["mrr"]) / len(metrics_tracking["mrr"])
@@ -386,7 +420,9 @@ def get_evaluation_history(
 
     result_runs = list(local_runs)
     result_runs.extend(list(wandb_result.get("runs", [])))
-    result_runs = sorted(result_runs, key=lambda run: str(run.get("timestamp") or ""), reverse=True)[:limit]
+    result_runs = sorted(
+        result_runs, key=lambda run: str(run.get("timestamp") or ""), reverse=True
+    )[:limit]
     response = {
         "runs": result_runs,
         "summary": _aggregate_history_summary(result_runs),
@@ -422,7 +458,9 @@ def get_wandb_evaluation_run(
     if result.get("status") == "error":
         raise HTTPException(status_code=502, detail=result.get("warning", "Failed to load W&B run"))
     if result.get("status") == "disabled":
-        raise HTTPException(status_code=400, detail=result.get("warning", "W&B project not configured"))
+        raise HTTPException(
+            status_code=400, detail=result.get("warning", "W&B project not configured")
+        )
 
     run = dict(result.get("run") or {})
     return {
@@ -543,12 +581,16 @@ def get_ablation_results() -> dict[str, Any]:
     if not run_dir:
         raise HTTPException(status_code=404, detail="No evaluation runs found")
 
-    ablation_path = run_dir / "ablation_results.json"
-    if not ablation_path.exists():
+    candidate_paths = [
+        run_dir / "ablation_results.json",
+        run_dir / "retrieval_ablations.json",
+    ]
+    ablation_path = next((path for path in candidate_paths if path.exists()), None)
+    if not ablation_path:
         return {"ablation_runs": [], "message": "No ablation results available"}
 
     try:
-        return json.loads(ablation_path.read_text())
+        return _normalize_ablation_payload(json.loads(ablation_path.read_text()))
     except Exception as e:
         logger.error(f"Failed to load ablation results: {e}")
         return {"ablation_runs": [], "error": str(e)}
