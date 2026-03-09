@@ -56,7 +56,9 @@ def test_evaluation_history_merges_wandb_runs(monkeypatch, tmp_path):
                 "status": "ok",
                 "duration_s": 1,
                 "failed_thresholds_count": 0,
-                "tracking": {"wandb": {"project": "demo", "entity": "team", "run_url": "https://wandb/local"}},
+                "tracking": {
+                    "wandb": {"project": "demo", "entity": "team", "run_url": "https://wandb/local"}
+                },
             }
         ),
         encoding="utf-8",

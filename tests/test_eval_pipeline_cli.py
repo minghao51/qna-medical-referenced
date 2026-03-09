@@ -39,7 +39,10 @@ def test_eval_pipeline_cli_uses_config(monkeypatch, tmp_path: Path):
     assert len(calls) == 2
     assert calls[0]["experiment_config"]["metadata"]["name"] == "baseline"
     assert calls[1]["experiment_config"]["variant_name"] == "chunk_small"
-    assert calls[1]["experiment_config"]["ingestion"]["source_chunk_configs"]["pdf"]["chunk_size"] == 480
+    assert (
+        calls[1]["experiment_config"]["ingestion"]["source_chunk_configs"]["pdf"]["chunk_size"]
+        == 480
+    )
 
 
 def test_eval_pipeline_cli_applies_equals_style_overrides(monkeypatch, tmp_path: Path):

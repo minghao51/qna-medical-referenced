@@ -83,7 +83,9 @@ def log_assessment_to_wandb(
         _flatten_numeric("summary", summary, metrics)
         _flatten_numeric("retrieval", retrieval_metrics, metrics)
         _flatten_numeric("rag", rag_metrics, metrics)
-        _flatten_numeric("steps", {k: v.get("aggregate", {}) for k, v in step_metrics.items()}, metrics)
+        _flatten_numeric(
+            "steps", {k: v.get("aggregate", {}) for k, v in step_metrics.items()}, metrics
+        )
         metrics["thresholds.failed_count"] = len(failed_thresholds)
         if metrics:
             run.log(metrics)

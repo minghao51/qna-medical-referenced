@@ -28,9 +28,7 @@ class TestEmbedding:
         embeddings = vector_store._embed(texts)
 
         assert len(embeddings) == 1
-        assert len(embeddings[0]) == QWEN_EMBEDDING_DIM, (
-            f"Expected {QWEN_EMBEDDING_DIM} dimensions"
-        )
+        assert len(embeddings[0]) == QWEN_EMBEDDING_DIM, f"Expected {QWEN_EMBEDDING_DIM} dimensions"
 
     @requires_live_api
     def test_batch_embedding_dimension(self, vector_store):

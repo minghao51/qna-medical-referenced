@@ -79,7 +79,8 @@ def _normalize_wandb_run(run: Any, *, project: str, entity: str | None = None) -
         "source": "wandb",
         "experiment_name": experiment.get("metadata", {}).get("name")
         or manifest.get("experiment", {}).get("variant"),
-        "variant_name": experiment.get("variant_name") or manifest.get("experiment", {}).get("variant"),
+        "variant_name": experiment.get("variant_name")
+        or manifest.get("experiment", {}).get("variant"),
         "index_config_hash": manifest.get("experiment", {}).get("index_config_hash"),
         "wandb_url": getattr(run, "url", None),
         "wandb_run_id": getattr(run, "id", None),
@@ -119,17 +120,16 @@ def fetch_wandb_runs(
         return {"runs": [], "status": "error", "warning": str(exc)}
 
     normalized_runs = [
-        _normalize_wandb_run(run, project=project_name, entity=entity)
-        for run in runs
+        _normalize_wandb_run(run, project=project_name, entity=entity) for run in runs
     ]
 
     return _cache_set(
         cache_key,
         {
-        "runs": normalized_runs,
-        "status": "ok",
-        "project": project_name,
-        "entity": entity,
+            "runs": normalized_runs,
+            "status": "ok",
+            "project": project_name,
+            "entity": entity,
         },
     )
 
@@ -167,11 +167,17 @@ def fetch_wandb_run(
         if run_id and getattr(run, "id", None) == run_id:
             return _cache_set(
                 cache_key,
-                {"status": "ok", "run": _normalize_wandb_run(run, project=project_name, entity=entity)},
+                {
+                    "status": "ok",
+                    "run": _normalize_wandb_run(run, project=project_name, entity=entity),
+                },
             )
         if run_name and getattr(run, "name", None) == run_name:
             return _cache_set(
                 cache_key,
-                {"status": "ok", "run": _normalize_wandb_run(run, project=project_name, entity=entity)},
+                {
+                    "status": "ok",
+                    "run": _normalize_wandb_run(run, project=project_name, entity=entity),
+                },
             )
     return {"status": "not_found", "warning": "wandb run not found"}
