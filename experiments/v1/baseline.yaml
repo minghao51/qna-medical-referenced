@@ -1,0 +1,91 @@
+schema_version: 1
+metadata:
+  name: baseline
+  description: Default end-to-end evaluation baseline
+  owner: local
+  hypothesis: Baseline experiment for extraction, indexing, retrieval, and evaluation
+  tags: [baseline, rag]
+ingestion:
+  page_classification_enabled: true
+  index_only_classified_pages: true
+  html_extractor_mode: auto
+  structured_chunking_enabled: true
+  source_chunk_configs:
+    pdf:
+      chunk_size: 650
+      chunk_overlap: 80
+      strategy: recursive
+      min_chunk_size: 140
+    markdown:
+      chunk_size: 600
+      chunk_overlap: 80
+      strategy: recursive
+      min_chunk_size: 80
+embedding_index:
+  collection_name: medical_docs
+  collection_name_suffix: baseline
+  embedding_model: text-embedding-v4
+  embedding_batch_size: 10
+  semantic_weight: 0.6
+  keyword_weight: 0.2
+  boost_weight: 0.2
+  rebuild_policy: if_missing_or_stale
+  materialize_html: true
+retrieval:
+  top_k: 5
+  search_mode: rrf_hybrid
+  enable_diversification: true
+  mmr_lambda: 0.75
+  overfetch_multiplier: 4
+  max_chunks_per_source_page: 2
+  max_chunks_per_source: 3
+dataset:
+  path: tests/fixtures/golden_queries.json
+  split: regression
+  min_label_confidence: medium
+  max_synthetic_questions: 40
+  sample_docs_per_source_type: 10
+  seed: 42
+  enable_llm_generation: false
+evaluation:
+  artifact_dir: data/evals
+  include_answer_eval: false
+  disable_llm_judging: true
+  fail_on_thresholds: false
+  export_failed_generations: false
+  run_retrieval_ablations: true
+  run_diversity_sweep: false
+  diversity_sweep: {}
+tracking:
+  wandb:
+    enabled: false
+    project: qna-medical-referenced
+    entity: null
+    group: pipeline-eval
+    job_type: pipeline_eval
+    tags: [baseline, rag]
+    notes: Baseline local pipeline evaluation
+    mode: online
+    log_artifacts: true
+variants:
+  - name: html_strict
+    overrides:
+      ingestion:
+        html_extractor_mode: fallback_only
+        index_only_classified_pages: true
+  - name: chunk_small
+    overrides:
+      ingestion:
+        source_chunk_configs:
+          pdf:
+            chunk_size: 480
+            chunk_overlap: 64
+          markdown:
+            chunk_size: 480
+            chunk_overlap: 64
+  - name: rrf_mmr_tuned
+    overrides:
+      retrieval:
+        enable_diversification: true
+        mmr_lambda: 0.9
+        overfetch_multiplier: 6

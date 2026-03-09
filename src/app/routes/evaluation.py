@@ -28,12 +28,27 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from src.experiments.wandb_history import fetch_wandb_run, fetch_wandb_runs
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 EVALS_DIR = Path("data/evals")
 LATEST_POINTER = Path("data/evals/latest_run.txt")
+
+
+def _list_run_dirs() -> list[Path]:
+    if not EVALS_DIR.exists():
+        return []
+    return sorted(
+        [
+            path
+            for path in EVALS_DIR.iterdir()
+            if path.is_dir() and "_" in path.name and path.name[0].isdigit()
+        ],
+        reverse=True,
+    )
 
 
 def _get_latest_run_dir() -> Path | None:
@@ -50,7 +65,7 @@ def _get_latest_run_dir() -> Path | None:
         run_dir = Path(LATEST_POINTER.read_text().strip())
         if run_dir.exists():
             return run_dir
-    runs = sorted(EVALS_DIR.glob("??????T??????Z_*"), reverse=True)
+    runs = _list_run_dirs()
     return runs[0] if runs else None
 
 
@@ -63,7 +78,7 @@ def _get_all_runs() -> list[dict[str, Any]]:
     """
     if not EVALS_DIR.exists():
         return []
-    runs = sorted(EVALS_DIR.glob("??????T??????Z_*"), reverse=True)
+    runs = _list_run_dirs()
     result = []
     for run_dir in runs:
         summary_path = run_dir / "summary.json"
@@ -76,11 +91,128 @@ def _get_all_runs() -> list[dict[str, Any]]:
                         "status": summary.get("status"),
                         "duration_s": summary.get("duration_s"),
                         "failed_thresholds_count": summary.get("failed_thresholds_count"),
+                        "source": "local",
+                        "tracking": summary.get("tracking", {}),
                     }
                 )
             except Exception:
-                result.append({"run_dir": str(run_dir.name), "status": "error"})
+                result.append({"run_dir": str(run_dir.name), "status": "error", "source": "local"})
     return result
+
+
+def _read_json_if_exists(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def _tracking_target_from_latest_local() -> tuple[str | None, str | None]:
+    run_dir = _get_latest_run_dir()
+    if not run_dir:
+        return None, None
+    manifest = _read_json_if_exists(run_dir / "manifest.json")
+    summary = _read_json_if_exists(run_dir / "summary.json")
+    summary_tracking = dict((summary.get("tracking") or {}).get("wandb") or {})
+    if summary_tracking.get("project"):
+        return summary_tracking.get("project"), summary_tracking.get("entity")
+    experiment_cfg = (
+        (((manifest.get("config") or {}).get("experiment_config") or {}).get("tracking") or {}).get("wandb")
+        or {}
+    )
+    if experiment_cfg.get("project"):
+        return experiment_cfg.get("project"), experiment_cfg.get("entity")
+    return None, None
+
+
+def _local_history_runs(limit: int) -> list[dict[str, Any]]:
+    runs = _list_run_dirs()[:limit]
+    result_runs = []
+    for run_dir in runs:
+        summary = _read_json_if_exists(run_dir / "summary.json")
+        retrieval = _read_json_if_exists(run_dir / "retrieval_metrics.json")
+        manifest = _read_json_if_exists(run_dir / "manifest.json")
+        experiment_cfg = dict(((manifest.get("config") or {}).get("experiment_config")) or {})
+        result_runs.append(
+            {
+                "run_dir": str(run_dir.name),
+                "timestamp": run_dir.name.split("_")[0] if "_" in run_dir.name else "",
+                "status": summary.get("status"),
+                "duration_s": summary.get("duration_s", 0),
+                "failed_thresholds_count": summary.get("failed_thresholds_count", 0),
+                "retrieval_metrics": {
+                    "hit_rate_at_k": retrieval.get("hit_rate_at_k", 0),
+                    "mrr": retrieval.get("mrr", 0),
+                    "ndcg_at_k": retrieval.get("ndcg_at_k", 0),
+                    "latency_p50_ms": retrieval.get("latency_p50_ms", 0),
+                    "latency_p95_ms": retrieval.get("latency_p95_ms", 0),
+                    "precision_at_k": retrieval.get("precision_at_k", 0),
+                    "recall_at_k": retrieval.get("recall_at_k", 0),
+                },
+                "source": "local",
+                "experiment_name": (experiment_cfg.get("metadata") or {}).get("name"),
+                "variant_name": experiment_cfg.get("variant_name"),
+                "index_config_hash": (manifest.get("experiment") or {}).get("index_config_hash"),
+                "wandb_url": (((summary.get("tracking") or {}).get("wandb") or {}).get("run_url")),
+                "wandb_run_id": (((summary.get("tracking") or {}).get("wandb") or {}).get("run_id")),
+                "tracking": summary.get("tracking", {}),
+            }
+        )
+    return result_runs
+
+
+def _aggregate_history_summary(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    metrics_tracking = {
+        "hit_rate_at_k": [],
+        "mrr": [],
+        "ndcg_at_k": [],
+        "latency_p50_ms": [],
+        "latency_p95_ms": [],
+        "duration_s": [],
+    }
+    source_breakdown: dict[str, int] = {}
+    for run in runs:
+        source = str(run.get("source") or "unknown")
+        source_breakdown[source] = source_breakdown.get(source, 0) + 1
+        retrieval = dict(run.get("retrieval_metrics") or {})
+        for key in ("hit_rate_at_k", "mrr", "ndcg_at_k", "latency_p50_ms", "latency_p95_ms"):
+            value = retrieval.get(key)
+            if isinstance(value, (int, float)):
+                metrics_tracking[key].append(value)
+        duration = run.get("duration_s")
+        if isinstance(duration, (int, float)):
+            metrics_tracking["duration_s"].append(duration)
+    return {
+        "total_runs": len(runs),
+        "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"]) / len(metrics_tracking["hit_rate_at_k"])
+        if metrics_tracking["hit_rate_at_k"]
+        else 0,
+        "avg_mrr": sum(metrics_tracking["mrr"]) / len(metrics_tracking["mrr"])
+        if metrics_tracking["mrr"]
+        else 0,
+        "avg_latency_p50": sum(metrics_tracking["latency_p50_ms"])
+        / len(metrics_tracking["latency_p50_ms"])
+        if metrics_tracking["latency_p50_ms"]
+        else 0,
+        "avg_duration": sum(metrics_tracking["duration_s"]) / len(metrics_tracking["duration_s"])
+        if metrics_tracking["duration_s"]
+        else 0,
+        "sources": source_breakdown,
+    }
+
+
+def _resolved_wandb_target(
+    wandb_project: str | None = None, wandb_entity: str | None = None
+) -> tuple[str | None, str | None]:
+    resolved_project = wandb_project
+    resolved_entity = wandb_entity
+    if not resolved_project:
+        resolved_project, resolved_entity = _tracking_target_from_latest_local()
+        if wandb_entity:
+            resolved_entity = wandb_entity
+    return resolved_project, resolved_entity
 
 
 @router.get(
@@ -191,7 +323,12 @@ def get_evaluation_runs() -> list[dict[str, Any]]:
     summary="Get evaluation trending metrics",
     description="Get historical evaluation metrics for trending analysis and performance monitoring",
 )
-def get_evaluation_history(limit: int = 10) -> dict[str, Any]:
+def get_evaluation_history(
+    limit: int = 10,
+    source: str = "local",
+    wandb_project: str | None = None,
+    wandb_entity: str | None = None,
+) -> dict[str, Any]:
     """Get historical evaluation metrics for trending analysis.
 
     Aggregates metrics across multiple evaluation runs to show trends
@@ -230,86 +367,81 @@ def get_evaluation_history(limit: int = 10) -> dict[str, Any]:
             }
         }
     """
-    if not EVALS_DIR.exists():
-        return {"runs": [], "metrics": []}
+    source_mode = str(source or "local").strip().lower()
+    if source_mode not in {"local", "wandb", "all"}:
+        raise HTTPException(status_code=400, detail="source must be one of: local, wandb, all")
 
-    runs = sorted(EVALS_DIR.glob("??????T??????Z_*"), reverse=True)[:limit]
+    local_runs = _local_history_runs(limit) if source_mode in {"local", "all"} else []
+    resolved_project, resolved_entity = _resolved_wandb_target(wandb_project, wandb_entity)
+    warnings: list[str] = []
+    wandb_result: dict[str, Any] = {"runs": [], "status": "disabled"}
+    if source_mode in {"wandb", "all"}:
+        wandb_result = fetch_wandb_runs(
+            project=resolved_project or "",
+            entity=resolved_entity,
+            limit=limit,
+        )
+        if wandb_result.get("warning"):
+            warnings.append(str(wandb_result["warning"]))
 
-    result_runs = []
-    metrics_tracking = {
-        "hit_rate_at_k": [],
-        "mrr": [],
-        "ndcg_at_k": [],
-        "latency_p50_ms": [],
-        "latency_p95_ms": [],
-        "failed_thresholds": [],
-        "duration_s": [],
-    }
-
-    for run_dir in runs:
-        summary_path = run_dir / "summary.json"
-        retrieval_path = run_dir / "retrieval_metrics.json"
-
-        run_data: dict[str, Any] = {
-            "run_dir": str(run_dir.name),
-            "timestamp": run_dir.name.split("_")[0] if "_" in run_dir.name else "",
-        }
-
-        if summary_path.exists():
-            try:
-                summary = json.loads(summary_path.read_text())
-                run_data["status"] = summary.get("status")
-                run_data["duration_s"] = summary.get("duration_s", 0)
-                run_data["failed_thresholds_count"] = summary.get("failed_thresholds_count", 0)
-
-                metrics_tracking["failed_thresholds"].append(
-                    summary.get("failed_thresholds_count", 0)
-                )
-                metrics_tracking["duration_s"].append(summary.get("duration_s", 0))
-            except Exception:
-                pass
-
-        if retrieval_path.exists():
-            try:
-                retrieval = json.loads(retrieval_path.read_text())
-                run_data["retrieval_metrics"] = {
-                    "hit_rate_at_k": retrieval.get("hit_rate_at_k", 0),
-                    "mrr": retrieval.get("mrr", 0),
-                    "ndcg_at_k": retrieval.get("ndcg_at_k", 0),
-                    "latency_p50_ms": retrieval.get("latency_p50_ms", 0),
-                    "latency_p95_ms": retrieval.get("latency_p95_ms", 0),
-                }
-
-                metrics_tracking["hit_rate_at_k"].append(retrieval.get("hit_rate_at_k", 0))
-                metrics_tracking["mrr"].append(retrieval.get("mrr", 0))
-                metrics_tracking["ndcg_at_k"].append(retrieval.get("ndcg_at_k", 0))
-                metrics_tracking["latency_p50_ms"].append(retrieval.get("latency_p50_ms", 0))
-                metrics_tracking["latency_p95_ms"].append(retrieval.get("latency_p95_ms", 0))
-            except Exception:
-                pass
-
-        result_runs.append(run_data)
-
-    return {
+    result_runs = list(local_runs)
+    result_runs.extend(list(wandb_result.get("runs", [])))
+    result_runs = sorted(result_runs, key=lambda run: str(run.get("timestamp") or ""), reverse=True)[:limit]
+    response = {
         "runs": result_runs,
-        "summary": {
-            "total_runs": len(result_runs),
-            "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"])
-            / len(metrics_tracking["hit_rate_at_k"])
-            if metrics_tracking["hit_rate_at_k"]
-            else 0,
-            "avg_mrr": sum(metrics_tracking["mrr"]) / len(metrics_tracking["mrr"])
-            if metrics_tracking["mrr"]
-            else 0,
-            "avg_latency_p50": sum(metrics_tracking["latency_p50_ms"])
-            / len(metrics_tracking["latency_p50_ms"])
-            if metrics_tracking["latency_p50_ms"]
-            else 0,
-            "avg_duration": sum(metrics_tracking["duration_s"])
-            / len(metrics_tracking["duration_s"])
-            if metrics_tracking["duration_s"]
-            else 0,
+        "summary": _aggregate_history_summary(result_runs),
+        "sources": {
+            "mode": source_mode,
+            "wandb": {
+                "status": wandb_result.get("status"),
+                "project": wandb_result.get("project", resolved_project),
+                "entity": wandb_result.get("entity", resolved_entity),
+            },
         },
+    }
+    if warnings:
+        response["warnings"] = warnings
+    return response
+
+
+@router.get("/evaluation/wandb/run/{run_ref}")
+def get_wandb_evaluation_run(
+    run_ref: str,
+    wandb_project: str | None = None,
+    wandb_entity: str | None = None,
+) -> dict[str, Any]:
+    resolved_project, resolved_entity = _resolved_wandb_target(wandb_project, wandb_entity)
+    result = fetch_wandb_run(
+        project=resolved_project or "",
+        entity=resolved_entity,
+        run_id=run_ref,
+        run_name=run_ref,
+    )
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail=f"W&B run not found: {run_ref}")
+    if result.get("status") == "error":
+        raise HTTPException(status_code=502, detail=result.get("warning", "Failed to load W&B run"))
+    if result.get("status") == "disabled":
+        raise HTTPException(status_code=400, detail=result.get("warning", "W&B project not configured"))
+
+    run = dict(result.get("run") or {})
+    return {
+        "run_dir": run.get("run_dir", run_ref),
+        "summary": {
+            "run_dir": run.get("run_dir", run_ref),
+            "duration_s": run.get("duration_s"),
+            "retrieval_metrics": run.get("retrieval_metrics", {}),
+            "rag_metrics": (run.get("summary") or {}).get("rag_metrics", {}),
+            "failed_thresholds_count": run.get("failed_thresholds_count", 0),
+            "status": run.get("status", "unknown"),
+            "tracking": run.get("tracking", {}),
+        },
+        "retrieval_metrics": run.get("retrieval_metrics", {}),
+        "manifest": run.get("manifest", {}),
+        "source": "wandb",
+        "tracking": run.get("tracking", {}),
+        "wandb_run_id": run.get("wandb_run_id"),
+        "wandb_url": run.get("wandb_url"),
     }
 
 

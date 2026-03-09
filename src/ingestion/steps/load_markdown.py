@@ -8,6 +8,10 @@ from typing import List
 
 from src.config import DATA_RAW_DIR
 from src.ingestion.artifacts import load_source_artifact
+from src.ingestion.steps.download_web import (
+    get_manifest_record_by_filename,
+    get_manifest_record_by_logical_name,
+)
 
 INDEX_ONLY_CLASSIFIED_PAGES = True
 
@@ -29,6 +33,23 @@ class MarkdownLoader:
                 and not artifact.get("metadata", {}).get("indexable", True)
             ):
                 continue
+
+            # Lookup manifest record for additional metadata
+            # Try .md filename first, then .html (original source), then by logical_name
+            manifest_record = get_manifest_record_by_filename(md_file.name)
+            if not manifest_record:
+                # Try with .html extension (md file stem + .html)
+                html_filename = md_file.stem + ".html"
+                manifest_record = get_manifest_record_by_filename(html_filename)
+            if not manifest_record:
+                # Try by logical_name (md file stem)
+                manifest_record = get_manifest_record_by_logical_name(md_file.stem)
+
+            metadata = (artifact or {}).get("metadata", {}).copy()
+            if manifest_record:
+                metadata["logical_name"] = manifest_record.get("logical_name")
+                metadata["source_url"] = manifest_record.get("url")
+
             documents.append(
                 {
                     "id": md_file.stem,
@@ -36,7 +57,7 @@ class MarkdownLoader:
                     "content": text,
                     "source_type": "html",
                     "structured_blocks": (artifact or {}).get("structured_blocks", []),
-                    "metadata": (artifact or {}).get("metadata", {}),
+                    "metadata": metadata,
                 }
             )
         return documents

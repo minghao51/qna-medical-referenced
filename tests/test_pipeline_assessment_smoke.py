@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from src.evals import pipeline_assessment as pa
+from src.evals.artifacts import ArtifactStore
 
 
 def _fake_step(stage: str):
@@ -75,3 +76,10 @@ def test_run_assessment_smoke(monkeypatch, tmp_path: Path):
     assert (result.run_dir / "summary.md").exists()
     assert (result.run_dir / "retrieval_metrics.json").exists()
     assert (tmp_path / "evals" / "latest_run.txt").exists()
+
+
+def test_artifact_store_uses_unique_run_dirs(tmp_path: Path):
+    first = ArtifactStore(tmp_path / "evals", "same-name")
+    second = ArtifactStore(tmp_path / "evals", "same-name")
+
+    assert first.run_dir != second.run_dir

@@ -32,6 +32,8 @@ from src.evals.step_checks import (
     assess_l5_index_quality,
     audit_l0_download,
 )
+from src.experiments.wandb_tracking import log_assessment_to_wandb
+from src.rag.runtime import configure_runtime_for_experiment, initialize_runtime_index
 
 DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
     "l1.markdown_empty_rate": {"op": "max", "value": 0.10},
@@ -209,10 +211,12 @@ def _evaluate_retrieval(
     high_conf_exact_chunk_values: list[float] = []
     high_conf_evidence_values: list[float] = []
     topic_false_positive_values: list[float] = []
+    query_embedding_latencies: list[float] = []
     by_query_category: dict[str, list[dict[str, float]]] = {}
     by_task_type: dict[str, list[dict[str, float]]] = {}
     by_expected_source_type: dict[str, list[dict[str, float]]] = {}
     by_difficulty: dict[str, list[dict[str, float]]] = {}
+    by_semantic_case: dict[str, list[dict[str, float]]] = {}
     retrieval_contribution = {
         "semantic_ranked_hits": 0,
         "bm25_ranked_hits": 0,
@@ -326,14 +330,20 @@ def _evaluate_retrieval(
         evidence_hit_values.append(row_metrics["evidence_hit"])
         topic_false_positive_values.append(row_metrics["topic_false_positive_rate"])
         latencies.append(float(trace.total_time_ms))
+        query_embedding_latencies.append(
+            float(getattr(trace.retrieval, "score_weights", {}).get("query_embedding_timing_ms", 0))
+        )
         category = str(item.get("query_category") or "uncategorized")
         task_type = str(item.get("task_type") or "unspecified")
         source_type = _expected_source_type_for_item(item)
         difficulty = str(item.get("difficulty") or "unspecified")
+        semantic_case = str(item.get("semantic_case") or category or "default")
         by_query_category.setdefault(category, []).append(row_metrics)
         by_task_type.setdefault(task_type, []).append(row_metrics)
         by_expected_source_type.setdefault(source_type, []).append(row_metrics)
         by_difficulty.setdefault(difficulty, []).append(row_metrics)
+        if semantic_case in {"paraphrase", "synonym", "acronym", "semantic_only"}:
+            by_semantic_case.setdefault(semantic_case, []).append(row_metrics)
         if any(doc.get("semantic_rank") for doc in retrieved_docs):
             retrieval_contribution["semantic_ranked_hits"] += int(exact_chunk_hit)
         if any(doc.get("bm25_rank") for doc in retrieved_docs):
@@ -389,6 +399,8 @@ def _evaluate_retrieval(
         "evidence_hit_rate": mean(evidence_hit_values),
         "latency_p50_ms": percentile(latencies, 50),
         "latency_p95_ms": percentile(latencies, 95),
+        "query_embedding_latency_p50_ms": percentile(query_embedding_latencies, 50),
+        "query_embedding_latency_p95_ms": percentile(query_embedding_latencies, 95),
         "hit_rate_at_k_high_conf": mean(high_conf_hit_values)
         if high_conf_hit_values
         else mean(hit_values),
@@ -407,6 +419,7 @@ def _evaluate_retrieval(
             k: _slice_aggregate(v) for k, v in sorted(by_expected_source_type.items())
         },
         "by_difficulty": {k: _slice_aggregate(v) for k, v in sorted(by_difficulty.items())},
+        "by_semantic_case": {k: _slice_aggregate(v) for k, v in sorted(by_semantic_case.items())},
         "contribution_analysis": retrieval_contribution,
     }
     return rows, aggregate
@@ -620,10 +633,18 @@ def run_assessment(
     run_retrieval_ablations: bool = False,
     run_diversity_sweep: bool = False,
     diversity_sweep: dict[str, Any] | None = None,
+    experiment_config: dict[str, Any] | None = None,
 ) -> AssessmentResult:
     start = time.time()
-    from src.ingestion.steps.chunk_text import set_structured_chunking_enabled
-    from src.ingestion.steps.convert_html import set_page_classification_enabled
+    from src.ingestion.indexing.vector_store import set_vector_store_runtime_config
+    from src.ingestion.steps.chunk_text import (
+        set_source_chunk_configs,
+        set_structured_chunking_enabled,
+    )
+    from src.ingestion.steps.convert_html import (
+        set_html_extractor_mode,
+        set_page_classification_enabled,
+    )
     from src.ingestion.steps.load_markdown import set_index_only_classified_pages
 
     thresholds = dict(DEFAULT_THRESHOLDS)
@@ -641,9 +662,6 @@ def run_assessment(
         resolved_retrieval_options["search_mode"] = "semantic_only"
     elif retrieval_mode != "rrf_hybrid":
         resolved_retrieval_options["search_mode"] = retrieval_mode
-    set_page_classification_enabled(not disable_page_classification)
-    set_index_only_classified_pages(not disable_page_classification)
-    set_structured_chunking_enabled(not disable_structured_chunking)
     config = AssessmentConfig(
         artifact_dir=Path(artifact_dir),
         name=name,
@@ -668,7 +686,49 @@ def run_assessment(
         run_retrieval_ablations=run_retrieval_ablations,
         run_diversity_sweep=run_diversity_sweep,
         diversity_sweep=dict(diversity_sweep or {}),
+        experiment_config=experiment_config,
     )
+
+    experiment_runtime = configure_runtime_for_experiment(config.experiment_config)
+    index_preparation: dict[str, Any] = {"status": "not_requested"}
+    if not config.experiment_config:
+        set_page_classification_enabled(not disable_page_classification)
+        set_index_only_classified_pages(not disable_page_classification)
+        set_html_extractor_mode("auto")
+        set_structured_chunking_enabled(not disable_structured_chunking)
+        set_source_chunk_configs(None)
+        set_vector_store_runtime_config(None)
+    if config.experiment_config:
+        embedding_index = config.experiment_config.get("embedding_index", {})
+        vector_config = experiment_runtime.get("vector_store", {})
+        vector_path = Path("data/vectors") / (
+            f"{vector_config.get('collection_name', settings.collection_name)}.json"
+        )
+        existing_index_hash = None
+        if vector_path.exists():
+            try:
+                payload = json.loads(vector_path.read_text(encoding="utf-8"))
+                existing_index_hash = (payload.get("index_metadata", {}) or {}).get(
+                    "index_config_hash"
+                )
+            except Exception:
+                existing_index_hash = None
+        rebuild_policy = str(embedding_index.get("rebuild_policy", "if_missing_or_stale")).lower()
+        should_rebuild = rebuild_policy == "always"
+        if rebuild_policy in {"if_missing_or_stale", "auto"}:
+            should_rebuild = (not vector_path.exists()) or (
+                existing_index_hash != config.experiment_config.get("index_config_hash")
+            )
+        if rebuild_policy == "never" and existing_index_hash not in {
+            None,
+            config.experiment_config.get("index_config_hash"),
+        }:
+            raise ValueError("Experiment index configuration does not match existing index")
+        index_preparation = initialize_runtime_index(
+            rebuild=should_rebuild,
+            materialize_html=bool(embedding_index.get("materialize_html", True)),
+            force_html_reconvert=should_rebuild,
+        )
 
     store = ArtifactStore(config.artifact_dir, config.name)
     manifest = {
@@ -676,16 +736,26 @@ def run_assessment(
         "git_head": _git_head(),
         "dashscope_key_present": key_available,
         "started_at_epoch_s": start,
+        "experiment": {
+            "file": (config.experiment_config or {}).get("experiment_file"),
+            "variant": (config.experiment_config or {}).get("variant_name"),
+            "config_hash": (config.experiment_config or {}).get("experiment_config_hash"),
+            "index_config_hash": (config.experiment_config or {}).get("index_config_hash"),
+        },
+        "index_preparation": index_preparation,
     }
     store.write_json("manifest.json", manifest)
 
+    l5_collection_name = experiment_runtime.get("vector_store", {}).get("collection_name")
     step_metrics = {
         "l0": audit_l0_download(),
         "l1": assess_l1_html_markdown_quality(),
         "l2": assess_l2_pdf_quality(),
         "l3": assess_l3_chunking_quality(),
         "l4": assess_l4_reference_quality(),
-        "l5": assess_l5_index_quality(),
+        "l5": assess_l5_index_quality(collection_name=l5_collection_name)
+        if l5_collection_name
+        else assess_l5_index_quality(),
     }
     step_findings: list[dict[str, Any]] = []
     for stage in step_metrics.values():
@@ -754,15 +824,43 @@ def run_assessment(
     manifest["chunking"] = {
         "chunk_size_config": l3_agg.get("chunk_size_config"),
         "chunk_overlap_config": l3_agg.get("chunk_overlap_config"),
+        "structured_chunking_enabled": not config.disable_structured_chunking,
+        "source_chunk_configs": (
+            (config.experiment_config or {}).get("ingestion", {}).get("source_chunk_configs")
+        ),
+        "page_classification_enabled": not config.disable_page_classification,
+        "html_extractor_mode": (
+            (config.experiment_config or {}).get("ingestion", {}).get("html_extractor_mode")
+        ),
     }
+    index_metadata: dict[str, Any] = {}
+    if vector_path and Path(vector_path).exists():
+        try:
+            index_payload = json.loads(Path(vector_path).read_text(encoding="utf-8"))
+            index_metadata = index_payload.get("index_metadata", {}) or {}
+        except Exception:
+            index_metadata = {}
     manifest["index_provenance"] = {
-        "collection_name": settings.collection_name,
+        "collection_name": index_metadata.get("collection_name", settings.collection_name),
         "vector_path": vector_path,
         "vector_file_mtime_epoch_s": Path(vector_path).stat().st_mtime
         if vector_path and Path(vector_path).exists()
         else None,
         "doc_counts_by_source_type": l5_agg.get("source_distribution", {}),
         "dedupe_effect_estimate": l5_agg.get("dedupe_effect_estimate"),
+        "index_config_hash": index_metadata.get("index_config_hash"),
+        "embedding_model": index_metadata.get("embedding_model"),
+        "embedding_batch_size": index_metadata.get("embedding_batch_size"),
+        "semantic_weight": index_metadata.get("semantic_weight"),
+        "keyword_weight": index_metadata.get("keyword_weight"),
+        "boost_weight": index_metadata.get("boost_weight"),
+        "page_classification_enabled": index_metadata.get("page_classification_enabled"),
+        "index_only_classified_pages": index_metadata.get("index_only_classified_pages"),
+        "html_extractor_mode": index_metadata.get("html_extractor_mode"),
+        "structured_chunking_enabled": index_metadata.get("structured_chunking_enabled"),
+        "source_chunk_configs": index_metadata.get("source_chunk_configs"),
+        "observed_embedding_dim": l5_agg.get("embedding_dim"),
+        "indexing_stats": index_preparation.get("indexing_stats", {}),
     }
     manifest["checksums"] = {
         "vector_file_sha256": _sha256_file(vector_path),
@@ -812,6 +910,19 @@ def run_assessment(
             failed_thresholds=failed_thresholds,
         ),
     )
+    tracking_info = log_assessment_to_wandb(
+        experiment=config.experiment_config,
+        summary=summary,
+        manifest=manifest,
+        step_metrics=step_metrics,
+        retrieval_metrics=retrieval_metrics,
+        rag_metrics=rag_metrics,
+        run_dir=store.run_dir,
+        failed_thresholds=failed_thresholds,
+    )
+    manifest["tracking"] = {"wandb": tracking_info}
+    summary["tracking"] = {"wandb": tracking_info}
+    store.write_json("manifest.json", manifest)
     store.write_json("summary.json", summary)
     store.write_latest_pointer()
 

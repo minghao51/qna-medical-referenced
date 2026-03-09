@@ -12,6 +12,7 @@ from pypdf import PdfReader
 
 from src.config import DATA_RAW_DIR
 from src.ingestion.artifacts import SourceArtifact, persist_source_artifact
+from src.ingestion.steps.download_web import get_manifest_record_by_filename
 
 try:  # pragma: no cover - optional dependency
     import pdfplumber
@@ -209,6 +210,13 @@ class PDFLoader:
             )
             persist_source_artifact(artifact)
 
+            # Lookup manifest record for additional metadata
+            manifest_record = get_manifest_record_by_filename(pdf_file.name)
+            metadata = artifact.metadata.copy()
+            if manifest_record:
+                metadata["logical_name"] = manifest_record.get("logical_name")
+                metadata["source_url"] = manifest_record.get("url")
+
             documents.append(
                 {
                     "id": pdf_file.stem,
@@ -216,7 +224,7 @@ class PDFLoader:
                     "source_type": "pdf",
                     "pages": pages,
                     "structured_blocks": all_blocks,
-                    "metadata": artifact.metadata,
+                    "metadata": metadata,
                 }
             )
 

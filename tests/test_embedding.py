@@ -4,7 +4,7 @@ import pytest
 
 from src.ingestion.indexing.vector_store import VectorStore
 
-GEMINI_EMBEDDING_DIM = 3072
+QWEN_EMBEDDING_DIM = 2048
 
 requires_live_api = pytest.mark.live_api
 
@@ -28,8 +28,8 @@ class TestEmbedding:
         embeddings = vector_store._embed(texts)
 
         assert len(embeddings) == 1
-        assert len(embeddings[0]) == GEMINI_EMBEDDING_DIM, (
-            f"Expected {GEMINI_EMBEDDING_DIM} dimensions"
+        assert len(embeddings[0]) == QWEN_EMBEDDING_DIM, (
+            f"Expected {QWEN_EMBEDDING_DIM} dimensions"
         )
 
     @requires_live_api
@@ -39,7 +39,7 @@ class TestEmbedding:
 
         assert len(embeddings) == 10
         for emb in embeddings:
-            assert len(emb) == GEMINI_EMBEDDING_DIM
+            assert len(emb) == QWEN_EMBEDDING_DIM
 
     @requires_live_api
     def test_embedding_consistency(self, vector_store):
@@ -96,7 +96,7 @@ class TestEmbedding:
         vector_store.add_documents(documents)
 
         assert len(vector_store.documents["embeddings"]) == 2
-        assert len(vector_store.documents["embeddings"][0]) == GEMINI_EMBEDDING_DIM
+        assert len(vector_store.documents["embeddings"][0]) == QWEN_EMBEDDING_DIM
 
     @requires_live_api
     def test_embedding_batch_size(self, vector_store):
@@ -115,7 +115,7 @@ class TestEmbedding:
         embeddings = vector_store._embed(["a"])
 
         assert len(embeddings) == 1
-        assert len(embeddings[0]) == GEMINI_EMBEDDING_DIM
+        assert len(embeddings[0]) == QWEN_EMBEDDING_DIM
 
     @requires_live_api
     def test_medical_term_embedding(self, vector_store):
@@ -123,4 +123,4 @@ class TestEmbedding:
         embeddings = vector_store._embed(texts)
 
         assert len(embeddings) == 2
-        assert all(len(e) == GEMINI_EMBEDDING_DIM for e in embeddings)
+        assert all(len(e) == QWEN_EMBEDDING_DIM for e in embeddings)

@@ -3,7 +3,13 @@
 	import Tooltip from '$lib/components/Tooltip.svelte';
 	import { stageNames, metricDefinitions } from '$lib/utils/metric-definitions';
 
-	import type { EvaluationResponse, RetrievalMetrics, StepMetrics } from '$lib/types';
+	import type {
+		EvaluationHistoryResponse,
+		EvaluationHistoryRun,
+		EvaluationResponse,
+		RetrievalMetrics,
+		StepMetrics
+	} from '$lib/types';
 	import MetricChart from '$lib/components/MetricChart.svelte';
 	import QualityDistributionChart from '$lib/components/QualityDistributionChart.svelte';
 	import HealthScoreBadge from '$lib/components/HealthScoreBadge.svelte';
@@ -20,9 +26,14 @@
 	let refreshing = $state(false);
 	let error = $state('');
 	let data = $state<EvaluationResponse | null>(null);
-	let historyData = $state<{runs: any[]; summary: any} | null>(null);
+	let historyData = $state<EvaluationHistoryResponse | null>(null);
 	let historyLoading = $state(true);
 	let selectedTrendMetric = $state<'hit_rate' | 'mrr' | 'latency'>('hit_rate');
+	let historySource = $state<'local' | 'wandb' | 'all'>('all');
+	let wandbProject = $state('');
+	let wandbEntity = $state('');
+	let experimentFilter = $state('');
+	let selectedHistorySource = $state<'all' | 'local' | 'wandb'>('all');
 
 	// Comparison mode
 	let compareMode = $state(false);
@@ -53,6 +64,16 @@
 	let ablationLoading = $state(false);
 
 	const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+	function buildHistoryUrl(): string {
+		const params = new URLSearchParams({
+			limit: '20',
+			source: historySource
+		});
+		if (wandbProject.trim()) params.set('wandb_project', wandbProject.trim());
+		if (wandbEntity.trim()) params.set('wandb_entity', wandbEntity.trim());
+		return `${API_URL}/evaluation/history?${params.toString()}`;
+	}
 
 	function formatPercent(value: number): string {
 		return (value * 100).toFixed(1) + '%';
@@ -91,7 +112,7 @@
 
 	async function loadHistory() {
 		try {
-			const res = await fetch(`${API_URL}/evaluation/history?limit=20`);
+			const res = await fetch(buildHistoryUrl());
 			if (res.ok) {
 				historyData = await res.json();
 			}
@@ -116,9 +137,30 @@
 		}
 	}
 
+	function selectionKey(run: EvaluationHistoryRun): string {
+		if (run.source === 'wandb') {
+			return `wandb:${run.wandb_run_id || run.run_dir}`;
+		}
+		return `local:${run.run_dir}`;
+	}
+
+	function runDetailUrl(run: EvaluationHistoryRun): string {
+		if (run.source === 'wandb') {
+			const ref = encodeURIComponent(run.wandb_run_id || run.run_dir);
+			const params = new URLSearchParams();
+			if (wandbProject.trim()) params.set('wandb_project', wandbProject.trim());
+			if (wandbEntity.trim()) params.set('wandb_entity', wandbEntity.trim());
+			const query = params.toString();
+			return `${API_URL}/evaluation/wandb/run/${ref}${query ? `?${query}` : ''}`;
+		}
+		return `${API_URL}/evaluation/run/${encodeURIComponent(run.run_dir)}`;
+	}
+
 	async function loadRun(runDir: string): Promise<EvaluationResponse | null> {
+		const run = filteredHistoryRuns().find((item) => selectionKey(item) === runDir);
+		if (!run) return null;
 		try {
-			const res = await fetch(`${API_URL}/evaluation/run/${runDir}`);
+			const res = await fetch(runDetailUrl(run));
 			if (res.ok) {
 				return await res.json();
 			}
@@ -160,6 +202,28 @@
 		return { value: 0, positive: null };
 	}
 
+	function historyLabel(run: EvaluationHistoryRun): string {
+		return run.experiment_name || run.variant_name || run.timestamp || run.run_dir;
+	}
+
+	function filteredHistoryRuns(): EvaluationHistoryRun[] {
+		const runs = historyData?.runs || [];
+		return runs.filter((run) => {
+			if (selectedHistorySource !== 'all' && run.source !== selectedHistorySource) return false;
+			if (!experimentFilter.trim()) return true;
+			const haystack = [
+				run.experiment_name,
+				run.variant_name,
+				run.run_dir,
+				run.index_config_hash
+			]
+				.filter(Boolean)
+				.join(' ')
+				.toLowerCase();
+			return haystack.includes(experimentFilter.trim().toLowerCase());
+		});
+	}
+
 	async function showMetricDrillDown(stage: string, metricName: string, currentValue: number) {
 		try {
 			const res = await fetch(`${API_URL}/evaluation/steps/${stage}/records?limit=100`);
@@ -171,7 +235,7 @@
 					stage: stage,
 					currentValue: currentValue,
 					records: data.records || [],
-					historicalData: historyData?.runs
+					historicalData: filteredHistoryRuns()
 						.map((run) => {
 							const value = run.retrieval_metrics?.[metricName as keyof typeof run.retrieval_metrics];
 							if (value !== undefined) {
@@ -249,8 +313,8 @@
 					<label for="baseline-run">Baseline Run:</label>
 					<select id="baseline-run" bind:value={baselineRun} onchange={loadComparisonData}>
 						<option value="">Select baseline...</option>
-						{#each historyData.runs as run}
-							<option value={run.run_dir}>{run.timestamp || run.run_dir?.slice(0, 8) || 'N/A'}</option>
+						{#each filteredHistoryRuns() as run}
+							<option value={selectionKey(run)}>{historyLabel(run)} [{run.source}]</option>
 						{/each}
 					</select>
 				</div>
@@ -258,8 +322,8 @@
 					<label for="comparison-run">Comparison Run:</label>
 					<select id="comparison-run" bind:value={compareRun} onchange={loadComparisonData}>
 						<option value="">Select comparison...</option>
-						{#each historyData.runs as run}
-							<option value={run.run_dir}>{run.timestamp || run.run_dir?.slice(0, 8) || 'N/A'}</option>
+						{#each filteredHistoryRuns() as run}
+							<option value={selectionKey(run)}>{historyLabel(run)} [{run.source}]</option>
 						{/each}
 					</select>
 				</div>
@@ -286,13 +350,46 @@
 		<section class="history-section">
 			<div class="section-header">
 				<h2>Historical Trending</h2>
-				<div class="metric-selector">
-					<label for="trend-metric">Metric:</label>
-					<select bind:value={selectedTrendMetric} id="trend-metric">
-						<option value="hit_rate">Hit Rate & MRR</option>
-						<option value="mrr">MRR Focus</option>
-						<option value="latency">Latency</option>
+				<div class="history-controls">
+					<div class="metric-selector">
+						<label for="history-source">Source:</label>
+						<select bind:value={historySource} id="history-source" onchange={loadHistory}>
+							<option value="all">Local + W&B</option>
+							<option value="local">Local only</option>
+							<option value="wandb">W&B only</option>
+						</select>
+					</div>
+					<div class="metric-selector">
+						<label for="trend-metric">Metric:</label>
+						<select bind:value={selectedTrendMetric} id="trend-metric">
+							<option value="hit_rate">Hit Rate & MRR</option>
+							<option value="mrr">MRR Focus</option>
+							<option value="latency">Latency</option>
+						</select>
+					</div>
+					<div class="metric-selector compact-input">
+						<label for="wandb-project">W&B Project:</label>
+						<input id="wandb-project" bind:value={wandbProject} placeholder="auto or project" />
+					</div>
+					<div class="metric-selector compact-input">
+						<label for="wandb-entity">Entity:</label>
+						<input id="wandb-entity" bind:value={wandbEntity} placeholder="optional" />
+					</div>
+					<button class="action-btn" onclick={loadHistory}>Reload History</button>
+				</div>
+				<div class="history-controls">
+					<label for="history-source-filter">Visible Runs:</label>
+					<select bind:value={selectedHistorySource} id="history-source-filter">
+						<option value="all">All Sources</option>
+						<option value="local">Local</option>
+						<option value="wandb">W&amp;B</option>
 					</select>
+					<input
+						type="text"
+						placeholder="Filter by experiment, variant, or index hash"
+						bind:value={experimentFilter}
+						class="search-input history-search"
+					/>
 				</div>
 			</div>
 			<div class="history-summary">
@@ -312,7 +409,18 @@
 					<span class="stat-label">Avg Latency</span>
 					<span class="stat-value">{historyData.summary.avg_latency_p50.toFixed(0)}ms</span>
 				</div>
+				<div class="summary-stat">
+					<span class="stat-label">Sources</span>
+					<span class="stat-value small">
+						{Object.entries(historyData.summary.sources || {}).map(([key, count]) => `${key}:${count}`).join(' · ')}
+					</span>
+				</div>
 			</div>
+			{#if historyData.warnings?.length}
+				<div class="history-warning">
+					{historyData.warnings.join(' ')}
+				</div>
+			{/if}
 			<div class="charts-grid">
 				{#if selectedTrendMetric === 'hit_rate'}
 					<div class="chart-card">
@@ -320,15 +428,15 @@
 							type="line"
 							title="Hit Rate & MRR Over Time"
 							data={{
-								labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
+								labels: filteredHistoryRuns().map(r => historyLabel(r)),
 								datasets: [
 									{
 										label: 'Hit Rate @k',
-										data: historyData.runs.map(r => (r.retrieval_metrics?.hit_rate_at_k || 0) * 100)
+										data: filteredHistoryRuns().map(r => (r.retrieval_metrics?.hit_rate_at_k || 0) * 100)
 									},
 									{
 										label: 'MRR',
-										data: historyData.runs.map(r => (r.retrieval_metrics?.mrr || 0) * 100)
+										data: filteredHistoryRuns().map(r => (r.retrieval_metrics?.mrr || 0) * 100)
 									}
 								]
 							}}
@@ -341,19 +449,19 @@
 							type="line"
 							title="MRR & Precision Over Time"
 							data={{
-								labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
+								labels: filteredHistoryRuns().map(r => historyLabel(r)),
 								datasets: [
 									{
 										label: 'MRR',
-										data: historyData.runs.map(r => (r.retrieval_metrics?.mrr || 0) * 100)
+										data: filteredHistoryRuns().map(r => (r.retrieval_metrics?.mrr || 0) * 100)
 									},
 									{
 										label: 'Precision @k',
-										data: historyData.runs.map(r => (r.retrieval_metrics?.precision_at_k || 0) * 100)
+										data: filteredHistoryRuns().map(r => (r.retrieval_metrics?.precision_at_k || 0) * 100)
 									},
 									{
 										label: 'Recall @k',
-										data: historyData.runs.map(r => (r.retrieval_metrics?.recall_at_k || 0) * 100)
+										data: filteredHistoryRuns().map(r => (r.retrieval_metrics?.recall_at_k || 0) * 100)
 									}
 								]
 							}}
@@ -366,15 +474,15 @@
 							type="bar"
 							title="Latency Over Time (ms)"
 							data={{
-								labels: historyData.runs.map(r => r.timestamp || r.run_dir?.slice(0, 8) || 'N/A'),
+								labels: filteredHistoryRuns().map(r => historyLabel(r)),
 								datasets: [
 									{
 										label: 'p50',
-										data: historyData.runs.map(r => r.retrieval_metrics?.latency_p50_ms || 0)
+										data: filteredHistoryRuns().map(r => r.retrieval_metrics?.latency_p50_ms || 0)
 									},
 									{
 										label: 'p95',
-										data: historyData.runs.map(r => r.retrieval_metrics?.latency_p95_ms || 0)
+										data: filteredHistoryRuns().map(r => r.retrieval_metrics?.latency_p95_ms || 0)
 									}
 								]
 							}}
@@ -382,6 +490,31 @@
 						/>
 					</div>
 				{/if}
+			</div>
+			<div class="history-run-list">
+				{#each filteredHistoryRuns() as run}
+					<div class="history-run-card">
+						<div class="history-run-meta">
+							<div class="history-run-title">
+								<span class="source-pill" class:wandb={run.source === 'wandb'}>{run.source}</span>
+								<strong>{historyLabel(run)}</strong>
+							</div>
+							<span class="history-run-subtitle">{run.run_dir}</span>
+						</div>
+						<div class="history-run-metrics">
+							<span>Hit {((run.retrieval_metrics?.hit_rate_at_k || 0) * 100).toFixed(1)}%</span>
+							<span>MRR {(run.retrieval_metrics?.mrr || 0).toFixed(3)}</span>
+							<span>p50 {(run.retrieval_metrics?.latency_p50_ms || 0).toFixed(0)}ms</span>
+						</div>
+						<div class="history-run-tags">
+							{#if run.variant_name}<span class="history-tag">variant: {run.variant_name}</span>{/if}
+							{#if run.index_config_hash}<span class="history-tag">index: {run.index_config_hash.slice(0, 8)}</span>{/if}
+							{#if run.wandb_url}
+								<a class="history-link" href={run.wandb_url} target="_blank" rel="noreferrer">Open W&amp;B</a>
+							{/if}
+						</div>
+					</div>
+				{/each}
 			</div>
 		</section>
 	{/if}
@@ -394,6 +527,11 @@
 				<div class="comparison-col">
 					<h3>Baseline</h3>
 					<p class="run-id">{comparisonData.baseline.run_dir}</p>
+					{#if comparisonData.baseline.wandb_url}
+						<p class="run-link-row">
+							<a href={comparisonData.baseline.wandb_url} target="_blank" rel="noreferrer">Open W&amp;B run</a>
+						</p>
+					{/if}
 					{#if comparisonData.baseline.retrieval_metrics}
 						<div class="metrics-grid compact">
 							<div class="metric-card">
@@ -414,6 +552,11 @@
 				<div class="comparison-col">
 					<h3>Comparison</h3>
 					<p class="run-id">{comparisonData.comparison.run_dir}</p>
+					{#if comparisonData.comparison.wandb_url}
+						<p class="run-link-row">
+							<a href={comparisonData.comparison.wandb_url} target="_blank" rel="noreferrer">Open W&amp;B run</a>
+						</p>
+					{/if}
 					{#if comparisonData.comparison.retrieval_metrics}
 						<div class="metrics-grid compact">
 							<div class="metric-card">
@@ -1065,6 +1208,13 @@
 		font-size: 0.9rem;
 	}
 
+	.history-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
 	.metric-selector label {
 		color: #666;
 		font-weight: 500;
@@ -1081,6 +1231,13 @@
 
 	.metric-selector select:hover {
 		border-color: #2196f3;
+	}
+
+	.compact-input input {
+		padding: 0.4rem 0.75rem;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		font-size: 0.9rem;
 	}
 
 	.history-summary {
@@ -1107,6 +1264,11 @@
 		color: #2196f3;
 	}
 
+	.stat-value.small {
+		font-size: 0.95rem;
+		line-height: 1.4;
+	}
+
 	.charts-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -1117,6 +1279,105 @@
 		background: #fafafa;
 		border-radius: 8px;
 		padding: 1rem;
+	}
+
+	.history-warning {
+		margin-bottom: 1rem;
+		padding: 0.75rem 1rem;
+		border-radius: 6px;
+		background: #fff4e5;
+		color: #8a5700;
+		font-size: 0.9rem;
+	}
+
+	.history-run-list {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: 1rem;
+		margin-top: 1.5rem;
+	}
+
+	.history-run-card {
+		border: 1px solid #e6e6e6;
+		border-radius: 10px;
+		padding: 1rem;
+		background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+	}
+
+	.history-run-meta {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.history-run-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.history-run-subtitle {
+		font-size: 0.8rem;
+		color: #6b7280;
+		word-break: break-all;
+	}
+
+	.history-run-metrics {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: #334155;
+		margin-bottom: 0.75rem;
+	}
+
+	.history-run-tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: center;
+	}
+
+	.history-tag {
+		font-size: 0.78rem;
+		padding: 0.2rem 0.45rem;
+		border-radius: 999px;
+		background: #eef2ff;
+		color: #3547a5;
+	}
+
+	.history-link {
+		font-size: 0.82rem;
+		color: #0f62fe;
+		text-decoration: none;
+		font-weight: 600;
+	}
+
+	.history-link:hover {
+		text-decoration: underline;
+	}
+
+	.source-pill {
+		font-size: 0.72rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		padding: 0.2rem 0.45rem;
+		border-radius: 999px;
+		background: #e8f5e9;
+		color: #256029;
+	}
+
+	.source-pill.wandb {
+		background: #fff1e6;
+		color: #a64b00;
+	}
+
+	.history-search {
+		min-width: 280px;
 	}
 
 	.loading, .error, .empty-state {
@@ -1563,6 +1824,20 @@
 		color: #999;
 		margin-bottom: 1rem;
 		font-family: monospace;
+	}
+
+	.run-link-row {
+		margin: -0.5rem 0 1rem;
+		font-size: 0.85rem;
+	}
+
+	.run-link-row a {
+		color: #0f62fe;
+		text-decoration: none;
+	}
+
+	.run-link-row a:hover {
+		text-decoration: underline;
 	}
 
 	.metrics-grid.compact {

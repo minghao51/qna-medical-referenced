@@ -7,6 +7,7 @@ def test_settings_defaults():
     )
     assert settings.model_name == "qwen3.5-flash"
     assert settings.embedding_model == "text-embedding-v4"
+    assert settings.embedding_batch_size == 10
     assert settings.collection_name == "medical_docs"
     assert settings.max_message_length == 2000
     assert settings.rate_limit_per_minute == 60

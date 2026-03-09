@@ -5,10 +5,10 @@ L5: Vector Store - Embed and store document chunks with hybrid search.
 
 import logging
 import time
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from src.config import settings
-from src.ingestion.indexing.embedding import embed_texts
+from src.ingestion.indexing.embedding import embed_texts, embed_texts_with_stats
 from src.ingestion.indexing.keyword_index import (
     build_keyword_index,
     build_term_frequencies,
@@ -58,17 +58,26 @@ class VectorStore:
         semantic_weight: float = 0.6,
         keyword_weight: float = 0.2,
         boost_weight: float = 0.2,
+        embedding_model: str | None = None,
+        embedding_batch_size: int | None = None,
+        index_metadata: dict[str, Any] | None = None,
     ):
         self.collection_name = collection_name or settings.collection_name
         self.semantic_weight = semantic_weight
         self.keyword_weight = keyword_weight
         self.boost_weight = boost_weight
+        self.embedding_model = embedding_model or settings.embedding_model
+        self.embedding_batch_size = int(embedding_batch_size or settings.embedding_batch_size)
         self.embeddings_file = VECTOR_DIR / f"{self.collection_name}.json"
         self.documents = self._load()
+        self.documents.setdefault("index_metadata", {})
+        if index_metadata:
+            self.documents["index_metadata"] = dict(index_metadata)
         self.content_hashes = set(self.documents.get("content_hashes", []))
         self.keyword_index = self._build_keyword_index()
         self._index_dirty = False
         self._doc_term_freqs = self._build_term_frequencies()
+        self.last_indexing_stats: dict[str, Any] = {}
 
     def _load(self) -> dict:
         return load_documents(self.embeddings_file)
@@ -103,14 +112,29 @@ class VectorStore:
         )
 
     def _embed(self, texts: List[str], batch_size: int = 10) -> List[List[float]]:
-        return embed_texts(texts, batch_size=batch_size)
+        return embed_texts(texts, batch_size=batch_size, model=self.embedding_model)
 
-    def add_documents(self, documents: List[dict], batch_size: int = 10) -> dict:
+    def _embed_with_stats(
+        self, texts: List[str], batch_size: int = 10
+    ) -> tuple[List[List[float]], dict]:
+        return embed_texts_with_stats(
+            texts,
+            batch_size=batch_size,
+            model=self.embedding_model,
+        )
+
+    def set_index_metadata(self, metadata: dict[str, Any] | None = None) -> None:
+        self.documents["index_metadata"] = dict(metadata or {})
+        self._save()
+
+    def add_documents(self, documents: List[dict], batch_size: int | None = None) -> dict:
         texts = [sanitize_text(doc["content"]) for doc in documents]
         ids = [doc["id"] for doc in documents]
+        effective_batch_size = int(batch_size or self.embedding_batch_size)
         metadatas = []
         for doc in documents:
             source = doc["source"]
+            doc_metadata = doc.get("metadata", {})
             meta = {
                 "source": source,
                 "source_type": doc.get("source_type", _source_type_for(source)),
@@ -121,6 +145,8 @@ class VectorStore:
                 "quality_score": float(doc.get("quality_score", 1.0)),
                 "extractor": doc.get("extractor")
                 or doc.get("metadata", {}).get("selected_extractor"),
+                "logical_name": doc_metadata.get("logical_name"),
+                "source_url": doc_metadata.get("source_url"),
             }
             if "page" in doc:
                 meta["page"] = doc["page"]
@@ -138,12 +164,13 @@ class VectorStore:
                 meta["section_sibling_rank"] = doc["section_sibling_rank"]
             metadatas.append(meta)
 
-        embeddings = self._embed(texts, batch_size)
+        embeddings, embedding_stats = self._embed_with_stats(texts, effective_batch_size)
         stats = {
             "attempted": len(documents),
             "inserted": 0,
             "skipped_duplicate_id": 0,
             "skipped_duplicate_content": 0,
+            "embedding_stats": embedding_stats,
         }
 
         for i, doc_id in enumerate(ids):
@@ -165,9 +192,11 @@ class VectorStore:
         self.documents["contents"] = list(self.documents["contents"])
         self.documents["embeddings"] = list(self.documents["embeddings"])
         self.documents["metadatas"] = list(self.documents["metadatas"])
+        self.documents.setdefault("index_metadata", {})
 
         self._save()
         self._index_dirty = True
+        self.last_indexing_stats = stats
         return stats
 
     def similarity_search(
@@ -202,6 +231,12 @@ class VectorStore:
                     "fused_rank": score_info.get("fused_rank"),
                     "source_prior": score_info.get("source_prior", 0.0),
                     "quality_score": meta.get("quality_score", 1.0),
+                    "logical_name": meta.get("logical_name"),
+                    "source_url": meta.get("source_url"),
+                    "metadata": {
+                        "logical_name": meta.get("logical_name"),
+                        "source_url": meta.get("source_url"),
+                    },
                 }
             )
         return results
@@ -209,17 +244,24 @@ class VectorStore:
     def _search_ranked(self, query: str, search_mode: str) -> tuple[list[dict], dict]:
         self._rebuild_index_if_needed()
         mode = (search_mode or "rrf_hybrid").lower()
-        trace_info = {"search_mode": mode}
+        trace_info = {"search_mode": mode, "embedding_model": self.embedding_model}
 
         keyword_scores = self._keyword_score(query)
         query_embedding = None
         use_semantic = mode != "bm25_only"
         if use_semantic:
             try:
-                query_embedding = self._embed([query])[0]
+                embedding_start = time.time()
+                query_embedding = self._embed([query], batch_size=1)[0]
+                trace_info["query_embedding_timing_ms"] = int(
+                    (time.time() - embedding_start) * 1000
+                )
             except Exception as e:
                 logger.warning(f"Embedding failed, falling back to BM25-only search: {e}")
                 use_semantic = False
+                trace_info["query_embedding_timing_ms"] = 0
+        else:
+            trace_info["query_embedding_timing_ms"] = 0
         semantic_ranked = rank_documents(
             documents=self.documents,
             keyword_scores={},
@@ -351,6 +393,12 @@ class VectorStore:
                     "quality_score": round(float(meta.get("quality_score", 1.0)), 4),
                     "content_type": meta.get("content_type", "paragraph"),
                     "section_path": meta.get("section_path", []),
+                    "logical_name": meta.get("logical_name"),
+                    "source_url": meta.get("source_url"),
+                    "metadata": {
+                        "logical_name": meta.get("logical_name"),
+                        "source_url": meta.get("source_url"),
+                    },
                 }
             )
 
@@ -363,15 +411,67 @@ class VectorStore:
         self.keyword_index = {}
         self._doc_term_freqs = {}
         self._index_dirty = False
+        self.last_indexing_stats = {}
         if self.embeddings_file.exists():
             self.embeddings_file.unlink()
 
 
 _vector_store = None
+_vector_store_runtime_config: dict[str, Any] = {}
+_vector_store_runtime_signature: tuple[tuple[str, Any], ...] | None = None
 
 
-def get_vector_store() -> VectorStore:
-    global _vector_store
+def _normalize_runtime_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    resolved = dict(config or _vector_store_runtime_config or {})
+    return {
+        "collection_name": resolved.get("collection_name", settings.collection_name),
+        "semantic_weight": float(resolved.get("semantic_weight", 0.6)),
+        "keyword_weight": float(resolved.get("keyword_weight", 0.2)),
+        "boost_weight": float(resolved.get("boost_weight", 0.2)),
+        "embedding_model": resolved.get("embedding_model", settings.embedding_model),
+        "embedding_batch_size": int(
+            resolved.get("embedding_batch_size", settings.embedding_batch_size)
+        ),
+        "index_metadata": dict(resolved.get("index_metadata", {})),
+    }
+
+
+def _runtime_signature(config: dict[str, Any]) -> tuple[tuple[str, Any], ...]:
+    return tuple(
+        sorted(
+            (
+                key,
+                tuple(sorted(value.items())) if isinstance(value, dict) else value,
+            )
+            for key, value in config.items()
+        )
+    )
+
+
+def set_vector_store_runtime_config(config: dict[str, Any] | None = None) -> None:
+    global _vector_store, _vector_store_runtime_config, _vector_store_runtime_signature
+    normalized = _normalize_runtime_config(config)
+    signature = _runtime_signature(normalized)
+    _vector_store_runtime_config = normalized
+    if _vector_store_runtime_signature != signature:
+        _vector_store = None
+        _vector_store_runtime_signature = signature
+
+
+def get_vector_store_runtime_config() -> dict[str, Any]:
+    return dict(_normalize_runtime_config(_vector_store_runtime_config))
+
+
+def get_vector_store(config: dict[str, Any] | None = None) -> VectorStore:
+    global _vector_store, _vector_store_runtime_signature
+    normalized = _normalize_runtime_config(config)
+    signature = _runtime_signature(normalized)
+    if config is not None:
+        set_vector_store_runtime_config(normalized)
     if _vector_store is None:
-        _vector_store = VectorStore()
+        _vector_store = VectorStore(**normalized)
+        _vector_store_runtime_signature = signature
+    elif _vector_store_runtime_signature != signature:
+        _vector_store = VectorStore(**normalized)
+        _vector_store_runtime_signature = signature
     return _vector_store

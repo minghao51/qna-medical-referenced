@@ -29,6 +29,7 @@ DEFAULT_SOURCE_CHUNK_CONFIGS = {
     },
 }
 STRUCTURED_CHUNKING_ENABLED = True
+SOURCE_CHUNK_CONFIGS_OVERRIDE: dict | None = None
 
 
 class TextChunker:
@@ -65,6 +66,7 @@ class TextChunker:
         quality_score: float = 1.0,
         parent_block_ids: list[str] | None = None,
         extractor: str | None = None,
+        doc_metadata: dict | None = None,
     ) -> List[dict]:
         chunks = []
         start = 0
@@ -90,6 +92,10 @@ class TextChunker:
             chunk_text = raw_chunk.strip()
             if chunk_text:
                 chunk_index = start_chunk_index + len(chunks)
+                chunk_metadata = {
+                    "logical_name": doc_metadata.get("logical_name") if doc_metadata else None,
+                    "source_url": doc_metadata.get("source_url") if doc_metadata else None,
+                }
                 chunks.append(
                     {
                         "id": f"{doc_id}_p{page}_chunk_{chunk_index}",
@@ -106,6 +112,7 @@ class TextChunker:
                         "quality_score": quality_score,
                         "parent_block_ids": list(parent_block_ids or []),
                         "extractor": extractor,
+                        "metadata": chunk_metadata,
                     }
                 )
 
@@ -145,6 +152,7 @@ class TextChunker:
         *,
         page: int = 1,
         start_chunk_index: int = 0,
+        doc_metadata: dict | None = None,
     ) -> List[dict]:
         chunks: list[dict] = []
         chunk_index = start_chunk_index
@@ -156,6 +164,7 @@ class TextChunker:
                 page=page,
                 start_chunk_index=chunk_index,
                 base_char_offset=section_offset,
+                doc_metadata=doc_metadata,
             )
             chunks.extend(section_chunks)
             chunk_index += len(section_chunks)
@@ -187,6 +196,7 @@ class TextChunker:
         *,
         default_page: int = 1,
         start_chunk_index: int = 0,
+        doc_metadata: dict | None = None,
     ) -> List[dict]:
         chunks: list[dict] = []
         chunk_index = start_chunk_index
@@ -220,6 +230,7 @@ class TextChunker:
                                 section_path,
                                 quality_score,
                                 [block_id],
+                                doc_metadata,
                             )
                         )
                         chunk_index += 1
@@ -238,6 +249,7 @@ class TextChunker:
                             section_path,
                             quality_score,
                             [block_id],
+                            doc_metadata,
                         )
                     )
                     chunk_index += 1
@@ -255,6 +267,7 @@ class TextChunker:
                         section_path,
                         quality_score,
                         [block_id],
+                        doc_metadata,
                     )
                 )
                 chunk_index += 1
@@ -271,6 +284,7 @@ class TextChunker:
                 quality_score=quality_score,
                 parent_block_ids=[block_id],
                 extractor=str(block.get("metadata", {}).get("extractor", "")) or None,
+                doc_metadata=doc_metadata,
             )
             chunks.extend(split_chunks)
             chunk_index += len(split_chunks)
@@ -293,8 +307,13 @@ class TextChunker:
         section_path: list[str],
         quality_score: float,
         parent_block_ids: list[str],
+        doc_metadata: dict | None = None,
     ) -> dict:
         text = text.strip()
+        chunk_metadata = {
+            "logical_name": doc_metadata.get("logical_name") if doc_metadata else None,
+            "source_url": doc_metadata.get("source_url") if doc_metadata else None,
+        }
         return {
             "id": f"{doc_id}_p{page}_chunk_{chunk_index}",
             "source": source,
@@ -313,6 +332,7 @@ class TextChunker:
             "next_chunk_id": None,
             "section_sibling_rank": 0,
             "source_type": self._source_kind(source),
+            "metadata": chunk_metadata,
         }
 
     def _filter_low_quality_chunks(self, chunks: list[dict]) -> list[dict]:
@@ -409,6 +429,7 @@ class TextChunker:
         for doc in documents:
             source = doc.get("source", "unknown")
             doc_id = doc.get("id", "doc")
+            doc_metadata = doc.get("metadata", {})
             doc_chunk_index = 0
             source_key = self._source_kind(source)
             active_cfg = cfg_map.get(source_key, cfg_map.get("default", {}))
@@ -439,6 +460,7 @@ class TextChunker:
                             doc_id,
                             default_page=page_num,
                             start_chunk_index=doc_chunk_index,
+                            doc_metadata=doc_metadata,
                         )
                     elif text:
                         chunks = doc_chunker._chunk_text_with_base_index(
@@ -449,6 +471,7 @@ class TextChunker:
                             start_chunk_index=doc_chunk_index,
                             quality_score=0.8,
                             extractor=str(page_data.get("extractor", "")) or None,
+                            doc_metadata=doc_metadata,
                         )
                     else:
                         chunks = []
@@ -466,6 +489,7 @@ class TextChunker:
                         doc_id,
                         default_page=page,
                         start_chunk_index=doc_chunk_index,
+                        doc_metadata=doc_metadata,
                     )
                 elif str(source).lower().endswith(".md") and doc_chunker.strategy != "legacy":
                     chunks = doc_chunker._chunk_markdown_document(
@@ -474,6 +498,7 @@ class TextChunker:
                         doc_id,
                         page=page,
                         start_chunk_index=doc_chunk_index,
+                        doc_metadata=doc_metadata,
                     )
                 else:
                     chunks = doc_chunker._chunk_text_with_base_index(
@@ -483,6 +508,7 @@ class TextChunker:
                         page=page,
                         start_chunk_index=doc_chunk_index,
                         quality_score=0.8,
+                        doc_metadata=doc_metadata,
                     )
                 chunks = doc_chunker._filter_low_quality_chunks(chunks)
                 all_chunks.extend(chunks)
@@ -510,11 +536,28 @@ class TextChunker:
 
 def chunk_documents(documents: List[dict], source_chunk_configs: dict | None = None) -> List[dict]:
     chunker = TextChunker()
-    return chunker.chunk_documents_with_configs(
-        documents, source_chunk_configs=source_chunk_configs
-    )
+    effective_configs = source_chunk_configs
+    if effective_configs is None and SOURCE_CHUNK_CONFIGS_OVERRIDE is not None:
+        effective_configs = copy.deepcopy(SOURCE_CHUNK_CONFIGS_OVERRIDE)
+    return chunker.chunk_documents_with_configs(documents, source_chunk_configs=effective_configs)
 
 
 def set_structured_chunking_enabled(enabled: bool) -> None:
     global STRUCTURED_CHUNKING_ENABLED
     STRUCTURED_CHUNKING_ENABLED = bool(enabled)
+
+
+def set_source_chunk_configs(configs: dict | None) -> None:
+    global SOURCE_CHUNK_CONFIGS_OVERRIDE
+    SOURCE_CHUNK_CONFIGS_OVERRIDE = copy.deepcopy(configs) if configs is not None else None
+
+
+def get_source_chunk_configs() -> dict:
+    cfg = copy.deepcopy(DEFAULT_SOURCE_CHUNK_CONFIGS)
+    if SOURCE_CHUNK_CONFIGS_OVERRIDE:
+        for key, value in SOURCE_CHUNK_CONFIGS_OVERRIDE.items():
+            if key in cfg and isinstance(value, dict):
+                cfg[key].update(value)
+            else:
+                cfg[key] = copy.deepcopy(value)
+    return cfg

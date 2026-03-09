@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Runtime RAG retrieval and index initialization."""
 
+import json
 import logging
 import time
 from dataclasses import asdict, dataclass
@@ -8,9 +9,26 @@ from typing import Any, List, Tuple
 
 from src.config import settings
 from src.ingestion.indexing.text_utils import ACRONYM_EXPANSIONS, tokenize_text
-from src.ingestion.indexing.vector_store import get_vector_store
-from src.ingestion.steps.chunk_text import chunk_documents
-from src.ingestion.steps.load_markdown import get_markdown_documents
+from src.ingestion.indexing.vector_store import (
+    get_vector_store,
+    get_vector_store_runtime_config,
+    set_vector_store_runtime_config,
+)
+from src.ingestion.steps.chunk_text import (
+    chunk_documents,
+    get_source_chunk_configs,
+    set_source_chunk_configs,
+    set_structured_chunking_enabled,
+)
+from src.ingestion.steps.convert_html import main as convert_html_main
+from src.ingestion.steps.convert_html import (
+    set_html_extractor_mode,
+    set_page_classification_enabled,
+)
+from src.ingestion.steps.load_markdown import (
+    get_markdown_documents,
+    set_index_only_classified_pages,
+)
 from src.ingestion.steps.load_pdfs import get_documents
 from src.ingestion.steps.load_reference_data import ReferenceDataLoader
 from src.rag.formatting import build_context_and_sources
@@ -19,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 _vector_store_initialized = False
+_vector_store_initialized_signature: str | None = None
 _RETRIEVAL_OVERFETCH_MULTIPLIER = 4
 _MAX_CHUNKS_PER_SOURCE_PAGE = 2
 _MAX_CHUNKS_PER_SOURCE = 3
@@ -91,6 +110,7 @@ def _expand_queries(query: str) -> list[str]:
 
 
 def _build_index_from_sources(vector_store) -> None:
+    build_start = time.time()
     loader = ReferenceDataLoader()
     pdf_docs = get_documents()
     markdown_docs = get_markdown_documents()
@@ -99,39 +119,148 @@ def _build_index_from_sources(vector_store) -> None:
     ref_docs = loader.load_reference_ranges_as_docs()
     chunked_docs.extend(ref_docs)
     stats = vector_store.add_documents(chunked_docs)
+    stats["build_elapsed_ms"] = int((time.time() - build_start) * 1000)
+    stats["pdf_document_count"] = len(pdf_docs)
+    stats["markdown_document_count"] = len(markdown_docs)
+    stats["reference_document_count"] = len(ref_docs)
+    stats["chunk_count"] = len(chunked_docs)
     print(
         "Indexed document chunks "
         f"(attempted={stats['attempted']}, inserted={stats['inserted']}, "
         f"duplicate_id={stats['skipped_duplicate_id']}, duplicate_content={stats['skipped_duplicate_content']})"
     )
+    return stats
 
 
-def initialize_vector_store(rebuild: bool = False):
-    global _vector_store_initialized
+def _vector_store_runtime_signature() -> str:
+    return json.dumps(
+        get_vector_store_runtime_config(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def initialize_vector_store(
+    rebuild: bool = False,
+    *,
+    materialize_html: bool = False,
+    force_html_reconvert: bool = False,
+):
+    global _vector_store_initialized, _vector_store_initialized_signature
+
+    runtime_signature = _vector_store_runtime_signature()
+    if _vector_store_initialized_signature != runtime_signature:
+        _vector_store_initialized = False
 
     vector_store = get_vector_store()
 
     if rebuild:
         vector_store.clear()
         _vector_store_initialized = False
+        _vector_store_initialized_signature = None
 
-    if _vector_store_initialized:
-        return
+    if materialize_html:
+        convert_html_main(force=force_html_reconvert)
+
+    if _vector_store_initialized and vector_store.documents.get("contents"):
+        _vector_store_initialized_signature = runtime_signature
+        return {
+            "status": "ready",
+            "reused_existing_index": True,
+            "vector_store_config": get_vector_store_runtime_config(),
+            "index_metadata": vector_store.documents.get("index_metadata", {}),
+            "vector_document_count": len(vector_store.documents.get("contents", [])),
+            "indexing_stats": vector_store.last_indexing_stats,
+        }
 
     if vector_store.documents.get("contents"):
         _vector_store_initialized = True
+        _vector_store_initialized_signature = runtime_signature
         logger.info(
             "Loaded existing vector store with %d documents",
             len(vector_store.documents["contents"]),
         )
-        return
+        return {
+            "status": "ready",
+            "reused_existing_index": True,
+            "vector_store_config": get_vector_store_runtime_config(),
+            "index_metadata": vector_store.documents.get("index_metadata", {}),
+            "vector_document_count": len(vector_store.documents.get("contents", [])),
+            "indexing_stats": vector_store.last_indexing_stats,
+        }
 
-    _build_index_from_sources(vector_store)
+    build_stats = _build_index_from_sources(vector_store)
     _vector_store_initialized = True
+    _vector_store_initialized_signature = runtime_signature
+    return {
+        "status": "built",
+        "reused_existing_index": False,
+        "vector_store_config": get_vector_store_runtime_config(),
+        "index_metadata": vector_store.documents.get("index_metadata", {}),
+        "vector_document_count": len(vector_store.documents.get("contents", [])),
+        "indexing_stats": build_stats,
+    }
 
 
-def initialize_runtime_index(rebuild: bool = False):
-    initialize_vector_store(rebuild=rebuild)
+def initialize_runtime_index(
+    rebuild: bool = False,
+    *,
+    materialize_html: bool = False,
+    force_html_reconvert: bool = False,
+):
+    return initialize_vector_store(
+        rebuild=rebuild,
+        materialize_html=materialize_html,
+        force_html_reconvert=force_html_reconvert,
+    )
+
+
+def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -> dict[str, Any]:
+    if not experiment:
+        return {}
+
+    ingestion = dict(experiment.get("ingestion", {}))
+    embedding_index = dict(experiment.get("embedding_index", {}))
+    set_page_classification_enabled(ingestion.get("page_classification_enabled", True))
+    set_index_only_classified_pages(ingestion.get("index_only_classified_pages", True))
+    set_html_extractor_mode(ingestion.get("html_extractor_mode", "auto"))
+    set_structured_chunking_enabled(ingestion.get("structured_chunking_enabled", True))
+    set_source_chunk_configs(ingestion.get("source_chunk_configs"))
+    vector_config = {
+        "collection_name": embedding_index.get("collection_name", settings.collection_name),
+        "semantic_weight": embedding_index.get("semantic_weight", 0.6),
+        "keyword_weight": embedding_index.get("keyword_weight", 0.2),
+        "boost_weight": embedding_index.get("boost_weight", 0.2),
+        "embedding_model": embedding_index.get("embedding_model", settings.embedding_model),
+        "embedding_batch_size": embedding_index.get(
+            "embedding_batch_size", settings.embedding_batch_size
+        ),
+        "index_metadata": {
+            "experiment_name": experiment.get("metadata", {}).get("name"),
+            "experiment_file": experiment.get("experiment_file"),
+            "experiment_config_hash": experiment.get("experiment_config_hash"),
+            "index_config_hash": experiment.get("index_config_hash"),
+            "collection_name": embedding_index.get("collection_name", settings.collection_name),
+            "embedding_model": embedding_index.get("embedding_model", settings.embedding_model),
+            "embedding_batch_size": embedding_index.get(
+                "embedding_batch_size", settings.embedding_batch_size
+            ),
+            "semantic_weight": embedding_index.get("semantic_weight", 0.6),
+            "keyword_weight": embedding_index.get("keyword_weight", 0.2),
+            "boost_weight": embedding_index.get("boost_weight", 0.2),
+            "page_classification_enabled": ingestion.get("page_classification_enabled", True),
+            "index_only_classified_pages": ingestion.get("index_only_classified_pages", True),
+            "html_extractor_mode": ingestion.get("html_extractor_mode", "auto"),
+            "structured_chunking_enabled": ingestion.get("structured_chunking_enabled", True),
+            "source_chunk_configs": get_source_chunk_configs(),
+        },
+    }
+    set_vector_store_runtime_config(vector_config)
+    return {
+        "ingestion": ingestion,
+        "embedding_index": embedding_index,
+        "vector_store": vector_config,
+    }
 
 
 def _source_page_key(item: dict) -> tuple[str, int | None]:
@@ -315,6 +444,7 @@ def retrieve_context_with_trace(
 
     retrieved_docs = []
     for r in results:
+        metadata = r.get("metadata", {})
         retrieved_docs.append(
             RetrievedDocument(
                 id=r["id"],
@@ -334,6 +464,8 @@ def retrieve_context_with_trace(
                 chunk_quality_score=r.get("quality_score"),
                 content_type=r.get("content_type"),
                 section_path=r.get("section_path", []),
+                logical_name=metadata.get("logical_name"),
+                source_url=metadata.get("source_url"),
             )
         )
 
@@ -344,6 +476,8 @@ def retrieve_context_with_trace(
         documents=retrieved_docs,
         score_weights={
             **retrieval_trace.get("score_weights", {}),
+            "embedding_model": retrieval_trace.get("embedding_model"),
+            "query_embedding_timing_ms": retrieval_trace.get("query_embedding_timing_ms", 0),
             "search_mode": cfg.search_mode,
             "expanded_queries": retrieval_trace.get("expanded_queries", []),
             "enable_diversification": cfg.enable_diversification,

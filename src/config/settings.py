@@ -11,6 +11,7 @@ Example:
         api_key = settings.dashscope_api_key
 """
 
+import os
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -56,12 +57,36 @@ class Settings(BaseSettings):
     Environment variable: EMBEDDING_MODEL
     """
 
+    embedding_batch_size: int = 10
+    """Default batch size for embedding generation.
+
+    Default: 10
+
+    Environment variable: EMBEDDING_BATCH_SIZE
+    """
+
     qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
     """Qwen API base URL (OpenAI compatible).
 
     Default: Singapore region (https://dashscope-intl.aliyuncs.com/compatible-mode/v1)
 
     Environment variable: QWEN_BASE_URL
+    """
+
+    wandb_api_key: str = ""
+    """Weights & Biases API key.
+
+    Optional. Used for logging runs and querying remote run history.
+
+    Environment variable: WANDB_API_KEY
+    """
+
+    wandb_cache_ttl_seconds: int = 60
+    """In-process TTL for W&B history/run-detail cache.
+
+    Default: 60 seconds.
+
+    Environment variable: WANDB_CACHE_TTL_SECONDS
     """
 
     # Storage Configuration
@@ -145,3 +170,6 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+if settings.wandb_api_key and not os.environ.get("WANDB_API_KEY"):
+    os.environ["WANDB_API_KEY"] = settings.wandb_api_key

@@ -226,6 +226,24 @@ def _find_existing_file_by_content_hash(content_hash_value: str) -> Path | None:
     return None
 
 
+def get_manifest_record_by_filename(filename: str) -> dict | None:
+    """Look up manifest record by filename."""
+    manifest = _load_manifest()
+    for record in manifest.get("records", []):
+        if record.get("filename") == filename:
+            return record
+    return None
+
+
+def get_manifest_record_by_logical_name(logical_name: str) -> dict | None:
+    """Look up manifest record by logical_name."""
+    manifest = _load_manifest()
+    for record in manifest.get("records", []):
+        if record.get("logical_name") == logical_name:
+            return record
+    return None
+
+
 def file_exists(url: str, extension: str = "html") -> bool:
     """Check if file already exists for this URL."""
     normalized = normalize_url(url)

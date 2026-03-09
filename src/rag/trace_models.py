@@ -25,6 +25,8 @@ class RetrievedDocument(BaseModel):
     chunk_quality_score: Optional[float] = None
     content_type: Optional[str] = None
     section_path: list[str] = Field(default_factory=list)
+    logical_name: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class RetrievalStage(BaseModel):

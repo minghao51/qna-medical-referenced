@@ -26,6 +26,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 DATA_DIR = DATA_RAW_DIR
 PAGE_CLASSIFICATION_ENABLED = True
+HTML_EXTRACTOR_MODE = "auto"
 
 _REMOVAL_SELECTORS = [
     "nav",
@@ -289,7 +290,12 @@ def convert_html_to_md(
     fallback["structured_blocks"] = blocks
     fallback["markdown"] = _markdown_from_blocks(blocks)
 
-    use_fallback = _should_use_fallback(primary_markdown, page_type, html_content)
+    if HTML_EXTRACTOR_MODE == "primary_only":
+        use_fallback = False
+    elif HTML_EXTRACTOR_MODE == "fallback_only":
+        use_fallback = True
+    else:
+        use_fallback = _should_use_fallback(primary_markdown, page_type, html_content)
     markdown_content = fallback["markdown"] if use_fallback else primary_markdown
     selected_extractor = "beautifulsoup" if use_fallback else "trafilatura"
 
@@ -323,6 +329,7 @@ def convert_html_to_md(
             "page_type": page_type,
             "selected_extractor": selected_extractor,
             "primary_extractor": primary_meta,
+            "html_extractor_mode": HTML_EXTRACTOR_MODE,
             "text_density": _density(markdown_content, html_content),
             "boilerplate_ratio": _boilerplate_ratio(markdown_content),
             "indexable": page_type in {"article", "faq"},
@@ -338,6 +345,14 @@ def convert_html_to_md(
 def set_page_classification_enabled(enabled: bool) -> None:
     global PAGE_CLASSIFICATION_ENABLED
     PAGE_CLASSIFICATION_ENABLED = bool(enabled)
+
+
+def set_html_extractor_mode(mode: str) -> None:
+    global HTML_EXTRACTOR_MODE
+    normalized = str(mode or "auto").strip().lower()
+    if normalized not in {"auto", "primary_only", "fallback_only"}:
+        normalized = "auto"
+    HTML_EXTRACTOR_MODE = normalized
 
 
 def get_html_files() -> list[Path]:

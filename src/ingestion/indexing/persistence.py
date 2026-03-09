@@ -15,13 +15,17 @@ def empty_documents() -> dict:
         "embeddings": [],
         "metadatas": [],
         "content_hashes": [],
+        "index_metadata": {},
     }
 
 
 def load_documents(path: Path) -> dict:
     if path.exists():
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            loaded = json.load(f)
+            if "index_metadata" not in loaded:
+                loaded["index_metadata"] = {}
+            return loaded
     return empty_documents()
 
 

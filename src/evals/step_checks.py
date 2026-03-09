@@ -497,6 +497,7 @@ def assess_l5_index_quality(
             {"severity": "error", "message": "Vector arrays have mismatched lengths", "stage": "L5"}
         )
     unique_dims = sorted(set(lengths))
+    index_metadata = data.get("index_metadata", {})
     if len(unique_dims) > 1:
         findings.append(
             {"severity": "error", "message": "Embedding dimensions are inconsistent", "stage": "L5"}
@@ -513,6 +514,9 @@ def assess_l5_index_quality(
         "lengths_consistent": lengths_equal,
         "embedding_dim_consistent": len(unique_dims) <= 1,
         "embedding_dim": unique_dims[0] if len(unique_dims) == 1 else None,
+        "embedding_model": index_metadata.get("embedding_model"),
+        "embedding_batch_size": index_metadata.get("embedding_batch_size"),
+        "index_config_hash": index_metadata.get("index_config_hash"),
         "short_content_rate": (
             sum(1 for c in contents if isinstance(c, str) and len(c.strip()) < 20) / len(contents)
         )

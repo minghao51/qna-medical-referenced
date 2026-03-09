@@ -65,6 +65,7 @@ export interface EvaluationSummary {
 	rag_metrics: RagMetrics;
 	failed_thresholds_count: number;
 	status: 'ok' | 'failed';
+	tracking?: Record<string, any>;
 }
 
 export interface RetrievalMetrics {
@@ -145,4 +146,45 @@ export interface EvaluationResponse {
 	step_metrics?: Record<string, StepMetrics>;
 	retrieval_metrics?: RetrievalMetrics;
 	manifest?: Record<string, any>;
+	source?: string;
+	tracking?: Record<string, any>;
+	wandb_run_id?: string;
+	wandb_url?: string;
+}
+
+export interface EvaluationHistoryRun {
+	run_dir: string;
+	timestamp: string;
+	status?: string;
+	duration_s?: number;
+	failed_thresholds_count?: number;
+	retrieval_metrics?: Partial<RetrievalMetrics>;
+	source: 'local' | 'wandb' | string;
+	experiment_name?: string;
+	variant_name?: string;
+	index_config_hash?: string;
+	wandb_url?: string;
+	wandb_run_id?: string;
+	tracking?: Record<string, any>;
+}
+
+export interface EvaluationHistoryResponse {
+	runs: EvaluationHistoryRun[];
+	summary: {
+		total_runs: number;
+		avg_hit_rate: number;
+		avg_mrr: number;
+		avg_latency_p50: number;
+		avg_duration: number;
+		sources?: Record<string, number>;
+	};
+	sources?: {
+		mode: string;
+		wandb?: {
+			status?: string;
+			project?: string | null;
+			entity?: string | null;
+		};
+	};
+	warnings?: string[];
 }
