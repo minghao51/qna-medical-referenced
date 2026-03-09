@@ -1,5 +1,9 @@
 # Pipeline Quality Assessment Framework (L0-L6 + RAG)
 
+**Status:** ✅ Implemented - See `src/evals/` for implementation
+
+> This design document has been implemented. The evaluation system is now available via `src/cli/eval_pipeline.py` and provides comprehensive quality assessment across all pipeline stages.
+
 ## Summary
 
 - The real pipeline orchestration is `src/ingestion/pipeline.py`.
