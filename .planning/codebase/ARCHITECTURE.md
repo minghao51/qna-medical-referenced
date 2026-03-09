@@ -1,173 +1,153 @@
-# ARCHITECTURE.md - Patterns, Layers, Data Flow
+# Architecture
 
-## Architecture Overview
+## Design Principles
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Frontend (SvelteKit)                 │
-│                     http://localhost:5173                   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP/JSON
-┌──────────────────────────▼──────────────────────────────────┐
-│                    Backend (FastAPI)                         │
-│                     http://localhost:8000                    │
-├─────────────────────────────────────────────────────────────┤
-│  Middleware: RequestID → RateLimit → APIKey                 │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
-│  │   /chat      │  │  /history    │  │  /health         │   │
-│  │   POST       │  │  GET/DELETE  │  │  GET             │   │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────────┘   │
-│         │                 │                                  │
-│  ┌──────▼─────────────────▼───────┐                         │
-│  │     Use Case (chat.py)         │                         │
-│  │  ┌─────────────────────────┐   │                         │
-│  │  │ RAG Runtime             │   │                         │
-│  │  │ - retrieve_context()    │   │                         │
-│  │  │ - Vector Store          │   │                         │
-│  │  │ - Semantic Search       │   │                         │
-│  │  │ - Keyword Index         │   │                         │
-│  │  └───────────┬─────────────┘   │                         │
-│  └──────────────┼─────────────────┘                         │
-│                 │                                            │
-│  ┌──────────────▼─────────────────┐                         │
-│  │     LLM Client (Qwen)          │                         │
-│  └───────────────────────────────┘                         │
-└─────────────────────────────────────────────────────────────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-        ▼                  ▼                  ▼
-┌───────────────┐  ┌───────────────┐  ┌───────────────┐
-│  Qwen API     │  │ Vector Store  │  │ Chat History  │
-│  (Dashscope)  │  │ (JSON files)  │  │ (JSON file)   │
-└───────────────┘  └───────────────┘  └───────────────┘
-```
+### Layered Architecture
+Clear separation of concerns across layers:
+1. **HTTP Layer** (`src/app/`) - FastAPI routes and endpoints
+2. **Business Logic** (`src/usecases/`) - Use case orchestration
+3. **Domain** (`src/models.py`) - Core domain models
+4. **Infrastructure** (`src/infra/`) - External integrations
 
-## Design Patterns
+### Hexagonal Architecture
+- Core domain logic surrounded by adapters
+- Infrastructure isolated from business rules
+- Testable components with clear boundaries
 
-### 1. Separation of Concerns
-The codebase is organized into clear layers with distinct responsibilities:
+### Pipeline Pattern
+Separate flows for runtime and offline processing:
+- **Runtime**: Chat requests → RAG pipeline → LLM → Response
+- **Offline**: Download → Process → Chunk → Embed → Index → Store
 
-- **HTTP Layer** (`src/app/`): FastAPI routes, middleware, request/response schemas
-- **Business Logic** (`src/usecases/`): Orchestration of workflows
-- **Runtime Retrieval** (`src/rag/`): Query-time context retrieval
-- **Offline Pipeline** (`src/ingestion/`): Data processing and indexing
-- **Infrastructure** (`src/infra/`): External service adapters (LLM, storage)
-- **Configuration** (`src/config/`): Settings and paths
+## Core Components
 
-### 2. Hybrid Search
-Vector store combines multiple retrieval strategies:
-- **Semantic Search** (60%): Qwen embeddings + cosine similarity
-- **Keyword Search** (20%): TF-IDF with NLTK stemming
-- **Source Boost** (20%): PDF sources boosted over CSV
+### RAG Pipeline
+- **Location**: `src/rag/`
+- **Components**:
+  - Runtime retrieval and context generation
+  - Hybrid search (semantic + keyword)
+  - MMR reranking for result diversity
+  - Configurable retrieval parameters
 
-### 3. Repository Pattern
-- `chat_history_store.py` provides abstraction for chat persistence
-- `vector_store.py` provides abstraction for vector operations
-- Clear separation between interface and implementation
+### Ingestion Pipeline
+- **Location**: `src/ingestion/`
+- **Components**:
+  - Steps: download, convert, chunk, embed, index
+  - Indexing: vector store management
+  - Persistence: document and embedding storage
 
-### 4. Middleware Chain
-FastAPI middleware applied in order:
-1. RequestIDMiddleware - adds request ID for tracing
-2. RateLimitMiddleware - enforces rate limits
-3. APIKeyMiddleware - validates API keys
-
-### 5. Factory Pattern
-- `factory.py` creates FastAPI app with proper lifespan management
-- Centralizes app initialization and startup/shutdown hooks
-
-## Layer Responsibilities
-
-| Layer | Location | Responsibility |
-|-------|----------|----------------|
-| API Routes | `src/app/routes/` | HTTP endpoints, request/response handling |
-| Middleware | `src/app/middleware/` | Auth, rate limiting, request ID |
-| Schemas | `src/app/schemas/` | Pydantic models for validation |
-| Use Cases | `src/usecases/` | Business logic orchestration |
-| RAG Runtime | `src/rag/` | Query-time context retrieval |
-| Ingestion Pipeline | `src/ingestion/` | Offline data processing and indexing |
-| LLM Client | `src/infra/llm/qwen_client.py` | Qwen/Dashscope API integration |
-| Storage | `src/infra/storage/` | Chat history persistence |
-| Config | `src/config/settings.py` | Environment configuration |
-| Paths | `src/config/paths.py` | Filesystem path configuration |
+### Evaluation System
+- **Location**: `src/evals/`
+- **Components**:
+  - Pipeline assessment framework
+  - Metric calculation (hit rate, NDCG, precision, recall)
+  - Artifact management
+  - Step-by-step validation
 
 ## Data Flow
 
-### Chat Request Flow
-1. Request arrives at `/chat` endpoint (`src/app/routes/chat.py`)
-2. Middleware validates API key and rate limit
-3. Use case orchestrates the flow (`src/usecases/chat.py`)
-4. Session history loaded from JSON file
-5. Query sent to RAG runtime (`src/rag/runtime.py`)
-6. Vector store performs hybrid search (semantic + keyword)
-7. Top-K documents retrieved as context
-8. Qwen LLM generates response with context
-9. Response + sources saved to chat history
-10. Response returned to client with optional pipeline trace
+### Runtime Request Flow
+```
+HTTP Request
+    ↓
+FastAPI Route (src/app/routes/)
+    ↓
+Use Case (src/usecases/)
+    ↓
+RAG Runtime (src/rag/runtime.py)
+    ↓
+Vector Store (src/ingestion/indexing/vector_store.py)
+    ↓
+LLM Client (src/infra/llm/)
+    ↓
+Response Formatting (src/rag/formatting.py)
+    ↓
+HTTP Response
+```
 
 ### Offline Ingestion Flow
-1. Pipeline runner invoked (`src/cli/ingest.py`)
-2. Download web content (optional) (`src/ingestion/steps/download_web.py`)
-3. Convert HTML to Markdown (`src/ingestion/steps/convert_html.py`)
-4. Load PDF documents (`src/ingestion/steps/load_pdfs.py`)
-5. Chunk documents with overlap (`src/ingestion/steps/chunk_text.py`)
-6. Load CSV reference ranges (`src/ingestion/steps/load_reference_data.py`)
-7. Generate embeddings and build index (`src/ingestion/indexing/vector_store.py`)
-8. Persist vector store to disk (`src/ingestion/indexing/persistence.py`)
-9. Runtime index availability confirmed (`src/rag/runtime.py`)
+```
+Source URLs/Files
+    ↓
+Download (src/ingestion/steps/download_web.py)
+    ↓
+Convert (src/ingestion/steps/convert_html.py, load_pdfs.py, load_markdown.py)
+    ↓
+Chunk (src/ingestion/steps/chunk_text.py)
+    ↓
+Embed (src/ingestion/indexing/embedding.py)
+    ↓
+Index (src/ingestion/indexing/vector_store.py)
+    ↓
+Persist (src/ingestion/indexing/persistence.py)
+```
 
-## Module Communication
+## Key Abstractions
 
-### Synchronous vs Asynchronous
-- **Synchronous**: LLM calls, vector store operations, file I/O
-- **Async**: HTTP request handling (FastAPI async routes)
+### Document Model
+- Content, metadata, and embeddings
+- Source tracking and provenance
+- Chunked representation for retrieval
 
-### Error Handling
-- Errors propagate through use case layer
-- HTTP responses use appropriate status codes
-- Detailed error messages in development mode
+### Retrieval Configuration
+- Top-k result control
+- Diversity parameters
+- Hybrid search weights
+- MMR reranking settings
+
+### Pipeline Trace
+- Observability for debugging
+- Step-by-step execution tracking
+- Performance metrics
+
+## Entry Points
+
+### Backend Services
+- **HTTP Server**: `src/cli/serve.py` - FastAPI on port 8000
+- **Ingestion CLI**: `src/cli/ingest.py` - Data pipeline runner
+- **Evaluation CLI**: `src/cli/eval_pipeline.py` - Quality assessment
+
+### Frontend
+- **Main Interface**: `frontend/src/routes/+page.svelte` - Port 5173
+- **Build**: SvelteKit with Vite
 
 ## Configuration Management
 
-### Settings (`src/config/settings.py`)
-- Uses Pydantic BaseSettings for type-safe configuration
-- Environment variables loaded with proper defaults
-- Validation at startup
+### Centralized Settings
+- **Location**: `src/config/settings.py`
+- **Framework**: Pydantic BaseSettings
+- **Features**:
+  - Environment variable loading
+  - Type-safe configuration
+  - Default values for development
 
-### Paths (`src/config/paths.py`)
-- Centralizes filesystem path configuration
-- OS-agnostic path handling
-- Data directory organization
+### Path Management
+- **Location**: `src/config/paths.py`
+- **Purpose**: Centralized path resolution
+- **Components**:
+  - Data directories
+  - Model paths
+  - Cache locations
 
-## Testing Strategy
+## Factory Pattern
 
-### Backend Tests
-- Unit tests for individual components
-- Integration tests for API endpoints
-- Evaluation tests for quality assessment
+### Application Factory
+- **Location**: `src/app/factory.py`
+- **Purpose**: Create and configure FastAPI app
+- **Responsibilities**:
+  - Route registration
+  - Middleware setup
+  - CORS configuration
+  - Dependency injection
 
-### Frontend Tests
-- Playwright E2E tests for user flows
-- Component testing for Svelte components
+## Deployment Architecture
 
-## Security Considerations
+### Containerization
+- Docker Compose multi-service setup
+- Separate containers for backend and frontend
+- Shared volume for data persistence
 
-1. **API Key Authentication**: Optional API key validation via middleware
-2. **Rate Limiting**: Per-IP rate limiting to prevent abuse
-3. **Request Tracing**: Request ID middleware for debugging
-4. **Environment Variables**: Sensitive data in `.env` file (not committed)
-
-## Performance Optimizations
-
-1. **Hybrid Search**: Combines semantic and keyword search for better relevance
-2. **Lazy Loading**: Vector index loaded only at startup
-3. **Caching**: Chat history cached in memory
-4. **Chunk Overlap**: 150-character overlap for better context retrieval
-
-## Scalability Considerations
-
-1. **Stateless API**: Each request is independent
-2. **File-based Storage**: Easy to migrate to database if needed
-3. **Modular Design**: Easy to replace components (LLM provider, vector store)
-4. **Docker Support**: Containerized deployment with docker-compose
+### Scalability Considerations
+- Stateless HTTP layer
+- File-based storage (single-instance limitation)
+- No connection pooling (potential bottleneck)

@@ -4,6 +4,7 @@ This folder is organized into stable reference docs and dated reports.
 
 ## Start Here
 
+- `quickstart.md` - fastest path to run the backend, ingestion pipeline, and frontend locally
 - `architecture/overview.md` - current backend package map and responsibilities
 - `architecture/rag-system.md` - runtime retrieval flow and offline ingestion flow
 - `testing/backend-tests.md` - backend test inventory and test commands

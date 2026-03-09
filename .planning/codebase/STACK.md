@@ -1,64 +1,58 @@
-# STACK.md - Languages, Runtime, Frameworks, Dependencies
+# Tech Stack
 
-## Backend
+## Backend (Python)
 
-### Language & Runtime
-- **Python**: 3.13+
-- **Runtime**: Uvicorn (ASGI server)
+### Runtime & Framework
+- **Python Version**: 3.13
+- **Web Framework**: FastAPI
+- **Package Manager**: uv
 
-### Core Dependencies
-| Package | Version | Purpose |
-|---------|---------|---------|
-| fastapi | >=0.129.0 | Web framework |
-| openai | >=1.0.0 | OpenAI-compatible client (for Qwen/Dashscope) |
-| pypdf | >=6.7.0 | PDF parsing |
-| nltk | >=3.9.2 | Text processing (stemming, stopwords) |
-| httpx | >=0.28.1 | Async HTTP client |
-| beautifulsoup4 | >=4.13.0 | HTML parsing |
-| markdownify | >=0.14.0 | HTML to Markdown |
-| pydantic-settings | >=2.6.0 | Configuration management |
-| uvicorn | >=0.40.0 | ASGI server |
+### LLM Providers
+- **Primary**: Alibaba Dashscope (Qwen models)
+  - qwen3.5-flash
+  - qwen3.5-plus
+  - qwen3.5-max
+- **Backup/Alternative**: Google Gemini API
 
-### Dev Dependencies
-- **pytest**: >=8.0.0 - Testing framework
-- **ruff**: >=0.8.0 - Linting
-- **playwright**: >=1.58.0 - E2E testing
+### Data & Storage
+- **Vector Database**: Custom file-based vector store (SQLite-based)
+- **Document Processing**:
+  - pypdf - PDF parsing
+  - pdfplumber - Advanced PDF extraction
+  - beautifulsoup4 - HTML parsing
+  - trafilatura - Web content extraction
 
-## Frontend
+### Testing & Quality
+- **Testing Framework**: pytest
+- **E2E Testing**: Playwright
+- **Linting/Formatting**: ruff
+  - Line length: 100 characters
+  - Rules: E, F, I, N, W
 
-### Language & Framework
-- **TypeScript**: ^5.9.3
-- **Svelte**: ^5.49.2 (SvelteKit)
-- **Vite**: ^7.3.1 (Build tool)
+### Monitoring & Observability
+- **Experiment Tracking**: Weights & Biases (wandb)
+- **Pipeline Tracing**: Custom trace models for debugging
 
-### Frontend Dependencies
-| Package | Version | Purpose |
-|---------|---------|---------|
-| @sveltejs/kit | ^2.50.2 | Svelte meta-framework |
-| svelte | ^5.49.2 | UI framework |
-| @playwright/test | ^1.58.2 | E2E testing |
-| typescript | ^5.9.3 | Type safety |
+## Frontend (TypeScript/JavaScript)
 
-## Infrastructure
+### Framework & Tooling
+- **Framework**: SvelteKit 2.50.2
+- **Build Tool**: Vite 7.3.1
+- **Language**: TypeScript (strict mode enabled)
+- **Adapter**: Node.js adapter
 
-### Container Orchestration
-- **Docker Compose**: Multi-service deployment (backend, frontend, test)
+### Visualization & UI
+- **Charting**: Chart.js 4.5.1
+- **E2E Testing**: Playwright 1.58.2
 
-### External Services
-- **Alibaba Dashscope API**: LLM generation and embeddings (Qwen models)
-  - Model: `qwen3.5-flash` (generation)
-  - Embedding: `text-embedding-v4`
+## Containerization
 
-### Data Storage
-- **Vector Store**: JSON file-based (`data/vectors/`)
-- **Chat History**: JSON file (`data/chat_history.json`)
-- **Rate Limiting**: SQLite (`data/rate_limits.db`)
+### Orchestration
+- **Docker Compose**: Multi-service architecture
+  - Backend service (FastAPI)
+  - Frontend service (SvelteKit)
+  - Test service
 
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| DASHSCOPE_API_KEY | Alibaba Dashscope API key | Yes |
-| API_KEYS | Comma-separated API keys for auth | No |
-| MODEL_NAME | LLM model name | No (default: qwen3.5-flash) |
-| EMBEDDING_MODEL | Embedding model | No (default: text-embedding-v4) |
+### Deployment
+- Production-ready containerization
+- Environment-specific configurations

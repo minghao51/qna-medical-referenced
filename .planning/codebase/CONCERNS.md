@@ -1,134 +1,224 @@
-# CONCERNS.md - Tech Debt, Bugs, Security
+# Code Concerns
 
-## Tech Debt
+## High Priority Issues
 
-### High Priority
+### Large Complex Files
 
-1. **Missing Type Hints**
-   - Location: Several ingestion and RAG files
-   - Issue: Some functions lack complete type annotations
-   - Fix: Add full type hints
+#### Files Requiring Refactoring
 
-2. **No Database for Chat History**
-   - Location: `src/infra/storage/chat_history_store.py`
-   - Issue: JSON file not suitable for production with concurrent writes
-   - Fix: Consider SQLite or PostgreSQL for chat history
+**1. src/evals/pipeline_assessment.py (3,748 lines)**
+- **Issue**: Extremely large file, difficult to maintain
+- **Impact**: Hard to navigate, test, and debug
+- **Recommendation**: Split into multiple modules by functionality
+  - Assessment orchestration
+  - Metric calculation
+  - Artifact management
+  - Reporting
 
-3. **Hardcoded Weights**
-   - Location: `src/ingestion/indexing/vector_store.py`
-   - Issue: Semantic (0.6), keyword (0.2), boost (0.2) hardcoded
-   - Fix: Move to configuration
+**2. src/evals/step_checks.py (1,355 lines)**
+- **Issue**: Large validation file
+- **Impact**: Complex to understand and modify
+- **Recommendation**: Split by step type or domain
 
-### Medium Priority
+**3. src/ingestion/steps/chunk_text.py (1,334 lines)**
+- **Issue**: Large chunking implementation
+- **Impact**: Difficult to test edge cases
+- **Recommendation**: Extract strategies into separate modules
 
-4. **In-Memory Vector Store Singleton**
-   - Location: `src/rag/runtime.py`
-   - Issue: Global singleton may cause memory issues with large datasets
-   - Fix: Implement LRU cache or chunked loading
+### Circular Dependencies
 
-5. **No Cache for Qwen API**
-   - Location: `src/infra/llm/qwen_client.py`
-   - Issue: Repeated queries re-hit API
-   - Fix: Add response caching layer
+#### Import Cycles
+- **Location**: `src/models.py` ↔ `src.rag.trace_models`
+- **Impact**: Potential initialization issues
+- **Recommendation**: Refactor to eliminate circular imports
+  - Move shared models to separate module
+  - Use dependency injection
 
-6. **Error Messages Expose Details**
-   - Location: `src/app/routes/chat.py`
-   - Issue: Logs internal errors but generic message to client
-   - Note: Current behavior is secure but could improve logging
+#### Complex Dependency Chains
+- **Location**: `src/evals/pipeline_assessment.py`
+- **Issue**: Imports from many submodules
+- **Impact**: Tight coupling, difficult to test
+- **Recommendation**: Use dependency inversion principle
 
-7. **No Input Sanitization Beyond Basic**
-   - Location: `src/app/schemas/chat.py`
-   - Issue: Only strips whitespace
-   - Fix: Add more robust input validation
+## Security Concerns
 
-## Known Bugs
+### API Key Management
 
-### Open Issues
+#### Current Implementation
+```python
+# Comma-separated string in memory
+api_keys = settings.dashscope_api_key.split(",")
+```
 
-1. **LSP Type Errors in Vector Store**
-   - Severity: Low
-   - Location: `src/ingestion/indexing/vector_store.py`
-   - Description: Type checking warnings in some edge cases
-   - Impact: Type checking warnings, no runtime impact
+#### Issues
+- Keys stored as comma-separated string
+- No rotation mechanism
+- No audit trail
 
-2. **Duplicate Embedding on Restart**
-   - Severity: Medium
-   - Location: `src/ingestion/indexing/vector_store.py`
-   - Description: Re-adding documents on each server restart if not properly deduplicated
-   - Impact: Index grows with duplicates
-   - Mitigation: Use unique document IDs
+#### Recommendations
+- Implement key rotation
+- Add audit logging
+- Use secure vault for production
+- Implement rate limiting
 
-3. **Rate Limiter Race Condition**
-   - Severity: Low
-   - Location: `src/app/middleware/rate_limit.py`
-   - Description: SQLite + asyncio.Lock may have edge cases
-   - Impact: Potential rate limit bypass under high concurrency
+### Missing Security Features
 
-## Security
+#### Rate Limiting
+- **Status**: Not implemented
+- **Risk**: API abuse, cost overrun
+- **Recommendation**: Add rate limiting middleware
 
-### Current Security Measures
+#### Input Validation
+- **Status**: Partial (Pydantic schemas)
+- **Gaps**: May need additional sanitization
+- **Recommendation**: Security audit of endpoints
 
-1. **API Key Authentication**
-   - Middleware validates `X-API-Key` header
-   - Configurable via `API_KEYS` env var
-   - Bypassed for health endpoints
+#### Authentication
+- **Status**: No authentication on endpoints
+- **Risk**: Unauthorized access
+- **Recommendation**: Add authentication if deploying publicly
 
-2. **Rate Limiting**
-   - Per-API-key or per-IP limit: 60 req/min
-   - SQLite-backed tracking
+## Performance Issues
 
-3. **Input Validation**
-   - Pydantic models for request validation
-   - Max message length: 2000 chars
+### Memory Usage
 
-4. **No PII in Logs**
-   - Error messages sanitized
-   - No stack traces exposed
+#### Large File Impact
+- **Files**: 3,000+ line files
+- **Issue**: High memory footprint
+- **Recommendation**: Module splitting reduces memory
 
-### Potential Security Improvements
+### Caching
 
-1. **HTTPS Only**
-   - Not enforced in development
-   - Add in production deployment
+#### Current State
+- No caching layer for frequent operations
+- Repeated computations
+- **Recommendation**:
+  - Cache embeddings
+  - Cache frequent queries
+  - Use LRU for hot data
 
-2. **API Key Rotation**
-   - Not implemented
-   - Add key rotation mechanism
+### Database Operations
 
-3. **Request Size Limits**
-   - Max 2000 chars enforced
-   - Consider adding file upload limits
+#### Current Issues
+- Synchronous operations may block requests
+- No connection pooling
+- **Recommendation**:
+  - Implement async database operations
+  - Add connection pooling
+  - Consider moving to PostgreSQL with pgvector
 
-## Performance Concerns
+### Scalability Limitations
 
-1. **Large Embedding Files**
-   - Vector store is JSON-based
-   - Loads entire index into memory
-   - Consider chunked loading for scale
+#### File-Based Storage
+- **Current**: SQLite-based vector store
+- **Limitation**: Single-instance only
+- **Bottleneck**: No horizontal scaling
+- **Recommendation**: Consider dedicated vector database for production
 
-2. **No Connection Pooling**
-   - Qwen API client created per-request
-   - Consider singleton client
+## Code Quality Issues
 
-3. **Synchronous PDF Loading**
-   - PDF loader is synchronous
-   - Blocks event loop on large PDFs
-   - Consider async implementation
+### Inconsistent Error Handling
 
-## Resolved Issues
+#### Patterns Observed
+- Some functions raise exceptions
+- Others return error values
+- **Recommendation**: Standardize on exception-based error handling
 
-The following issues have been resolved by architectural changes:
+### Missing Type Annotations
 
-1. ~~**Duplicate Vector Store Code**~~ - RESOLVED
-   - Old: `src/pipeline/L5_vector_store.py`, `src/vectorstore/store.py`
-   - New: Single implementation in `src/ingestion/indexing/vector_store.py`
-   - Runtime access via `src/rag/runtime.py`
+#### Locations
+- Some functions lack complete type hints
+- **Impact**: Reduced IDE support, potential runtime errors
+- **Recommendation**: Enforce strict type checking with mypy or similar
 
-2. ~~**Legacy Pipeline Modules**~~ - RESOLVED
-   - Old: `src/pipeline/` with L0-L6 modules
-   - New: `src/ingestion/` and `src/rag/` with clear separation
-   - Offline ingestion and runtime retrieval properly separated
+### Logging Gaps
 
-3. ~~**Scattered Middleware**~~ - RESOLVED
-   - Old: `src/middleware/`
-   - New: `src/app/middleware/` with proper HTTP layer organization
+#### Issues
+- Inconsistent logging levels
+- Missing context in some error messages
+- **Recommendation**:
+  - Implement structured logging
+  - Add request IDs for tracing
+  - Standardize log formats
+
+## Testing Gaps
+
+### Missing Integration Tests
+
+#### Areas Needing Coverage
+- End-to-end workflow tests
+- Multi-component interactions
+- **Recommendation**: Add comprehensive integration tests
+
+### No Load Testing
+
+#### Gap
+- No performance testing under load
+- **Risk**: Performance degradation in production
+- **Recommendation**:
+  - Add load testing framework
+  - Test with realistic query volumes
+  - Benchmark before releases
+
+### Limited Edge Case Coverage
+
+#### Areas to Improve
+- Empty result handling
+- Malformed input handling
+- API failure scenarios
+- **Recommendation**: Add comprehensive edge case tests
+
+## Documentation Concerns
+
+### Missing Documentation
+
+#### Areas Needing Docs
+- API documentation (OpenAPI/Swagger)
+- Architecture decision records
+- Deployment guides
+- **Recommendation**: Create comprehensive documentation
+
+### Out-of-Date Comments
+
+#### Issue
+- Some comments may not match current code
+- **Recommendation**: Audit and update comments
+
+## Technical Debt Summary
+
+### Immediate Actions (High Priority)
+1. Split `pipeline_assessment.py` into smaller modules
+2. Resolve circular dependencies
+3. Implement rate limiting
+4. Add authentication for production deployment
+
+### Short-Term Actions (Medium Priority)
+1. Refactor large files (>500 lines)
+2. Implement caching layer
+3. Add structured logging
+4. Improve error handling consistency
+
+### Long-Term Actions (Lower Priority)
+1. Consider PostgreSQL with pgvector for vector storage
+2. Implement comprehensive integration tests
+3. Add load testing framework
+4. Create detailed API documentation
+
+## Positive Findings
+
+### Security Strengths
+- ✓ No hardcoded secrets in source code
+- ✓ API keys properly managed via environment variables
+- ✓ Input validation with Pydantic
+
+### Code Quality Strengths
+- ✓ Clear architectural patterns
+- ✓ Comprehensive docstrings
+- ✓ Type hints used consistently
+- ✓ Good test coverage for critical paths
+
+### Architecture Strengths
+- ✓ Clean separation of concerns
+- ✓ Modular design
+- ✓ Containerized deployment
+- ✓ Pipeline tracing for debugging

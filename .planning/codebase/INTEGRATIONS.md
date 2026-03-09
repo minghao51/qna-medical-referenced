@@ -1,70 +1,65 @@
-# INTEGRATIONS.md - External APIs, Databases, Auth
+# External Integrations
 
-## External APIs
+## LLM APIs
 
-### Alibaba Dashscope API (Qwen)
-- **Purpose**: LLM text generation and embeddings
-- **Configuration**: `src/config/settings.py`
-- **Models Used**:
-  - Generation: `qwen3.5-flash`
-  - Embeddings: `text-embedding-v4`
-- **Implementation**: `src/infra/llm/qwen_client.py`
+### Alibaba Dashscope (Primary)
+- **Purpose**: Main LLM provider for chat and embeddings
+- **Models**:
+  - qwen3.5-flash - Fast responses
+  - qwen3.5-plus - Balanced performance
+  - qwen3.5-max - Highest quality
+  - text-embedding-v4 - Embeddings
+- **Configuration**: Environment variable `DASHSCOPE_API_KEY`
+- **Error Handling**: Retry logic with exponential backoff
 
-### Web Content Sources (Download)
-The system downloads medical content from Singapore government health websites:
-- **ACE Clinical Guidelines** (ace-hta.gov.sg): 11 clinical guidelines
-- **HealthHub** (healthhub.sg): 5 public health pages
-- **HPP Guidelines** (hpp.moh.gov.sg): 1 guidelines index
-- **MOH Singapore** (moh.gov.sg): 1 main portal
-- **Implementation**: `src/ingestion/steps/download_web.py`
+### Google Gemini (Backup)
+- **Purpose**: Alternative LLM provider
+- **Configuration**: Available but not primary
+- **Usage**: Fallback option for redundancy
 
-## Databases & Storage
+## Experiment Tracking
 
-### Vector Store (JSON-based)
-- **Location**: `data/vectors/{collection_name}.json`
-- **Purpose**: Semantic search with hybrid (semantic + keyword) retrieval
-- **Implementation**: `src/ingestion/indexing/vector_store.py`
+### Weights & Biases (wandb)
+- **Purpose**: Track evaluation experiments and metrics
 - **Features**:
-  - TF-IDF keyword indexing
-  - Cosine similarity for semantic search
-  - Source boosting (PDF: 1.0, CSV: 0.5)
+  - Pipeline assessment logging
+  - Metric tracking (hit rate, NDCG, precision, recall)
+  - Artifact management
+- **Configuration**: Optional, enabled via environment
 
-### Chat History (JSON File)
-- **Location**: `data/chat_history.json`
-- **Purpose**: Session-based conversation history
-- **Implementation**: `src/infra/storage/chat_history_store.py`
+## Data Storage
 
-### Rate Limiting (SQLite)
-- **Location**: `data/rate_limits.db`
-- **Purpose**: Per-API-key/IP rate limiting
-- **Implementation**: `src/app/middleware/rate_limit.py`
-- **Default**: 60 requests/minute
+### File-Based Persistence
+- **Documents**: Local file system storage
+- **Vectors**: Custom SQLite-based vector store
+- **Chat History**: File-based persistence
+- **Location**: `data/` directory
 
-### Reference Data (CSV)
-- **Location**: `data/raw/LabQAR/reference_ranges.csv`
-- **Purpose**: Lab test reference ranges
-- **Columns**: test_name, normal_range, unit, category, notes
-- **Implementation**: `src/ingestion/steps/load_reference_data.py`
+## Internal Services
 
-## Authentication
+### Vector Store
+- **Implementation**: Custom (not ChromaDB)
+- **Capabilities**:
+  - Semantic search
+  - Keyword search
+  - Hybrid search
+  - MMR reranking for diversity
 
-### API Key Middleware
-- **Implementation**: `src/app/middleware/auth.py`
-- **Header**: `X-API-Key`
-- **Config**: `API_KEYS` environment variable (comma-separated)
-- **Paths bypassed**: `/`, `/health`, `/docs`, `/openapi.json`
+## Web Scraping (Offline)
+
+### Document Sources
+- **PDF Processing**: pypdf, pdfplumber
+- **HTML Parsing**: beautifulsoup4
+- **Content Extraction**: trafilatura
+- **Usage**: Ingestion pipeline for knowledge base
+
+## API Configuration
+
+### Authentication
+- API keys managed via environment variables
+- No hardcoded secrets in codebase
+- Comma-separated string format for multiple keys
 
 ### Rate Limiting
-- **Implementation**: `src/app/middleware/rate_limit.py`
-- **Default**: 60 requests/minute per key/IP
-- **Storage**: SQLite with in-memory caching
-
-## Data Flow
-
-```
-User Question → API (auth + rate limit) →
-  → RAG Runtime (retrieve context) →
-  → Qwen LLM (generate response) →
-  → Store in chat history →
-  → Return response + sources
-```
+- **Current**: No rate limiting implemented
+- **Note**: Potential concern for production use
