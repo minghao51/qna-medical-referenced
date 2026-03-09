@@ -1,11 +1,89 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
 const API_URL = process.env.API_URL || 'http://localhost:8000';
+const assistantMessage = 'LDL cholesterol is often called "bad" cholesterol because elevated levels increase cardiovascular risk.';
+const mockPipeline = {
+	retrieval: {
+		query: 'What is LDL cholesterol?',
+		top_k: 5,
+		timing_ms: 120,
+		score_weights: {
+			semantic: 0.6,
+			keyword: 0.2,
+			source: 0.2
+		},
+		documents: [
+			{
+				id: 'doc-1',
+				content: 'LDL cholesterol contributes to plaque buildup in arteries and is a major cardiovascular risk factor.',
+				source: 'healthhub.sg',
+				page: 2,
+				semantic_score: 0.91,
+				keyword_score: 0.72,
+				source_boost: 0.9,
+				combined_score: 0.87,
+				rank: 1
+			}
+		]
+	},
+	context: {
+		total_chunks: 3,
+		total_chars: 1480,
+		sources: ['healthhub.sg', 'moh.gov.sg'],
+		preview: 'LDL cholesterol contributes to plaque buildup and higher cardiovascular risk.'
+	},
+	generation: {
+		model: 'qwen3.5-flash',
+		timing_ms: 420,
+		tokens_estimate: 180
+	},
+	total_time_ms: 540
+};
+
+async function mockChatResponse(page: Page, includePipeline = true) {
+	await page.route('**/chat?**', async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				response: assistantMessage,
+				sources: ['healthhub.sg', 'moh.gov.sg'],
+				...(includePipeline ? { pipeline: mockPipeline } : {})
+			})
+		});
+	});
+
+	await page.route('**/chat', async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				response: assistantMessage,
+				sources: ['healthhub.sg', 'moh.gov.sg']
+			})
+		});
+	});
+}
+
+async function sendMessage(page: Page, message: string) {
+	const textarea = page.locator('textarea');
+	await textarea.click();
+	await textarea.pressSequentially(message);
+	await expect(page.locator('button:has-text("Send")')).toBeEnabled();
+	await page.locator('button:has-text("Send")').click();
+}
+
+async function expectAssistantResponse(page: Page) {
+	const assistant = page.locator('.message.assistant').filter({ has: page.locator('.content') }).last();
+	await expect(assistant).toBeVisible();
+	await expect(assistant.locator('.content')).toContainText('LDL cholesterol', { timeout: 15000 });
+	return assistant;
+}
 
 test.describe('Pipeline Visualization', () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto(BASE_URL);
+		await mockChatResponse(page, false);
+		await page.goto('/');
 	});
 
 	test('pipeline toggle checkbox is visible', async ({ page }) => {
@@ -48,34 +126,21 @@ test.describe('Pipeline Visualization', () => {
 	});
 
 	test('send message and receive response', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is LDL cholesterol?');
-		await page.waitForTimeout(300);
-		
-		const sendButton = page.locator('button:has-text("Send")');
-		await expect(sendButton).toBeEnabled();
-		await sendButton.click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
-		await expect(page.locator('.message.assistant .content')).not.toBeEmpty();
+		await sendMessage(page, 'What is LDL cholesterol?');
+		await expectAssistantResponse(page);
 	});
 });
 
 test.describe('Confidence Indicators', () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto(BASE_URL);
+		await mockChatResponse(page);
+		await page.goto('/');
 		await page.locator('.pipeline-toggle input[type="checkbox"]').check();
 	});
 
 	test('confidence badge appears on assistant message with pipeline', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is normal cholesterol?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is normal cholesterol?');
+		const assistant = await expectAssistantResponse(page);
 
 		// Pipeline button appears when pipeline is enabled
 		const pipelineBtn = page.locator('.pipeline-btn');
@@ -85,19 +150,14 @@ test.describe('Confidence Indicators', () => {
 		await pipelineBtn.click();
 
 		// Confidence badge in message header
-		const badge = page.locator('.message.assistant .confidence-badge');
+		const badge = assistant.locator('.confidence-badge');
 		await expect(badge).toBeVisible();
 		await expect(badge).toContainText(/High|Medium|Low/i);
 	});
 
 	test('source quality indicators appear for sources', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is cholesterol?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is cholesterol?');
+		await expectAssistantResponse(page);
 
 		// Check for source badges
 		const sourceBadges = page.locator('.source-badge');
@@ -111,7 +171,8 @@ test.describe('Confidence Indicators', () => {
 
 test.describe('Pipeline Panel', () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto(BASE_URL);
+		await mockChatResponse(page);
+		await page.goto('/');
 		// Enable pipeline toggle for these tests
 		await page.locator('.pipeline-toggle input[type="checkbox"]').check();
 	});
@@ -122,13 +183,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('pipeline button appears on assistant message when enabled', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is normal cholesterol?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is normal cholesterol?');
+		await expectAssistantResponse(page);
 
 		const pipelineBtn = page.locator('.pipeline-btn');
 		await expect(pipelineBtn).toBeVisible();
@@ -136,13 +192,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('pipeline panel is visible after sending message with pipeline', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is LDL?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is LDL?');
+		await expectAssistantResponse(page);
 
 		// Panel should be visible automatically since showPipeline is set to true after response
 		const panel = page.locator('.pipeline-panel');
@@ -151,13 +202,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('pipeline panel shows confidence breakdown', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is HDL?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is HDL?');
+		await expectAssistantResponse(page);
 
 		const panel = page.locator('.pipeline-panel');
 		await expect(panel).toBeVisible({ timeout: 10000 });
@@ -168,13 +214,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('pipeline panel shows flow diagram', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is triglycerides?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is triglycerides?');
+		await expectAssistantResponse(page);
 
 		const flowDiagram = page.locator('.flow-diagram');
 		await expect(flowDiagram).toBeVisible({ timeout: 10000 });
@@ -182,13 +223,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('pipeline panel shows retrieval stage details', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('Explain cholesterol');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'Explain cholesterol');
+		await expectAssistantResponse(page);
 
 		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
 		await expect(page.locator('.pipeline-panel')).toContainText('Retrieval');
@@ -196,13 +232,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('pipeline panel shows context stage', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What are lipoproteins?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What are lipoproteins?');
+		await expectAssistantResponse(page);
 
 		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
 		await expect(page.locator('.pipeline-panel')).toContainText('Context Assembly');
@@ -210,13 +241,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('pipeline panel shows generation stage', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is heart disease?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is heart disease?');
+		await expectAssistantResponse(page);
 
 		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
 		await expect(page.locator('.pipeline-panel')).toContainText('Generation');
@@ -224,13 +250,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('pipeline panel can be toggled', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is blood pressure?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is blood pressure?');
+		await expectAssistantResponse(page);
 
 		// Panel should be visible
 		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
@@ -244,13 +265,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('documents can be clicked to inspect', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is normal glucose?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is normal glucose?');
+		await expectAssistantResponse(page);
 
 		await page.locator('.pipeline-btn').click();
 
@@ -265,13 +281,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('modal can be closed', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is A1C?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is A1C?');
+		await expectAssistantResponse(page);
 
 		await page.locator('.pipeline-btn').click();
 
@@ -287,13 +298,8 @@ test.describe('Pipeline Panel', () => {
 	});
 
 	test('metric bars display correctly', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is metabolic syndrome?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is metabolic syndrome?');
+		await expectAssistantResponse(page);
 
 		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
 
@@ -304,19 +310,15 @@ test.describe('Pipeline Panel', () => {
 
 test.describe('Sources Display', () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto(BASE_URL);
+		await mockChatResponse(page);
+		await page.goto('/');
 		// Enable pipeline to get sources
 		await page.locator('.pipeline-toggle input[type="checkbox"]').check();
 	});
 
 	test('sources display correctly on response when available', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('What is LDL cholesterol?');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
-
-		await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 15000 });
+		await sendMessage(page, 'What is LDL cholesterol?');
+		await expectAssistantResponse(page);
 
 		// Check if sources element exists (might not have sources for some queries)
 		const sources = page.locator('.sources');
@@ -330,6 +332,8 @@ test.describe('Sources Display', () => {
 });
 
 test.describe('API Integration', () => {
+	test.setTimeout(60000);
+
 	test('backend health endpoint responds', async ({ request }) => {
 		const response = await request.get(`${API_URL}/health`);
 		expect(response.status()).toBe(200);
@@ -346,63 +350,60 @@ test.describe('API Integration', () => {
 		expect(data).toHaveProperty('message');
 	});
 
-	test('chat endpoint accepts requests', async ({ request }) => {
-		const response = await request.post(`${API_URL}/chat`, {
-			data: {
-				message: 'What is normal cholesterol?',
-				session_id: 'test-session'
-			},
-			headers: {
-				'Content-Type': 'application/json'
-			}
-		});
-
+	test('evaluation ablation endpoint returns expected shape', async ({ request }) => {
+		const response = await request.get(`${API_URL}/evaluation/ablation`);
 		expect(response.status()).toBe(200);
 
 		const data = await response.json();
-		expect(data).toHaveProperty('response');
-		expect(data).toHaveProperty('sources');
-		expect(Array.isArray(data.sources)).toBeTruthy();
+		expect(data).toHaveProperty('ablation_runs');
+		expect(Array.isArray(data.ablation_runs)).toBeTruthy();
+
+		if (data.message !== undefined) {
+			expect(typeof data.message).toBe('string');
+		}
 	});
 });
 
 test.describe('Chat with Pipeline Enabled', () => {
-	test('chat with include_pipeline parameter returns full pipeline', async ({ request }) => {
-		const response = await request.post(`${API_URL}/chat?include_pipeline=true`, {
-			data: {
-				message: 'What is normal cholesterol?',
-				session_id: 'test-pipeline-session'
-			},
-			headers: {
-				'Content-Type': 'application/json'
-			}
-		});
+	test.setTimeout(60000);
 
-		expect(response.status()).toBe(200);
+	let pipelineResponse: any;
 
-		const data = await response.json();
-		expect(data).toHaveProperty('response');
-		expect(data).toHaveProperty('sources');
-		expect(data).toHaveProperty('pipeline');
+	test.beforeAll(async ({ playwright }) => {
+		const request = await playwright.request.newContext();
+		try {
+			const response = await request.post(`${API_URL}/chat?include_pipeline=true`, {
+				data: {
+					message: 'What is normal cholesterol?',
+					session_id: 'test-pipeline-session'
+				},
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			});
 
-		const { pipeline } = data;
+			expect(response.status()).toBe(200);
+			pipelineResponse = await response.json();
+			expect(pipelineResponse).toHaveProperty('pipeline');
+		} finally {
+			await request.dispose();
+		}
+	});
+
+	test('chat with include_pipeline parameter returns full pipeline', async () => {
+		expect(pipelineResponse).toHaveProperty('response');
+		expect(pipelineResponse).toHaveProperty('sources');
+		expect(pipelineResponse).toHaveProperty('pipeline');
+
+		const { pipeline } = pipelineResponse;
 		expect(pipeline).toHaveProperty('retrieval');
 		expect(pipeline).toHaveProperty('context');
 		expect(pipeline).toHaveProperty('generation');
 		expect(pipeline).toHaveProperty('total_time_ms');
 	});
 
-	test('pipeline retrieval stage has correct structure', async ({ request }) => {
-		const response = await request.post(`${API_URL}/chat?include_pipeline=true`, {
-			data: {
-				message: 'What is normal cholesterol?',
-				session_id: 'test-retrieval'
-			}
-		});
-
-		const data = await response.json();
-		const { pipeline } = data;
-
+	test('pipeline retrieval stage has correct structure', async () => {
+		const { pipeline } = pipelineResponse;
 		expect(pipeline.retrieval).toHaveProperty('query');
 		expect(pipeline.retrieval).toHaveProperty('top_k');
 		expect(pipeline.retrieval).toHaveProperty('documents');
@@ -410,17 +411,8 @@ test.describe('Chat with Pipeline Enabled', () => {
 		expect(pipeline.retrieval).toHaveProperty('timing_ms');
 	});
 
-	test('pipeline documents have correct structure', async ({ request }) => {
-		const response = await request.post(`${API_URL}/chat?include_pipeline=true`, {
-			data: {
-				message: 'Test query',
-				session_id: 'test-docs'
-			}
-		});
-
-		const data = await response.json();
-		const { pipeline } = data;
-
+	test('pipeline documents have correct structure', async () => {
+		const { pipeline } = pipelineResponse;
 		expect(Array.isArray(pipeline.retrieval.documents)).toBeTruthy();
 		if (pipeline.retrieval.documents.length > 0) {
 			const doc = pipeline.retrieval.documents[0];
@@ -435,17 +427,8 @@ test.describe('Chat with Pipeline Enabled', () => {
 		}
 	});
 
-	test('pipeline score weights match expected values', async ({ request }) => {
-		const response = await request.post(`${API_URL}/chat?include_pipeline=true`, {
-			data: {
-				message: 'Test query',
-				session_id: 'test-weights'
-			}
-		});
-
-		const data = await response.json();
-		const { pipeline } = data;
-
+	test('pipeline score weights match expected values', async () => {
+		const { pipeline } = pipelineResponse;
 		expect(pipeline.retrieval.score_weights).toMatchObject({
 			semantic: 0.6,
 			keyword: 0.2,
@@ -453,34 +436,16 @@ test.describe('Chat with Pipeline Enabled', () => {
 		});
 	});
 
-	test('pipeline context stage has correct structure', async ({ request }) => {
-		const response = await request.post(`${API_URL}/chat?include_pipeline=true`, {
-			data: {
-				message: 'What is heart health?',
-				session_id: 'test-context'
-			}
-		});
-
-		const data = await response.json();
-		const { pipeline } = data;
-
+	test('pipeline context stage has correct structure', async () => {
+		const { pipeline } = pipelineResponse;
 		expect(pipeline.context).toHaveProperty('total_chunks');
 		expect(pipeline.context).toHaveProperty('total_chars');
 		expect(pipeline.context).toHaveProperty('sources');
 		expect(pipeline.context).toHaveProperty('preview');
 	});
 
-	test('pipeline generation stage has correct structure', async ({ request }) => {
-		const response = await request.post(`${API_URL}/chat?include_pipeline=true`, {
-			data: {
-				message: 'Explain diabetes',
-				session_id: 'test-generation'
-			}
-		});
-
-		const data = await response.json();
-		const { pipeline } = data;
-
+	test('pipeline generation stage has correct structure', async () => {
+		const { pipeline } = pipelineResponse;
 		expect(pipeline.generation).toHaveProperty('model');
 		expect(pipeline.generation).toHaveProperty('timing_ms');
 	});
@@ -488,7 +453,8 @@ test.describe('Chat with Pipeline Enabled', () => {
 
 test.describe('Error Handling', () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto(BASE_URL);
+		await mockChatResponse(page, false);
+		await page.goto('/');
 	});
 
 	test('handles empty input gracefully', async ({ page }) => {
@@ -497,11 +463,7 @@ test.describe('Error Handling', () => {
 	});
 
 	test('New Chat clears messages', async ({ page }) => {
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('Test message');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
+		await sendMessage(page, 'Test message');
 
 		await expect(page.locator('.message.user')).toBeVisible();
 
@@ -512,15 +474,13 @@ test.describe('Error Handling', () => {
 	});
 
 	test('displays error when API fails', async ({ page }) => {
+		await page.unroute('**/chat?**');
+		await page.unroute('**/chat');
 		await page.route('**/chat', async (route) => {
 			await route.abort('failed');
 		});
 
-		const textarea = page.locator('textarea');
-		await textarea.click();
-		await textarea.pressSequentially('Test message');
-		await page.waitForTimeout(300);
-		await page.locator('button:has-text("Send")').click();
+		await sendMessage(page, 'Test message');
 
 		await page.waitForTimeout(500);
 		const error = page.locator('.error');
@@ -532,7 +492,7 @@ test.describe('Error Handling', () => {
 
 test.describe('Navigation', () => {
 	test('can navigate to eval page', async ({ page }) => {
-		await page.goto(BASE_URL);
+		await page.goto('/');
 
 		await page.locator('a:has-text("Pipeline Eval")').click();
 

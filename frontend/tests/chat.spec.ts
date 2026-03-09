@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
-
 test('chat page loads correctly', async ({ page }) => {
-  await page.goto(BASE_URL);
+  await page.goto('/');
   
   // Check page title
   await expect(page).toHaveTitle(/Health Screening Q&A/);
@@ -23,7 +21,7 @@ test('chat page loads correctly', async ({ page }) => {
 });
 
 test('can type in input field', async ({ page }) => {
-  await page.goto(BASE_URL);
+  await page.goto('/');
   
   const input = page.locator('textarea');
   await input.click();
@@ -34,7 +32,7 @@ test('can type in input field', async ({ page }) => {
 });
 
 test('send button is disabled when input is empty', async ({ page }) => {
-  await page.goto(BASE_URL);
+  await page.goto('/');
   
   const sendButton = page.locator('button:has-text("Send")');
   await expect(sendButton).toBeDisabled();

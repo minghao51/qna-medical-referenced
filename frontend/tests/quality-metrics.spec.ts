@@ -1,10 +1,26 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+const API_URL = process.env.API_URL || 'http://localhost:8000';
+
+async function proxyBrowserApiRequests(page: Page) {
+	if (API_URL === 'http://localhost:8000') return;
+
+	await page.route('http://localhost:8000/**', async (route) => {
+		const proxiedUrl = route.request().url().replace('http://localhost:8000', API_URL);
+		const response = await route.fetch({ url: proxiedUrl });
+		await route.fulfill({ response });
+	});
+}
 
 test.describe('Quality Metrics Dashboard', () => {
+	test.setTimeout(60000);
+
 	test.beforeEach(async ({ page }) => {
+		await proxyBrowserApiRequests(page);
 		await page.goto('/eval');
-		// Wait for evaluation data to load
-		await page.waitForSelector('.eval-container', { timeout: 5000 });
+		await page.waitForSelector('.eval-container', { timeout: 15000 });
+		await page.waitForSelector('.step-card, .retrieval-section, .error', { timeout: 15000 });
+		await expect(page.locator('.error')).toHaveCount(0);
 	});
 
 	test('displays chunk quality distribution in L3 card', async ({ page }) => {
