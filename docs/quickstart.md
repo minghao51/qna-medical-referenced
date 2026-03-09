@@ -99,6 +99,24 @@ cd frontend
 npm test
 ```
 
+## 8. Run evaluation (optional)
+
+The system includes a comprehensive evaluation framework for assessing pipeline quality:
+
+```bash
+# Run full pipeline evaluation
+uv run python -m src.cli.eval_pipeline
+
+# Run specific experiment variant
+uv run python -m src.cli.eval_pipeline --variant my-experiment
+
+# View evaluation results
+# Access http://localhost:8000/evaluation/latest (after starting backend)
+# Or visit the frontend evaluation dashboard at http://localhost:5173/eval
+```
+
+See `docs/architecture/overview.md` for evaluation system details.
+
 ## Troubleshooting
 
 - If chat responses fail immediately, re-check `.env` and confirm `DASHSCOPE_API_KEY` is set.
