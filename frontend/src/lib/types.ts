@@ -145,6 +145,14 @@ export interface EvaluationResponse {
 	summary?: EvaluationSummary;
 	step_metrics?: Record<string, StepMetrics>;
 	retrieval_metrics?: RetrievalMetrics;
+	failed_thresholds?: Array<{
+		metric?: string;
+		value?: number | string | boolean | null;
+		threshold_op?: 'min' | 'max' | string;
+		threshold_value?: number;
+		message?: string;
+		severity?: 'warning' | 'error' | string;
+	}>;
 	manifest?: Record<string, any>;
 	source?: string;
 	tracking?: Record<string, any>;

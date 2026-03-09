@@ -26,6 +26,7 @@
 	let refreshing = $state(false);
 	let error = $state('');
 	let data = $state<EvaluationResponse | null>(null);
+	let latestData = $state<EvaluationResponse | null>(null);
 	let historyData = $state<EvaluationHistoryResponse | null>(null);
 	let historyLoading = $state(true);
 	let selectedTrendMetric = $state<'hit_rate' | 'mrr' | 'latency'>('hit_rate');
@@ -34,6 +35,8 @@
 	let wandbEntity = $state('');
 	let experimentFilter = $state('');
 	let selectedHistorySource = $state<'all' | 'local' | 'wandb'>('all');
+	let selectedRunKey = $state('');
+	let urlStateReady = false;
 
 	// Comparison mode
 	let compareMode = $state(false);
@@ -65,6 +68,60 @@
 
 	const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+	function parseRunDate(raw: string | null | undefined): Date | null {
+		if (!raw) return null;
+		const match = raw.match(
+			/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:\.(\d{1,6}))?Z?/
+		);
+		if (!match) return null;
+
+		const [, year, month, day, hour, minute, second, fraction = '0'] = match;
+		const milliseconds = Number(fraction.padEnd(3, '0').slice(0, 3));
+		return new Date(
+			Date.UTC(
+				Number(year),
+				Number(month) - 1,
+				Number(day),
+				Number(hour),
+				Number(minute),
+				Number(second),
+				milliseconds
+			)
+		);
+	}
+
+	function extractRunTimestamp(run: EvaluationHistoryRun | EvaluationResponse): string {
+		return ('timestamp' in run ? run.timestamp : '') || run.run_dir || '';
+	}
+
+	function formatRunTimestamp(
+		run: EvaluationHistoryRun | EvaluationResponse,
+		options: Intl.DateTimeFormatOptions = {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		}
+	): string {
+		const parsed = parseRunDate(extractRunTimestamp(run));
+		return parsed ? parsed.toLocaleString(undefined, options) : extractRunTimestamp(run) || 'N/A';
+	}
+
+	function formatRunTimestampWithZone(run: EvaluationHistoryRun | EvaluationResponse): string {
+		const parsed = parseRunDate(extractRunTimestamp(run));
+		return parsed
+			? parsed.toLocaleString(undefined, {
+					year: 'numeric',
+					month: 'short',
+					day: 'numeric',
+					hour: 'numeric',
+					minute: '2-digit',
+					second: '2-digit',
+					timeZoneName: 'short'
+				})
+			: extractRunTimestamp(run) || 'N/A';
+	}
+
 	function buildHistoryUrl(): string {
 		const params = new URLSearchParams({
 			limit: '20',
@@ -88,13 +145,59 @@
 		return value <= threshold;
 	}
 
+	function applyUrlStateFromLocation() {
+		const params = new URLSearchParams(window.location.search);
+		searchQuery = params.get('q') || '';
+		experimentFilter = params.get('history_q') || '';
+		selectedStages = params.get('stages')?.split(',').filter(Boolean) || [...allStages];
+		selectedTrendMetric =
+			(params.get('metric') as 'hit_rate' | 'mrr' | 'latency' | null) || 'hit_rate';
+		historySource = (params.get('source') as 'local' | 'wandb' | 'all' | null) || 'all';
+		selectedHistorySource =
+			(params.get('visible') as 'all' | 'local' | 'wandb' | null) || 'all';
+		wandbProject = params.get('project') || '';
+		wandbEntity = params.get('entity') || '';
+		compareMode = params.get('compare') === '1';
+		baselineRun = params.get('baseline') || '';
+		compareRun = params.get('candidate') || '';
+		selectedRunKey = params.get('run') || '';
+	}
+
+	function syncUrlState() {
+		if (!urlStateReady) return;
+
+		const params = new URLSearchParams();
+		if (searchQuery.trim()) params.set('q', searchQuery.trim());
+		if (experimentFilter.trim()) params.set('history_q', experimentFilter.trim());
+		if (selectedStages.length && selectedStages.length !== allStages.length) {
+			params.set('stages', selectedStages.join(','));
+		}
+		if (selectedTrendMetric !== 'hit_rate') params.set('metric', selectedTrendMetric);
+		if (historySource !== 'all') params.set('source', historySource);
+		if (selectedHistorySource !== 'all') params.set('visible', selectedHistorySource);
+		if (wandbProject.trim()) params.set('project', wandbProject.trim());
+		if (wandbEntity.trim()) params.set('entity', wandbEntity.trim());
+		if (compareMode) params.set('compare', '1');
+		if (baselineRun) params.set('baseline', baselineRun);
+		if (compareRun) params.set('candidate', compareRun);
+		if (selectedRunKey) params.set('run', selectedRunKey);
+
+		const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
+		window.history.replaceState({}, '', next);
+	}
+
 	async function loadData() {
 		try {
 			const res = await fetch(`${API_URL}/evaluation/latest`);
 			if (!res.ok) {
 				throw new Error('Failed to fetch evaluation data');
 			}
-			data = await res.json();
+			const payload = (await res.json()) as EvaluationResponse;
+			latestData = payload;
+			if (!selectedRunKey || selectedRunKey === `local:${payload.run_dir}` || !data) {
+				selectedRunKey = `local:${payload.run_dir}`;
+				data = payload;
+			}
 			error = '';
 		} catch (e) {
 			error = 'Failed to load evaluation data. Make sure the API is running.';
@@ -108,6 +211,10 @@
 	async function refresh() {
 		refreshing = true;
 		await loadData();
+		if (selectedRunKey && data && selectedRunKey !== `local:${latestData?.run_dir}`) {
+			const selected = await loadRun(selectedRunKey);
+			if (selected) data = selected;
+		}
 	}
 
 	async function loadHistory() {
@@ -157,7 +264,10 @@
 	}
 
 	async function loadRun(runDir: string): Promise<EvaluationResponse | null> {
-		const run = filteredHistoryRuns().find((item) => selectionKey(item) === runDir);
+		if (latestData && `local:${latestData.run_dir}` === runDir) {
+			return latestData;
+		}
+		const run = (historyData?.runs || []).find((item) => selectionKey(item) === runDir);
 		if (!run) return null;
 		try {
 			const res = await fetch(runDetailUrl(run));
@@ -168,6 +278,14 @@
 			console.error('Failed to load run:', e);
 		}
 		return null;
+	}
+
+	async function selectRun(runKey: string) {
+		selectedRunKey = runKey;
+		const selected = await loadRun(runKey);
+		if (selected) {
+			data = selected;
+		}
 	}
 
 	async function loadComparisonData() {
@@ -203,7 +321,31 @@
 	}
 
 	function historyLabel(run: EvaluationHistoryRun): string {
-		return run.experiment_name || run.variant_name || run.timestamp || run.run_dir;
+		return run.experiment_name || run.variant_name || formatRunTimestamp(run);
+	}
+
+	function isSelectedRun(run: EvaluationHistoryRun): boolean {
+		return selectionKey(run) === selectedRunKey;
+	}
+
+	function selectedRunLabel(): string {
+		const run = (historyData?.runs || []).find((item) => selectionKey(item) === selectedRunKey);
+		if (run) return historyLabel(run);
+		if (latestData && selectedRunKey === `local:${latestData.run_dir}`) {
+			return formatRunTimestamp(latestData);
+		}
+		return 'Latest run';
+	}
+
+	function formatDelta(value: number, digits = 1, suffix = ''): string {
+		if (!Number.isFinite(value)) return 'N/A';
+		const sign = value > 0 ? '+' : '';
+		return `${sign}${value.toFixed(digits)}${suffix}`;
+	}
+
+	function retrievalMetric(run: EvaluationHistoryRun, key: keyof RetrievalMetrics): number {
+		const value = run.retrieval_metrics?.[key];
+		return typeof value === 'number' ? value : 0;
 	}
 
 	function filteredHistoryRuns(): EvaluationHistoryRun[] {
@@ -224,6 +366,11 @@
 		});
 	}
 
+	$effect(() => {
+		if (!urlStateReady) return;
+		syncUrlState();
+	});
+
 	async function showMetricDrillDown(stage: string, metricName: string, currentValue: number) {
 		try {
 			const res = await fetch(`${API_URL}/evaluation/steps/${stage}/records?limit=100`);
@@ -240,7 +387,12 @@
 							const value = run.retrieval_metrics?.[metricName as keyof typeof run.retrieval_metrics];
 							if (value !== undefined) {
 								return {
-									timestamp: run.timestamp || run.run_dir?.slice(0, 8) || 'N/A',
+									timestamp: formatRunTimestamp(run, {
+										month: 'short',
+										day: 'numeric',
+										hour: 'numeric',
+										minute: '2-digit'
+									}),
 									value: typeof value === 'number' ? value : 0
 								};
 							}
@@ -255,7 +407,16 @@
 	}
 
 	onMount(async () => {
+		applyUrlStateFromLocation();
 		await Promise.all([loadData(), loadHistory(), loadAblationResults()]);
+		if (selectedRunKey && latestData && selectedRunKey !== `local:${latestData.run_dir}`) {
+			const selected = await loadRun(selectedRunKey);
+			if (selected) data = selected;
+		}
+		if (compareMode && (baselineRun || compareRun)) {
+			await loadComparisonData();
+		}
+		urlStateReady = true;
 	});
 </script>
 
@@ -421,6 +582,65 @@
 					{historyData.warnings.join(' ')}
 				</div>
 			{/if}
+			{#if filteredHistoryRuns().length >= 2}
+				{@const latestRun = filteredHistoryRuns()[0]}
+				{@const previousRun = filteredHistoryRuns()[1]}
+				<section class="delta-strip">
+					<div class="delta-strip-header">
+						<div>
+							<h3>Latest vs Previous</h3>
+							<p>
+								{historyLabel(latestRun)} compared with {historyLabel(previousRun)}
+							</p>
+						</div>
+						<button class="action-btn secondary-btn" onclick={() => selectRun(selectionKey(latestRun))}>
+							Open latest run
+						</button>
+					</div>
+					<div class="delta-grid">
+						<div class="delta-card">
+							<span class="delta-label">Hit Rate @k</span>
+							<strong>{(retrievalMetric(latestRun, 'hit_rate_at_k') * 100).toFixed(1)}%</strong>
+							<span
+								class:positive={(retrievalMetric(latestRun, 'hit_rate_at_k') - retrievalMetric(previousRun, 'hit_rate_at_k')) * 100 > 0}
+								class:negative={(retrievalMetric(latestRun, 'hit_rate_at_k') - retrievalMetric(previousRun, 'hit_rate_at_k')) * 100 < 0}
+							>
+								{formatDelta((retrievalMetric(latestRun, 'hit_rate_at_k') - retrievalMetric(previousRun, 'hit_rate_at_k')) * 100, 1, ' pts')}
+							</span>
+						</div>
+						<div class="delta-card">
+							<span class="delta-label">MRR</span>
+							<strong>{retrievalMetric(latestRun, 'mrr').toFixed(3)}</strong>
+							<span
+								class:positive={retrievalMetric(latestRun, 'mrr') - retrievalMetric(previousRun, 'mrr') > 0}
+								class:negative={retrievalMetric(latestRun, 'mrr') - retrievalMetric(previousRun, 'mrr') < 0}
+							>
+								{formatDelta(retrievalMetric(latestRun, 'mrr') - retrievalMetric(previousRun, 'mrr'), 3)}
+							</span>
+						</div>
+						<div class="delta-card">
+							<span class="delta-label">Latency p50</span>
+							<strong>{retrievalMetric(latestRun, 'latency_p50_ms').toFixed(0)}ms</strong>
+							<span
+								class:positive={retrievalMetric(latestRun, 'latency_p50_ms') - retrievalMetric(previousRun, 'latency_p50_ms') < 0}
+								class:negative={retrievalMetric(latestRun, 'latency_p50_ms') - retrievalMetric(previousRun, 'latency_p50_ms') > 0}
+							>
+								{formatDelta(retrievalMetric(latestRun, 'latency_p50_ms') - retrievalMetric(previousRun, 'latency_p50_ms'), 0, 'ms')}
+							</span>
+						</div>
+						<div class="delta-card">
+							<span class="delta-label">Failed Thresholds</span>
+							<strong>{latestRun.failed_thresholds_count || 0}</strong>
+							<span
+								class:positive={(latestRun.failed_thresholds_count || 0) - (previousRun.failed_thresholds_count || 0) < 0}
+								class:negative={(latestRun.failed_thresholds_count || 0) - (previousRun.failed_thresholds_count || 0) > 0}
+							>
+								{formatDelta((latestRun.failed_thresholds_count || 0) - (previousRun.failed_thresholds_count || 0), 0)}
+							</span>
+						</div>
+					</div>
+				</section>
+			{/if}
 			<div class="charts-grid">
 				{#if selectedTrendMetric === 'hit_rate'}
 					<div class="chart-card">
@@ -493,14 +713,28 @@
 			</div>
 			<div class="history-run-list">
 				{#each filteredHistoryRuns() as run}
-					<div class="history-run-card">
-						<div class="history-run-meta">
-							<div class="history-run-title">
-								<span class="source-pill" class:wandb={run.source === 'wandb'}>{run.source}</span>
-								<strong>{historyLabel(run)}</strong>
+					<div
+						class="history-run-card"
+						class:selected={isSelectedRun(run)}
+						role="button"
+						tabindex="0"
+						onclick={() => selectRun(selectionKey(run))}
+						onkeydown={(event) => {
+							if (event.key === 'Enter' || event.key === ' ') {
+								event.preventDefault();
+								selectRun(selectionKey(run));
+							}
+						}}
+					>
+							<div class="history-run-meta">
+								<div class="history-run-title">
+									<span class="source-pill" class:wandb={run.source === 'wandb'}>{run.source}</span>
+									<strong>{historyLabel(run)}</strong>
+								</div>
+							<span class="history-run-subtitle">
+								{formatRunTimestampWithZone(run)} · {run.run_dir}
+							</span>
 							</div>
-							<span class="history-run-subtitle">{run.run_dir}</span>
-						</div>
 						<div class="history-run-metrics">
 							<span>Hit {((run.retrieval_metrics?.hit_rate_at_k || 0) * 100).toFixed(1)}%</span>
 							<span>MRR {(run.retrieval_metrics?.mrr || 0).toFixed(3)}</span>
@@ -510,7 +744,7 @@
 							{#if run.variant_name}<span class="history-tag">variant: {run.variant_name}</span>{/if}
 							{#if run.index_config_hash}<span class="history-tag">index: {run.index_config_hash.slice(0, 8)}</span>{/if}
 							{#if run.wandb_url}
-								<a class="history-link" href={run.wandb_url} target="_blank" rel="noreferrer">Open W&amp;B</a>
+								<a class="history-link" href={run.wandb_url} target="_blank" rel="noreferrer" onclick={(event) => event.stopPropagation()}>Open W&amp;B</a>
 							{/if}
 						</div>
 					</div>
@@ -636,8 +870,22 @@
 		<div class="content">
 			{#if data.summary}
 				<section class="summary-card">
-					<h2>Run Summary</h2>
+					<div class="summary-header">
+						<div>
+							<h2>Run Summary</h2>
+							<p class="summary-subtitle">Viewing {selectedRunLabel()}</p>
+						</div>
+						{#if latestData && data.run_dir !== latestData.run_dir}
+							<button class="action-btn secondary-btn" onclick={() => latestData && selectRun(`local:${latestData.run_dir}`)}>
+								Back to latest
+							</button>
+						{/if}
+					</div>
 					<div class="summary-grid">
+						<div class="summary-item">
+							<span class="label">Run Time</span>
+							<span class="value">{formatRunTimestampWithZone(data)}</span>
+						</div>
 						<div class="summary-item">
 							<span class="label">Run Directory</span>
 							<span class="value">{data.run_dir}</span>
@@ -656,6 +904,33 @@
 						</div>
 					</div>
 				</section>
+				{/if}
+
+				{#if data.failed_thresholds && data.failed_thresholds.length > 0}
+					<section class="threshold-summary">
+						<div class="summary-header">
+							<div>
+								<h2>Threshold Failures</h2>
+								<p class="summary-subtitle">Current value versus configured threshold</p>
+							</div>
+						</div>
+						<div class="threshold-list">
+							{#each data.failed_thresholds as failure}
+								<div class="threshold-card">
+									<div class="threshold-card-header">
+										<strong>{failure.metric || failure.message || 'Threshold check'}</strong>
+										<span class="threshold-badge">{failure.threshold_op} {failure.threshold_value}</span>
+									</div>
+									<div class="threshold-card-body">
+										<span>Observed: {String(failure.value)}</span>
+										{#if failure.message}
+											<span>{failure.message}</span>
+										{/if}
+									</div>
+								</div>
+							{/each}
+						</div>
+					</section>
 				{/if}
 
 				{#if data.step_metrics}
@@ -1279,6 +1554,7 @@
 		background: #fafafa;
 		border-radius: 8px;
 		padding: 1rem;
+		overflow: visible;
 	}
 
 	.history-warning {
@@ -1288,6 +1564,68 @@
 		background: #fff4e5;
 		color: #8a5700;
 		font-size: 0.9rem;
+	}
+
+	.delta-strip {
+		margin-bottom: 1.5rem;
+		padding: 1rem;
+		border: 1px solid #d7e6ff;
+		border-radius: 10px;
+		background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%);
+	}
+
+	.delta-strip-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 1rem;
+		margin-bottom: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.delta-strip-header h3 {
+		margin: 0 0 0.25rem;
+		font-size: 1rem;
+	}
+
+	.delta-strip-header p {
+		margin: 0;
+		color: #5f6b7a;
+		font-size: 0.9rem;
+	}
+
+	.delta-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.delta-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.85rem 1rem;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.9);
+		border: 1px solid rgba(62, 111, 190, 0.14);
+	}
+
+	.delta-label {
+		font-size: 0.8rem;
+		color: #607086;
+	}
+
+	.delta-card strong {
+		font-size: 1.1rem;
+		color: #1c2b39;
+	}
+
+	.positive {
+		color: #1b8a5a;
+	}
+
+	.negative {
+		color: #c2410c;
 	}
 
 	.history-run-list {
@@ -1302,6 +1640,21 @@
 		border-radius: 10px;
 		padding: 1rem;
 		background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+		cursor: pointer;
+		transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+	}
+
+	.history-run-card:hover,
+	.history-run-card:focus-visible {
+		border-color: #90b8ff;
+		box-shadow: 0 8px 22px rgba(33, 88, 181, 0.08);
+		transform: translateY(-1px);
+		outline: none;
+	}
+
+	.history-run-card.selected {
+		border-color: #2563eb;
+		box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
 	}
 
 	.history-run-meta {
@@ -1321,7 +1674,8 @@
 	.history-run-subtitle {
 		font-size: 0.8rem;
 		color: #6b7280;
-		word-break: break-all;
+		line-height: 1.4;
+		word-break: break-word;
 	}
 
 	.history-run-metrics {
@@ -1452,6 +1806,25 @@
 		padding: 1.5rem;
 	}
 
+	.summary-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 1rem;
+		margin-bottom: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.summary-header h2 {
+		margin-bottom: 0.25rem;
+	}
+
+	.summary-subtitle {
+		margin: 0;
+		font-size: 0.92rem;
+		color: #667085;
+	}
+
 	.summary-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1485,7 +1858,7 @@
 		background: white;
 		border: 1px solid #e0e0e0;
 		border-radius: 8px;
-		overflow: hidden;
+		overflow: visible;
 		transition: box-shadow 0.2s ease, transform 0.2s ease;
 	}
 
@@ -1582,11 +1955,64 @@
 		flex-direction: column;
 		gap: 0.5rem;
 		position: relative;
+		overflow: visible;
 		transition: box-shadow 0.2s ease, border-color 0.2s ease;
 	}
 
 	.metric-card:hover {
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+	}
+
+	.threshold-summary {
+		background: white;
+		border: 1px solid #f0d7bf;
+		border-radius: 8px;
+		padding: 1.5rem;
+	}
+
+	.threshold-list {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+		gap: 0.9rem;
+	}
+
+	.threshold-card {
+		padding: 0.9rem 1rem;
+		border-radius: 8px;
+		border: 1px solid #f6dcc7;
+		background: #fffaf5;
+	}
+
+	.threshold-card-header {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.75rem;
+		align-items: flex-start;
+		margin-bottom: 0.5rem;
+	}
+
+	.threshold-card-header strong {
+		font-size: 0.95rem;
+		color: #7c2d12;
+		word-break: break-word;
+	}
+
+	.threshold-badge {
+		flex-shrink: 0;
+		font-size: 0.75rem;
+		padding: 0.2rem 0.45rem;
+		border-radius: 999px;
+		background: #fde6d3;
+		color: #9a3412;
+		font-weight: 600;
+	}
+
+	.threshold-card-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		font-size: 0.88rem;
+		color: #7c4a2d;
 	}
 
 	.metric-card-button {
@@ -1697,6 +2123,12 @@
 		font-weight: 500;
 		font-size: 0.9rem;
 		transition: all 0.2s;
+	}
+
+	.secondary-btn {
+		background: #f8fbff;
+		border-color: #cfe0ff;
+		color: #2155b5;
 	}
 
 	.action-btn:hover:not(:disabled) {
