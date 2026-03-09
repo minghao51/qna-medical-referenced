@@ -20,14 +20,15 @@ src/
 
   usecases/               # Orchestration / business flows
     chat.py               # chat request -> retrieve -> generate -> persist
+    pipeline.py           # offline pipeline orchestration + runtime refresh
 
   rag/                    # Runtime retrieval path
     runtime.py            # index init + retrieve_context(+trace)
     trace_models.py       # response trace models
     formatting.py         # source/context formatting helpers
 
-  ingestion/              # Offline pipeline + indexing internals
-    pipeline.py           # end-to-end ingestion orchestration
+  ingestion/              # Offline ingestion/indexing internals
+    pipeline.py           # compatibility shim to usecases.pipeline
     steps/                # download/convert/load/chunk/reference steps
     indexing/             # vector store + embedding/search/persistence helpers
 
@@ -65,13 +66,14 @@ Used when preparing/refreshing the corpus and vector index.
 
 Flow:
 
-1. `src.ingestion.steps.download_web` (optional web downloads)
-2. `src.ingestion.steps.convert_html` (HTML -> Markdown)
-3. `src.ingestion.steps.load_pdfs`
-4. `src.ingestion.steps.chunk_text`
-5. `src.ingestion.steps.load_reference_data`
-6. `src.ingestion.indexing.vector_store` (embedding + persistence)
-7. `src.rag.runtime.initialize_runtime_index()` confirms runtime index availability
+1. `src.usecases.pipeline.run_pipeline()` orchestrates the refresh
+2. `src.ingestion.steps.download_web` (optional web downloads)
+3. `src.ingestion.steps.convert_html` (HTML -> Markdown)
+4. `src.ingestion.steps.load_pdfs`
+5. `src.ingestion.steps.chunk_text`
+6. `src.ingestion.steps.load_reference_data`
+7. `src.ingestion.indexing.vector_store` (embedding + persistence)
+8. `src.rag.runtime.initialize_runtime_index()` confirms runtime index availability
 
 ## Configuration Ownership
 
