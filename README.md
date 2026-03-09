@@ -26,6 +26,9 @@ uv run python -m src.cli.ingest
 uv run python -m src.cli.ingest --skip-download
 uv run python -m src.cli.ingest --force
 
+# Run pipeline evaluation
+uv run python -m src.cli.eval_pipeline
+
 # Tests and lint
 uv run pytest
 uv run ruff check .
@@ -43,6 +46,10 @@ bash scripts/check_docs_consistency.sh
 | `/chat` | POST | Ask a question |
 | `/history/{session_id}` | GET | Read chat history |
 | `/history/{session_id}` | DELETE | Clear chat history |
+| `/evaluation/latest` | GET | Latest evaluation results |
+| `/evaluation/runs` | GET | List all evaluation runs |
+| `/evaluation/history` | GET | Historical trending metrics |
+| `/evaluation/stages/{stage}` | GET | Metrics for specific pipeline stage |
 
 ## Repository Map (Fresh Eyes)
 
@@ -51,12 +58,13 @@ bash scripts/check_docs_consistency.sh
 ```text
 src/
   app/                    FastAPI app factory, routes, schemas, middleware
-  usecases/               Application orchestration (chat flow)
+  usecases/               Application orchestration (chat flow, pipeline)
   rag/                    Runtime retrieval + trace models
   ingestion/              Offline data pipeline + indexing internals
+  evals/                  Pipeline quality assessment and metrics
   infra/                  External integrations (Qwen client, local storage)
   config/                 Settings and canonical paths
-  cli/                    Canonical CLI entrypoints
+  cli/                    Canonical CLI entrypoints (serve, ingest, eval_pipeline)
 ```
 
 ### Frontend
@@ -67,11 +75,14 @@ frontend/                 Svelte app (separate dev/build commands)
 
 ## Documentation
 
-- `docs/README.md` - docs index
-- `docs/architecture/overview.md` - backend structure overview (current)
-- `docs/architecture/rag-system.md` - runtime retrieval + ingestion flow (current)
-- `docs/testing/backend-tests.md` - backend test inventory
-- `docs/reports/` - dated historical notes and reports
+- `docs/README.md` - Documentation index
+- `docs/quickstart.md` - Fastest path to run the system locally
+- `docs/architecture/overview.md` - Backend + frontend architecture (current)
+- `docs/architecture/rag-system.md` - Runtime retrieval + ingestion flow (current)
+- `docs/configuration.md` - Comprehensive configuration guide
+- `docs/testing/` - Backend and frontend testing documentation
+- `docs/plans/` - Design documents and implementation plans
+- `docs/reports/` - Historical reports and implementation notes
 
 ## Notes
 
