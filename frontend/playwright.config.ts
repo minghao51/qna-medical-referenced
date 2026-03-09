@@ -21,9 +21,11 @@ export default defineConfig({
 			use: { ...devices['Desktop Chrome'] },
 		},
 	],
-	webServer: {
-		command: 'bun run dev --port 5174',
-		url: 'http://localhost:5174',
-		reuseExistingServer: !process.env.CI,
-	},
+	webServer: process.env.PLAYWRIGHT_BASE_URL
+		? undefined
+		: {
+			command: 'bun run dev --port 5174',
+			url: 'http://localhost:5174',
+			reuseExistingServer: !process.env.CI,
+		},
 });
