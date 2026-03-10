@@ -132,8 +132,15 @@ Maximum message length in characters.
 
 ### API Configuration
 
+#### `ENVIRONMENT`
+**Default:** `development`
+
+Runtime environment name. Use `development` or `test` for local work, and `staging` or `production` for internet-exposed deployments.
+
+Outside development/test, the backend requires API keys at startup.
+
 #### `API_KEYS`
-**Default:** (not set - authentication disabled)
+**Default:** (not set)
 
 Comma-separated list of valid API keys for client authentication.
 
@@ -162,13 +169,30 @@ curl -X POST http://localhost:8000/chat \\
 - Rotate keys regularly
 - Use separate keys for different client types
 
+#### `API_KEYS_JSON`
+**Default:** (not set)
+
+Optional JSON array of richer API key records. This supports stable key IDs, hashed secrets, and metadata for ownership or revocation.
+
+**Format:**
+```bash
+API_KEYS_JSON=[{"id":"frontend","key":"super-secret-key","owner":"web","role":"client","status":"active"}]
+```
+
+You may provide either `key` or a SHA-256 `hash`.
+
+#### `CORS_ALLOWED_ORIGINS`
+**Default:** local development origins
+
+Comma-separated list of allowed frontend origins. For production, set this explicitly to the deployed frontend origin.
+
 #### `RATE_LIMIT_PER_MINUTE`
 **Default:** `60`
 
-Maximum number of requests allowed per minute per client IP.
+Maximum number of requests allowed per minute per client.
 
 **What it does:**
-- Tracks requests by client IP address
+- Tracks requests by authenticated API key when present, otherwise by client IP
 - Returns HTTP 429 (Too Many Requests) when exceeded
 - Prevents API abuse and runaway costs
 
@@ -219,6 +243,8 @@ delay = RETRY_DELAY * (2 ^ attempt_number)
 
 ### Development (.env.development)
 ```bash
+ENVIRONMENT=development
+
 # LLM
 DASHSCOPE_API_KEY=dev_key_xyz
 MODEL_NAME=qwen3.5-flash
@@ -231,8 +257,9 @@ VECTOR_DIR=data/vectors
 # Chat
 MAX_MESSAGE_LENGTH=2000
 
-# API (disabled in development)
+# API (optional in development)
 # API_KEYS=
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 # Rate limiting
 RATE_LIMIT_PER_MINUTE=60
@@ -244,6 +271,8 @@ RETRY_DELAY=1.0
 
 ### Production (.env.production)
 ```bash
+ENVIRONMENT=production
+
 # LLM
 DASHSCOPE_API_KEY=prod_key_secure_random
 MODEL_NAME=qwen-plus
@@ -258,6 +287,7 @@ MAX_MESSAGE_LENGTH=4000
 
 # API (enabled in production)
 API_KEYS=key_abc123,key_xyz789
+CORS_ALLOWED_ORIGINS=https://your-frontend.example.com
 
 # Rate limiting
 RATE_LIMIT_PER_MINUTE=120
@@ -269,6 +299,8 @@ RETRY_DELAY=2.0
 
 ### Testing (.env.test)
 ```bash
+ENVIRONMENT=test
+
 # LLM
 DASHSCOPE_API_KEY=test_key
 MODEL_NAME=qwen3.5-flash
@@ -293,6 +325,12 @@ RETRY_DELAY=0.1
 ```
 
 ## Troubleshooting
+
+### Backend fails to start in production
+
+**Cause:** `ENVIRONMENT` is set to `staging` or `production` without configured API keys.
+
+**Solution:** Set `API_KEYS` or `API_KEYS_JSON` before starting the API.
 
 ### "Empty response from Qwen API" error
 
@@ -346,7 +384,9 @@ RETRY_DELAY=0.1
 Before deploying to production, ensure:
 
 - [ ] `DASHSCOPE_API_KEY` is set from environment variable, not in code
-- [ ] `API_KEYS` is set with strong, unique keys for each client
+- [ ] `ENVIRONMENT` is set correctly for the deployment
+- [ ] `API_KEYS` or `API_KEYS_JSON` is set with strong, unique keys for each client
+- [ ] `CORS_ALLOWED_ORIGINS` only includes trusted frontend origins
 - [ ] `.env` file is NOT committed to version control
 - [ ] `.env` file has restricted permissions (chmod 600)
 - [ ] `RATE_LIMIT_PER_MINUTE` is set to prevent abuse

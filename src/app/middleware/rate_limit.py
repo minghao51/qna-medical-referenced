@@ -1,78 +1,40 @@
-"""Rate limiting middleware using sliding window algorithm.
+"""Rate limiting middleware using a fixed-window backend."""
 
-This module provides rate limiting based on client IP address or API key.
-Uses SQLite for persistence and a sliding window algorithm to track
-request timestamps within the last minute.
+from __future__ import annotations
 
-Rate limiting algorithm:
-    - Sliding window with 1-minute window size
-    - Tracks timestamps of all requests in the window
-    - Allows up to N requests per minute (configurable)
-    - Returns HTTP 429 when limit exceeded
-
-Storage:
-    - SQLite database at path specified by RATE_LIMIT_DB
-    - Table: rate_limits (key, requests)
-    - Requests stored as comma-separated ISO timestamps
-
-Exempt paths:
-    - / - Root path
-    - /health - Health check endpoint
-    - /docs - API documentation (Swagger UI)
-    - /openapi.json - OpenAPI schema
-
-Example:
-    Configure rate limit in .env:
-        RATE_LIMIT_PER_MINUTE=60
-
-    Client request exceeding limit:
-        HTTP/1.1 429 Too Many Requests
-        {"detail": "Rate limit exceeded. Please try again later."}
-"""
-
-import asyncio
+import logging
 import sqlite3
+import time
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.app.middleware.auth import get_api_keys
+from src.app.logging import log_event
 from src.config import RATE_LIMIT_DB, settings
 
+from .auth import EXEMPT_PATHS
 
-def _init_db():
-    """Initialize the rate limiting SQLite database.
+logger = logging.getLogger(__name__)
 
-    Creates the rate_limits table if it doesn't exist.
-    Called once on module import.
-    """
-    with get_connection() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS rate_limits (
-                key TEXT PRIMARY KEY,
-                requests TEXT NOT NULL
-            )
-        """)
-        conn.commit()
+
+@dataclass
+class RateLimitDecision:
+    allowed: bool
+    limit: int
+    remaining: int
+    retry_after: int
+
+
+class RateLimitBackend:
+    def check(self, key: str, limit: int, now: int | None = None) -> RateLimitDecision:
+        raise NotImplementedError
 
 
 @contextmanager
 def get_connection():
-    """Get a SQLite database connection.
-
-    Yields a connection with row_factory set to sqlite3.Row for
-    dictionary-like access to rows.
-
-    Yields:
-        sqlite3.Connection: Database connection
-
-    Example:
-        with get_connection() as conn:
-            row = conn.execute("SELECT * FROM rate_limits").fetchone()
-    """
     conn = sqlite3.connect(RATE_LIMIT_DB)
     conn.row_factory = sqlite3.Row
     try:
@@ -81,142 +43,115 @@ def get_connection():
         conn.close()
 
 
-class RateLimiter:
-    """Rate limiter using sliding window algorithm.
+class SQLiteRateLimitBackend(RateLimitBackend):
+    def __init__(self, window_seconds: int = 60):
+        self.window_seconds = window_seconds
+        self._init_db()
 
-    Tracks request timestamps per client (IP or API key) and enforces
-    a maximum number of requests per minute.
-
-    Attributes:
-        requests_per_minute: Maximum allowed requests in 1-minute window
-        lock: Async lock for thread-safe database operations
-
-    Example:
-        Check if request is allowed:
-            limiter = RateLimiter(requests_per_minute=60)
-            allowed = await limiter.check_rate_limit("client_ip")
-            if not allowed:
-                return "Rate limit exceeded"
-    """
-
-    def __init__(self, requests_per_minute: int = 60):
-        """Initialize rate limiter.
-
-        Args:
-            requests_per_minute: Maximum requests allowed per minute
-        """
-        self.requests_per_minute = requests_per_minute
-        self.lock = asyncio.Lock()
-        _init_db()
-
-    async def check_rate_limit(self, key: str) -> bool:
-        """Check if request is within rate limit.
-
-        Retrieves previous request timestamps for the key, removes
-        timestamps older than 1 minute, and checks if the count is
-        within the allowed limit. Adds current timestamp if allowed.
-
-        Args:
-            key: Unique identifier (client IP or API key)
-
-        Returns:
-            True if request is allowed, False if limit exceeded
-        """
-        if self.requests_per_minute <= 0:
-            return True
-
-        async with self.lock:
-            now = datetime.now()
-            cutoff = now - timedelta(minutes=1)
-
-            with get_connection() as conn:
-                row = conn.execute(
-                    "SELECT requests FROM rate_limits WHERE key = ?", (key,)
-                ).fetchone()
-
-                request_times = []
-                if row:
-                    try:
-                        timestamps = row["requests"].split(",")
-                        request_times = [datetime.fromisoformat(ts) for ts in timestamps if ts]
-                    except (ValueError, AttributeError):
-                        request_times = []
-
-                # Filter to only requests within the last minute
-                request_times = [t for t in request_times if t > cutoff]
-
-                # Check if limit exceeded
-                if len(request_times) >= self.requests_per_minute:
-                    return False
-
-                # Add current request timestamp
-                request_times.append(now)
-
-                # Save updated timestamps
-                timestamps_str = ",".join(t.isoformat() for t in request_times)
-                conn.execute(
-                    "INSERT OR REPLACE INTO rate_limits (key, requests) VALUES (?, ?)",
-                    (key, timestamps_str),
+    def _init_db(self) -> None:
+        with get_connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rate_limit_counters (
+                    key TEXT PRIMARY KEY,
+                    window_start INTEGER NOT NULL,
+                    count INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
                 )
-                conn.commit()
+                """
+            )
+            conn.commit()
 
-                return True
+    def _cleanup(self, conn: sqlite3.Connection, now: int) -> None:
+        cutoff = now - (self.window_seconds * 2)
+        conn.execute("DELETE FROM rate_limit_counters WHERE updated_at < ?", (cutoff,))
+
+    def check(self, key: str, limit: int, now: int | None = None) -> RateLimitDecision:
+        if limit <= 0:
+            return RateLimitDecision(True, limit, limit, 0)
+        current = now or int(time.time())
+        window_start = current - (current % self.window_seconds)
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT window_start, count FROM rate_limit_counters WHERE key = ?",
+                (key,),
+            ).fetchone()
+            if not row or int(row["window_start"]) != window_start:
+                count = 1
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO rate_limit_counters (key, window_start, count, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (key, window_start, count, current),
+                )
+            else:
+                count = int(row["count"]) + 1
+                conn.execute(
+                    """
+                    UPDATE rate_limit_counters
+                    SET count = ?, updated_at = ?
+                    WHERE key = ? AND window_start = ?
+                    """,
+                    (count, current, key, window_start),
+                )
+            self._cleanup(conn, current)
+            conn.commit()
+
+        allowed = count <= limit
+        remaining = max(0, limit - count)
+        retry_after = max(0, (window_start + self.window_seconds) - current)
+        return RateLimitDecision(
+            allowed=allowed,
+            limit=limit,
+            remaining=remaining if allowed else 0,
+            retry_after=retry_after if not allowed else 0,
+        )
 
 
-# Global rate limiter instance configured from settings
+class RateLimiter:
+    def __init__(self, requests_per_minute: int = 60, backend: RateLimitBackend | None = None):
+        self.requests_per_minute = requests_per_minute
+        self.backend = backend or SQLiteRateLimitBackend(window_seconds=60)
+
+    def check_rate_limit(self, key: str) -> RateLimitDecision:
+        return self.backend.check(key=key, limit=self.requests_per_minute)
+
+
 rate_limiter = RateLimiter(requests_per_minute=settings.rate_limit_per_minute)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """FastAPI middleware for rate limiting.
-
-    Applies rate limiting to all requests except exempt paths.
-    Tracks requests by client IP, or by API key if authentication
-    is enabled. Returns HTTP 429 when limit exceeded.
-
-    Exempt paths:
-        - / - Root
-        - /health - Health check
-        - /docs - Swagger UI documentation
-        - /openapi.json - OpenAPI schema
-
-    Example:
-        Add to FastAPI app:
-            from src.app.middleware.rate_limit import RateLimitMiddleware
-            app.add_middleware(RateLimitMiddleware)
-    """
-
     async def dispatch(self, request: Request, call_next):
-        """Process request and enforce rate limit.
-
-        Args:
-            request: Incoming HTTP request
-            call_next: Next middleware or route handler in chain
-
-        Returns:
-            Response from next handler, or 429 error if rate limited
-        """
-        if rate_limiter.requests_per_minute <= 0:
+        if rate_limiter.requests_per_minute <= 0 or request.url.path in EXEMPT_PATHS:
             return await call_next(request)
 
-        # Skip rate limiting for public endpoints
-        if request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
-            return await call_next(request)
-
-        # Determine rate limit key (API key if auth enabled, otherwise IP)
+        auth = getattr(request.state, "auth", None)
         client_ip = request.client.host if request.client else "unknown"
-
-        api_keys = get_api_keys()
-        if api_keys:
-            api_key = request.headers.get("X-API-Key")
-            rate_key = api_key if api_key else client_ip
-        else:
-            rate_key = client_ip
-
-        # Check rate limit
-        if not await rate_limiter.check_rate_limit(rate_key):
-            return JSONResponse(
-                status_code=429, content={"detail": "Rate limit exceeded. Please try again later."}
+        rate_key = f"auth:{auth.key_id}" if auth else f"ip:{client_ip}"
+        decision = rate_limiter.check_rate_limit(rate_key)
+        if not decision.allowed:
+            log_event(
+                logger,
+                logging.WARNING,
+                "rate_limit_exceeded",
+                request_id=getattr(request.state, "request_id", None),
+                path=request.url.path,
+                rate_key=rate_key,
+                retry_after=decision.retry_after,
             )
+            response = JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Please try again later."},
+            )
+            response.headers["Retry-After"] = str(decision.retry_after)
+            response.headers["X-RateLimit-Limit"] = str(decision.limit)
+            response.headers["X-RateLimit-Remaining"] = "0"
+            response.headers["X-RateLimit-Reset"] = str(decision.retry_after)
+            return response
 
-        return await call_next(request)
+        response = await call_next(request)
+        response.headers["X-RateLimit-Limit"] = str(decision.limit)
+        response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+        response.headers["X-RateLimit-Reset"] = "0"
+        return response

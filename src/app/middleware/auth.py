@@ -1,138 +1,93 @@
-"""API key authentication middleware.
+"""API key authentication middleware."""
 
-This module provides authentication middleware that validates API keys
-provided by clients via the X-API-Key header. When API keys are configured
-in settings, all requests must include a valid key.
+from __future__ import annotations
 
-Authentication flow:
-    1. Check if API keys are configured in settings
-    2. If not configured, skip authentication (development mode)
-    3. If configured, require X-API-Key header on all requests
-    4. Validate the key against the configured set
-    5. Reject with 401 if missing, 403 if invalid
-
-Exempt paths:
-    - / - Root path
-    - /health - Health check endpoint
-    - /docs - API documentation (Swagger UI)
-    - /openapi.json - OpenAPI schema
-
-Example:
-    Configure API keys in .env:
-        API_KEYS=key1,key2,key3
-
-    Client request with authentication:
-        curl -X POST http://localhost:8000/chat \\
-          -H "X-API-Key: key1" \\
-          -H "Content-Type: application/json" \\
-          -d '{"message": "Hello"}'
-"""
-
-from fastapi import HTTPException, Request
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.config import settings
+from src.app.security import AuthContext, load_api_key_records
+
+EXEMPT_PATHS = {"/", "/health", "/docs", "/openapi.json"}
 
 
 class APIKeyConfig:
-    """Configuration and caching for API keys.
+    """Validated API key configuration cached in memory."""
 
-    Caches API keys in memory to avoid repeated parsing of the
-    comma-separated string from settings. Provides reload capability
-    for dynamic key updates.
-
-    Attributes:
-        _keys: Cached set of valid API keys, or None if not loaded
-    """
-
-    _keys: set[str] | None = None
+    _records: list = []
+    _record_map: dict[str, object] = {}
+    _loaded = False
 
     @classmethod
-    def get_keys(cls) -> set[str]:
-        """Get the set of valid API keys.
-
-        Loads from settings on first call, then caches the result.
-        Empty set indicates authentication is disabled.
-
-        Returns:
-            Set of valid API key strings. Empty if none configured.
-        """
-        if cls._keys is None:
-            keys_str = settings.api_keys or ""
-            cls._keys = set(keys_str.split(",")) if keys_str else set()
-        return cls._keys
+    def get_records(cls) -> list:
+        if not cls._loaded:
+            cls.reload()
+        return list(cls._records)
 
     @classmethod
-    def reload(cls):
-        """Reload API keys from settings.
+    def get_record_map(cls) -> dict[str, object]:
+        if not cls._loaded:
+            cls.reload()
+        return dict(cls._record_map)
 
-        Clears the cache so next get_keys() call will reload from
-        settings. Useful for testing or dynamic configuration updates.
-        """
-        cls._keys = None
+    @classmethod
+    def reload(cls) -> None:
+        cls._records = load_api_key_records()
+        cls._record_map = {record.key_id: record for record in cls._records}
+        cls._loaded = True
+
+
+def get_api_key_records() -> list:
+    return APIKeyConfig.get_records()
 
 
 def get_api_keys() -> set[str]:
-    """Get the configured API keys.
+    return {record.key_id for record in APIKeyConfig.get_records()}
 
-    Convenience function that delegates to APIKeyConfig.get_keys().
 
-    Returns:
-        Set of valid API key strings. Empty if authentication disabled.
-    """
-    return APIKeyConfig.get_keys()
+def authenticate_api_key(api_key: str | None) -> AuthContext | None:
+    if not api_key:
+        return None
+    for record in APIKeyConfig.get_records():
+        if record.matches(api_key):
+            return AuthContext(key_id=record.key_id, owner=record.owner, role=record.role)
+    return None
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
-    """FastAPI middleware for API key authentication.
-
-    Validates X-API-Key header on all requests except exempt paths.
-    Returns 401 if header missing, 403 if key invalid.
-
-    Exempt paths:
-        - / - Root
-        - /health - Health check
-        - /docs - Swagger UI documentation
-        - /openapi.json - OpenAPI schema
-
-    Example:
-        Add to FastAPI app:
-            from src.app.middleware.auth import APIKeyMiddleware
-            app.add_middleware(APIKeyMiddleware)
-    """
-
     async def dispatch(self, request: Request, call_next):
-        """Process request and validate API key.
+        request.state.auth = None
 
-        Args:
-            request: Incoming HTTP request
-            call_next: Next middleware or route handler in chain
-
-        Returns:
-            Response from next handler
-
-        Raises:
-            HTTPException(401): If X-API-Key header is missing
-            HTTPException(403): If API key is invalid
-        """
-        # Skip authentication for public endpoints
-        if request.url.path in ["/", "/health", "/docs", "/openapi.json"]:
+        if request.url.path in EXEMPT_PATHS:
             return await call_next(request)
 
-        # Get configured API keys
-        api_keys = get_api_keys()
-
-        # If no keys configured, authentication is disabled
-        if not api_keys:
+        records = APIKeyConfig.get_records()
+        if not records:
             return await call_next(request)
 
-        # Validate API key from header
         api_key = request.headers.get("X-API-Key")
-
         if not api_key:
-            raise HTTPException(status_code=401, detail="Missing X-API-Key header")
+            return self._error_response(request, 401, "Missing X-API-Key header")
 
-        if api_key not in api_keys:
-            raise HTTPException(status_code=403, detail="Invalid API key")
+        auth_context = authenticate_api_key(api_key.strip())
+        if auth_context is None:
+            return self._error_response(request, 403, "Invalid API key")
 
+        request.state.auth = auth_context
         return await call_next(request)
+
+    @staticmethod
+    def _error_response(request: Request, status_code: int, detail: str) -> JSONResponse:
+        payload = {
+            "detail": detail,
+            "error": {
+                "code": "http_error",
+                "status_code": status_code,
+                "request_id": getattr(request.state, "request_id", None),
+            },
+        }
+        response = JSONResponse(status_code=status_code, content=payload)
+        request_id = getattr(request.state, "request_id", None)
+        if request_id:
+            response.headers["X-Request-ID"] = request_id
+        return response

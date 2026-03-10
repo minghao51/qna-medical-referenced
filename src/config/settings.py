@@ -30,6 +30,18 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
+    environment: str = "development"
+    """Runtime environment name.
+
+    Supported values: development, test, staging, production.
+    """
+
+    log_level: str = "INFO"
+    """Application log level."""
+
+    cors_allowed_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000"
+    """Comma-separated allowed CORS origins."""
+
     # LLM Configuration
     dashscope_api_key: str = ""
     """Alibaba Dashscope API key for Qwen models.
@@ -139,6 +151,12 @@ class Settings(BaseSettings):
     Environment variable: API_KEYS
     """
 
+    api_keys_json: Optional[str] = None
+    """Optional JSON array of API key records.
+
+    Each item may contain: id, key or hash, owner, role, status.
+    """
+
     rate_limit_per_minute: int = 60
     """Maximum number of requests allowed per minute per client.
 
@@ -167,6 +185,14 @@ class Settings(BaseSettings):
 
     Environment variable: RETRY_DELAY
     """
+
+    @property
+    def is_development(self) -> bool:
+        return self.environment.strip().lower() in {"development", "dev", "local", "test"}
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
 settings = Settings()

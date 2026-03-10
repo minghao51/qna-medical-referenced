@@ -29,8 +29,9 @@ Example:
 import time
 from typing import Any, Optional
 
+from src.app.exceptions import UpstreamServiceError
 from src.infra.llm import get_client
-from src.infra.storage import chat_history_store
+from src.infra.storage import ChatHistoryStore
 from src.rag import retrieve_context, retrieve_context_with_trace
 
 
@@ -68,6 +69,7 @@ def _compose_full_context(history_context: str, retrieved_context: str) -> str:
 def process_chat_message(
     *,
     llm_client: Any,
+    history_store: ChatHistoryStore,
     message: str,
     session_id: Optional[str],
     include_pipeline: bool = False,
@@ -104,7 +106,7 @@ def process_chat_message(
         - Updates pipeline trace with timing information if tracing enabled
     """
     resolved_session_id = session_id or "default"
-    history = chat_history_store.get_history(resolved_session_id)
+    history = history_store.get_history(resolved_session_id)
     history_context = _build_history_context(history)
 
     pipeline_trace = None
@@ -119,15 +121,18 @@ def process_chat_message(
 
     gen_start = time.time()
     client = llm_client or get_client()
-    response = client.generate(prompt=message, context=full_context)
+    try:
+        response = client.generate(prompt=message, context=full_context)
+    except Exception as exc:
+        raise UpstreamServiceError("An error occurred processing your request") from exc
     gen_timing_ms = int((time.time() - gen_start) * 1000)
 
     if pipeline_trace is not None:
         pipeline_trace.generation.timing_ms = gen_timing_ms
         pipeline_trace.total_time_ms = int((time.time() - chat_start) * 1000)
 
-    chat_history_store.save_message(resolved_session_id, "user", message)
-    chat_history_store.save_message(resolved_session_id, "assistant", response)
+    history_store.save_message(resolved_session_id, "user", message)
+    history_store.save_message(resolved_session_id, "assistant", response)
 
     return {
         "response": response,

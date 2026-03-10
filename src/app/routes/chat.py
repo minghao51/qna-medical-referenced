@@ -19,8 +19,9 @@ Example request:
 import logging
 from typing import Union
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 
+from src.app.logging import log_event
 from src.app.schemas import ChatRequest, ChatResponse
 from src.rag.trace_models import ChatResponseWithPipeline
 from src.usecases.chat import process_chat_message
@@ -120,8 +121,10 @@ def chat(
     """
     try:
         llm_client = getattr(request.app.state, "llm_client", None)
+        history_store = request.app.state.chat_history_store
         result = process_chat_message(
             llm_client=llm_client,
+            history_store=history_store,
             message=payload.message,
             session_id=payload.session_id,
             include_pipeline=include_pipeline,
@@ -136,6 +139,14 @@ def chat(
             )
 
         return ChatResponse(response=result["response"], sources=result["sources"])
-    except Exception as e:
-        logger.error("Chat error: %s: %s", type(e).__name__, str(e))
-        raise HTTPException(status_code=500, detail="An error occurred processing your request")
+    except Exception:
+        log_event(
+            logger,
+            logging.ERROR,
+            "chat_failed",
+            request_id=getattr(request.state, "request_id", None),
+            session_id=payload.session_id,
+            include_pipeline=include_pipeline,
+            auth_key_id=getattr(getattr(request.state, "auth", None), "key_id", None),
+        )
+        raise

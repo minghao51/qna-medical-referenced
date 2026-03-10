@@ -6,9 +6,9 @@ lifecycle hooks, and CORS policies.
 
 Middleware Order (Important):
     1. CORS - Handles cross-origin requests (must be first)
-    2. RequestID - Adds unique request IDs for tracing
-    3. RateLimit - Enforces rate limiting per IP
-    4. APIKey - Validates authentication (must be last for security)
+    2. RateLimit - Enforces rate limiting per client
+    3. APIKey - Validates authentication
+    4. RequestID - Adds unique request IDs for tracing and must run outermost
 
 Example:
     Create a test application:
@@ -20,15 +20,25 @@ Example:
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.app.exceptions import (
+    AppError,
+    app_error_handler,
+    http_exception_handler,
+    unhandled_exception_handler,
+)
+from src.app.logging import configure_logging
 from src.app.middleware import APIKeyMiddleware, RateLimitMiddleware, RequestIDMiddleware
 from src.app.routes import chat_router, evaluation_router, health_router, history_router
+from src.app.security import validate_security_configuration
+from src.config import settings
 from src.infra.llm import get_client
+from src.infra.storage import FileChatHistoryStore
 from src.rag import initialize_runtime_index
 
-logging.basicConfig(level=logging.INFO)
+configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 
 
@@ -54,6 +64,7 @@ async def lifespan(app: FastAPI):
         - Currently none (FastAPI handles cleanup automatically)
     """
     app.state.llm_client = get_client()
+    app.state.chat_history_store = FileChatHistoryStore()
     initialize_runtime_index()
     yield
 
@@ -71,7 +82,7 @@ def create_app() -> FastAPI:
     Middleware configuration:
         - CORS: Allows requests from frontend dev servers
         - RequestID: Adds X-Request-ID header for tracing
-        - RateLimit: Limits requests to 60/minute per IP
+        - RateLimit: Limits requests to 60/minute per client
         - APIKey: Validates X-API-Key header if configured
 
     Routes:
@@ -80,6 +91,8 @@ def create_app() -> FastAPI:
         - /history: Chat history management
         - /evaluation: Evaluation and metrics endpoints
     """
+    validate_security_configuration()
+
     app = FastAPI(
         title="Health Screening Interpreter Chatbot",
         description="An intelligent chatbot to help understand health screening results",
@@ -92,30 +105,26 @@ def create_app() -> FastAPI:
     # For production, update allow_origins with actual frontend domain
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://localhost:5174",
-            "http://localhost:3000",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:5174",
-            "http://127.0.0.1:3000",
-        ],
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    # Request tracking middleware
-    app.add_middleware(RequestIDMiddleware)
     # Rate limiting (prevents abuse)
     app.add_middleware(RateLimitMiddleware)
-    # Authentication (must be last for security)
+    # Authentication before rate-limit key selection
     app.add_middleware(APIKeyMiddleware)
+    # Request tracking outermost so errors also carry request ids
+    app.add_middleware(RequestIDMiddleware)
 
     # Register route modules
     app.include_router(health_router)
     app.include_router(chat_router)
     app.include_router(history_router)
     app.include_router(evaluation_router)
+    app.add_exception_handler(AppError, app_error_handler)
+    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
     return app
 
 

@@ -23,6 +23,7 @@ Example:
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,8 @@ router = APIRouter()
 
 EVALS_DIR = Path("data/evals")
 LATEST_POINTER = Path("data/evals/latest_run.txt")
+RUN_DIR_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+VALID_STAGES = {"l0", "l1", "l2", "l3", "l4", "l5"}
 
 
 def _list_run_dirs() -> list[Path]:
@@ -67,6 +70,22 @@ def _get_latest_run_dir() -> Path | None:
             return run_dir
     runs = _list_run_dirs()
     return runs[0] if runs else None
+
+
+def _validate_run_dir(run_dir: str) -> str:
+    normalized = str(run_dir or "").strip()
+    if not normalized or not RUN_DIR_PATTERN.fullmatch(normalized):
+        raise HTTPException(status_code=400, detail="Invalid run directory identifier")
+    return normalized
+
+
+def _validate_stage(stage: str) -> str:
+    normalized = str(stage or "").strip().lower()
+    if normalized not in VALID_STAGES:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid stage. Must be one of: {sorted(VALID_STAGES)}"
+        )
+    return normalized
 
 
 def _get_all_runs() -> list[dict[str, Any]]:
@@ -429,6 +448,7 @@ def get_evaluation_history(
             }
         }
     """
+    limit = max(1, min(int(limit), 100))
     source_mode = str(source or "local").strip().lower()
     if source_mode not in {"local", "wandb", "all"}:
         raise HTTPException(status_code=400, detail="source must be one of: local, wandb, all")
@@ -474,6 +494,7 @@ def get_wandb_evaluation_run(
     wandb_project: str | None = None,
     wandb_entity: str | None = None,
 ) -> dict[str, Any]:
+    _validate_run_dir(run_ref)
     resolved_project, resolved_entity = _resolved_wandb_target(wandb_project, wandb_entity)
     result = fetch_wandb_run(
         project=resolved_project or "",
@@ -539,6 +560,7 @@ def get_evaluation_run(run_dir: str) -> dict[str, Any]:
     Example:
         GET /evaluation/run/250228T120000Z_abc123
     """
+    run_dir = _validate_run_dir(run_dir)
     target_dir = EVALS_DIR / run_dir
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail=f"Run directory not found: {run_dir}")
@@ -621,8 +643,8 @@ def get_ablation_results() -> dict[str, Any]:
     try:
         return _normalize_ablation_payload(json.loads(ablation_path.read_text()))
     except Exception as e:
-        logger.error(f"Failed to load ablation results: {e}")
-        return {"ablation_runs": [], "error": str(e)}
+        logger.error("Failed to load ablation results: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to load ablation results")
 
 
 @router.get(
@@ -657,21 +679,18 @@ def get_step_records(stage: str, limit: int = 100) -> dict[str, Any]:
     if not run_dir:
         raise HTTPException(status_code=404, detail="No evaluation runs found")
 
-    valid_stages = ["l0", "l1", "l2", "l3", "l4", "l5"]
-    if stage.lower() not in valid_stages:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid stage. Must be one of: {valid_stages}"
-        )
+    stage_name = _validate_stage(stage)
+    limit = max(1, min(int(limit), 500))
 
     step_metrics_path = run_dir / "step_metrics.json"
     if not step_metrics_path.exists():
         raise HTTPException(status_code=404, detail="Step metrics not found")
 
     step_metrics = json.loads(step_metrics_path.read_text())
-    stage_data = step_metrics.get(stage.lower(), {})
+    stage_data = step_metrics.get(stage_name, {})
     records = stage_data.get("records", [])
 
-    return {"stage": stage, "records": records[:limit], "total_count": len(records)}
+    return {"stage": stage_name, "records": records[:limit], "total_count": len(records)}
 
 
 @router.get(
@@ -712,15 +731,13 @@ def get_step_metrics(stage: str) -> dict[str, Any]:
     if not run_dir:
         raise HTTPException(status_code=404, detail="No evaluation runs found")
 
-    valid_stages = ["l0", "l1", "l2", "l3", "l4", "l5"]
-    if stage.lower() not in valid_stages:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid stage. Must be one of: {valid_stages}"
-        )
+    stage_name = _validate_stage(stage)
 
     step_metrics_path = run_dir / "step_metrics.json"
     if not step_metrics_path.exists():
         raise HTTPException(status_code=404, detail="Step metrics not found")
 
     step_metrics = json.loads(step_metrics_path.read_text())
-    return step_metrics.get(stage.lower(), {"error": "Stage not found in metrics"})
+    if stage_name not in step_metrics:
+        raise HTTPException(status_code=404, detail="Stage not found in metrics")
+    return step_metrics[stage_name]

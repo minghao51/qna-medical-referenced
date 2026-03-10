@@ -33,7 +33,8 @@ DASHSCOPE_API_KEY=your_api_key_here
 
 Optional:
 
-- Set `API_KEYS` if you want backend request authentication enabled.
+- Leave `ENVIRONMENT=development` for local work.
+- Set `API_KEYS` or `API_KEYS_JSON` if you want backend request authentication enabled locally.
 - See `docs/configuration.md` for the full configuration reference.
 
 ## 3. Download NLTK data
@@ -49,6 +50,8 @@ uv run python -m src.cli.serve
 ```
 
 The API will be available at `http://localhost:8000`.
+
+If you configured API keys, include `X-API-Key` in backend requests.
 
 Useful endpoints:
 

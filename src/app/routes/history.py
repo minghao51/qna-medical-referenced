@@ -17,9 +17,7 @@ Example:
         curl -X DELETE http://localhost:8001/history/user-123
 """
 
-from fastapi import APIRouter
-
-from src.infra.storage import chat_history_store
+from fastapi import APIRouter, Request
 
 router = APIRouter()
 
@@ -29,7 +27,7 @@ router = APIRouter()
     summary="Get chat history",
     description="Retrieve all messages in the conversation history for a given session ID",
 )
-def get_history(session_id: str):
+def get_history(session_id: str, request: Request):
     """Get conversation history for a session.
 
     Returns all messages (user and assistant) in chronological order
@@ -53,7 +51,7 @@ def get_history(session_id: str):
             ]
         }
     """
-    return {"history": chat_history_store.get_history(session_id)}
+    return {"history": request.app.state.chat_history_store.get_history(session_id)}
 
 
 @router.delete(
@@ -61,7 +59,7 @@ def get_history(session_id: str):
     summary="Clear chat history",
     description="Delete all messages in the conversation history for a given session ID",
 )
-def clear_history(session_id: str):
+def clear_history(session_id: str, request: Request):
     """Clear conversation history for a session.
 
     Deletes all messages associated with the specified session.
@@ -82,5 +80,5 @@ def clear_history(session_id: str):
             "status": "cleared"
         }
     """
-    chat_history_store.clear_history(session_id)
+    request.app.state.chat_history_store.clear_history(session_id)
     return {"status": "cleared"}
