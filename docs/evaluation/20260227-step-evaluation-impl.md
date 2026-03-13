@@ -60,6 +60,39 @@ uv run python -m src.cli.eval_pipeline --thresholds-file custom_thresholds.json
 - **evidence_hit_rate**: Fraction where evidence phrase is found
 - **latency_p50_ms / p95_ms**: Retrieval latency percentiles
 
+### Answer Quality Metrics (L6)
+
+L6 stage also evaluates the quality of generated answers using DeepEval's LLM-as-a-judge framework.
+
+Six metrics are evaluated:
+
+1. **Factual Accuracy** (heavyweight model): Groundedness in retrieved context
+2. **Completeness** (heavyweight model): Coverage of question aspects
+3. **Clinical Relevance** (heavyweight model): Medical appropriateness
+4. **Clarity** (lightweight model): Readability and structure
+5. **Answer Relevancy** (lightweight model): Directly addresses question
+6. **Faithfulness** (heavyweight model): No hallucinations
+
+#### Output Files
+
+- `l6_answer_quality.jsonl`: Per-query detailed results with scores and reasoning
+- `summary.json`: Aggregate metrics in `l6` section
+
+#### Example
+
+```json
+{
+  "l6": {
+    "factual_accuracy": {"mean": 0.85, "count": 100},
+    "completeness": {"mean": 0.78, "count": 100},
+    "clinical_relevance": {"mean": 0.82, "count": 100},
+    "clarity": {"mean": 0.88, "count": 100},
+    "answer_relevancy": {"mean": 0.90, "count": 100},
+    "faithfulness": {"mean": 0.83, "count": 100}
+  }
+}
+```
+
 ### Step Metrics
 - **duplicate_chunk_rate**: Duplicate content in chunks (target: <5%)
 - **empty_page_rate**: PDF pages with no extracted text (target: <20%)

@@ -201,6 +201,68 @@ Maximum number of requests allowed per minute per client.
 - Set to `10` for strict rate limiting
 - Set to `0` to disable rate limiting (not recommended for production)
 
+### DeepEval Evaluation Configuration
+
+The evaluation pipeline supports LLM-as-a-judge evaluation via DeepEval framework.
+
+#### `JUDGE_MODEL_LIGHT`
+**Default:** `qwen3.5-35b-a3b`
+
+Lightweight judge model for simple classification tasks (Clarity, Answer Relevancy).
+
+**When to change:**
+- Use for cost-sensitive evaluations
+- Suitable for straightforward scoring tasks
+- Approximately 15x cheaper than heavyweight model
+
+#### `JUDGE_MODEL_HEAVY`
+**Default:** `qwen3.5-flash`
+
+Heavyweight judge model for complex reasoning tasks (Factual Accuracy, Completeness, Clinical Relevance, Faithfulness).
+
+**When to change:**
+- Use for higher-quality evaluations on complex medical queries
+- Better for nuanced clinical reasoning assessment
+- Higher cost but more accurate judgments
+
+#### `JUDGE_TEMPERATURE`
+**Default:** `0.0`
+
+Temperature setting for judge models (0 = deterministic).
+
+**What it does:**
+- Controls randomness in judge model outputs
+- 0.0 ensures consistent, reproducible scores
+- Higher values (0.1-0.3) may be used for more nuanced evaluations
+
+#### `ENABLE_DEEPEVAL`
+**Default:** `false`
+
+Enable DeepEval framework for answer quality evaluation.
+
+**When to set:**
+- Set to `true` when running answer quality evaluations
+- Requires `--enable-deepeval` flag in eval pipeline
+- Automatically activates when using `--include-answer-eval`
+
+### Running Evaluation with DeepEval
+
+```bash
+uv run python -m src.cli.eval_pipeline \
+    --include-answer-eval \
+    --enable-deepeval \
+    --top-k 5 \
+    --dataset-path data/evals/golden_queries.json
+```
+
+### Cost Optimization
+
+The evaluation uses model tiering to reduce costs:
+- Simple metrics (Clarity, Answer Relevancy): qwen3.5-35b-a3b (~15x cheaper)
+- Complex metrics (Factual Accuracy, Completeness, Clinical Relevance, Faithfulness): qwen3.5-flash
+
+Estimated cost: $0.70-2.10 per 100 queries.
+
 ### Retry Configuration
 
 #### `MAX_RETRIES`

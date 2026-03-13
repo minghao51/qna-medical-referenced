@@ -11,6 +11,7 @@ from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
 @pytest.mark.deepeval
 @pytest.mark.slow
+@pytest.mark.asyncio
 async def test_evaluate_answers_deepeval_basic():
     """Test basic functionality of DeepEval answer evaluation."""
     dataset = [
@@ -56,6 +57,7 @@ async def test_evaluate_answers_deepeval_basic():
 
 @pytest.mark.deepeval
 @pytest.mark.slow
+@pytest.mark.asyncio
 async def test_evaluate_answers_deepeval_multiple_queries():
     """Test evaluation with multiple queries."""
     dataset = [
@@ -89,6 +91,7 @@ async def test_evaluate_answers_deepeval_multiple_queries():
 
 @pytest.mark.deepeval
 @pytest.mark.slow
+@pytest.mark.asyncio
 async def test_evaluate_answers_deepeval_includes_trace():
     """Test that pipeline trace information is included in results."""
     dataset = [
