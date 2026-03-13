@@ -15,6 +15,13 @@ DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
     "l6.mrr_high_conf": {"op": "min", "value": 0.40},
     "l6.topic_false_positive_rate": {"op": "max", "value": 0.35},
     "l6.duplicate_source_ratio_mean": {"op": "max", "value": 0.60},
+    # L6: Answer Quality (DeepEval metrics)
+    "l6.factual_accuracy_mean": {"op": "min", "value": 0.8},
+    "l6.completeness_mean": {"op": "min", "value": 0.75},
+    "l6.clinical_relevance_mean": {"op": "min", "value": 0.8},
+    "l6.clarity_mean": {"op": "min", "value": 0.70},
+    "l6.answer_relevancy_mean": {"op": "min", "value": 0.7},
+    "l6.faithfulness_mean": {"op": "min", "value": 0.8},
 }
 
 
