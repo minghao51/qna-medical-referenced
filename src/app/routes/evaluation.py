@@ -38,7 +38,7 @@ router = APIRouter()
 EVALS_DIR = Path("data/evals")
 LATEST_POINTER = Path("data/evals/latest_run.txt")
 RUN_DIR_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
-VALID_STAGES = {"l0", "l1", "l2", "l3", "l4", "l5"}
+VALID_STAGES = {"l0", "l1", "l2", "l3", "l4", "l5", "l6"}
 
 
 def _list_run_dirs() -> list[Path]:
@@ -741,3 +741,142 @@ def get_step_metrics(stage: str) -> dict[str, Any]:
     if stage_name not in step_metrics:
         raise HTTPException(status_code=404, detail="Stage not found in metrics")
     return step_metrics[stage_name]
+
+
+@router.get(
+    "/evaluation/answer-quality/{run_dir}",
+    summary="Get DeepEval answer quality results",
+    description="Get detailed LLM-judged answer quality metrics for a specific evaluation run",
+)
+def get_answer_quality_details(run_dir: str) -> dict[str, Any]:
+    """Get detailed DeepEval results for a specific evaluation run.
+
+    Returns per-query answer quality metrics including factual accuracy,
+    completeness, clinical relevance, clarity, relevancy, and faithfulness.
+
+    Args:
+        run_dir: Name of the evaluation run directory
+
+    Returns:
+        Dictionary containing:
+            - run_dir: Run directory name
+            - results: List of per-query evaluation results with metrics
+
+    Raises:
+        HTTPException(404): If run directory or results file doesn't exist
+
+    Example:
+        GET /evaluation/answer-quality/250228T120000Z_abc123
+
+        Response:
+        {
+            "run_dir": "250228T120000Z_abc123",
+            "results": [
+                {
+                    "query_id": "q1",
+                    "query": "What is the LDL-C target?",
+                    "answer": "The target is...",
+                    "metrics": {
+                        "Factual Accuracy": {"score": 0.85, "reason": "..."},
+                        "Completeness": {"score": 0.90, "reason": "..."}
+                    }
+                }
+            ]
+        }
+    """
+    from src.evals.artifacts import ArtifactStore
+
+    run_dir = _validate_run_dir(run_dir)
+    target_dir = EVALS_DIR / run_dir
+    if not target_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Run directory not found: {run_dir}")
+
+    results_path = target_dir / "l6_answer_quality.jsonl"
+    if not results_path.exists():
+        raise HTTPException(status_code=404, detail="Answer quality results not found for this run")
+
+    results = []
+    for line in results_path.read_text().strip().split("\n"):
+        if line:
+            try:
+                results.append(json.loads(line))
+            except Exception:
+                continue
+
+    return {"run_dir": run_dir, "results": results}
+
+
+@router.post(
+    "/evaluation/evaluate-single",
+    summary="Evaluate a single answer",
+    description="Evaluate one query-answer-context pair using DeepEval metrics (for debugging)",
+)
+def evaluate_single_answer(query: str, answer: str, context: str) -> dict[str, Any]:
+    """Evaluate a single query-answer-context pair.
+
+    Useful for debugging and testing specific responses. Runs all 6 DeepEval
+    medical quality metrics on the provided input.
+
+    Args:
+        query: The question or query text
+        answer: The generated answer to evaluate
+        context: The retrieved context used to generate the answer
+
+    Returns:
+        Dictionary containing:
+            - query: Input query
+            - answer: Input answer
+            - metrics: Dict of metric names to {score, reason}
+
+    Raises:
+        HTTPException(500): If evaluation fails
+
+    Example:
+        POST /evaluation/evaluate-single?query=...&answer=...&context=...
+
+        Response:
+        {
+            "query": "What is cholesterol?",
+            "answer": "Cholesterol is a lipid...",
+            "metrics": {
+                "Factual Accuracy": {"score": 0.85, "reason": "Well grounded..."},
+                "Completeness": {"score": 0.75, "reason": "Covers key points..."},
+                ...
+            }
+        }
+    """
+    from deepeval.test_case import LLMTestCase
+
+    from src.evals.metrics.medical import (
+        answer_relevancy_metric,
+        clarity_metric,
+        clinical_relevance_metric,
+        completeness_metric,
+        factual_accuracy_metric,
+        faithfulness_metric,
+    )
+
+    test_case = LLMTestCase(input=query, actual_output=answer, retrieval_context=[context])
+
+    metrics = [
+        factual_accuracy_metric,
+        completeness_metric,
+        clinical_relevance_metric,
+        clarity_metric,
+        answer_relevancy_metric,
+        faithfulness_metric,
+    ]
+
+    results = {}
+    for metric in metrics:
+        try:
+            metric.measure(test_case)
+            results[metric.name] = {
+                "score": metric.score,
+                "reason": metric.reason if hasattr(metric, "reason") else None,
+            }
+        except Exception as e:
+            logger.error("Failed to measure metric %s: %s", metric.name, e)
+            results[metric.name] = {"score": 0.0, "error": str(e)}
+
+    return {"query": query, "answer": answer, "metrics": results}
