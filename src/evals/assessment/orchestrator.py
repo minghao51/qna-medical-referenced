@@ -15,7 +15,7 @@ from src.evals.schemas import AssessmentConfig, AssessmentResult
 from src.experiments.wandb_tracking import log_assessment_to_wandb
 from src.rag.runtime import configure_runtime_for_experiment, initialize_runtime_index
 
-from .answer_eval import evaluate_answers
+from .answer_eval import evaluate_answers, evaluate_answers_deepeval
 from .reporting import git_head, render_summary, sha256_file
 from .retrieval_eval import evaluate_retrieval, run_diversity_sweep, run_retrieval_ablations
 from .thresholds import DEFAULT_THRESHOLDS, evaluate_thresholds
@@ -47,6 +47,7 @@ def run_assessment(
     run_diversity_sweep: bool = False,
     diversity_sweep: dict[str, Any] | None = None,
     experiment_config: dict[str, Any] | None = None,
+    enable_deepeval: bool = True,
     audit_l0_download_fn: Callable[[], dict[str, Any]] | None = None,
     assess_l1_html_markdown_quality_fn: Callable[[], dict[str, Any]] | None = None,
     assess_l2_pdf_quality_fn: Callable[[], dict[str, Any]] | None = None,
@@ -124,6 +125,7 @@ def run_assessment(
         run_diversity_sweep=run_diversity_sweep,
         diversity_sweep=dict(diversity_sweep or {}),
         experiment_config=experiment_config,
+        enable_deepeval=enable_deepeval,
     )
 
     experiment_runtime = configure_runtime_for_experiment_fn(config.experiment_config)
@@ -238,7 +240,11 @@ def run_assessment(
     rag_rows: list[dict[str, Any]] = []
     rag_metrics: dict[str, Any] = {"status": "skipped", "reason": "disabled"}
     if config.include_answer_eval and not config.disable_llm_judging:
-        rag_rows, rag_metrics = evaluate_answers_fn(dataset, config.top_k)
+        # Use DeepEval if enabled, otherwise use legacy evaluator
+        if config.enable_deepeval:
+            rag_rows, rag_metrics = evaluate_answers_deepeval(dataset, config.top_k)
+        else:
+            rag_rows, rag_metrics = evaluate_answers_fn(dataset, config.top_k)
     elif config.disable_llm_judging:
         rag_metrics = {"status": "skipped", "reason": "llm_judging_disabled"}
 
