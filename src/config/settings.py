@@ -85,6 +85,19 @@ class Settings(BaseSettings):
     Environment variable: QWEN_BASE_URL
     """
 
+    # LLM-as-a-Judge Configuration
+    judge_model_light: str = "qwen3.5-35b-a3b"
+    """Lightweight model for simple classification tasks (3B active params)."""
+
+    judge_model_heavy: str = "qwen3.5-flash"
+    """Heavyweight model for complex Chain-of-Thought reasoning."""
+
+    judge_temperature: float = 0.0
+    """Temperature for judge models (0 = deterministic, repeatable)."""
+
+    enable_deepeval: bool = True
+    """Use DeepEval framework for evaluation."""
+
     wandb_api_key: str = ""
     """Weights & Biases API key.
 
