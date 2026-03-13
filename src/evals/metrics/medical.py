@@ -5,9 +5,10 @@ assessing factual accuracy, completeness, clinical relevance, and clarity.
 Implements model tiering for cost optimization.
 """
 
-from deepeval.metrics import GEval, AnswerRelevancyMetric, FaithfulnessMetric
+from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, GEval
 from deepeval.test_case import LLMTestCaseParams
-from src.evals.deepeval_models import get_light_model, get_heavy_model
+
+from src.evals.deepeval_models import get_heavy_model, get_light_model
 
 # =============================================================================
 # Custom Medical Metrics (using GEval with LLM-as-a-judge)
@@ -33,10 +34,10 @@ Rate from 1-5:
     evaluation_params=[
         LLMTestCaseParams.INPUT,
         LLMTestCaseParams.ACTUAL_OUTPUT,
-        LLMTestCaseParams.RETRIEVAL_CONTEXT
+        LLMTestCaseParams.RETRIEVAL_CONTEXT,
     ],
     threshold=0.8,
-    model=get_heavy_model()
+    model=get_heavy_model(),
 )
 
 # Completeness Judge (Heavyweight model - requires Chain-of-Thought)
@@ -56,12 +57,9 @@ Rate from 1-5:
 - 3: Adequate, some missing aspects
 - 2: Incomplete, missing key details
 - 1: Fails to address the question""",
-    evaluation_params=[
-        LLMTestCaseParams.INPUT,
-        LLMTestCaseParams.ACTUAL_OUTPUT
-    ],
+    evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
     threshold=0.75,
-    model=get_heavy_model()
+    model=get_heavy_model(),
 )
 
 # Clinical Relevance Judge (Heavyweight model - requires domain expertise)
@@ -84,10 +82,10 @@ Rate from 1-5:
     evaluation_params=[
         LLMTestCaseParams.INPUT,
         LLMTestCaseParams.ACTUAL_OUTPUT,
-        LLMTestCaseParams.RETRIEVAL_CONTEXT
+        LLMTestCaseParams.RETRIEVAL_CONTEXT,
     ],
     threshold=0.8,
-    model=get_heavy_model()
+    model=get_heavy_model(),
 )
 
 # Clarity Judge (Lightweight model - simpler classification)
@@ -107,12 +105,9 @@ Rate from 1-5:
 - 3: Understandable, could be clearer
 - 2: Confusing in parts
 - 1: Very unclear, poorly structured""",
-    evaluation_params=[
-        LLMTestCaseParams.INPUT,
-        LLMTestCaseParams.ACTUAL_OUTPUT
-    ],
+    evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
     threshold=0.70,
-    model=get_light_model()
+    model=get_light_model(),
 )
 
 # =============================================================================
@@ -120,13 +115,7 @@ Rate from 1-5:
 # =============================================================================
 
 # Answer Relevancy (Lightweight model)
-answer_relevancy_metric = AnswerRelevancyMetric(
-    threshold=0.7,
-    model=get_light_model()
-)
+answer_relevancy_metric = AnswerRelevancyMetric(threshold=0.7, model=get_light_model())
 
 # Faithfulness/Hallucination Detection (Heavyweight model)
-faithfulness_metric = FaithfulnessMetric(
-    threshold=0.8,
-    model=get_heavy_model()
-)
+faithfulness_metric = FaithfulnessMetric(threshold=0.8, model=get_heavy_model())

@@ -7,13 +7,14 @@ verifying proper initialization and model tiering.
 from deepeval.test_case import LLMTestCase
 
 from src.evals.metrics.medical import (
-    factual_accuracy_metric,
-    completeness_metric,
-    clinical_relevance_metric,
-    clarity_metric,
     answer_relevancy_metric,
-    faithfulness_metric
+    clarity_metric,
+    clinical_relevance_metric,
+    completeness_metric,
+    factual_accuracy_metric,
+    faithfulness_metric,
 )
+
 
 def test_metrics_are_initialized():
     """Test all metrics are properly initialized."""
@@ -34,6 +35,7 @@ def test_metrics_are_initialized():
     assert answer_relevancy_metric.threshold == 0.7
     assert faithfulness_metric.threshold == 0.8
 
+
 def test_metrics_use_correct_models():
     """Test lightweight and heavyweight models are assigned correctly."""
     # Clarity uses lightweight (simple classification)
@@ -42,12 +44,13 @@ def test_metrics_use_correct_models():
     # Factual accuracy uses heavyweight (CoT reasoning)
     assert factual_accuracy_metric.model.model == "qwen3.5-flash"
 
+
 def test_factual_accuracy_metric_measures():
     """Test factual accuracy metric can measure a test case."""
     test_case = LLMTestCase(
         input="What is the LDL-C target for secondary prevention?",
         actual_output="The LDL-C target is 1.8 mmol/L for secondary prevention.",
-        retrieval_context=["Guidelines recommend LDL-C < 1.8 mmol/L for secondary prevention."]
+        retrieval_context=["Guidelines recommend LDL-C < 1.8 mmol/L for secondary prevention."],
     )
 
     factual_accuracy_metric.measure(test_case)
@@ -57,12 +60,13 @@ def test_factual_accuracy_metric_measures():
     # Good answer should score high
     assert factual_accuracy_metric.score > 0.5
 
+
 def test_clarity_metric_uses_lightweight_model():
     """Test clarity metric uses lightweight model."""
     test_case = LLMTestCase(
         input="Explain cholesterol.",
         actual_output="Cholesterol is a waxy substance found in blood.",
-        retrieval_context=[]
+        retrieval_context=[],
     )
 
     clarity_metric.measure(test_case)
