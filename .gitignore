@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv/
 
+# Git worktrees
+.worktrees/
+
 # Environment files
 .env
 .env.*
@@ -20,6 +23,7 @@ logs/
 .pytest_cache/
 .mypy_cache/
 test-results/
+wandb/
 
 # IDE
 .idea/
