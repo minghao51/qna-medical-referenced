@@ -36,6 +36,8 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
     "live_api: requires live Qwen API access",
+    "deepeval: marks tests as DeepEval integration tests (slow, requires API)",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')"
 ]
 
 [tool.ruff]
