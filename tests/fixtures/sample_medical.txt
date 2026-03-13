@@ -1,0 +1,14 @@
+Cholesterol Management Guidelines
+
+LDL-C Targets:
+- Secondary prevention: < 1.8 mmol/L (< 70 mg/dL)
+- Primary prevention: < 2.6 mmol/L (< 100 mg/dL)
+
+Treatment Recommendations:
+1. Statins are first-line therapy for lipid lowering
+2. Ezetimibe can be added if statins alone are insufficient
+3. PCSK9 inhibitors for very high-risk patients
+
+Monitoring:
+- Check lipid panel every 3-6 months during treatment
+- Monitor for muscle pain (statin-associated muscle symptoms)
