@@ -136,11 +136,25 @@ async def evaluate_answers_deepeval(
         metric_results = {}
         for metric in metrics:
             metric.measure(test_case)
-            metric_results[metric.name] = {
+            # Get metric name - GEval metrics have .name, built-in metrics use class name
+            metric_name = getattr(metric, 'name', metric.__class__.__name__)
+
+            # Map class names to the expected all_scores key format
+            score_key_map = {
+                "Factual Accuracy": "factual_accuracy",
+                "Completeness": "completeness",
+                "Clinical Relevance": "clinical_relevance",
+                "Clarity": "clarity",
+                "AnswerRelevancyMetric": "answer_relevancy",
+                "FaithfulnessMetric": "faithfulness"
+            }
+            score_key = score_key_map.get(metric_name, metric_name.lower().replace(" ", "_"))
+
+            metric_results[metric_name] = {
                 "score": metric.score,
                 "reason": metric.reason if hasattr(metric, 'reason') else None
             }
-            all_scores[metric.name.lower().replace(" ", "_")].append(metric.score)
+            all_scores[score_key].append(metric.score)
 
         results.append({
             "query_id": item.get("query_id"),

@@ -869,14 +869,16 @@ def evaluate_single_answer(query: str, answer: str, context: str) -> dict[str, A
 
     results = {}
     for metric in metrics:
+        # Get metric name - GEval metrics have .name, built-in metrics use class name
+        metric_name = getattr(metric, "name", metric.__class__.__name__)
         try:
             metric.measure(test_case)
-            results[metric.name] = {
+            results[metric_name] = {
                 "score": metric.score,
                 "reason": metric.reason if hasattr(metric, "reason") else None,
             }
         except Exception as e:
-            logger.error("Failed to measure metric %s: %s", metric.name, e)
-            results[metric.name] = {"score": 0.0, "error": str(e)}
+            logger.error("Failed to measure metric %s: %s", metric_name, e)
+            results[metric_name] = {"score": 0.0, "error": str(e)}
 
     return {"query": query, "answer": answer, "metrics": results}
