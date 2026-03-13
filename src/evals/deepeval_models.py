@@ -53,7 +53,9 @@ class QwenModel(DeepEvalBaseLLM):
             messages=[{"role": "user", "content": prompt}],
             temperature=settings.judge_temperature,
         )
-        return response.choices[0].message.content or ""
+        if response.choices and response.choices[0].message.content:
+            return response.choices[0].message.content
+        return ""
 
     async def a_generate(self, prompt: str) -> str:
         """Generate text asynchronously.
