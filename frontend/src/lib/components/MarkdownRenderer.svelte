@@ -18,13 +18,25 @@
   hljs.registerLanguage('xml', xml);
   hljs.registerLanguage('plaintext', plaintext);
 
-  export let content: string;
-  export let class: string = '';
-  export let maxHeight: string | undefined = undefined;
-  export let showCopyButton: boolean = true;
-  export let codeTheme: 'light' | 'dark' | 'github' = 'github';
-  export let truncate: number | undefined = undefined;
-  export let onError: (error: Error) => void = console.error;
+  interface Props {
+    content: string;
+    className?: string;
+    maxHeight?: string;
+    showCopyButton?: boolean;
+    codeTheme?: 'light' | 'dark' | 'github';
+    truncate?: number;
+    onError?: (error: Error) => void;
+  }
+
+  let {
+    content,
+    className = '',
+    maxHeight,
+    showCopyButton = true,
+    codeTheme = 'github',
+    truncate,
+    onError = console.error
+  }: Props = $props();
 
   let copiedCode = $state<string | null>(null);
   let codeBlockId = $state(0);
@@ -44,50 +56,23 @@
       onError(err as Error);
     }
   }
-
-  // Custom renderer for code blocks with syntax highlighting
-  const renderers = {
-    code: (code: { language: string; text: string }) => {
-      const id = `code-block-${codeBlockId++}`;
-      const lang = code.language || 'plaintext';
-      const highlighted = hljs.highlight(code.text, { language: lang }).value;
-
-      return `
-        <div style="position: relative;">
-          <button
-            class="code-copy-button"
-            data-code-id="${id}"
-            data-code-text="${encodeURIComponent(code.text)}"
-            aria-label="Copy code to clipboard"
-          >
-            ${copiedCode === id ? 'Copied!' : 'Copy'}
-          </button>
-          <pre><code class="hljs language-${lang}">${highlighted}</code></pre>
-        </div>
-      `;
-    }
-  };
-
-  function handleClick(e: MouseEvent) {
-    const button = (e.target as HTMLElement).closest('.code-copy-button');
-    if (button) {
-      const codeText = decodeURIComponent(button.getAttribute('data-code-text') || '');
-      const codeId = button.getAttribute('data-code-id') || '';
-      copyToClipboard(codeText, codeId);
-    }
-  }
 </script>
 
-<div class="markdown-renderer {class}" style:max-height={maxHeight} on:click={handleClick}>
+<div class="markdown-renderer {className}" style:max-height={maxHeight}>
   {#if content && typeof content === 'string'}
-    <SvelteMarkdown source={displayContent} {renderers} />
+    <SvelteMarkdown source={displayContent} />
   {:else}
     <p class="error">Unable to display content</p>
   {/if}
 </div>
 
 <style>
-  .code-copy-button {
+  .error {
+    color: #d32f2f;
+    font-style: italic;
+  }
+
+  :global(.code-copy-button) {
     position: absolute;
     top: 8px;
     right: 8px;
@@ -103,12 +88,7 @@
     z-index: 10;
   }
 
-  .code-copy-button:hover {
+  :global(.code-copy-button:hover) {
     background-color: rgba(0, 0, 0, 0.85);
-  }
-
-  .error {
-    color: #d32f2f;
-    font-style: italic;
   }
 </style>
