@@ -1,0 +1,140 @@
+/* Highlight.js GitHub theme */
+@import 'highlight.js/styles/github.css';
+
+/* Custom markdown styles */
+.markdown-renderer {
+  line-height: 1.6;
+  color: #24292e;
+}
+
+/* Headings */
+.markdown-renderer h1 {
+  font-size: 2em;
+  margin: 0.67em 0;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #eaecef;
+}
+
+.markdown-renderer h2 {
+  font-size: 1.5em;
+  margin: 0.75em 0;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #eaecef;
+}
+
+.markdown-renderer h3 {
+  font-size: 1.25em;
+  margin: 0.83em 0;
+}
+
+.markdown-renderer h4 {
+  font-size: 1em;
+  margin: 1em 0;
+}
+
+.markdown-renderer h5 {
+  font-size: 0.875em;
+  margin: 1.25em 0;
+}
+
+.markdown-renderer h6 {
+  font-size: 0.85em;
+  margin: 1.5em 0;
+  color: #6a737d;
+}
+
+/* Tables */
+.markdown-renderer table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown-renderer th {
+  background-color: #f6f8fa;
+  border: 1px solid #dfe2e5;
+  padding: 6px 13px;
+  font-weight: 600;
+}
+
+.markdown-renderer td {
+  border: 1px solid #dfe2e5;
+  padding: 6px 13px;
+}
+
+.markdown-renderer tr:nth-child(2n) {
+  background-color: #f6f8fa;
+}
+
+.markdown-renderer tr:hover {
+  background-color: #fff5b5;
+}
+
+/* Code blocks */
+.markdown-renderer pre {
+  background-color: #f6f8fa;
+  border-radius: 6px;
+  font-size: 85%;
+  line-height: 1.45;
+  overflow: auto;
+  padding: 16px;
+  position: relative;
+}
+
+.markdown-renderer code {
+  background-color: rgba(27, 31, 35, 0.05);
+  border-radius: 3px;
+  font-size: 85%;
+  margin: 0;
+  padding: 0.2em 0.4em;
+}
+
+.markdown-renderer pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+/* Lists */
+.markdown-renderer ul,
+.markdown-renderer ol {
+  padding-left: 2em;
+  margin: 0 0 1em 0;
+}
+
+.markdown-renderer li {
+  margin: 0.25em 0;
+}
+
+.markdown-renderer li > ul,
+.markdown-renderer li > ol {
+  margin: 0.25em 0;
+}
+
+/* Blockquotes */
+.markdown-renderer blockquote {
+  margin: 0 0 1em 0;
+  padding: 0 1em;
+  color: #6a737d;
+  border-left: 0.25em solid #dfe2e5;
+}
+
+/* Horizontal rules */
+.markdown-renderer hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  background-color: #e1e4e8;
+  border: 0;
+}
+
+/* Links */
+.markdown-renderer a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.markdown-renderer a:hover {
+  text-decoration: underline;
+}

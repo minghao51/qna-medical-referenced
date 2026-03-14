@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import type { Message } from '$lib/types';
+	import type { ChatSource, Message } from '$lib/types';
 	import PipelinePanel from '$lib/components/PipelinePanel.svelte';
 	import ConfidenceBadge from '$lib/components/ConfidenceBadge.svelte';
 	import SourceQualityIndicator from '$lib/components/SourceQualityIndicator.svelte';
+	import MarkdownRenderer from '$lib/components/MarkdownRenderer.svelte';
 	import { calculateConfidence } from '$lib/confidenceCalculator';
+	import { getSafeExternalUrl } from '$lib/utils/url';
+	import '../lib/styles/markdown.css';
 
 	const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -17,6 +20,15 @@
 	let includePipelineForSession = $state(false);
 	let messagesContainer: HTMLDivElement | undefined = $state();
 	let copiedIndex: number | null = $state(null);
+
+	type RenderableSource = {
+		label: string;
+		source: string;
+		url: string | null;
+		page?: number;
+		classifier: string;
+		key: string;
+	};
 
 	function generateSessionId() {
 		let id = localStorage.getItem('chat_session_id');
@@ -124,24 +136,6 @@
 		return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 	}
 
-	function escapeHtml(text: string): string {
-		return text
-			.replaceAll('&', '&amp;')
-			.replaceAll('<', '&lt;')
-			.replaceAll('>', '&gt;')
-			.replaceAll('"', '&quot;')
-			.replaceAll("'", '&#39;');
-	}
-
-	function renderMarkdown(text: string): string {
-		const escaped = escapeHtml(text);
-		return escaped
-			.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-			.replace(/\*(.*?)\*/g, '<em>$1</em>')
-			.replace(/`(.*?)`/g, '<code>$1</code>')
-			.replace(/\n/g, '<br>');
-	}
-
 	onMount(() => {
 		sessionId = generateSessionId();
 		loadHistory();
@@ -149,6 +143,45 @@
 
 	function hasPipeline(message: Message): boolean {
 		return message.role === 'assistant' && message.pipeline !== undefined;
+	}
+
+	function normalizeSource(source: ChatSource | string): RenderableSource {
+		if (typeof source === 'string') {
+			const safeUrl = getSafeExternalUrl(source);
+			return {
+				label: source,
+				source,
+				url: safeUrl,
+				classifier: safeUrl ?? source,
+				key: safeUrl ?? source
+			};
+		}
+
+		const safeUrl = getSafeExternalUrl(source.url);
+		const label = source.label || source.source || 'Unknown source';
+		const canonicalSource = source.source || source.url || label;
+		return {
+			label,
+			source: canonicalSource,
+			url: safeUrl,
+			page: source.page,
+			classifier: safeUrl ?? canonicalSource,
+			key: safeUrl ?? canonicalSource ?? label
+		};
+	}
+
+	function getRenderableSources(message: Message): RenderableSource[] {
+		if (!message.sources?.length) return [];
+
+		const deduped = new Map<string, RenderableSource>();
+		for (const source of message.sources) {
+			const normalized = normalizeSource(source);
+			if (!deduped.has(normalized.key)) {
+				deduped.set(normalized.key, normalized);
+			}
+		}
+
+		return Array.from(deduped.values());
 	}
 </script>
 
@@ -176,6 +209,7 @@
 		{/if}
 
 		{#each messages as msg, index}
+			{@const renderableSources = getRenderableSources(msg)}
 			<div class="message {msg.role}">
 				<div class="message-header">
 					<span class="role-label">{msg.role === 'user' ? 'You' : 'Assistant'}</span>
@@ -196,16 +230,31 @@
 						</button>
 					{/if}
 				</div>
-				<div class="content">{@html msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}</div>
-				{#if msg.sources && msg.sources.length > 0}
+				<div class="content">
+					{#if msg.role === 'assistant'}
+						<MarkdownRenderer content={msg.content} />
+					{:else}
+						{msg.content}
+					{/if}
+				</div>
+				{#if renderableSources.length > 0}
 					<div class="sources">
 						<strong>Sources:</strong>
-						{#each msg.sources as source}
-							<span class="source">
-								<SourceQualityIndicator {source} />
-								<span class="source-text">{source}</span>
-							</span>
-						{/each}
+						<ol class="sources-list">
+							{#each renderableSources as source, sourceIndex}
+								<li class="source-item">
+									<span class="source-index">{sourceIndex + 1}.</span>
+									<SourceQualityIndicator source={source.classifier} />
+									{#if source.url}
+										<a href={source.url} target="_blank" rel="noopener noreferrer" class="source-link">
+											{source.label}
+										</a>
+									{:else}
+										<span class="source-text">{source.label}</span>
+									{/if}
+								</li>
+							{/each}
+						</ol>
 					</div>
 				{/if}
 				{#if hasPipeline(msg)}
@@ -258,7 +307,8 @@
 
 <style>
 	.chat-container {
-		max-width: 800px;
+		max-width: 1400px;
+		width: 100%;
 		margin: 0 auto;
 		height: 100vh;
 		display: flex;
@@ -355,7 +405,13 @@
 		margin-bottom: 1rem;
 		padding: 1rem;
 		border-radius: 8px;
-		max-width: 85%;
+		max-width: 90%;
+	}
+
+	@media (max-width: 768px) {
+		.message {
+			max-width: 95%;
+		}
 	}
 
 	.message.user {
@@ -463,24 +519,44 @@
 		margin-top: 0.5rem;
 		font-size: 0.85rem;
 		color: #666;
+		display: grid;
+		gap: 0.5rem;
 	}
 
-	.source {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		background: #e0e0e0;
-		padding: 0.2rem 0.5rem;
-		border-radius: 3px;
-		margin: 0.2rem 0.2rem 0 0;
-		font-size: 0.75rem;
+	.sources-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.45rem;
 	}
 
+	.source-item {
+		display: grid;
+		grid-template-columns: auto auto minmax(0, 1fr);
+		align-items: start;
+		gap: 0.5rem;
+	}
+
+	.source-index {
+		min-width: 1.5rem;
+		font-weight: 600;
+		color: #6b7280;
+	}
+
+	.source-link,
 	.source-text {
-		max-width: 200px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		font-size: 0.95rem;
+		color: #4b5563;
+		word-break: break-word;
+	}
+
+	.source-link {
+		text-decoration: none;
+	}
+
+	.source-link:hover {
+		text-decoration: underline;
 	}
 
 	.pipeline-btn {
@@ -553,5 +629,12 @@
 	.input-area button:disabled {
 		background: #ccc;
 		cursor: not-allowed;
+	}
+
+	/* Optimal line length for wide screens */
+	@media (min-width: 1400px) {
+		.message.assistant .content {
+			max-width: 75ch;
+		}
 	}
 </style>
