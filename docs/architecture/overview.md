@@ -114,7 +114,7 @@ Artifacts are stored in `data/evals/<timestamp>_<slug>/` with:
 - `retrieval_results.jsonl` - per-query retrieval traces
 - Other stage-specific metrics files
 
-See `docs/plans/pipeline-quality-assessment-plan.md` for design details.
+See `docs/evaluation/pipeline_quality_assessment_plan.md` for the implemented evaluation spec.
 
 ## Configuration Ownership
 
@@ -143,6 +143,7 @@ The frontend is a SvelteKit application that provides the user interface for the
 - **Build:** Vite 7.3.1
 - **Testing:** Playwright (E2E)
 - **Charts:** Chart.js 4.x
+- **Markdown:** svelte-markdown 0.4.1, highlight.js 11.9.0
 
 ## Routes
 
@@ -183,6 +184,12 @@ The frontend is a SvelteKit application that provides the user interface for the
 | `MetricChart.svelte` | `frontend/src/lib/components/` | Reusable Chart.js wrapper |
 | `eval/+page.svelte` | `frontend/src/routes/` | Enhanced with historical charts |
 
+### Markdown Rendering (Phase 5)
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `MarkdownRenderer.svelte` | `frontend/src/lib/components/` | Full markdown rendering with syntax highlighting |
+
 ## Data Flow
 
 ```
@@ -218,7 +225,34 @@ Client-side confidence scoring (0-100):
 
 ```bash
 cd frontend
-bun run dev    # Development server on http://localhost:5173
-bun run build  # Production build
-bun run test   # Playwright E2E tests
+npm run dev    # Development server on http://localhost:5173
+npm run build  # Production build
+npm run test   # Playwright E2E tests
 ```
+
+## Markdown Rendering
+
+The application uses a custom `MarkdownRenderer` component for rendering chat message content with full markdown support.
+
+**Technology:**
+- svelte-markdown 0.4.1: Markdown parsing
+- highlight.js 11.9.0: Code syntax highlighting with tree-shaking
+
+**Features:**
+- Tables with responsive scrolling
+- Headings (H1-H6) with proper hierarchy
+- Code blocks with syntax highlighting (Python, JavaScript, TypeScript, Bash, JSON, XML)
+- Lists (ordered/unordered) with proper indentation
+- Bold, italic, strikethrough, links, blockquotes
+- Copy button for code blocks
+
+**Security:**
+- Built-in XSS sanitization via svelte-markdown
+- Only safe HTML tags allowed
+- No script execution or dangerous protocols
+
+**Responsive Layout:**
+- Max-width: 1400px (up from 800px)
+- Optimal line length: 75ch on wide screens
+- Mobile-optimized with scrollable tables
+

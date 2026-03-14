@@ -1,42 +1,42 @@
-# sv
+# Frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit frontend for:
 
-## Creating a project
+- the main chat experience at `/`
+- the evaluation dashboard at `/eval`
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Commands
 
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv create --template minimal --types ts --no-install frontend
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+```bash
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
 npm run build
+npm run preview
+npm run test
 ```
 
-You can preview the production build with `npm run preview`.
+## Dependencies
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+### Markdown Rendering
+- **svelte-markdown**: Parse and render markdown in chat responses
+- **highlight.js**: Syntax highlighting for code blocks
+
+### Usage
+
+The `MarkdownRenderer` component is used in the main chat page to render assistant messages. It supports full CommonMark markdown plus GitHub-flavored tables, with syntax highlighting for Python, JavaScript, TypeScript, Bash, JSON, and XML.
+
+
+## Local Expectations
+
+- The frontend typically runs on Vite's default local port during normal development.
+- Playwright uses port `5174` via `frontend/playwright.config.ts`.
+- The backend API is expected at `http://localhost:8000`.
+
+## Key Locations
+
+- `src/routes/+page.svelte` for the chat page
+- `src/routes/eval/+page.svelte` for the evaluation dashboard
+- `src/lib/components/` for reusable UI components
+- `tests/` for Playwright end-to-end tests
+
+For full project setup, use `docs/quickstart.md` from the repo root.
