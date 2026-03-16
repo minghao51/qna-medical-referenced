@@ -1,94 +1,66 @@
 <script lang="ts">
-  import SvelteMarkdown from 'svelte-markdown';
-  import hljs from 'highlight.js/lib/core';
-  import python from 'highlight.js/lib/languages/python';
-  import javascript from 'highlight.js/lib/languages/javascript';
-  import typescript from 'highlight.js/lib/languages/typescript';
-  import bash from 'highlight.js/lib/languages/bash';
-  import json from 'highlight.js/lib/languages/json';
-  import xml from 'highlight.js/lib/languages/xml';
-  import plaintext from 'highlight.js/lib/languages/plaintext';
+	import { setContext } from 'svelte';
+	import SvelteMarkdown from 'svelte-markdown';
+	import CodeBlockRenderer from '$lib/components/markdown/renderers/CodeBlockRenderer.svelte';
+	import HtmlRenderer from '$lib/components/markdown/renderers/HtmlRenderer.svelte';
+	import LinkRenderer from '$lib/components/markdown/renderers/LinkRenderer.svelte';
+	import { markdownRendererContextKey } from '$lib/components/markdown/context';
 
-  // Register languages for tree-shaking
-  hljs.registerLanguage('python', python);
-  hljs.registerLanguage('javascript', javascript);
-  hljs.registerLanguage('typescript', typescript);
-  hljs.registerLanguage('bash', bash);
-  hljs.registerLanguage('json', json);
-  hljs.registerLanguage('xml', xml);
-  hljs.registerLanguage('plaintext', plaintext);
+	interface Props {
+		content: string;
+		className?: string;
+		maxHeight?: string;
+		showCopyButton?: boolean;
+		truncate?: number;
+		onError?: (error: Error) => void;
+	}
 
-  interface Props {
-    content: string;
-    className?: string;
-    maxHeight?: string;
-    showCopyButton?: boolean;
-    codeTheme?: 'light' | 'dark' | 'github';
-    truncate?: number;
-    onError?: (error: Error) => void;
-  }
+	const markdownOptions = {
+		gfm: true,
+		headerIds: false,
+		mangle: false
+	} as const;
 
-  let {
-    content,
-    className = '',
-    maxHeight,
-    showCopyButton = true,
-    codeTheme = 'github',
-    truncate,
-    onError = console.error
-  }: Props = $props();
+	const renderers = {
+		code: CodeBlockRenderer,
+		html: HtmlRenderer,
+		link: LinkRenderer
+	};
 
-  let copiedCode = $state<string | null>(null);
-  let codeBlockId = $state(0);
+	let {
+		content,
+		className = '',
+		maxHeight,
+		showCopyButton = true,
+		truncate,
+		onError = console.error
+	}: Props = $props();
 
-  // Truncate content if needed
-  let displayContent = $derived(truncate && content.length > truncate
-    ? content.slice(0, truncate) + '...'
-    : content
-  );
+	setContext(markdownRendererContextKey, {
+		getShowCopyButton: () => showCopyButton,
+		reportError: (error: Error) => onError(error)
+	});
 
-  async function copyToClipboard(code: string, id: string) {
-    try {
-      await navigator.clipboard.writeText(code);
-      copiedCode = id;
-      setTimeout(() => copiedCode = null, 2000);
-    } catch (err) {
-      onError(err as Error);
-    }
-  }
+	let displayContent = $derived(
+		truncate && content.length > truncate ? `${content.slice(0, truncate).trimEnd()}...` : content
+	);
 </script>
 
-<div class="markdown-renderer {className}" style:max-height={maxHeight}>
-  {#if content && typeof content === 'string'}
-    <SvelteMarkdown source={displayContent} />
-  {:else}
-    <p class="error">Unable to display content</p>
-  {/if}
+<div class={`markdown-renderer ${className}`.trim()} class:markdown-renderer--scrollable={Boolean(maxHeight)} style:max-height={maxHeight}>
+	{#if content && typeof content === 'string'}
+		<SvelteMarkdown source={displayContent} options={markdownOptions} {renderers} />
+	{:else}
+		<p class="error">Unable to display content</p>
+	{/if}
 </div>
 
 <style>
-  .error {
-    color: #d32f2f;
-    font-style: italic;
-  }
+	.markdown-renderer--scrollable {
+		overflow-y: auto;
+	}
 
-  :global(.code-copy-button) {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    min-width: 44px;
-    min-height: 44px;
-    padding: 8px 12px;
-    background-color: rgba(0, 0, 0, 0.7);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    z-index: 10;
-  }
-
-  :global(.code-copy-button:hover) {
-    background-color: rgba(0, 0, 0, 0.85);
-  }
+	.error {
+		color: #d32f2f;
+		font-style: italic;
+	}
 </style>

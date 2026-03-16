@@ -1344,17 +1344,33 @@
 				</section>
 			{/if}
 
-			{#if data.summary?.rag_metrics && data.summary.rag_metrics.status !== 'skipped'}
+			{#if data.summary?.l6_answer_quality_metrics && data.summary.l6_answer_quality_metrics.status !== 'skipped'}
 				<section class="rag-section">
-					<h2>Answer Evaluation</h2>
+					<h2>L6 Answer Quality</h2>
 					<div class="rag-stats">
 						<div class="metric-card">
-							<span class="metric-label">Relevance Score</span>
-							<span class="metric-value">{data.summary.rag_metrics.relevance_score_mean?.toFixed(2) || 'N/A'}</span>
+							<span class="metric-label">L6 Status</span>
+							<span class="metric-value">{data.summary.l6_answer_quality_metrics.status}</span>
 						</div>
 						<div class="metric-card">
-							<span class="metric-label">Faithfulness Score</span>
-							<span class="metric-value">{data.summary.rag_metrics.faithfulness_score_mean?.toFixed(2) || 'N/A'}</span>
+							<span class="metric-label">Query Count Scored</span>
+							<span class="metric-value">{data.summary.l6_answer_quality_metrics.query_count_scored ?? data.summary.l6_answer_quality_metrics.query_count ?? 'N/A'}</span>
+						</div>
+						<div class="metric-card">
+							<span class="metric-label">Metric Error Rate</span>
+							<span class="metric-value">
+								{data.summary.l6_answer_quality_metrics.metric_error_rate !== undefined
+									? formatPercent(data.summary.l6_answer_quality_metrics.metric_error_rate)
+									: 'N/A'}
+							</span>
+						</div>
+						<div class="metric-card">
+							<span class="metric-label">Answer Relevancy</span>
+							<span class="metric-value">{data.summary.l6_answer_quality_metrics.answer_relevancy?.mean?.toFixed(2) || 'N/A'}</span>
+						</div>
+						<div class="metric-card">
+							<span class="metric-label">Faithfulness</span>
+							<span class="metric-value">{data.summary.l6_answer_quality_metrics.faithfulness?.mean?.toFixed(2) || 'N/A'}</span>
 						</div>
 					</div>
 				</section>

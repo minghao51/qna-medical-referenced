@@ -12,7 +12,7 @@ export default defineConfig({
 	workers: 1,
 	reporter: 'list',
 	use: {
-		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5174',
+		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5174',
 		trace: 'on-first-retry',
 	},
 	projects: [
@@ -24,8 +24,8 @@ export default defineConfig({
 	webServer: process.env.PLAYWRIGHT_BASE_URL
 		? undefined
 		: {
-			command: 'bun run dev --port 5174',
-			url: 'http://localhost:5174',
+			command: 'npm run dev -- --host 127.0.0.1 --port 5174',
+			url: 'http://127.0.0.1:5174',
 			reuseExistingServer: !process.env.CI,
 		},
 });

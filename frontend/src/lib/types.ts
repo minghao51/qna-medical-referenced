@@ -31,6 +31,13 @@ export interface ContextStage {
 	preview: string;
 }
 
+export interface ChatSource {
+	label: string;
+	source: string;
+	url?: string;
+	page?: number;
+}
+
 export interface GenerationStage {
 	model: string;
 	timing_ms: number;
@@ -53,7 +60,7 @@ export interface PipelineTrace {
 export interface Message {
 	role: 'user' | 'assistant';
 	content: string;
-	sources?: string[];
+	sources?: Array<ChatSource | string>;
 	pipeline?: PipelineTrace;
 	timestamp?: number;
 }
@@ -62,7 +69,9 @@ export interface EvaluationSummary {
 	run_dir: string;
 	duration_s: number;
 	retrieval_metrics: RetrievalMetrics;
-	rag_metrics: RagMetrics;
+	l6_answer_quality_metrics: L6AnswerQualityMetrics;
+	l6_answer_quality_enabled?: boolean;
+	l6_answer_quality_status?: string;
 	failed_thresholds_count: number;
 	status: 'ok' | 'failed';
 	tracking?: Record<string, any>;
@@ -96,12 +105,28 @@ export interface RetrievalMetrics {
 	topic_false_positive_rate?: number;
 }
 
-export interface RagMetrics {
+export interface L6AnswerQualityMetric {
+	mean: number;
+	count: number;
+	error_count?: number;
+	error_rate?: number;
+}
+
+export interface L6AnswerQualityMetrics {
 	status: string;
 	reason?: string;
 	query_count?: number;
-	relevance_score_mean?: number;
-	faithfulness_score_mean?: number;
+	query_count_scored?: number;
+	metric_evaluations_total?: number;
+	metric_evaluations_ok?: number;
+	metric_evaluations_failed?: number;
+	metric_error_rate?: number;
+	factual_accuracy?: L6AnswerQualityMetric;
+	completeness?: L6AnswerQualityMetric;
+	clinical_relevance?: L6AnswerQualityMetric;
+	clarity?: L6AnswerQualityMetric;
+	answer_relevancy?: L6AnswerQualityMetric;
+	faithfulness?: L6AnswerQualityMetric;
 }
 
 export interface StepMetrics {

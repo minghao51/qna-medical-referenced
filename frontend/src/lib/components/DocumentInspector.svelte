@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { RetrievedDocument } from '$lib/types';
 	import { getDomainType, getDomainCredibilityScore } from '$lib/confidenceCalculator';
+	import { getSafeExternalUrl } from '$lib/utils/url';
 	import SourceQualityIndicator from './SourceQualityIndicator.svelte';
 	import MetricBar from './MetricBar.svelte';
 
@@ -38,18 +39,6 @@
 		});
 		
 		return snippets.slice(0, 3);
-	}
-
-	function getSafeExternalUrl(url: string): string | null {
-		try {
-			const parsed = new URL(url);
-			if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-				return parsed.toString();
-			}
-			return null;
-		} catch {
-			return null;
-		}
 	}
 
 	const relevantSnippets = $derived(getRelevantSnippets(document.content, query));
