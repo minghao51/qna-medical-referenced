@@ -95,8 +95,32 @@ class Settings(BaseSettings):
     judge_temperature: float = 0.0
     """Temperature for judge models (0 = deterministic, repeatable)."""
 
-    enable_deepeval: bool = True
-    """Use DeepEval framework for evaluation."""
+    deepeval_query_concurrency: int = 2
+    """Maximum number of queries to evaluate concurrently in DeepEval answer evaluation."""
+
+    deepeval_metric_concurrency: int = 3
+    """Maximum number of DeepEval metrics to execute concurrently per query."""
+
+    deepeval_metric_timeout_seconds: int = 90
+    """Maximum time to wait for a single DeepEval metric before marking it as errored."""
+
+    deepeval_answer_cache_enabled: bool = True
+    """Reuse cached retrieval + answer generation outputs across evaluation runs."""
+
+    deepeval_metric_cache_enabled: bool = True
+    """Reuse cached metric outputs for unchanged query/context/answer triples."""
+
+    deepeval_cache_dir: str = "data/evals/cache"
+    """Directory for DeepEval retrieval/generation cache files."""
+
+    deepeval_cache_schema_version: int = 2
+    """Schema version for DeepEval cache payloads."""
+
+    deepeval_faithfulness_truths_limit: int = 8
+    """Limit extracted truths for faithfulness to reduce prompt size and latency."""
+
+    judge_max_tokens: int = 1024
+    """Maximum completion tokens for LLM-as-a-judge responses."""
 
     wandb_api_key: str = ""
     """Weights & Biases API key.

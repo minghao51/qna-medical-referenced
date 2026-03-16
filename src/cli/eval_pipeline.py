@@ -54,6 +54,9 @@ def main() -> None:
     parser.add_argument("--include-answer-eval", action="store_true")
     parser.add_argument("--sample-docs-per-source-type", type=int, default=10)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max-queries", type=int, default=None)
+    parser.add_argument("--sample-seed", type=int, default=42)
+    parser.add_argument("--reuse-cached-dataset", action="store_true")
     parser.add_argument("--fail-on-thresholds", action="store_true")
     parser.add_argument("--thresholds-file", default=None)
     parser.add_argument("--dataset-split", default=None, choices=["dev", "test", "regression"])
@@ -129,6 +132,8 @@ def main() -> None:
                 args.sample_docs_per_source_type,
             ),
             "--seed": ("seed", args.seed),
+            "--max-queries": ("max_queries", args.max_queries),
+            "--sample-seed": ("sample_seed", args.sample_seed),
             "--thresholds-file": ("thresholds_file", args.thresholds_file),
             "--dataset-split": ("dataset_split", args.dataset_split),
             "--min-label-confidence": ("min_label_confidence", args.min_label_confidence),
@@ -141,6 +146,7 @@ def main() -> None:
             "--disable-llm-generation": ("disable_llm_generation", args.disable_llm_generation),
             "--disable-llm-judging": ("disable_llm_judging", args.disable_llm_judging),
             "--include-answer-eval": ("include_answer_eval", args.include_answer_eval),
+            "--reuse-cached-dataset": ("reuse_cached_dataset", args.reuse_cached_dataset),
             "--fail-on-thresholds": ("fail_on_thresholds", args.fail_on_thresholds),
             "--disable-page-classification": (
                 "disable_page_classification",
@@ -243,6 +249,9 @@ def main() -> None:
         include_answer_eval=args.include_answer_eval,
         sample_docs_per_source_type=args.sample_docs_per_source_type,
         seed=args.seed,
+        max_queries=args.max_queries,
+        sample_seed=args.sample_seed,
+        reuse_cached_dataset=args.reuse_cached_dataset,
         fail_on_thresholds=args.fail_on_thresholds,
         thresholds_file=args.thresholds_file,
         dataset_split=args.dataset_split,

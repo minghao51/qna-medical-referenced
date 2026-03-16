@@ -22,6 +22,7 @@ DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
     "l6.clarity_mean": {"op": "min", "value": 0.70},
     "l6.answer_relevancy_mean": {"op": "min", "value": 0.7},
     "l6.faithfulness_mean": {"op": "min", "value": 0.8},
+    "l6.metric_error_rate": {"op": "max", "value": 0.10},
 }
 
 
@@ -53,12 +54,22 @@ def is_threshold_pass(metric_value: Any, threshold_spec: Any) -> tuple[bool, str
 
 
 def evaluate_thresholds(
-    step_metrics: dict[str, Any], retrieval_metrics: dict[str, Any], thresholds: dict[str, Any]
+    step_metrics: dict[str, Any],
+    retrieval_metrics: dict[str, Any],
+    l6_answer_quality_metrics: dict[str, Any],
+    thresholds: dict[str, Any],
 ) -> list[dict[str, Any]]:
     failed: list[dict[str, Any]] = []
     lookup = flatten_stage_aggregates(step_metrics)
     for key, value in retrieval_metrics.items():
         if not isinstance(value, dict):
+            lookup[f"l6.{key}"] = value
+    for key, value in l6_answer_quality_metrics.items():
+        if isinstance(value, dict) and "mean" in value:
+            lookup[f"l6.{key}_mean"] = value.get("mean")
+            if "error_rate" in value:
+                lookup[f"l6.{key}_error_rate"] = value.get("error_rate")
+        elif not isinstance(value, dict):
             lookup[f"l6.{key}"] = value
     for key, threshold in thresholds.items():
         if key not in lookup:

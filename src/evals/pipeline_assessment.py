@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.evals.assessment.answer_eval import evaluate_answers as _evaluate_answers
+from src.evals.assessment.answer_eval import evaluate_answer_quality as _evaluate_answer_quality
 from src.evals.assessment.orchestrator import run_assessment as _run_assessment
 from src.evals.assessment.reporting import (
     git_head as _git_head,
@@ -52,7 +52,7 @@ def run_assessment(**kwargs):
         assess_l5_index_quality_fn=assess_l5_index_quality,
         build_retrieval_dataset_fn=build_retrieval_dataset,
         evaluate_retrieval_fn=_evaluate_retrieval,
-        evaluate_answers_fn=_evaluate_answers,
+        evaluate_answers_fn=_evaluate_answer_quality,
         evaluate_thresholds_fn=_evaluate_thresholds,
         git_head_fn=_git_head,
         configure_runtime_for_experiment_fn=configure_runtime_for_experiment,
@@ -67,7 +67,7 @@ def run_assessment(**kwargs):
 
 __all__ = [
     "DEFAULT_THRESHOLDS",
-    "_evaluate_answers",
+    "_evaluate_answer_quality",
     "_evaluate_retrieval",
     "_evaluate_thresholds",
     "_git_head",

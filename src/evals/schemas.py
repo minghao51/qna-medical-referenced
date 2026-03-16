@@ -19,6 +19,9 @@ class AssessmentConfig:
     include_answer_eval: bool = False
     sample_docs_per_source_type: int = 10
     seed: int = 42
+    max_queries: int | None = None
+    sample_seed: int = 42
+    reuse_cached_dataset: bool = False
     fail_on_thresholds: bool = False
     thresholds: dict[str, Any] = field(default_factory=dict)
     retrieval_options: dict[str, Any] = field(default_factory=dict)
@@ -33,7 +36,6 @@ class AssessmentConfig:
     run_diversity_sweep: bool = False
     diversity_sweep: dict[str, Any] = field(default_factory=dict)
     experiment_config: dict[str, Any] | None = None
-    enable_deepeval: bool = True
 
 
 @dataclass

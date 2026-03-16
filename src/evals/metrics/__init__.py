@@ -12,14 +12,7 @@ from src.evals.metrics._utils import (
 )
 
 # Medical-specific evaluation metrics
-from src.evals.metrics.medical import (
-    answer_relevancy_metric,
-    clarity_metric,
-    clinical_relevance_metric,
-    completeness_metric,
-    factual_accuracy_metric,
-    faithfulness_metric,
-)
+from src.evals.metrics.medical import METRIC_SPECS, MetricSpec, create_medical_metrics
 
 __all__ = [
     # Utility functions
@@ -31,10 +24,7 @@ __all__ = [
     "reciprocal_rank",
     "ndcg_at_k",
     # Medical metrics
-    "factual_accuracy_metric",
-    "completeness_metric",
-    "clinical_relevance_metric",
-    "clarity_metric",
-    "answer_relevancy_metric",
-    "faithfulness_metric",
+    "MetricSpec",
+    "METRIC_SPECS",
+    "create_medical_metrics",
 ]

@@ -35,7 +35,7 @@ def render_summary(
     *,
     step_metrics: dict[str, Any],
     retrieval_metrics: dict[str, Any],
-    rag_metrics: dict[str, Any],
+    l6_answer_quality_metrics: dict[str, Any],
     dataset_stats: dict[str, Any],
     failed_thresholds: list[dict[str, Any]],
 ) -> str:
@@ -58,8 +58,8 @@ def render_summary(
             "## Retrieval Metrics (L6)",
             f"- {json.dumps(retrieval_metrics, ensure_ascii=False)}",
             "",
-            "## Answer Eval",
-            f"- {json.dumps(rag_metrics, ensure_ascii=False)}",
+            "## L6 Answer Quality",
+            f"- {json.dumps(l6_answer_quality_metrics, ensure_ascii=False)}",
             "",
             "## Threshold Failures",
         ]

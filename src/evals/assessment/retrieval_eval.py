@@ -19,6 +19,17 @@ def normalize_source_label(source: str) -> str:
     return source.lower().replace(".pdf", "").replace(".md", "").replace(".html", "")
 
 
+def flatten_source_text(source: Any) -> str:
+    if isinstance(source, str):
+        return source
+    if hasattr(source, "model_dump"):
+        source = source.model_dump()
+    if isinstance(source, dict):
+        parts = [source.get("label"), source.get("source"), source.get("url")]
+        return " ".join(str(part) for part in parts if part)
+    return str(source)
+
+
 def source_type_from_name(name: str) -> str:
     lowered = str(name).lower()
     if lowered.endswith(".pdf"):
@@ -139,7 +150,10 @@ def evaluate_retrieval(
         if expected_sources:
             source_hit = (
                 1.0
-                if any(any(es in str(s).lower() for es in expected_sources) for s in sources)
+                if any(
+                    any(es in flatten_source_text(source).lower() for es in expected_sources)
+                    for source in sources
+                )
                 else 0.0
             )
         total_relevant = max(1, len(expected_sources)) if expected_sources else 1

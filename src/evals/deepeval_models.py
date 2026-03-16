@@ -6,7 +6,7 @@ framework. Supports model tiering for cost optimization.
 """
 
 from deepeval.models import DeepEvalBaseLLM
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from src.config.settings import settings
 
@@ -29,7 +29,18 @@ class QwenModel(DeepEvalBaseLLM):
             model: Model identifier string
         """
         self.model = model
-        self.client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url)
+        self.client = OpenAI(
+            api_key=settings.dashscope_api_key,
+            base_url=settings.qwen_base_url,
+            timeout=settings.deepeval_metric_timeout_seconds,
+            max_retries=2,
+        )
+        self.async_client = AsyncOpenAI(
+            api_key=settings.dashscope_api_key,
+            base_url=settings.qwen_base_url,
+            timeout=settings.deepeval_metric_timeout_seconds,
+            max_retries=2,
+        )
 
     def load_model(self):
         """Load and return the model.
@@ -52,6 +63,7 @@ class QwenModel(DeepEvalBaseLLM):
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=settings.judge_temperature,
+            max_tokens=settings.judge_max_tokens,
         )
         if response.choices and response.choices[0].message.content:
             return response.choices[0].message.content
@@ -66,8 +78,15 @@ class QwenModel(DeepEvalBaseLLM):
         Returns:
             Generated text response
         """
-        # For now, wrap sync call. Can be optimized later with async client.
-        return self.generate(prompt)
+        response = await self.async_client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=settings.judge_temperature,
+            max_tokens=settings.judge_max_tokens,
+        )
+        if response.choices and response.choices[0].message.content:
+            return response.choices[0].message.content
+        return ""
 
     def get_model_name(self) -> str:
         """Get the model name.
@@ -76,6 +95,15 @@ class QwenModel(DeepEvalBaseLLM):
             Model identifier string
         """
         return self.model
+
+    def supports_json_mode(self) -> bool:
+        return False
+
+    def supports_structured_outputs(self) -> bool:
+        return False
+
+    def supports_temperature(self) -> bool:
+        return True
 
 
 def get_light_model() -> QwenModel:

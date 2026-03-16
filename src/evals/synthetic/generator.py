@@ -32,6 +32,7 @@ def generate_synthetic_dataset(
     goldens = synthesizer.generate_goldens_from_docs(
         document_paths=[str(p) for p in document_paths],
         context_construction_config=ContextConstructionConfig(
+            critic_model=get_heavy_model(),
             chunk_size=1024,
             chunk_overlap=50,
         ),
