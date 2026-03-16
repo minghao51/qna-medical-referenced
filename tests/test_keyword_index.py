@@ -1,5 +1,6 @@
 import pytest
 
+from src.ingestion.indexing.text_utils import tokenize_text
 from src.ingestion.indexing.vector_store import VectorStore
 
 pytestmark = pytest.mark.live_api
@@ -34,7 +35,8 @@ class TestKeywordIndex:
         vector_store.add_documents(documents)
         vector_store._rebuild_index_if_needed()
 
-        assert "ldl" in vector_store.keyword_index or "cholesterol" in vector_store.keyword_index
+        assert "ldlc" in vector_store.keyword_index
+        assert "lipid" in vector_store.keyword_index
 
     def test_stop_words_filtered(self, vector_store):
         documents = [
@@ -115,8 +117,8 @@ class TestKeywordIndex:
         vector_store.add_documents(documents)
         vector_store._rebuild_index_if_needed()
 
-        assert "ldl" in vector_store.keyword_index or "ldl-c" in vector_store.keyword_index
-        assert "cholesterol" in vector_store.keyword_index
+        assert "ldlc" in vector_store.keyword_index
+        assert "lipid" in vector_store.keyword_index
 
     def test_numbers_not_indexed(self, vector_store):
         documents = [
@@ -126,7 +128,7 @@ class TestKeywordIndex:
         vector_store._rebuild_index_if_needed()
 
         assert "1" not in vector_store.keyword_index, "Pure numbers should not be indexed"
-        assert "ldl-c" in vector_store.keyword_index, "Acronyms should be indexed"
+        assert "ldlc" in vector_store.keyword_index, "Canonical acronym token should be indexed"
 
     def test_tfidf_ranking(self, vector_store):
         documents = [
@@ -150,7 +152,13 @@ class TestKeywordIndex:
         vector_store.add_documents(documents)
         vector_store._rebuild_index_if_needed()
 
-        assert "ldl-c" in vector_store.keyword_index, "Acronyms should be preserved"
+        assert "ldlc" in vector_store.keyword_index, "Acronyms should normalize consistently"
+
+    def test_medical_synonyms_normalized_consistently(self, vector_store):
+        tokens = tokenize_text("LDL-C cholesterol")
+
+        assert "ldlc" in tokens
+        assert "lipid" in tokens
 
     def test_case_insensitive_query(self, vector_store):
         documents = [

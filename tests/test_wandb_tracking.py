@@ -23,12 +23,16 @@ class _FakeRun:
         self.logged: list[dict] = []
         self.logged_artifacts: list[_FakeArtifact] = []
         self.finished = False
+        self.defined_metrics: list[tuple[str, dict]] = []
 
     def log(self, payload: dict) -> None:
         self.logged.append(payload)
 
     def log_artifact(self, artifact: _FakeArtifact) -> None:
         self.logged_artifacts.append(artifact)
+
+    def define_metric(self, name: str, **kwargs) -> None:
+        self.defined_metrics.append((name, kwargs))
 
     def finish(self) -> None:
         self.finished = True
@@ -74,9 +78,23 @@ def test_log_assessment_to_wandb_logs_metrics_and_artifacts(monkeypatch, tmp_pat
         },
         summary={"status": "ok", "duration_s": 1.5, "failed_thresholds_count": 0},
         manifest={"experiment": {"variant": None}},
-        step_metrics={"l1": {"aggregate": {"markdown_empty_rate": 0.1}}},
+        step_metrics={
+            "l1": {"aggregate": {"markdown_empty_rate": 0.1}},
+            "l3": {"aggregate": {"chunk_quality_histogram": {"low": 1, "high": 2}}},
+        },
         retrieval_metrics={"hit_rate_at_k": 0.9, "mrr": 0.8},
-        rag_metrics={"groundedness": 0.7},
+        l6_answer_quality_metrics={
+            "query_count": 3,
+            "query_count_scored": 3,
+            "metric_error_rate": 0.0,
+            "metric_evaluations_failed": 0,
+            "factual_accuracy": {"mean": 0.91, "count": 3},
+            "completeness": {"mean": 0.88, "count": 3},
+            "clinical_relevance": {"mean": 0.87, "count": 3},
+            "clarity": {"mean": 0.92, "count": 3, "error_rate": 0.0},
+            "answer_relevancy": {"mean": 0.89, "count": 3, "error_rate": 0.0},
+            "faithfulness": {"mean": 0.93, "count": 3, "error_rate": 0.0},
+        },
         run_dir=run_dir,
         failed_thresholds=[],
     )
@@ -85,6 +103,11 @@ def test_log_assessment_to_wandb_logs_metrics_and_artifacts(monkeypatch, tmp_pat
     assert tracking["run_id"] == "run-123"
     assert fake_wandb.inits[0]["project"] == "demo-project"
     assert fake_wandb.run.logged
-    assert fake_wandb.run.logged[0]["retrieval.hit_rate_at_k"] == 0.9
+    assert fake_wandb.run.logged[0]["retrieval/hit_rate"] == 0.9
+    assert fake_wandb.run.logged[0]["l6_answer_quality/faithfulness_mean"] == 0.93
+    assert fake_wandb.run.logged[0]["l6_answer_quality/faithfulness_error_rate"] == 0.0
+    assert fake_wandb.run.logged[0]["l6_answer_quality/query_count"] == 3
+    assert fake_wandb.run.logged[0]["l6_answer_quality/metric_error_rate"] == 0.0
+    assert fake_wandb.run.logged[0]["steps/l3/quality_histogram/low"] == 1
     assert fake_wandb.run.logged_artifacts[0].added_dirs == [str(run_dir)]
     assert fake_wandb.run.finished is True

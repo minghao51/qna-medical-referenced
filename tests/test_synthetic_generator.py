@@ -29,6 +29,8 @@ def test_synthetic_generator_structure():
         # Verify synthesizer was called correctly
         mock_synthesizer.generate_goldens_from_docs.assert_called_once()
         mock_synthesizer.save_as.assert_called_once()
+        _, kwargs = mock_synthesizer.generate_goldens_from_docs.call_args
+        assert "context_construction_config" in kwargs
 
         assert goldens == mock_goldens
 

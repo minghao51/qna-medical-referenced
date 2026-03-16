@@ -138,7 +138,7 @@ def test_get_wandb_evaluation_run_returns_remote_summary(monkeypatch):
                 "tracking": {"wandb": {"run_id": "abc123", "run_url": "https://wandb/run/abc123"}},
                 "wandb_run_id": "abc123",
                 "wandb_url": "https://wandb/run/abc123",
-                "summary": {"rag_metrics": {"status": "skipped"}},
+                "summary": {"l6_answer_quality_metrics": {"status": "skipped"}},
             },
         },
     )

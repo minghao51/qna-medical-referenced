@@ -36,7 +36,6 @@ def test_answer_quality_endpoint_loads_results(client, tmp_path):
         assert data["run_dir"] == "test_run"
         assert len(data["results"]) == 2
 
-
 @pytest.mark.skip(reason="Full evaluation test requires API keys and working metrics")
 def test_evaluate_single_endpoint(client):
     """Test single answer evaluation endpoint."""

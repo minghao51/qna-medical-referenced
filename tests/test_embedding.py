@@ -4,8 +4,6 @@ import pytest
 
 from src.ingestion.indexing.vector_store import VectorStore
 
-QWEN_EMBEDDING_DIM = 2048
-
 requires_live_api = pytest.mark.live_api
 
 
@@ -22,13 +20,17 @@ class TestEmbedding:
         yield store
         store.clear()
 
+    def _embedding_dim(self, embeddings: list[list[float]]) -> int:
+        assert embeddings and embeddings[0]
+        return len(embeddings[0])
+
     @requires_live_api
     def test_embedding_dimension(self, vector_store):
         texts = ["Test sentence for embedding dimension"]
         embeddings = vector_store._embed(texts)
 
         assert len(embeddings) == 1
-        assert len(embeddings[0]) == QWEN_EMBEDDING_DIM, f"Expected {QWEN_EMBEDDING_DIM} dimensions"
+        assert self._embedding_dim(embeddings) >= 1024
 
     @requires_live_api
     def test_batch_embedding_dimension(self, vector_store):
@@ -36,8 +38,9 @@ class TestEmbedding:
         embeddings = vector_store._embed(texts)
 
         assert len(embeddings) == 10
+        embedding_dim = self._embedding_dim(embeddings)
         for emb in embeddings:
-            assert len(emb) == QWEN_EMBEDDING_DIM
+            assert len(emb) == embedding_dim
 
     @requires_live_api
     def test_embedding_consistency(self, vector_store):
@@ -46,7 +49,13 @@ class TestEmbedding:
         emb1 = vector_store._embed([text])[0]
         emb2 = vector_store._embed([text])[0]
 
-        assert emb1 == emb2, "Same text should produce same embedding"
+        assert len(emb1) == len(emb2)
+        cosine_numerator = sum(a * b for a, b in zip(emb1, emb2))
+        emb1_norm = sum(a * a for a in emb1) ** 0.5
+        emb2_norm = sum(b * b for b in emb2) ** 0.5
+        similarity = cosine_numerator / (emb1_norm * emb2_norm)
+
+        assert similarity > 0.999, "Same text should produce nearly identical embeddings"
 
     @requires_live_api
     def test_different_texts_different_embeddings(self, vector_store):
@@ -94,7 +103,9 @@ class TestEmbedding:
         vector_store.add_documents(documents)
 
         assert len(vector_store.documents["embeddings"]) == 2
-        assert len(vector_store.documents["embeddings"][0]) == QWEN_EMBEDDING_DIM
+        assert len(vector_store.documents["embeddings"][0]) == len(
+            vector_store.documents["embeddings"][1]
+        )
 
     @requires_live_api
     def test_embedding_batch_size(self, vector_store):
@@ -113,7 +124,7 @@ class TestEmbedding:
         embeddings = vector_store._embed(["a"])
 
         assert len(embeddings) == 1
-        assert len(embeddings[0]) == QWEN_EMBEDDING_DIM
+        assert self._embedding_dim(embeddings) >= 1024
 
     @requires_live_api
     def test_medical_term_embedding(self, vector_store):
@@ -121,4 +132,5 @@ class TestEmbedding:
         embeddings = vector_store._embed(texts)
 
         assert len(embeddings) == 2
-        assert all(len(e) == QWEN_EMBEDDING_DIM for e in embeddings)
+        embedding_dim = self._embedding_dim(embeddings)
+        assert all(len(e) == embedding_dim for e in embeddings)

@@ -34,13 +34,12 @@ async def test_evaluate_answers_deepeval_basic():
     # Check metrics were computed
     metrics = results[0]["metrics"]
     # Custom GEval metrics have their name
-    assert "Factual Accuracy" in metrics
-    assert "Completeness" in metrics
-    assert "Clinical Relevance" in metrics
-    assert "Clarity" in metrics
-    # Built-in metrics use class names
-    assert "AnswerRelevancyMetric" in metrics
-    assert "FaithfulnessMetric" in metrics
+    assert "factual_accuracy" in metrics
+    assert "completeness" in metrics
+    assert "clinical_relevance" in metrics
+    assert "clarity" in metrics
+    assert "answer_relevancy" in metrics
+    assert "faithfulness" in metrics
 
     # Check each metric has a score
     for metric_name, metric_data in metrics.items():

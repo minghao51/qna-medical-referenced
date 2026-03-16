@@ -52,7 +52,11 @@ def test_chat_requires_valid_api_key(monkeypatch, tmp_path: Path):
 def test_chat_success_and_rate_limit_headers(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
         "src.app.routes.chat.process_chat_message",
-        lambda **kwargs: {"response": "ok", "sources": ["doc"], "pipeline": None},
+        lambda **kwargs: {
+            "response": "ok",
+            "sources": [{"label": "doc", "source": "example.com", "url": "https://example.com"}],
+            "pipeline": None,
+        },
     )
     client = _build_client(monkeypatch, tmp_path, rate_limit=2)
 

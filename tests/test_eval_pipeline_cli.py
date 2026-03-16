@@ -78,3 +78,37 @@ def test_eval_pipeline_cli_applies_equals_style_overrides(monkeypatch, tmp_path:
     assert len(calls) == 2
     assert all(call["top_k"] == 7 for call in calls)
     assert all(call["name"] == "override-name" for call in calls)
+
+
+def test_eval_pipeline_cli_passes_sampling_flags(monkeypatch, tmp_path: Path):
+    calls: list[dict] = []
+
+    def fake_run_assessment(**kwargs):
+        calls.append(kwargs)
+        run_dir = tmp_path / "sampled"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        return SimpleNamespace(
+            run_dir=run_dir,
+            status="ok",
+            failed_thresholds=[],
+            summary={"retrieval_metrics": {"mrr": 0.5}},
+        )
+
+    monkeypatch.setattr(eval_pipeline, "run_assessment", fake_run_assessment)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "eval_pipeline",
+            "--dataset-path=/tmp/sample.json",
+            "--disable-llm-generation",
+            "--max-queries=3",
+            "--sample-seed=99",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        eval_pipeline.main()
+
+    assert exc.value.code == 0
+    assert calls[0]["max_queries"] == 3
+    assert calls[0]["sample_seed"] == 99
