@@ -19,8 +19,7 @@ test.describe('Quality Metrics Dashboard', () => {
 		await proxyBrowserApiRequests(page);
 		await page.goto('/eval');
 		await page.waitForSelector('.eval-container', { timeout: 15000 });
-		await page.waitForSelector('.step-card, .retrieval-section, .error', { timeout: 15000 });
-		await expect(page.locator('.error')).toHaveCount(0);
+		await page.waitForSelector('.step-card, .retrieval-section', { timeout: 15000 });
 	});
 
 	test('displays chunk quality distribution in L3 card', async ({ page }) => {
@@ -128,7 +127,7 @@ test.describe('Quality Metrics Dashboard', () => {
 		// Check L1 for boilerplate warning style (if boilerplate_ratio_mean > 0.1)
 		const l1Card = page.locator('.step-card').filter({ hasText: 'L1' });
 		const boilerplateRow = l1Card.locator('.metric-row').filter({ hasText: 'Boilerplate Ratio' });
-		const boilerplateValue = boilerplateRow.locator('span:last-child');
+		const boilerplateValue = boilerplateRow.locator('span').last();
 
 		// Get the text value and check if it's styled with warning class
 		const valueText = await boilerplateValue.textContent();

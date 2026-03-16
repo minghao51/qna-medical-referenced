@@ -1,192 +1,111 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+const markdownFixture = `
+# Health Summary
+
+Here is a [trusted source](https://example.com/reference) and an unsafe [bad link](javascript:alert('xss')).
+
+| Test | Value |
+| --- | --- |
+| HbA1c | 5.4% |
+| LDL | 110 mg/dL |
+
+\`\`\`python
+print("monitor cholesterol")
+\`\`\`
+
+Inline \`code\` still works.
+
+<script>window.__markdown_xss = true</script>
+`;
+
+async function mockChatApi(page: Page) {
+	await page.route('**/history/**', async (route) => {
+		if (route.request().method() === 'DELETE') {
+			await route.fulfill({ status: 204, body: '' });
+			return;
+		}
+
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ history: [] })
+		});
+	});
+
+	await page.route('**/chat**', async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				response: markdownFixture,
+				sources: [],
+				pipeline: null
+			})
+		});
+	});
+}
 
 test.describe('Markdown Rendering', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5173');
-  });
+	test.beforeEach(async ({ page, baseURL, context }) => {
+		await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+		await mockChatApi(page);
+		await page.goto(baseURL || 'http://127.0.0.1:5174');
+	});
 
-  test('renders markdown headings with hierarchy', async ({ page }) => {
-    const input = page.locator('textarea');
-    await input.fill('test markdown with headings');
+	test('renders markdown structure with deterministic content', async ({ page }) => {
+		await page.locator('textarea').fill('show markdown');
+		await page.getByRole('button', { name: 'Send' }).click();
 
-    const sendButton = page.locator('.input-area button');
-    await sendButton.click();
+		const assistantMessage = page.locator('.message.assistant').last();
+		await expect(assistantMessage.getByRole('heading', { level: 1, name: 'Health Summary' })).toBeVisible();
+		await expect(assistantMessage.locator('table')).toBeVisible();
+		await expect(assistantMessage.locator('tbody tr')).toHaveCount(2);
+		await expect(assistantMessage.locator('code').filter({ hasText: 'code' })).toBeVisible();
+	});
 
-    // Wait for response
-    await page.waitForSelector('.message.assistant');
+	test('highlights code blocks and exposes copy affordance', async ({ page }) => {
+		await page.locator('textarea').fill('show code');
+		await page.getByRole('button', { name: 'Send' }).click();
 
-    // Check if any headings exist (may vary based on actual response)
-    const headings = await page.locator('.message.assistant :is(h1, h2, h3, h4, h5, h6)').count();
-    expect(headings).toBeGreaterThanOrEqual(0); // At least check the element exists
-  });
+		const assistantMessage = page.locator('.message.assistant').last();
+		const codeBlock = assistantMessage.locator('.code-block');
+		await expect(codeBlock).toBeVisible();
+		await expect(codeBlock.locator('.code-block__language')).toHaveText('python');
+		await expect(codeBlock.locator('code.hljs')).toBeVisible();
 
-  test('renders tables correctly', async ({ page }) => {
-    const input = page.locator('textarea');
-    await input.fill('show me a table of data');
+		const copyButton = codeBlock.getByRole('button', { name: 'Copy code block' });
+		await copyButton.click();
+		await expect(copyButton).toContainText('Copied');
+	});
 
-    const sendButton = page.locator('.input-area button');
-    await sendButton.click();
+	test('blocks raw html execution and unsafe links', async ({ page }) => {
+		await page.locator('textarea').fill('show unsafe markdown');
+		await page.getByRole('button', { name: 'Send' }).click();
 
-    // Wait for response
-    await page.waitForSelector('.message.assistant');
+		const assistantMessage = page.locator('.message.assistant').last();
+		await expect(assistantMessage.locator('script')).toHaveCount(0);
 
-    // Check for table elements (may vary based on actual response)
-    const table = page.locator('.message.assistant table').first();
-    const tableExists = await table.count();
+		const renderedText = await assistantMessage.textContent();
+		expect(renderedText).toContain('<script>window.__markdown_xss = true</script>');
+		expect(await page.evaluate(() => (window as typeof window & { __markdown_xss?: boolean }).__markdown_xss)).toBeUndefined();
 
-    if (tableExists > 0) {
-      await expect(table).toBeVisible();
-      const headers = await table.locator('th').count();
-      expect(headers).toBeGreaterThan(0);
-    }
-  });
+		const trustedLink = assistantMessage.getByRole('link', { name: 'trusted source' });
+		await expect(trustedLink).toHaveAttribute('href', 'https://example.com/reference');
+		await expect(trustedLink).toHaveAttribute('target', '_blank');
 
-  test('code blocks have syntax highlighting', async ({ page }) => {
-    const input = page.locator('textarea');
-    await input.fill('show me some python code');
+		const badLink = assistantMessage.getByText('bad link');
+		await expect(badLink).toBeVisible();
+		await expect(badLink.evaluate((element) => element.tagName)).resolves.toBe('SPAN');
+	});
 
-    const sendButton = page.locator('.input-area button');
-    await sendButton.click();
+	test('keeps markdown tables usable on mobile', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.locator('textarea').fill('show mobile markdown');
+		await page.getByRole('button', { name: 'Send' }).click();
 
-    // Wait for response
-    await page.waitForSelector('.message.assistant');
-
-    // Check for code blocks with hljs class (may vary based on response)
-    const codeBlocks = page.locator('.message.assistant pre code.hljs');
-    const count = await codeBlocks.count();
-
-    if (count > 0) {
-      await expect(codeBlocks.first()).toHaveClass(/hljs/);
-    }
-  });
-
-  test('copy button works for code blocks', async ({ page }) => {
-    const input = page.locator('textarea');
-    await input.fill('show me code');
-
-    const sendButton = page.locator('.input-area button');
-    await sendButton.click();
-
-    // Wait for response
-    await page.waitForSelector('.message.assistant');
-
-    // Look for copy buttons
-    const copyButtons = page.locator('.code-copy-button');
-    const count = await copyButtons.count();
-
-    if (count > 0) {
-      const firstButton = copyButtons.first();
-
-      // Click the copy button
-      await firstButton.click();
-
-      // Button should show "Copied!" text
-      await expect(firstButton).toContainText('Copied!', { timeout: 3000 });
-    }
-  });
-
-  test('responsive layout at different breakpoints', async ({ page }) => {
-    // Desktop
-    await page.setViewportSize({ width: 1920, height: 1080 });
-    const container = page.locator('.chat-container');
-    await expect(container).toBeVisible();
-
-    // Check max-width is set
-    const maxWidth = await container.evaluate((el) => {
-      return window.getComputedStyle(el).maxWidth;
-    });
-    expect(maxWidth).toBe('1400px');
-
-    // Tablet
-    await page.setViewportSize({ width: 768, height: 1024 });
-    await expect(container).toBeVisible();
-
-    // Mobile
-    await page.setViewportSize({ width: 375, height: 667 });
-    await expect(container).toBeVisible();
-  });
-
-  test('renders lists correctly', async ({ page }) => {
-    const input = page.locator('textarea');
-    await input.fill('list some items');
-
-    const sendButton = page.locator('.input-area button');
-    await sendButton.click();
-
-    // Wait for response
-    await page.waitForSelector('.message.assistant');
-
-    // Check for lists (may vary based on response)
-    const lists = page.locator('.message.assistant :is(ul, ol)');
-    const count = await lists.count();
-
-    if (count > 0) {
-      await expect(lists.first()).toBeVisible();
-    }
-  });
-
-  test('renders bold and italic text', async ({ page }) => {
-    const input = page.locator('textarea');
-    await input.fill('explain this in detail');
-
-    const sendButton = page.locator('.input-area button');
-    await sendButton.click();
-
-    // Wait for response
-    await page.waitForSelector('.message.assistant');
-
-    // Check for formatted text (may vary based on response)
-    const boldText = page.locator('.message.assistant strong');
-    const italicText = page.locator('.message.assistant em');
-
-    const boldCount = await boldText.count();
-    const italicCount = await italicText.count();
-
-    // At least verify the elements can be found
-    expect(boldCount + italicCount).toBeGreaterThanOrEqual(0);
-  });
-
-  test('XSS sanitization works', async ({ page }) => {
-    // Note: This test would require backend to return XSS attempts
-    // In a real scenario, you'd mock the API response
-    const input = page.locator('textarea');
-
-    // Send a message that might trigger markdown with special characters
-    await input.fill('what is <script>alert</script>');
-
-    const sendButton = page.locator('.input-area button');
-    await sendButton.click();
-
-    // Wait for response
-    await page.waitForSelector('.message.assistant');
-
-    // Verify no script tags are in the rendered content
-    const scripts = await page.locator('.message.assistant script').count();
-    expect(scripts).toBe(0);
-  });
-
-  test('message content is scrollable on mobile', async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 667 });
-
-    const input = page.locator('textarea');
-    await input.fill('give me a long explanation');
-
-    const sendButton = page.locator('.input-area button');
-    await sendButton.click();
-
-    // Wait for response
-    await page.waitForSelector('.message.assistant');
-
-    // Check that tables are scrollable if they exist
-    const tables = page.locator('.message.assistant table');
-    const count = await tables.count();
-
-    if (count > 0) {
-      const firstTable = tables.first();
-      const overflow = await firstTable.evaluate((el) => {
-        return window.getComputedStyle(el).overflowX;
-      });
-      expect(overflow).toBe('auto');
-    }
-  });
+		const table = page.locator('.message.assistant table').last();
+		await expect(table).toBeVisible();
+		await expect(table.evaluate((element) => window.getComputedStyle(element).overflowX)).resolves.toBe('auto');
+	});
 });

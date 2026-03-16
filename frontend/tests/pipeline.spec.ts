@@ -2,6 +2,25 @@ import { test, expect, type Page } from '@playwright/test';
 
 const API_URL = process.env.API_URL || 'http://localhost:8000';
 const assistantMessage = 'LDL cholesterol is often called "bad" cholesterol because elevated levels increase cardiovascular risk.';
+const structuredSources = [
+	{
+		label: 'MOH Lipids Guidance page 2',
+		source: 'moh.gov.sg',
+		url: 'https://www.moh.gov.sg/resources-statistics/reports/lipids-guidance',
+		page: 2
+	},
+	{
+		label: 'HealthHub Cholesterol Guide',
+		source: 'healthhub.sg',
+		url: 'https://www.healthhub.sg/a-z/diseases-and-conditions/high-blood-cholesterol'
+	},
+	{
+		label: 'MOH Lipids Guidance page 2',
+		source: 'moh.gov.sg',
+		url: 'https://www.moh.gov.sg/resources-statistics/reports/lipids-guidance',
+		page: 2
+	}
+];
 const mockPipeline = {
 	retrieval: {
 		query: 'What is LDL cholesterol?',
@@ -47,7 +66,7 @@ async function mockChatResponse(page: Page, includePipeline = true) {
 			contentType: 'application/json',
 			body: JSON.stringify({
 				response: assistantMessage,
-				sources: ['healthhub.sg', 'moh.gov.sg'],
+				sources: structuredSources,
 				...(includePipeline ? { pipeline: mockPipeline } : {})
 			})
 		});
@@ -59,7 +78,7 @@ async function mockChatResponse(page: Page, includePipeline = true) {
 			contentType: 'application/json',
 			body: JSON.stringify({
 				response: assistantMessage,
-				sources: ['healthhub.sg', 'moh.gov.sg']
+				sources: structuredSources
 			})
 		});
 	});
@@ -320,14 +339,46 @@ test.describe('Sources Display', () => {
 		await sendMessage(page, 'What is LDL cholesterol?');
 		await expectAssistantResponse(page);
 
-		// Check if sources element exists (might not have sources for some queries)
 		const sources = page.locator('.sources');
-		const sourceCount = await sources.count();
-		
-		if (sourceCount > 0) {
-			await expect(sources.first()).toBeVisible();
-			await expect(sources.first()).toContainText('Sources:');
-		}
+		await expect(sources).toBeVisible();
+		await expect(sources).toContainText('Sources:');
+		await expect(page.locator('.sources-list .source-item')).toHaveCount(2);
+		await expect(page.locator('.sources-list .source-item').first()).toContainText('1.');
+		await expect(page.locator('.sources-list .source-link').first()).toHaveAttribute(
+			'href',
+			'https://www.moh.gov.sg/resources-statistics/reports/lipids-guidance'
+		);
+		await expect(page.locator('.sources-list .source-item').first()).toContainText('Official');
+	});
+
+	test('legacy string sources still render during rollout', async ({ page }) => {
+		await page.unroute('**/chat?**');
+		await page.unroute('**/chat');
+		await page.route('**/chat?**', async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					response: assistantMessage,
+					sources: ['healthhub.sg', 'plain source title']
+				})
+			});
+		});
+		await page.route('**/chat', async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					response: assistantMessage,
+					sources: ['healthhub.sg', 'plain source title']
+				})
+			});
+		});
+
+		await sendMessage(page, 'What is LDL cholesterol?');
+		await expectAssistantResponse(page);
+		await expect(page.locator('.sources-list .source-item')).toHaveCount(2);
+		await expect(page.locator('.sources-list')).toContainText('plain source title');
 	});
 });
 
