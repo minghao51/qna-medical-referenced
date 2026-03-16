@@ -76,7 +76,8 @@ Six metrics are evaluated:
 #### Output Files
 
 - `l6_answer_quality.jsonl`: Per-query detailed results with scores and reasoning
-- `summary.json`: Aggregate metrics in `l6` section
+- `l6_answer_quality_metrics.json`: Aggregate answer-quality metrics
+- `summary.json`: Aggregate answer-quality metrics in `l6_answer_quality_metrics`
 
 #### Example
 

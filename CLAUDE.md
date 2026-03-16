@@ -22,4 +22,12 @@
     - uv run <command> (e.g., uv run pytest, uv run ruff check .) to execute commands within the managed environment.
     - uv add <package> to add a dependency to your pyproject.toml file.
 9. When creating or generating Markdown (.md) files, you must strict adhere to the following naming convention: YYYYMMDD-filename.md
+10. When doing git commit, make sure the message is concise, and do not mentioned claude code.
+11. When asked for a comprehensive review of changes, run the following verification commands:
+    - `uv run pytest` - Run full backend test suite
+    - `cd frontend && npm run e2e` - Run Playwright browser tests
+    - `uv run ruff check .` - Run Python linter
+    - `uv run ruff format --check .` - Check Python code formatting
+    - `uv run mypy src/planweaver` - Run Python type checker
+    - `cd frontend && npm run test:run` - Run frontend unit tests
 ---

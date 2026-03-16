@@ -399,7 +399,8 @@ def retrieve_context(query: str, top_k: int = 5, retrieval_options: dict[str, An
         enable_diversification=cfg.enable_diversification,
     )
 
-    return build_context_and_sources(results)
+    context, _, chat_sources = build_context_and_sources(results)
+    return context, chat_sources
 
 
 def retrieve_context_with_trace(
@@ -489,11 +490,11 @@ def retrieve_context_with_trace(
         timing_ms=retrieval_timing_ms,
     )
 
-    context, sources = build_context_and_sources(results)
+    context, source_labels, chat_sources = build_context_and_sources(results)
     context_stage = ContextStage(
         total_chunks=len(results),
         total_chars=len(context),
-        sources=sources,
+        sources=source_labels,
         preview=context[:200] + "..." if len(context) > 200 else context,
     )
 
@@ -507,7 +508,7 @@ def retrieve_context_with_trace(
         total_time_ms=total_time_ms,
     )
 
-    return context, sources, pipeline_trace
+    return context, chat_sources, pipeline_trace
 
 
 def get_full_context() -> str:
@@ -517,7 +518,7 @@ def get_full_context() -> str:
     return f"{ranges}\n\n{pdf_texts}"
 
 
-def get_context(query: str | None = None) -> Tuple[str, List[str]]:
+def get_context(query: str | None = None) -> Tuple[str, List[Any]]:
     if query:
         return retrieve_context(query)
 

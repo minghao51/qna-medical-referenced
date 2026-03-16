@@ -1,119 +1,62 @@
 # Playwright Testing
 
-## Overview
+Frontend E2E tests live in `frontend/tests/`.
 
-The project uses Playwright for end-to-end testing of the frontend application. Tests are located in `frontend/tests/`.
-
-## Running Tests
-
-### Prerequisites
-
-1. Install Playwright browsers:
-   ```bash
-   cd frontend && npx playwright install
-   ```
-
-2. Ensure services are running (see [Running the Application](../README.md#running-the-application))
-
-### Run All Tests
+## Install
 
 ```bash
-cd frontend && bun run test
+cd frontend
+npm install
+npx playwright install
 ```
 
-### Run Tests with UI
+## Run
+
+Start the backend first in another terminal:
 
 ```bash
-cd frontend && bun run test:ui
+uv run python -m src.cli.serve
 ```
 
-### Run Tests in Headed Mode
+Then run the frontend suite:
 
 ```bash
-cd frontend && bun run test:headed
+cd frontend
+npm run test
 ```
 
-### Run Specific Test File
+Useful variants:
 
 ```bash
-cd frontend && bun run test chat.spec.ts
+cd frontend
+npm run test:ui
+npm run test:headed
+npm run test:debug
+npm run test:report
 ```
 
-### Run Specific Test
+## Local Behavior
+
+- The Playwright config starts a local frontend server automatically if `PLAYWRIGHT_BASE_URL` is not set.
+- The default Playwright frontend URL is `http://localhost:5174`.
+- The backend API is expected at `http://localhost:8000` unless you override the frontend API configuration.
+
+## Useful Commands
 
 ```bash
-cd frontend && bun run test --grep "chat page loads"
+cd frontend
+npm run test -- --grep "chat page loads"
+npm run test -- tests/chat.spec.ts
 ```
 
-### Generate HTML Report
+## Coverage Areas
 
-```bash
-cd frontend && bun run test:report
-```
+- `chat.spec.ts` covers the main chat flow and core controls.
+- `pipeline.spec.ts` covers pipeline UI behavior and API interaction.
+- `quality-metrics.spec.ts` and `visual-verification.spec.ts` cover evaluation dashboard rendering.
 
-## Environment Variables
+## Notes
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PLAYWRIGHT_BASE_URL` | `http://localhost:5173` | Frontend URL |
-| `API_URL` | `http://localhost:8001` | Backend API URL |
-
-Example:
-```bash
-PLAYWRIGHT_BASE_URL=http://localhost:5174 bun run test
-```
-
-## Test Files
-
-### chat.spec.ts
-
-Tests for the main chat interface.
-
-| Test | What it Checks |
-|------|----------------|
-| `chat page loads correctly` | Page title, header, welcome message, input area |
-| `can type in input field` | Input field accepts text |
-| `send button is disabled when input is empty` | Send button disabled state |
-
-### pipeline.spec.ts
-
-Tests for pipeline visualization and API integration.
-
-| Test Suite | Tests |
-|------------|-------|
-| Pipeline Visualization | Toggle visibility, enable/disable, button appearance |
-| Pipeline Panel | Panel visibility, source display |
-| API Integration | Health endpoint, chat endpoint, pipeline parameter |
-| Error Handling | Empty input, New Chat clears messages |
-
-## Configuration
-
-The Playwright config is in `frontend/playwright.config.ts`. Key settings:
-
-- `testDir`: `./tests`
-- `timeout`: 30 seconds per test
-- `projects`: chromium, firefox, webkit
-- `webServer`: Automatically starts dev server in CI
-
-## CI Usage
-
-In CI environments, tests run with:
-```bash
-CI=true bun run test
-```
-
-This ensures:
-- Tests don't use `reuseExistingServer`
-- Parallelism is limited to prevent flakiness
-- Forbid test `.only` flags
-
-## Known Issues
-
-1. **Button disabled state**: Some tests fail due to Svelte 5 reactivity issues with the send button's disabled attribute. The tests expect the button to be disabled when input is empty, but the binding may not update correctly in test environment.
-
-2. **API URL**: The frontend uses `VITE_API_URL` environment variable. For docker, set this to `http://localhost:8001`.
-
-3. **Firefox/Webkit**: Not installed by default. Install with:
-   ```bash
-   npx playwright install firefox webkit
-   ```
+- The current Playwright config runs Chromium only.
+- If you point Playwright at an already-running frontend, set `PLAYWRIGHT_BASE_URL`.
+- Several specs make direct requests to the backend API, so `uv run python -m src.cli.serve` must be running on port `8000` unless you override `API_URL`.

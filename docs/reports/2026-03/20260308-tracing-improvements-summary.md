@@ -90,7 +90,7 @@ All tests passed:
 
 Run the verification script:
 ```bash
-uv run python verify_tracing_improvements.py
+uv run python scripts/manual/verify_tracing_improvements.py
 ```
 
 Test the chat interface:

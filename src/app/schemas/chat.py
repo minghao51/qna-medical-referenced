@@ -25,6 +25,13 @@ class ChatRequest(BaseModel):
         return value
 
 
+class ChatSource(BaseModel):
+    label: str
+    source: str
+    url: Optional[str] = None
+    page: Optional[int] = None
+
+
 class ChatResponse(BaseModel):
     response: str
-    sources: list[str]
+    sources: list[ChatSource]

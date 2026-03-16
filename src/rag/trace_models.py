@@ -5,6 +5,15 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+class ChatSource(BaseModel):
+    """Structured citation returned with chat responses."""
+
+    label: str
+    source: str
+    url: Optional[str] = None
+    page: Optional[int] = None
+
+
 class RetrievedDocument(BaseModel):
     """A retrieved document with individual scores."""
 
@@ -69,5 +78,5 @@ class ChatResponseWithPipeline(BaseModel):
     """Chat response with optional pipeline trace."""
 
     response: str
-    sources: list[str]
+    sources: list[ChatSource]
     pipeline: Optional[PipelineTrace] = None

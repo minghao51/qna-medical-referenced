@@ -2,6 +2,12 @@
 
 This guide explains all configuration options for the Health Screening Interpreter Chatbot, including environment variables, defaults, and security considerations.
 
+Evaluation runs now use the canonical L6 answer-quality artifacts and summary keys:
+
+- `l6_answer_quality.jsonl`
+- `l6_answer_quality_metrics.json`
+- `summary.json["l6_answer_quality_metrics"]`
+
 ## Overview
 
 The application uses [Pydantic BaseSettings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) for configuration management. Configuration is loaded from:
@@ -458,6 +464,7 @@ Before deploying to production, ensure:
 
 ## Next Steps
 
-- See [Architecture Documentation](/docs/architecture/README.md) for system design
-- See [Testing Guide](/docs/testing/README.md) for testing configuration
-- See [README.md](/README.md) for API endpoint documentation
+- See `docs/architecture/overview.md` for system structure
+- See `docs/architecture/rag-system.md` for ingestion and retrieval flow
+- See `docs/testing/backend-tests.md` and `docs/testing/playwright.md` for test workflows
+- See `README.md` for the repo-level entrypoints

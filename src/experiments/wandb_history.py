@@ -13,6 +13,24 @@ logger = logging.getLogger(__name__)
 _CACHE: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
 
 
+def _to_plain_data(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _to_plain_data(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_plain_data(item) for item in value]
+    if hasattr(value, "items"):
+        return {str(key): _to_plain_data(item) for key, item in value.items()}
+    return value
+
+
+def _get_metric(summary: dict[str, Any], new_key: str, legacy_key: str, default: Any = 0) -> Any:
+    if new_key in summary:
+        return summary[new_key]
+    if legacy_key in summary:
+        return summary[legacy_key]
+    return default
+
+
 def _cache_ttl_seconds() -> int:
     return max(0, int(getattr(settings, "wandb_cache_ttl_seconds", 60)))
 
@@ -43,20 +61,26 @@ def clear_wandb_cache() -> None:
 
 
 def _normalize_wandb_run(run: Any, *, project: str, entity: str | None = None) -> dict[str, Any]:
-    summary = dict(getattr(run, "summary", {}) or {})
-    config = dict(getattr(run, "config", {}) or {})
+    summary = _to_plain_data(getattr(run, "summary", {}) or {})
+    config = _to_plain_data(getattr(run, "config", {}) or {})
     experiment = dict(config.get("experiment", {}) or {})
     manifest = dict(config.get("manifest", {}) or {})
-    retrieval = dict(summary.get("retrieval_metrics", {}) or {})
+    retrieval = _to_plain_data(summary.get("retrieval_metrics", {}) or {})
     if not retrieval:
         retrieval = {
-            "hit_rate_at_k": summary.get("retrieval.hit_rate_at_k", 0),
-            "mrr": summary.get("retrieval.mrr", 0),
-            "ndcg_at_k": summary.get("retrieval.ndcg_at_k", 0),
-            "latency_p50_ms": summary.get("retrieval.latency_p50_ms", 0),
-            "latency_p95_ms": summary.get("retrieval.latency_p95_ms", 0),
-            "precision_at_k": summary.get("retrieval.precision_at_k", 0),
-            "recall_at_k": summary.get("retrieval.recall_at_k", 0),
+            "hit_rate_at_k": _get_metric(summary, "retrieval/hit_rate", "retrieval.hit_rate_at_k"),
+            "mrr": _get_metric(summary, "retrieval/mrr", "retrieval.mrr"),
+            "ndcg_at_k": _get_metric(summary, "retrieval/ndcg", "retrieval.ndcg_at_k"),
+            "latency_p50_ms": _get_metric(
+                summary, "retrieval/latency_p50_ms", "retrieval.latency_p50_ms"
+            ),
+            "latency_p95_ms": _get_metric(
+                summary, "retrieval/latency_p95_ms", "retrieval.latency_p95_ms"
+            ),
+            "precision_at_k": _get_metric(
+                summary, "retrieval/precision_at_k", "retrieval.precision_at_k"
+            ),
+            "recall_at_k": _get_metric(summary, "retrieval/recall_at_k", "retrieval.recall_at_k"),
         }
     tracking = {
         "wandb": {
@@ -73,8 +97,11 @@ def _normalize_wandb_run(run: Any, *, project: str, entity: str | None = None) -
         "run_dir": getattr(run, "name", None) or getattr(run, "id", "wandb-run"),
         "timestamp": getattr(run, "created_at", None) or "",
         "status": summary.get("status", getattr(run, "state", "unknown")),
-        "duration_s": summary.get("duration_s"),
-        "failed_thresholds_count": summary.get("failed_thresholds_count", 0),
+        "duration_s": summary.get("summary/duration_s", summary.get("duration_s")),
+        "failed_thresholds_count": summary.get(
+            "summary/failed_thresholds",
+            summary.get("failed_thresholds_count", 0),
+        ),
         "retrieval_metrics": retrieval,
         "source": "wandb",
         "experiment_name": experiment.get("metadata", {}).get("name")

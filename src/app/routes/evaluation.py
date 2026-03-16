@@ -12,15 +12,16 @@ Endpoints:
 
 Example:
     Get latest evaluation:
-        curl http://localhost:8001/evaluation/latest
+        curl http://localhost:8000/evaluation/latest
 
     Get evaluation history:
-        curl http://localhost:8001/evaluation/history?limit=20
+        curl http://localhost:8000/evaluation/history?limit=20
 
     Get step metrics:
-        curl http://localhost:8001/evaluation/steps/l2
+        curl http://localhost:8000/evaluation/steps/l2
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -29,6 +30,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from src.evals.assessment.l6_contract import (
+    L6_ANSWER_QUALITY_ROWS,
+    SUMMARY_L6_METRICS_KEY,
+)
 from src.experiments.wandb_history import fetch_wandb_run, fetch_wandb_runs
 
 logger = logging.getLogger(__name__)
@@ -518,7 +523,7 @@ def get_wandb_evaluation_run(
             "run_dir": run.get("run_dir", run_ref),
             "duration_s": run.get("duration_s"),
             "retrieval_metrics": run.get("retrieval_metrics", {}),
-            "rag_metrics": (run.get("summary") or {}).get("rag_metrics", {}),
+            SUMMARY_L6_METRICS_KEY: (run.get("summary") or {}).get(SUMMARY_L6_METRICS_KEY, {}),
             "failed_thresholds_count": run.get("failed_thresholds_count", 0),
             "status": run.get("status", "unknown"),
             "tracking": run.get("tracking", {}),
@@ -784,14 +789,12 @@ def get_answer_quality_details(run_dir: str) -> dict[str, Any]:
             ]
         }
     """
-    from src.evals.artifacts import ArtifactStore
-
     run_dir = _validate_run_dir(run_dir)
     target_dir = EVALS_DIR / run_dir
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail=f"Run directory not found: {run_dir}")
 
-    results_path = target_dir / "l6_answer_quality.jsonl"
+    results_path = target_dir / L6_ANSWER_QUALITY_ROWS
     if not results_path.exists():
         raise HTTPException(status_code=404, detail="Answer quality results not found for this run")
 
@@ -845,40 +848,31 @@ def evaluate_single_answer(query: str, answer: str, context: str) -> dict[str, A
             }
         }
     """
+    from deepeval.metrics.indicator import safe_a_measure
     from deepeval.test_case import LLMTestCase
 
-    from src.evals.metrics.medical import (
-        answer_relevancy_metric,
-        clarity_metric,
-        clinical_relevance_metric,
-        completeness_metric,
-        factual_accuracy_metric,
-        faithfulness_metric,
-    )
+    from src.evals.metrics.medical import METRIC_SPECS, create_medical_metrics
 
     test_case = LLMTestCase(input=query, actual_output=answer, retrieval_context=[context])
 
-    metrics = [
-        factual_accuracy_metric,
-        completeness_metric,
-        clinical_relevance_metric,
-        clarity_metric,
-        answer_relevancy_metric,
-        faithfulness_metric,
-    ]
-
     results = {}
-    for metric in metrics:
-        # Get metric name - GEval metrics have .name, built-in metrics use class name
-        metric_name = getattr(metric, "name", metric.__class__.__name__)
+    for spec, metric in zip(METRIC_SPECS, create_medical_metrics(), strict=True):
         try:
-            metric.measure(test_case)
-            results[metric_name] = {
-                "score": metric.score,
+            asyncio.run(
+                safe_a_measure(
+                    metric,
+                    test_case,
+                    ignore_errors=False,
+                    skip_on_missing_params=False,
+                )
+            )
+            results[spec.key] = {
+                "score": metric.score if metric.score is not None else 0.0,
                 "reason": metric.reason if hasattr(metric, "reason") else None,
+                "error": getattr(metric, "error", None),
             }
         except Exception as e:
-            logger.error("Failed to measure metric %s: %s", metric_name, e)
-            results[metric_name] = {"score": 0.0, "error": str(e)}
+            logger.error("Failed to measure metric %s: %s", spec.key, e)
+            results[spec.key] = {"score": 0.0, "error": str(e)}
 
     return {"query": query, "answer": answer, "metrics": results}

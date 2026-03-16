@@ -11,10 +11,10 @@ Endpoints:
 
 Example:
     Get history:
-        curl http://localhost:8001/history/user-123
+        curl http://localhost:8000/history/user-123
 
     Clear history:
-        curl -X DELETE http://localhost:8001/history/user-123
+        curl -X DELETE http://localhost:8000/history/user-123
 """
 
 from fastapi import APIRouter, Request

@@ -1,28 +1,28 @@
 # Documentation Index
 
-This folder is organized into stable reference docs, plans, and dated reports.
+This folder is organized by purpose, not by chronology.
 
-## Start Here
+## Current Docs
 
-- `quickstart.md` - fastest path to run the backend, ingestion pipeline, and frontend locally
-- `architecture/overview.md` - current backend package map and responsibilities
-- `architecture/rag-system.md` - runtime retrieval flow and offline ingestion flow
-- `configuration.md` - comprehensive configuration guide with examples
-- `testing/backend-tests.md` - backend test inventory and test commands
-- `testing/playwright.md` - frontend E2E testing with Playwright
-- `data/sources.md` - data sources used for ingestion pipeline
+- `quickstart.md` for local setup and core workflows
+- `configuration.md` for environment variables and deployment-facing settings
+- `architecture/overview.md` for the repository map
+- `architecture/rag-system.md` for ingestion and retrieval flow
+- `evaluation/pipeline_quality_assessment_plan.md` for the implemented evaluation system
+- `testing/backend-tests.md` for backend test commands
+- `testing/playwright.md` for frontend E2E usage
+- `data/sources.md` for the ingestion source inventory
 
 ## Plans
 
-- `plans/` - design documents and implementation plans for future features
+- `plans/` for active design documents worth keeping around
 
 ## Historical Reports
 
-- `reports/2025-02/` - documentation improvements summary
-- `reports/2025-03/` - frontend dashboard implementation notes (phases 1-5)
-- `reports/2026-02/` - design notes, verification summaries, and Playwright testing reports
-- `reports/2026-03/` - RAG pipeline comprehensive technical report
+- `reports/` for dated implementation notes, summaries, and historical snapshots
 
-Notes:
-- Files in `reports/` are preserved as historical snapshots and may reference paths or structures that changed later.
-- Plans in `plans/` represent design documents that may or may not have been implemented.
+## Conventions
+
+- Keep current reference material in the top-level sections above.
+- Move completed, dated writeups into `reports/`.
+- Remove or relocate one-off verification notes instead of leaving them at repo root.
