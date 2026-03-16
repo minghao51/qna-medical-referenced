@@ -15,10 +15,19 @@ from src.evals.schemas import AssessmentConfig, AssessmentResult
 from src.experiments.wandb_tracking import log_assessment_to_wandb
 from src.rag.runtime import configure_runtime_for_experiment, initialize_runtime_index
 
-from .answer_eval import evaluate_answers, evaluate_answers_deepeval
+from .answer_eval import evaluate_answer_quality, evaluate_answers_deepeval
+from .l6_contract import (
+    L6_ANSWER_QUALITY_METRICS,
+    L6_ANSWER_QUALITY_ROWS,
+    SUMMARY_L6_ENABLED_KEY,
+    SUMMARY_L6_METRICS_KEY,
+    SUMMARY_L6_STATUS_KEY,
+)
 from .reporting import git_head, render_summary, sha256_file
 from .retrieval_eval import evaluate_retrieval, run_diversity_sweep, run_retrieval_ablations
 from .thresholds import DEFAULT_THRESHOLDS, evaluate_thresholds
+
+__all__ = ["evaluate_answers_deepeval", "run_assessment"]
 
 
 def run_assessment(
@@ -33,6 +42,9 @@ def run_assessment(
     include_answer_eval: bool | None = None,
     sample_docs_per_source_type: int = 10,
     seed: int = 42,
+    max_queries: int | None = None,
+    sample_seed: int = 42,
+    reuse_cached_dataset: bool = False,
     fail_on_thresholds: bool = False,
     thresholds_file: str | Path | None = None,
     dataset_split: str | None = None,
@@ -47,7 +59,6 @@ def run_assessment(
     run_diversity_sweep: bool = False,
     diversity_sweep: dict[str, Any] | None = None,
     experiment_config: dict[str, Any] | None = None,
-    enable_deepeval: bool = True,
     audit_l0_download_fn: Callable[[], dict[str, Any]] | None = None,
     assess_l1_html_markdown_quality_fn: Callable[[], dict[str, Any]] | None = None,
     assess_l2_pdf_quality_fn: Callable[[], dict[str, Any]] | None = None,
@@ -60,7 +71,7 @@ def run_assessment(
     ] = evaluate_retrieval,
     evaluate_answers_fn: Callable[
         ..., tuple[list[dict[str, Any]], dict[str, Any]]
-    ] = evaluate_answers,
+    ] = evaluate_answer_quality,
     evaluate_thresholds_fn: Callable[..., list[dict[str, Any]]] = evaluate_thresholds,
     git_head_fn: Callable[[], str | None] = git_head,
     configure_runtime_for_experiment_fn: Callable[
@@ -111,6 +122,9 @@ def run_assessment(
         include_answer_eval=resolved_include_answer_eval,
         sample_docs_per_source_type=sample_docs_per_source_type,
         seed=seed,
+        max_queries=max_queries,
+        sample_seed=sample_seed,
+        reuse_cached_dataset=reuse_cached_dataset,
         fail_on_thresholds=fail_on_thresholds,
         thresholds=thresholds,
         retrieval_options=resolved_retrieval_options or None,
@@ -125,7 +139,6 @@ def run_assessment(
         run_diversity_sweep=run_diversity_sweep,
         diversity_sweep=dict(diversity_sweep or {}),
         experiment_config=experiment_config,
-        enable_deepeval=enable_deepeval,
     )
 
     experiment_runtime = configure_runtime_for_experiment_fn(config.experiment_config)
@@ -199,6 +212,9 @@ def run_assessment(
     step_findings: list[dict[str, Any]] = []
     for stage in step_metrics.values():
         step_findings.extend(stage.get("findings", []))
+    l5_agg = step_metrics.get("l5", {}).get("aggregate", {})
+    vector_path = l5_agg.get("vector_path")
+    vector_file_sha256 = sha256_file_fn(vector_path)
 
     dataset_bundle = build_retrieval_dataset_fn(
         dataset_path=config.dataset_path,
@@ -206,6 +222,15 @@ def run_assessment(
         max_synthetic_questions=config.max_synthetic_questions,
         sample_docs_per_source_type=config.sample_docs_per_source_type,
         seed=config.seed,
+        max_queries=config.max_queries,
+        sample_seed=config.sample_seed,
+        reuse_cached_dataset=config.reuse_cached_dataset,
+        reuse_requirements={
+            "experiment_index_config_hash": (
+                (config.experiment_config or {}).get("index_config_hash")
+            ),
+            "vector_file_sha256": vector_file_sha256,
+        },
         dataset_split=config.dataset_split,
         min_label_confidence=config.min_label_confidence,
     )
@@ -237,18 +262,33 @@ def run_assessment(
             ),
             max_chunks_per_source_values=config.diversity_sweep.get("max_chunks_per_source_values"),
         )
-    rag_rows: list[dict[str, Any]] = []
-    rag_metrics: dict[str, Any] = {"status": "skipped", "reason": "disabled"}
+    l3_agg = step_metrics.get("l3", {}).get("aggregate", {})
+    l6_answer_quality_rows: list[dict[str, Any]] = []
+    l6_answer_quality_metrics: dict[str, Any] = {"status": "skipped", "reason": "disabled"}
     if config.include_answer_eval and not config.disable_llm_judging:
-        # Use DeepEval if enabled, otherwise use legacy evaluator
-        if config.enable_deepeval:
-            rag_rows, rag_metrics = evaluate_answers_deepeval(dataset, config.top_k)
-        else:
-            rag_rows, rag_metrics = evaluate_answers_fn(dataset, config.top_k)
+        l6_answer_quality_rows, l6_answer_quality_metrics = evaluate_answers_fn(
+            dataset,
+            config.top_k,
+            cache_dir=Path(getattr(settings, "deepeval_cache_dir", "data/evals/cache")),
+            retrieval_options=config.retrieval_options,
+            cache_namespace={
+                "retrieval_mode": config.retrieval_mode,
+                "experiment_index_config_hash": (
+                    (config.experiment_config or {}).get("index_config_hash")
+                ),
+                "experiment_variant": ((config.experiment_config or {}).get("variant_name")),
+                "vector_file_sha256": vector_file_sha256,
+            },
+        )
     elif config.disable_llm_judging:
-        rag_metrics = {"status": "skipped", "reason": "llm_judging_disabled"}
+        l6_answer_quality_metrics = {"status": "skipped", "reason": "llm_judging_disabled"}
 
-    failed_thresholds = evaluate_thresholds_fn(step_metrics, retrieval_metrics, config.thresholds)
+    failed_thresholds = evaluate_thresholds_fn(
+        step_metrics,
+        retrieval_metrics,
+        l6_answer_quality_metrics,
+        config.thresholds,
+    )
     step_findings.extend(
         {
             "severity": "error",
@@ -259,11 +299,11 @@ def run_assessment(
         for f in failed_thresholds
     )
 
-    l3_agg = step_metrics.get("l3", {}).get("aggregate", {})
-    l5_agg = step_metrics.get("l5", {}).get("aggregate", {})
-    vector_path = l5_agg.get("vector_path")
-    dataset_file = str(config.dataset_path) if config.dataset_path else None
+    dataset_file = dataset_stats.get("dataset_path") or (
+        str(config.dataset_path) if config.dataset_path else None
+    )
     manifest["runtime_retrieval"] = retrieval_metrics.get("retrieval_options", {})
+    manifest["dataset"] = dataset_stats
     manifest["chunking"] = {
         "chunk_size_config": l3_agg.get("chunk_size_config"),
         "chunk_overlap_config": l3_agg.get("chunk_overlap_config"),
@@ -306,7 +346,7 @@ def run_assessment(
         "indexing_stats": index_preparation.get("indexing_stats", {}),
     }
     manifest["checksums"] = {
-        "vector_file_sha256": sha256_file_fn(vector_path),
+        "vector_file_sha256": vector_file_sha256,
         "dataset_file_sha256": sha256_file_fn(dataset_file),
     }
     store.write_json("manifest.json", manifest)
@@ -330,8 +370,8 @@ def run_assessment(
     store.write_json("retrieval_metrics.json", retrieval_metrics)
     store.write_json("retrieval_ablations.json", retrieval_ablations)
     store.write_json("retrieval_diversity_sweep.json", diversity_sweep_rows)
-    store.write_jsonl("rag_results.jsonl", rag_rows)
-    store.write_json("rag_metrics.json", rag_metrics)
+    store.write_jsonl(L6_ANSWER_QUALITY_ROWS, l6_answer_quality_rows)
+    store.write_json(L6_ANSWER_QUALITY_METRICS, l6_answer_quality_metrics)
 
     summary = {
         "run_dir": str(store.run_dir),
@@ -339,7 +379,9 @@ def run_assessment(
         "retrieval_metrics": retrieval_metrics,
         "retrieval_ablations": retrieval_ablations,
         "retrieval_diversity_sweep_top": diversity_sweep_rows[:5],
-        "rag_metrics": rag_metrics,
+        SUMMARY_L6_METRICS_KEY: l6_answer_quality_metrics,
+        SUMMARY_L6_ENABLED_KEY: bool(config.include_answer_eval),
+        SUMMARY_L6_STATUS_KEY: l6_answer_quality_metrics.get("status", "unknown"),
         "failed_thresholds_count": len(failed_thresholds),
         "status": "failed" if (failed_thresholds and config.fail_on_thresholds) else "ok",
     }
@@ -348,7 +390,7 @@ def run_assessment(
         render_summary_fn(
             step_metrics=step_metrics,
             retrieval_metrics=retrieval_metrics,
-            rag_metrics=rag_metrics,
+            l6_answer_quality_metrics=l6_answer_quality_metrics,
             dataset_stats=dataset_stats,
             failed_thresholds=failed_thresholds,
         ),
@@ -359,7 +401,7 @@ def run_assessment(
         manifest=manifest,
         step_metrics=step_metrics,
         retrieval_metrics=retrieval_metrics,
-        rag_metrics=rag_metrics,
+        l6_answer_quality_metrics=l6_answer_quality_metrics,
         run_dir=store.run_dir,
         failed_thresholds=failed_thresholds,
     )

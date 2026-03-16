@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
@@ -62,6 +63,136 @@ def normalize_golden_queries(fixture_path: Path) -> list[dict[str, Any]]:
             }
         )
     return [r for r in records if r["query"]]
+
+
+def _normalize_cached_dataset(dataset_path: Path) -> list[dict[str, Any]]:
+    data = json.loads(dataset_path.read_text(encoding="utf-8"))
+    if isinstance(data, dict) and "golden_queries" in data:
+        return normalize_golden_queries(dataset_path)
+    if isinstance(data, list):
+        return [
+            item for item in data if isinstance(item, dict) and str(item.get("query", "")).strip()
+        ]
+    raise ValueError(f"Unsupported dataset format in {dataset_path}")
+
+
+def _json_checksum(value: Any) -> str:
+    payload = json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _resolve_path_for_contract(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    try:
+        return str(path.resolve())
+    except Exception:
+        return str(path)
+
+
+def _build_dataset_compatibility_contract(
+    *,
+    dataset_path: Path | None,
+    enable_llm_generation: bool,
+    max_synthetic_questions: int,
+    sample_docs_per_source_type: int,
+    seed: int,
+    max_queries: int | None,
+    sample_seed: int,
+    dataset_split: str | None,
+    min_label_confidence: str,
+    reuse_requirements: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "dataset_path": _resolve_path_for_contract(dataset_path),
+        "dataset_split": dataset_split,
+        "min_label_confidence": min_label_confidence,
+        "enable_llm_generation": bool(enable_llm_generation),
+        "max_synthetic_questions": max_synthetic_questions if enable_llm_generation else 0,
+        "sample_docs_per_source_type": sample_docs_per_source_type if enable_llm_generation else 0,
+        "seed": seed if enable_llm_generation else 0,
+        "max_queries": max_queries,
+        "sample_seed": sample_seed,
+        "reuse_requirements": dict(reuse_requirements or {}),
+    }
+
+
+def _sample_filtered_records(
+    records: list[dict[str, Any]],
+    *,
+    max_queries: int | None,
+    sample_seed: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    if max_queries is None or max_queries <= 0 or len(records) <= max_queries:
+        return records, False
+    rng = random.Random(sample_seed)
+    chosen_indices = sorted(rng.sample(range(len(records)), max_queries))
+    return [records[idx] for idx in chosen_indices], True
+
+
+def _load_cached_dataset_manifest(run_dir: Path) -> dict[str, Any]:
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _resolve_cached_dataset_path(
+    compatibility_contract: dict[str, Any],
+) -> tuple[Path | None, str | None, list[dict[str, Any]]]:
+    evals_dir = Path("data/evals")
+    latest_pointer = evals_dir / "latest_run.txt"
+    candidate_run_dirs: list[Path] = []
+
+    if latest_pointer.exists():
+        latest_dir = Path(latest_pointer.read_text(encoding="utf-8").strip())
+        if not latest_dir.is_absolute():
+            latest_dir = Path.cwd() / latest_dir
+        candidate_run_dirs.append(latest_dir)
+
+    if evals_dir.exists():
+        run_dirs = sorted(
+            (path for path in evals_dir.iterdir() if path.is_dir()),
+            key=lambda path: path.name,
+            reverse=True,
+        )
+        candidate_run_dirs.extend(run_dirs)
+
+    rejections: list[dict[str, Any]] = []
+    seen: set[Path] = set()
+    for run_dir in candidate_run_dirs:
+        try:
+            resolved = run_dir.resolve()
+        except Exception:
+            resolved = run_dir
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        dataset_path = run_dir / "retrieval_dataset.json"
+        if not dataset_path.exists():
+            rejections.append({"run_dir": str(run_dir), "reason": "missing_dataset_file"})
+            continue
+        manifest = _load_cached_dataset_manifest(run_dir)
+        previous_contract = (manifest.get("dataset") or {}).get("compatibility") or {}
+        if not isinstance(previous_contract, dict) or not previous_contract:
+            rejections.append({"run_dir": str(run_dir), "reason": "missing_dataset_compatibility"})
+            continue
+        if previous_contract != compatibility_contract:
+            rejections.append(
+                {
+                    "run_dir": str(run_dir),
+                    "reason": "incompatible_dataset_contract",
+                    "expected": compatibility_contract,
+                    "actual": previous_contract,
+                }
+            )
+            continue
+        return dataset_path, _resolve_path_for_contract(run_dir), rejections
+    return None, None, rejections
 
 
 def _source_type(source: str) -> str:
@@ -386,15 +517,57 @@ def build_retrieval_dataset(
     max_synthetic_questions: int = 40,
     sample_docs_per_source_type: int = 10,
     seed: int = 42,
+    max_queries: int | None = None,
+    sample_seed: int = 42,
     dataset_split: str | None = None,
     min_label_confidence: str = "low",
+    reuse_cached_dataset: bool = False,
+    reuse_requirements: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    fixture = Path(dataset_path) if dataset_path else Path("tests/fixtures/golden_queries.json")
-    base_records = normalize_golden_queries(fixture)
+    resolved_dataset_path = Path(dataset_path) if dataset_path else None
+    reused_cached_dataset = False
+    reused_from_run_dir: str | None = None
+    reuse_rejections: list[dict[str, Any]] = []
+    default_fixture_path = Path("tests/fixtures/golden_queries.json")
+    effective_base_dataset_path = resolved_dataset_path or default_fixture_path
+    compatibility_contract = _build_dataset_compatibility_contract(
+        dataset_path=effective_base_dataset_path,
+        enable_llm_generation=enable_llm_generation,
+        max_synthetic_questions=max_synthetic_questions,
+        sample_docs_per_source_type=sample_docs_per_source_type,
+        seed=seed,
+        max_queries=max_queries,
+        sample_seed=sample_seed,
+        dataset_split=dataset_split,
+        min_label_confidence=min_label_confidence,
+        reuse_requirements=reuse_requirements,
+    )
+    if resolved_dataset_path is None and reuse_cached_dataset:
+        resolved_dataset_path, reused_from_run_dir, reuse_rejections = _resolve_cached_dataset_path(
+            compatibility_contract
+        )
+        reused_cached_dataset = resolved_dataset_path is not None
+        if resolved_dataset_path is None:
+            raise ValueError(
+                "reuse_cached_dataset requested but no compatible prior dataset was found"
+            )
+    if resolved_dataset_path is None:
+        resolved_dataset_path = default_fixture_path
+
+    base_records = _normalize_cached_dataset(resolved_dataset_path)
     synthetic_records: list[dict[str, Any]] = []
     attempts: list[dict[str, Any]] = []
 
-    if enable_llm_generation:
+    if reused_cached_dataset:
+        attempts = [
+            {
+                "status": "skipped",
+                "reason": "reused_cached_dataset",
+                "dataset_path": str(resolved_dataset_path),
+                "source_run_dir": reused_from_run_dir,
+            }
+        ]
+    elif enable_llm_generation:
         synthetic_records, attempts = _try_generate_synthetic_questions(
             max_synthetic_questions=max_synthetic_questions,
             sample_docs_per_source_type=sample_docs_per_source_type,
@@ -408,14 +581,37 @@ def build_retrieval_dataset(
     filtered = _filter_records(
         merged, dataset_split=dataset_split, min_label_confidence=min_label_confidence
     )
+    sampled, was_sampled = _sample_filtered_records(
+        filtered,
+        max_queries=max_queries,
+        sample_seed=sample_seed,
+    )
+    filtered_checksum = _json_checksum(sampled)
     return {
-        "dataset": filtered,
+        "dataset": sampled,
         "generation_attempts": attempts,
         "stats": {
+            "dataset_path": str(resolved_dataset_path),
+            "dataset_source": (
+                "cached_reuse"
+                if reused_cached_dataset
+                else "explicit_path"
+                if dataset_path
+                else "default_fixture"
+            ),
+            "dataset_checksum": filtered_checksum,
+            "reused_from_run_dir": reused_from_run_dir,
+            "reused_cached_dataset": reused_cached_dataset,
+            "reuse_rejections": reuse_rejections,
+            "compatibility": compatibility_contract,
             "fixture_records": len(base_records),
             "synthetic_records": len(synthetic_records),
             "merged_records": len(merged),
             "filtered_records": len(filtered),
+            "sampled_records": len(sampled),
+            "max_queries": max_queries,
+            "sample_seed": sample_seed,
+            "was_sampled": was_sampled,
             "split": dataset_split,
             "min_label_confidence": min_label_confidence,
         },
