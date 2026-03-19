@@ -168,6 +168,13 @@ def _normalize_name(value: str | None, fallback: str) -> str:
     return candidate or fallback
 
 
+def _normalize_wandb_metrics_verbosity(value: Any) -> str:
+    verbosity = str(value or "standard").strip().lower()
+    if verbosity not in {"critical", "standard", "debug"}:
+        return "standard"
+    return verbosity
+
+
 def _normalize_source_chunk_configs(value: Any) -> dict[str, Any]:
     cfg = deepcopy(DEFAULT_SOURCE_CHUNK_CONFIGS)
     if not isinstance(value, dict):
@@ -255,6 +262,7 @@ def _base_defaults() -> dict[str, Any]:
                 "notes": None,
                 "mode": "online",
                 "log_artifacts": True,
+                "metrics_verbosity": "standard",
             }
         },
         "variants": [],
@@ -314,6 +322,7 @@ def _normalize_experiment_dict(data: dict[str, Any], *, file_path: Path) -> dict
         "notes": str(wandb_cfg.get("notes")).strip() if wandb_cfg.get("notes") else None,
         "mode": mode,
         "log_artifacts": bool(wandb_cfg.get("log_artifacts", True)),
+        "metrics_verbosity": _normalize_wandb_metrics_verbosity(wandb_cfg.get("metrics_verbosity")),
     }
 
     variants = list(merged.get("variants", []))

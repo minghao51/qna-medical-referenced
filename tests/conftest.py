@@ -17,6 +17,9 @@ if "DASHSCOPE_API_KEY" not in os.environ or not os.environ.get("DASHSCOPE_API_KE
 LIVE_QWEN_ENABLED = os.environ.get("RUN_LIVE_QWEN_TESTS") == "1"
 _LIVE_QWEN_PRECHECK: str | None = None
 
+# Real API E2E tests flag
+REAL_API_TESTS_ENABLED = os.environ.get("ENABLE_REAL_API_TESTS") == "1"
+
 
 def pytest_collection_modifyitems(config, items):
     if LIVE_QWEN_ENABLED:
@@ -26,6 +29,13 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "live_api" in item.keywords:
             item.add_marker(skip_live)
+
+    # Skip real API E2E tests unless explicitly enabled
+    if not REAL_API_TESTS_ENABLED:
+        skip_real_api = pytest.mark.skip(reason="Set ENABLE_REAL_API_TESTS=1 to run real API E2E tests")
+        for item in items:
+            if "e2e_real_apis" in item.keywords:
+                item.add_marker(skip_real_api)
 
 
 def pytest_runtest_setup(item):

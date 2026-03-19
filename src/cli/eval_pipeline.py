@@ -57,6 +57,7 @@ def main() -> None:
     parser.add_argument("--max-queries", type=int, default=None)
     parser.add_argument("--sample-seed", type=int, default=42)
     parser.add_argument("--reuse-cached-dataset", action="store_true")
+    parser.add_argument("--force-rerun", action="store_true")
     parser.add_argument("--fail-on-thresholds", action="store_true")
     parser.add_argument("--thresholds-file", default=None)
     parser.add_argument("--dataset-split", default=None, choices=["dev", "test", "regression"])
@@ -147,6 +148,7 @@ def main() -> None:
             "--disable-llm-judging": ("disable_llm_judging", args.disable_llm_judging),
             "--include-answer-eval": ("include_answer_eval", args.include_answer_eval),
             "--reuse-cached-dataset": ("reuse_cached_dataset", args.reuse_cached_dataset),
+            "--force-rerun": ("force_rerun", args.force_rerun),
             "--fail-on-thresholds": ("fail_on_thresholds", args.fail_on_thresholds),
             "--disable-page-classification": (
                 "disable_page_classification",
@@ -203,6 +205,8 @@ def main() -> None:
             variant=args.variant,
             all_variants=args.all_variants,
         )
+        if args.variant and not args.all_variants:
+            specs = specs[-1:]
         baseline_result = None
         baseline_metrics = None
         exit_code = 0
@@ -211,6 +215,11 @@ def main() -> None:
             result = run_assessment(**kwargs)
             print(f"Evaluation complete: {result.run_dir}")
             print(f"Status: {result.status}")
+            dedup = dict(result.summary.get("dedup") or {})
+            if dedup.get("reused_existing_run"):
+                print(f"Reused existing run: {dedup.get('matched_run_dir') or result.run_dir}")
+            elif dedup.get("force_rerun"):
+                print("Dedup bypassed: force rerun")
             if result.failed_thresholds:
                 print(f"Threshold failures: {len(result.failed_thresholds)}")
             if idx == 0:
@@ -252,6 +261,7 @@ def main() -> None:
         max_queries=args.max_queries,
         sample_seed=args.sample_seed,
         reuse_cached_dataset=args.reuse_cached_dataset,
+        force_rerun=args.force_rerun,
         fail_on_thresholds=args.fail_on_thresholds,
         thresholds_file=args.thresholds_file,
         dataset_split=args.dataset_split,
@@ -268,6 +278,11 @@ def main() -> None:
     )
     print(f"Evaluation complete: {result.run_dir}")
     print(f"Status: {result.status}")
+    dedup = dict(result.summary.get("dedup") or {})
+    if dedup.get("reused_existing_run"):
+        print(f"Reused existing run: {dedup.get('matched_run_dir') or result.run_dir}")
+    elif dedup.get("force_rerun"):
+        print("Dedup bypassed: force rerun")
     if result.failed_thresholds:
         print(f"Threshold failures: {len(result.failed_thresholds)}")
     raise SystemExit(1 if result.status == "failed" else 0)

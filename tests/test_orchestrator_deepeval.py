@@ -1,13 +1,12 @@
 """Tests for DeepEval orchestrator integration."""
 
-from pathlib import Path
-
 from src.evals.assessment.orchestrator import run_assessment
 
 
 def test_deepeval_import_exists():
     """Test that DeepEval function is importable."""
     from src.evals.assessment.orchestrator import evaluate_answers_deepeval
+
     assert callable(evaluate_answers_deepeval)
 
 
@@ -47,7 +46,10 @@ def test_orchestrator_runs_l6_answer_quality_evaluator(tmp_path):
             "generation_attempts": [],
             "stats": {},
         },
-        evaluate_retrieval_fn=lambda dataset, top_k, retrieval_options=None: ([], {"query_count": 1}),
+        evaluate_retrieval_fn=lambda dataset, top_k, retrieval_options=None: (
+            [],
+            {"query_count": 1},
+        ),
         evaluate_answers_fn=fake_evaluate_answer_quality,
         evaluate_thresholds_fn=lambda step_metrics, retrieval_metrics, l6_answer_quality_metrics, thresholds: [],
         git_head_fn=lambda: "deadbeef",

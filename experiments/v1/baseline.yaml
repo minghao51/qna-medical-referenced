@@ -67,6 +67,7 @@ tracking:
     notes: Baseline local pipeline evaluation
     mode: online
     log_artifacts: true
+    metrics_verbosity: standard
 variants:
   - name: html_strict
     overrides:

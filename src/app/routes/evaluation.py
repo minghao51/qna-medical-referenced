@@ -34,7 +34,6 @@ from src.evals.assessment.l6_contract import (
     L6_ANSWER_QUALITY_ROWS,
     SUMMARY_L6_METRICS_KEY,
 )
-from src.experiments.wandb_history import fetch_wandb_run, fetch_wandb_runs
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +58,27 @@ def _list_run_dirs() -> list[Path]:
     )
 
 
+def _read_retrieval_metrics(path: Path) -> dict[str, Any]:
+    retrieval = _read_json_if_exists(path / "retrieval_metrics.json")
+    return retrieval if isinstance(retrieval, dict) else {}
+
+
+def _read_summary(path: Path) -> dict[str, Any]:
+    summary = _read_json_if_exists(path / "summary.json")
+    return summary if isinstance(summary, dict) else {}
+
+
+def _is_valid_local_run(run_dir: Path) -> bool:
+    if not (run_dir / "summary.json").exists():
+        return False
+    if not (run_dir / "retrieval_metrics.json").exists():
+        return False
+
+    retrieval = _read_retrieval_metrics(run_dir)
+    query_count = retrieval.get("query_count")
+    return isinstance(query_count, (int, float)) and query_count > 0
+
+
 def _get_latest_run_dir() -> Path | None:
     """Get the latest evaluation run directory.
 
@@ -68,6 +88,24 @@ def _get_latest_run_dir() -> Path | None:
 
     Returns:
         Path to the latest run directory, or None if no runs exist
+    """
+    if LATEST_POINTER.exists():
+        run_dir = Path(LATEST_POINTER.read_text().strip())
+        if run_dir.exists() and _is_valid_local_run(run_dir):
+            return run_dir
+    runs = _list_run_dirs()
+    for run_dir in runs:
+        if _is_valid_local_run(run_dir):
+            return run_dir
+    return None
+
+
+def _get_latest_existing_run_dir() -> Path | None:
+    """Get the latest run directory regardless of completeness.
+
+    Some endpoints, such as ablation debugging, can still serve useful artifacts
+    from a run directory even when the run does not have the full summary +
+    retrieval payload expected by the main history/latest endpoints.
     """
     if LATEST_POINTER.exists():
         run_dir = Path(LATEST_POINTER.read_text().strip())
@@ -105,22 +143,23 @@ def _get_all_runs() -> list[dict[str, Any]]:
     runs = _list_run_dirs()
     result = []
     for run_dir in runs:
-        summary_path = run_dir / "summary.json"
-        if summary_path.exists():
-            try:
-                summary = json.loads(summary_path.read_text())
-                result.append(
-                    {
-                        "run_dir": str(run_dir.name),
-                        "status": summary.get("status"),
-                        "duration_s": summary.get("duration_s"),
-                        "failed_thresholds_count": summary.get("failed_thresholds_count"),
-                        "source": "local",
-                        "tracking": summary.get("tracking", {}),
-                    }
-                )
-            except Exception:
-                result.append({"run_dir": str(run_dir.name), "status": "error", "source": "local"})
+        if not _is_valid_local_run(run_dir):
+            continue
+        try:
+            summary = _read_summary(run_dir)
+            result.append(
+                {
+                    "run_dir": str(run_dir.name),
+                    "status": summary.get("status"),
+                    "duration_s": summary.get("duration_s"),
+                    "failed_thresholds_count": summary.get("failed_thresholds_count"),
+                    "dedup": summary.get("dedup", {}),
+                    "source": "local",
+                    "tracking": summary.get("tracking", {}),
+                }
+            )
+        except Exception:
+            result.append({"run_dir": str(run_dir.name), "status": "error", "source": "local"})
     return result
 
 
@@ -192,29 +231,12 @@ def _normalize_ablation_payload(payload: Any) -> dict[str, Any]:
     return {"ablation_runs": ablation_runs}
 
 
-def _tracking_target_from_latest_local() -> tuple[str | None, str | None]:
-    run_dir = _get_latest_run_dir()
-    if not run_dir:
-        return None, None
-    manifest = _read_json_if_exists(run_dir / "manifest.json")
-    summary = _read_json_if_exists(run_dir / "summary.json")
-    summary_tracking = dict((summary.get("tracking") or {}).get("wandb") or {})
-    if summary_tracking.get("project"):
-        return summary_tracking.get("project"), summary_tracking.get("entity")
-    experiment_cfg = (
-        ((manifest.get("config") or {}).get("experiment_config") or {}).get("tracking") or {}
-    ).get("wandb") or {}
-    if experiment_cfg.get("project"):
-        return experiment_cfg.get("project"), experiment_cfg.get("entity")
-    return None, None
-
-
 def _local_history_runs(limit: int) -> list[dict[str, Any]]:
-    runs = _list_run_dirs()[:limit]
+    runs = [run_dir for run_dir in _list_run_dirs() if _is_valid_local_run(run_dir)][:limit]
     result_runs = []
     for run_dir in runs:
-        summary = _read_json_if_exists(run_dir / "summary.json")
-        retrieval = _read_json_if_exists(run_dir / "retrieval_metrics.json")
+        summary = _read_summary(run_dir)
+        retrieval = _read_retrieval_metrics(run_dir)
         manifest = _read_json_if_exists(run_dir / "manifest.json")
         experiment_cfg = dict(((manifest.get("config") or {}).get("experiment_config")) or {})
         result_runs.append(
@@ -241,6 +263,7 @@ def _local_history_runs(limit: int) -> list[dict[str, Any]]:
                 "wandb_run_id": (
                     ((summary.get("tracking") or {}).get("wandb") or {}).get("run_id")
                 ),
+                "dedup": summary.get("dedup", {}),
                 "tracking": summary.get("tracking", {}),
             }
         )
@@ -286,19 +309,6 @@ def _aggregate_history_summary(runs: list[dict[str, Any]]) -> dict[str, Any]:
         else 0,
         "sources": source_breakdown,
     }
-
-
-def _resolved_wandb_target(
-    wandb_project: str | None = None, wandb_entity: str | None = None
-) -> tuple[str | None, str | None]:
-    resolved_project = wandb_project
-    resolved_entity = wandb_entity
-    if not resolved_project:
-        resolved_project, resolved_entity = _tracking_target_from_latest_local()
-        if wandb_entity:
-            resolved_entity = wandb_entity
-    return resolved_project, resolved_entity
-
 
 @router.get(
     "/evaluation/latest",
@@ -411,9 +421,6 @@ def get_evaluation_runs() -> list[dict[str, Any]]:
 )
 def get_evaluation_history(
     limit: int = 10,
-    source: str = "local",
-    wandb_project: str | None = None,
-    wandb_entity: str | None = None,
 ) -> dict[str, Any]:
     """Get historical evaluation metrics for trending analysis.
 
@@ -454,86 +461,11 @@ def get_evaluation_history(
         }
     """
     limit = max(1, min(int(limit), 100))
-    source_mode = str(source or "local").strip().lower()
-    if source_mode not in {"local", "wandb", "all"}:
-        raise HTTPException(status_code=400, detail="source must be one of: local, wandb, all")
-
-    local_runs = _local_history_runs(limit) if source_mode in {"local", "all"} else []
-    resolved_project, resolved_entity = _resolved_wandb_target(wandb_project, wandb_entity)
-    warnings: list[str] = []
-    wandb_result: dict[str, Any] = {"runs": [], "status": "disabled"}
-    if source_mode in {"wandb", "all"}:
-        wandb_result = fetch_wandb_runs(
-            project=resolved_project or "",
-            entity=resolved_entity,
-            limit=limit,
-        )
-        if wandb_result.get("warning"):
-            warnings.append(str(wandb_result["warning"]))
-
-    result_runs = list(local_runs)
-    result_runs.extend(list(wandb_result.get("runs", [])))
-    result_runs = sorted(
-        result_runs, key=lambda run: str(run.get("timestamp") or ""), reverse=True
-    )[:limit]
-    response = {
-        "runs": result_runs,
-        "summary": _aggregate_history_summary(result_runs),
-        "sources": {
-            "mode": source_mode,
-            "wandb": {
-                "status": wandb_result.get("status"),
-                "project": wandb_result.get("project", resolved_project),
-                "entity": wandb_result.get("entity", resolved_entity),
-            },
-        },
-    }
-    if warnings:
-        response["warnings"] = warnings
-    return response
-
-
-@router.get("/evaluation/wandb/run/{run_ref}")
-def get_wandb_evaluation_run(
-    run_ref: str,
-    wandb_project: str | None = None,
-    wandb_entity: str | None = None,
-) -> dict[str, Any]:
-    _validate_run_dir(run_ref)
-    resolved_project, resolved_entity = _resolved_wandb_target(wandb_project, wandb_entity)
-    result = fetch_wandb_run(
-        project=resolved_project or "",
-        entity=resolved_entity,
-        run_id=run_ref,
-        run_name=run_ref,
-    )
-    if result.get("status") == "not_found":
-        raise HTTPException(status_code=404, detail=f"W&B run not found: {run_ref}")
-    if result.get("status") == "error":
-        raise HTTPException(status_code=502, detail=result.get("warning", "Failed to load W&B run"))
-    if result.get("status") == "disabled":
-        raise HTTPException(
-            status_code=400, detail=result.get("warning", "W&B project not configured")
-        )
-
-    run = dict(result.get("run") or {})
+    local_runs = _local_history_runs(limit)
     return {
-        "run_dir": run.get("run_dir", run_ref),
-        "summary": {
-            "run_dir": run.get("run_dir", run_ref),
-            "duration_s": run.get("duration_s"),
-            "retrieval_metrics": run.get("retrieval_metrics", {}),
-            SUMMARY_L6_METRICS_KEY: (run.get("summary") or {}).get(SUMMARY_L6_METRICS_KEY, {}),
-            "failed_thresholds_count": run.get("failed_thresholds_count", 0),
-            "status": run.get("status", "unknown"),
-            "tracking": run.get("tracking", {}),
-        },
-        "retrieval_metrics": run.get("retrieval_metrics", {}),
-        "manifest": run.get("manifest", {}),
-        "source": "wandb",
-        "tracking": run.get("tracking", {}),
-        "wandb_run_id": run.get("wandb_run_id"),
-        "wandb_url": run.get("wandb_url"),
+        "runs": local_runs,
+        "summary": _aggregate_history_summary(local_runs),
+        "sources": {"mode": "local"},
     }
 
 
@@ -633,7 +565,7 @@ def get_ablation_results() -> dict[str, Any]:
             ]
         }
     """
-    run_dir = _get_latest_run_dir()
+    run_dir = _get_latest_existing_run_dir()
     if not run_dir:
         raise HTTPException(status_code=404, detail="No evaluation runs found")
 
@@ -696,6 +628,50 @@ def get_step_records(stage: str, limit: int = 100) -> dict[str, Any]:
     records = stage_data.get("records", [])
 
     return {"stage": stage_name, "records": records[:limit], "total_count": len(records)}
+
+
+@router.get(
+    "/evaluation/l6/records",
+    summary="Get L6 answer quality per-query records",
+    description="Get detailed per-query records for L6 answer quality drill-down",
+)
+def get_l6_records(limit: int = 100) -> dict[str, Any]:
+    """Get detailed per-query L6 answer quality records.
+
+    Returns individual query evaluation records from DeepEval including
+    the query, answer, sources, and per-metric scores.
+
+    Args:
+        limit: Maximum number of records to return (default: 100)
+
+    Returns:
+        Dictionary containing:
+            - records: Array of per-query L6 evaluation records
+            - total_count: Total number of records available
+
+    Raises:
+        HTTPException(404): If no evaluation runs exist
+        HTTPException(404): If L6 answer quality records not found
+
+    Example:
+        GET /evaluation/l6/records?limit=50
+    """
+    run_dir = _get_latest_run_dir()
+    if not run_dir:
+        raise HTTPException(status_code=404, detail="No evaluation runs found")
+
+    l6_rows_path = run_dir / "l6_answer_quality.jsonl"
+    if not l6_rows_path.exists():
+        raise HTTPException(status_code=404, detail="L6 answer quality records not found")
+
+    records = []
+    with open(l6_rows_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+
+    return {"records": records[:limit], "total_count": len(records)}
 
 
 @router.get(

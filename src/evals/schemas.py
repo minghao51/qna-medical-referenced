@@ -36,6 +36,7 @@ class AssessmentConfig:
     run_diversity_sweep: bool = False
     diversity_sweep: dict[str, Any] = field(default_factory=dict)
     experiment_config: dict[str, Any] | None = None
+    force_rerun: bool = False
 
 
 @dataclass

@@ -46,7 +46,9 @@ def test_build_retrieval_dataset_offline_disable_llm(tmp_path: Path):
     assert bundle["generation_attempts"][0]["status"] == "skipped"
 
 
-def test_build_retrieval_dataset_uses_fixture_by_default_even_when_cache_exists(tmp_path: Path, monkeypatch):
+def test_build_retrieval_dataset_uses_fixture_by_default_even_when_cache_exists(
+    tmp_path: Path, monkeypatch
+):
     evals_dir = tmp_path / "data" / "evals"
     run_dir = evals_dir / "20260313T000000Z_cached-run"
     run_dir.mkdir(parents=True)
@@ -72,7 +74,11 @@ def test_build_retrieval_dataset_uses_fixture_by_default_even_when_cache_exists(
         json.dumps(
             {
                 "golden_queries": [
-                    {"query": "Fixture question", "expected_keywords": ["fixture"], "expected_sources": ["Fixture"]}
+                    {
+                        "query": "Fixture question",
+                        "expected_keywords": ["fixture"],
+                        "expected_sources": ["Fixture"],
+                    }
                 ]
             }
         ),
@@ -94,7 +100,11 @@ def test_build_retrieval_dataset_falls_back_to_fixture_without_cache(tmp_path: P
         json.dumps(
             {
                 "golden_queries": [
-                    {"query": "Fixture question", "expected_keywords": ["fixture"], "expected_sources": ["Fixture"]}
+                    {
+                        "query": "Fixture question",
+                        "expected_keywords": ["fixture"],
+                        "expected_sources": ["Fixture"],
+                    }
                 ]
             }
         ),
@@ -127,7 +137,9 @@ def test_build_retrieval_dataset_reuses_cached_json_only_when_enabled(tmp_path: 
     fixture_dir.mkdir(parents=True)
     fixture_path = fixture_dir / "golden_queries.json"
     fixture_path.write_text(
-        json.dumps({"golden_queries": [{"query": "Fixture question", "expected_sources": ["Fixture"]}]}),
+        json.dumps(
+            {"golden_queries": [{"query": "Fixture question", "expected_sources": ["Fixture"]}]}
+        ),
         encoding="utf-8",
     )
     compatibility = {
@@ -163,7 +175,9 @@ def test_build_retrieval_dataset_rejects_incompatible_latest_and_uses_older_comp
     fixture_dir.mkdir(parents=True)
     fixture_path = fixture_dir / "golden_queries.json"
     fixture_path.write_text(
-        json.dumps({"golden_queries": [{"query": "Fixture question", "expected_sources": ["Fixture"]}]}),
+        json.dumps(
+            {"golden_queries": [{"query": "Fixture question", "expected_sources": ["Fixture"]}]}
+        ),
         encoding="utf-8",
     )
     compatible_contract = {
@@ -229,7 +243,9 @@ def test_build_retrieval_dataset_fails_closed_when_no_compatible_cached_run_exis
     fixture_dir = tmp_path / "tests" / "fixtures"
     fixture_dir.mkdir(parents=True)
     (fixture_dir / "golden_queries.json").write_text(
-        json.dumps({"golden_queries": [{"query": "Fixture question", "expected_sources": ["Fixture"]}]}),
+        json.dumps(
+            {"golden_queries": [{"query": "Fixture question", "expected_sources": ["Fixture"]}]}
+        ),
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -238,13 +254,59 @@ def test_build_retrieval_dataset_fails_closed_when_no_compatible_cached_run_exis
         build_retrieval_dataset(enable_llm_generation=False, reuse_cached_dataset=True)
 
 
+def test_build_retrieval_dataset_reuses_custom_artifact_dir(tmp_path: Path, monkeypatch):
+    evals_dir = tmp_path / "custom-evals"
+    run_dir = evals_dir / "20260313T000000Z_cached-run"
+    fixture_dir = tmp_path / "tests" / "fixtures"
+    fixture_dir.mkdir(parents=True)
+    fixture_path = fixture_dir / "golden_queries.json"
+    fixture_path.write_text(
+        json.dumps(
+            {"golden_queries": [{"query": "Fixture question", "expected_sources": ["Fixture"]}]}
+        ),
+        encoding="utf-8",
+    )
+    compatibility = {
+        "dataset_path": str(fixture_path.resolve()),
+        "dataset_split": None,
+        "min_label_confidence": "low",
+        "enable_llm_generation": False,
+        "max_synthetic_questions": 0,
+        "sample_docs_per_source_type": 0,
+        "seed": 0,
+        "max_queries": None,
+        "sample_seed": 42,
+        "reuse_requirements": {},
+    }
+    _write_cached_run(
+        run_dir,
+        dataset=[{"query": "Cached question", "expected_sources": ["CacheSource"]}],
+        compatibility=compatibility,
+    )
+    (evals_dir / "latest_run.txt").write_text(str(run_dir), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    bundle = build_retrieval_dataset(
+        enable_llm_generation=False,
+        reuse_cached_dataset=True,
+        artifact_dir=evals_dir,
+    )
+
+    assert bundle["stats"]["reused_cached_dataset"] is True
+    assert bundle["dataset"][0]["query"] == "Cached question"
+
+
 def test_build_retrieval_dataset_samples_queries_deterministically(tmp_path: Path):
     dataset_file = tmp_path / "dataset.json"
     dataset_file.write_text(
         json.dumps(
             {
                 "golden_queries": [
-                    {"query": f"Q{i}", "expected_keywords": [f"k{i}"], "expected_sources": [f"S{i}"]}
+                    {
+                        "query": f"Q{i}",
+                        "expected_keywords": [f"k{i}"],
+                        "expected_sources": [f"S{i}"],
+                    }
                     for i in range(6)
                 ]
             }
@@ -271,8 +333,12 @@ def test_build_retrieval_dataset_samples_queries_deterministically(tmp_path: Pat
         sample_seed=9,
     )
 
-    assert [item["query"] for item in first["dataset"]] == [item["query"] for item in second["dataset"]]
+    assert [item["query"] for item in first["dataset"]] == [
+        item["query"] for item in second["dataset"]
+    ]
     assert first["stats"]["was_sampled"] is True
     assert first["stats"]["sampled_records"] == 2
     assert third["stats"]["sample_seed"] == 9
-    assert [item["query"] for item in first["dataset"]] != [item["query"] for item in third["dataset"]]
+    assert [item["query"] for item in first["dataset"]] != [
+        item["query"] for item in third["dataset"]
+    ]

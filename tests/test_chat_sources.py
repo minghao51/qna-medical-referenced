@@ -19,6 +19,8 @@ def _build_client(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("src.app.factory.initialize_runtime_index", lambda: None)
     monkeypatch.setattr(settings, "api_keys", "")
     monkeypatch.setattr(settings, "api_keys_json", None)
+    monkeypatch.setattr(settings, "chat_session_cookie_name", "chat_session_id")
+    monkeypatch.setattr(settings, "chat_session_cookie_max_age_seconds", 3600)
     APIKeyConfig.reload()
     app = create_app()
     app.state.llm_client = DummyLLMClient()
@@ -84,9 +86,10 @@ def test_chat_route_returns_structured_sources(monkeypatch, tmp_path: Path):
     )
     client = _build_client(monkeypatch, tmp_path)
 
-    response = client.post("/chat", json={"message": "hello", "session_id": "s1"})
+    response = client.post("/chat", json={"message": "hello"})
 
     assert response.status_code == 200
+    assert response.cookies.get("chat_session_id")
     body = response.json()
     assert body["sources"][0]["label"] == "HealthHub page 2"
     assert body["sources"][0]["source"] == "healthhub.sg"
@@ -131,9 +134,26 @@ def test_chat_route_with_pipeline_returns_structured_sources(monkeypatch, tmp_pa
     )
     client = _build_client(monkeypatch, tmp_path)
 
-    response = client.post("/chat?include_pipeline=true", json={"message": "hello", "session_id": "s1"})
+    response = client.post("/chat?include_pipeline=true", json={"message": "hello"})
 
     assert response.status_code == 200
     body = response.json()
     assert body["sources"][0]["label"] == "HealthHub page 2"
     assert body["pipeline"]["context"]["sources"] == ["HealthHub page 2"]
+
+
+def test_history_routes_ignore_legacy_session_id_and_use_cookie_session(monkeypatch, tmp_path: Path):
+    client = _build_client(monkeypatch, tmp_path)
+    store = client.app.state.chat_history_store
+
+    response = client.get("/history/not-the-real-session")
+    cookie_session_id = response.cookies.get("chat_session_id")
+    assert cookie_session_id
+
+    store.save_message(cookie_session_id, "user", "hello")
+    fetched = client.get("/history/arbitrary-session-id")
+
+    assert fetched.status_code == 200
+    assert fetched.json()["history"][0]["role"] == "user"
+    assert fetched.json()["history"][0]["content"] == "hello"
+    assert fetched.json()["history"][0]["timestamp"]

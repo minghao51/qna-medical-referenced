@@ -1,14 +1,9 @@
-"""Assessment subsystem exports."""
+"""Assessment subsystem exports.
 
-from src.evals.assessment.answer_eval import evaluate_answer_quality, evaluate_answers_deepeval
-from src.evals.assessment.orchestrator import run_assessment
-from src.evals.assessment.reporting import git_head, render_summary, sha256_file
-from src.evals.assessment.retrieval_eval import (
-    evaluate_retrieval,
-    run_diversity_sweep,
-    run_retrieval_ablations,
-)
-from src.evals.assessment.thresholds import DEFAULT_THRESHOLDS, evaluate_thresholds
+Keep package import side effects light so read-only helpers such as
+`src.evals.assessment.l6_contract` can be imported without optional
+evaluation dependencies like `deepeval`.
+"""
 
 __all__ = [
     "DEFAULT_THRESHOLDS",

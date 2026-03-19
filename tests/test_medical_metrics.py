@@ -38,9 +38,7 @@ def test_create_medical_metrics_returns_fresh_instances():
 
 def test_metric_specs_use_expected_models():
     metrics = create_medical_metrics()
-    metric_map = {
-        spec.key: metric for spec, metric in zip(METRIC_SPECS, metrics, strict=True)
-    }
+    metric_map = {spec.key: metric for spec, metric in zip(METRIC_SPECS, metrics, strict=True)}
 
     assert metric_map["clarity"].model.model == "qwen3.5-35b-a3b"
     assert metric_map["factual_accuracy"].model.model == "qwen3.5-flash"

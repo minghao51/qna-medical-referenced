@@ -31,7 +31,7 @@ from typing import Any, Optional
 
 from src.app.exceptions import UpstreamServiceError
 from src.infra.llm import get_client
-from src.infra.storage import ChatHistoryStore
+from src.infra.storage.interfaces import ChatHistoryStore
 from src.rag import retrieve_context, retrieve_context_with_trace
 
 

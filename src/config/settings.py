@@ -203,6 +203,54 @@ class Settings(BaseSettings):
     Environment variable: RATE_LIMIT_PER_MINUTE
     """
 
+    anonymous_chat_rate_limit_per_minute: int = 12
+    """Maximum anonymous `/chat` requests allowed per minute per browser + IP pair.
+
+    Default: 12
+    This tighter quota applies only when API key authentication is disabled or
+    a request is otherwise unauthenticated.
+
+    Environment variable: ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE
+    """
+
+    anonymous_browser_cookie_name: str = "anon_browser_id"
+    """Cookie name used to persist an anonymous browser identifier.
+
+    Environment variable: ANONYMOUS_BROWSER_COOKIE_NAME
+    """
+
+    chat_session_cookie_name: str = "chat_session_id"
+    """Cookie name used for the server-issued anonymous chat session.
+
+    Environment variable: CHAT_SESSION_COOKIE_NAME
+    """
+
+    chat_session_cookie_max_age_seconds: int = 60 * 60 * 24 * 30
+    """Lifetime of the anonymous chat session cookie in seconds.
+
+    Default: 30 days
+
+    Environment variable: CHAT_SESSION_COOKIE_MAX_AGE_SECONDS
+    """
+
+    chat_history_ttl_seconds: int = 60 * 60 * 24 * 30
+    """Retention window for file-backed anonymous chat history in seconds.
+
+    Default: 30 days
+
+    Environment variable: CHAT_HISTORY_TTL_SECONDS
+    """
+
+    trust_proxy_headers: bool = False
+    """Whether to trust forwarding headers for client IP resolution.
+
+    Default: False
+    Enable this only when the app is behind a trusted reverse proxy/load balancer
+    that correctly sets `X-Forwarded-For` or `X-Real-IP`.
+
+    Environment variable: TRUST_PROXY_HEADERS
+    """
+
     # Retry Configuration
     max_retries: int = 3
     """Maximum number of retry attempts for failed LLM API calls.
@@ -221,6 +269,25 @@ class Settings(BaseSettings):
     Example: 1.0s, 2.0s, 4.0s for max_retries=3
 
     Environment variable: RETRY_DELAY
+    """
+
+    # HyDE Configuration
+    hyde_enabled: bool = False
+    """Enable HyDE (Hypothetical Document Embeddings) query expansion.
+
+    Default: False (disabled for backward compatibility)
+    When enabled, generates hypothetical answers to improve retrieval quality.
+
+    Environment variable: HYDE_ENABLED
+    """
+
+    hyde_max_length: int = 200
+    """Maximum word count for HyDE hypothetical answers.
+
+    Default: 200
+    Range: 50-500
+
+    Environment variable: HYDE_MAX_LENGTH
     """
 
     @property

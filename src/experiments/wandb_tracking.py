@@ -19,31 +19,62 @@ _L6_ANSWER_QUALITY_METRIC_NAMES = (
 )
 
 
-def _define_wandb_metrics(run: Any) -> None:
-    """Define metric behavior for wandb UI organization."""
-    # Primary metrics - prominent display with summary behavior
-    run.define_metric("retrieval/hit_rate", summary="max")
-    run.define_metric("retrieval/mrr", summary="max")
-    run.define_metric("retrieval/ndcg", summary="max")
-    run.define_metric("retrieval/latency_p50_ms", summary="min")
-    for metric_name in _L6_ANSWER_QUALITY_METRIC_NAMES:
-        run.define_metric(f"l6_answer_quality/{metric_name}_mean", summary="max")
-        run.define_metric(f"l6_answer_quality/{metric_name}_error_rate", summary="min")
-    run.define_metric("l6_answer_quality/query_count", hidden=True)
-    run.define_metric("l6_answer_quality/query_count_scored", hidden=True)
-    run.define_metric("l6_answer_quality/metric_error_rate", summary="min")
-    run.define_metric("l6_answer_quality/metric_evaluations_failed", hidden=True)
+def _safe_define_metric(run: Any, name: str, **kwargs: Any) -> None:
+    try:
+        run.define_metric(name, **kwargs)
+    except Exception as exc:
+        logger.warning("Skipping unsupported W&B metric definition %s: %s", name, exc)
 
-    # Hide debug metrics from auto-generated charts
-    run.define_metric("retrieval/by_difficulty/*/query_count", hidden=True)
-    run.define_metric("retrieval/by_task_type/*", hidden=True)
-    run.define_metric("retrieval/by_expected_source_type/*", hidden=True)
-    run.define_metric("retrieval/by_semantic_case/*", hidden=True)
-    run.define_metric("retrieval/contribution_analysis/*", hidden=True)
-    run.define_metric("steps/*/_*", hidden=True)
-    run.define_metric("steps/*/source_distribution", hidden=True)
-    run.define_metric("steps/*/dedupe_effect_estimate", hidden=True)
-    run.define_metric("steps/*/page_classification_distribution", hidden=True)
+
+def _define_wandb_metrics(run: Any, verbosity: str = "standard") -> None:
+    """Define metric behavior for wandb UI organization.
+
+    Args:
+        run: The wandb run object
+        verbosity: One of 'critical', 'standard', or 'debug'
+    """
+    # Define all metrics that might be logged (safe to define even if not used)
+
+    # Primary metrics - prominent display with summary behavior
+    _safe_define_metric(run, "retrieval/hit_rate", summary="max")
+    _safe_define_metric(run, "retrieval/mrr", summary="max")
+    _safe_define_metric(run, "retrieval/ndcg", summary="max")
+    _safe_define_metric(run, "retrieval/latency_p50_ms", summary="min")
+    _safe_define_metric(run, "retrieval/latency_p95_ms", summary="min")
+
+    # Secondary retrieval metrics
+    _safe_define_metric(run, "retrieval/precision_at_k", summary="max")
+    _safe_define_metric(run, "retrieval/recall_at_k", summary="max")
+    _safe_define_metric(run, "retrieval/source_hit_rate", summary="max")
+    _safe_define_metric(run, "retrieval/exact_chunk_hit_rate", summary="max")
+    _safe_define_metric(run, "retrieval/evidence_hit_rate", summary="max")
+
+    # HyDe (Hypothetical Document Embeddings) metrics
+    _safe_define_metric(run, "retrieval/hyde_enabled", hidden=True)
+    _safe_define_metric(run, "retrieval/hyde_queries_count", hidden=True)
+    _safe_define_metric(run, "retrieval/hyde_hit_rate", summary="max")
+    _safe_define_metric(run, "retrieval/hyde_mrr", summary="max")
+    _safe_define_metric(run, "retrieval/hyde_source_hit_rate", summary="max")
+
+    # Note: wandb doesn't support glob patterns in define_metric
+    # Metrics will be auto-created when logged
+
+    # L6 answer quality metrics (if enabled)
+    for metric_name in _L6_ANSWER_QUALITY_METRIC_NAMES:
+        _safe_define_metric(run, f"l6_answer_quality/{metric_name}_mean", summary="max")
+        _safe_define_metric(run, f"l6_answer_quality/{metric_name}_error_rate", summary="min")
+    _safe_define_metric(run, "l6_answer_quality/query_count", hidden=True)
+    _safe_define_metric(run, "l6_answer_quality/query_count_scored", hidden=True)
+    _safe_define_metric(run, "l6_answer_quality/metric_error_rate", summary="min")
+    _safe_define_metric(run, "l6_answer_quality/metric_evaluations_failed", hidden=True)
+
+    # Summary metrics
+    _safe_define_metric(run, "summary/duration_s", summary="min")
+    _safe_define_metric(run, "summary/failed_thresholds", summary="min")
+    _safe_define_metric(run, "thresholds/failed_count", summary="min")
+
+    # Note: wandb doesn't support glob patterns in define_metric
+    # Additional metrics will be auto-created when logged in debug mode
 
 
 def _extract_primary_metrics(
@@ -72,7 +103,9 @@ def _extract_primary_metrics(
         if "query_count" in l6_answer_quality:
             metrics["l6_answer_quality/query_count"] = l6_answer_quality["query_count"]
         if "query_count_scored" in l6_answer_quality:
-            metrics["l6_answer_quality/query_count_scored"] = l6_answer_quality["query_count_scored"]
+            metrics["l6_answer_quality/query_count_scored"] = l6_answer_quality[
+                "query_count_scored"
+            ]
         if "metric_error_rate" in l6_answer_quality:
             metrics["l6_answer_quality/metric_error_rate"] = l6_answer_quality["metric_error_rate"]
         if "metric_evaluations_failed" in l6_answer_quality:
@@ -98,11 +131,12 @@ def _extract_secondary_metrics(retrieval: dict[str, Any]) -> dict[str, Any]:
         "source_hit_rate",
         "exact_chunk_hit_rate",
         "evidence_hit_rate",
+        "latency_p95_ms",
     ]:
         if key in retrieval:
             metrics[f"retrieval/{key}"] = retrieval[key]
 
-    # Difficulty breakdowns
+    # Difficulty breakdowns (key for understanding performance across query types)
     by_difficulty = retrieval.get("by_difficulty", {})
     for difficulty, metrics_dict in by_difficulty.items():
         if "hit_rate_at_k" in metrics_dict:
@@ -115,6 +149,17 @@ def _extract_secondary_metrics(retrieval: dict[str, Any]) -> dict[str, Any]:
     for category, metrics_dict in by_category.items():
         if "hit_rate_at_k" in metrics_dict:
             metrics[f"retrieval/by_category/{category}/hit_rate"] = metrics_dict["hit_rate_at_k"]
+
+    # HyDe (Hypothetical Document Embeddings) metrics
+    if retrieval.get("hyde_enabled"):
+        metrics["retrieval/hyde_enabled"] = True
+        metrics["retrieval/hyde_queries_count"] = retrieval.get("hyde_queries_count", 0)
+        if retrieval.get("hyde_hit_rate") is not None:
+            metrics["retrieval/hyde_hit_rate"] = retrieval["hyde_hit_rate"]
+        if retrieval.get("hyde_mrr") is not None:
+            metrics["retrieval/hyde_mrr"] = retrieval["hyde_mrr"]
+        if retrieval.get("hyde_source_hit_rate") is not None:
+            metrics["retrieval/hyde_source_hit_rate"] = retrieval["hyde_source_hit_rate"]
 
     return metrics
 
@@ -157,6 +202,26 @@ def _extract_debug_metrics(
                 continue
             if isinstance(value, (int, float, bool)):
                 metrics[f"steps/{step_name}/{metric_name}"] = value
+
+    return metrics
+
+
+def _get_critical_metrics(
+    retrieval: dict[str, Any],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Extract only the most critical metrics for high-level comparison."""
+    metrics = {}
+
+    # Core retrieval quality (5 metrics)
+    metrics["retrieval/hit_rate"] = retrieval.get("hit_rate_at_k")
+    metrics["retrieval/mrr"] = retrieval.get("mrr")
+    metrics["retrieval/ndcg"] = retrieval.get("ndcg_at_k")
+    metrics["retrieval/latency_p50_ms"] = retrieval.get("latency_p50_ms")
+
+    # Pipeline health (2 metrics)
+    metrics["summary/duration_s"] = summary.get("duration_s")
+    metrics["summary/failed_thresholds"] = summary.get("failed_thresholds_count", 0)
 
     return metrics
 
@@ -217,18 +282,32 @@ def log_assessment_to_wandb(
                 "manifest": manifest,
             },
         )
-        # Define metric behavior for UI organization
-        _define_wandb_metrics(run)
+        # Get verbosity level (default to 'standard')
+        verbosity = tracking_cfg.get("metrics_verbosity", "standard").lower()
 
-        # Extract metrics in tiers for better dashboard organization
+        # Define metric behavior for UI organization
+        _define_wandb_metrics(run, verbosity=verbosity)
+
+        # Extract metrics based on verbosity level
         metrics: dict[str, Any] = {}
-        metrics.update(
-            _extract_primary_metrics(
-                retrieval_metrics, l6_answer_quality_metrics, summary
+
+        if verbosity == "critical":
+            # Only log ~10 critical metrics for easy comparison
+            metrics.update(_get_critical_metrics(retrieval_metrics, summary))
+        elif verbosity == "standard":
+            # Log primary + secondary metrics (~50 metrics)
+            metrics.update(
+                _extract_primary_metrics(retrieval_metrics, l6_answer_quality_metrics, summary)
             )
-        )
-        metrics.update(_extract_secondary_metrics(retrieval_metrics))
-        metrics.update(_extract_debug_metrics(retrieval_metrics, step_metrics))
+            metrics.update(_extract_secondary_metrics(retrieval_metrics))
+        else:  # debug
+            # Log everything (current behavior, 1000+ metrics)
+            metrics.update(
+                _extract_primary_metrics(retrieval_metrics, l6_answer_quality_metrics, summary)
+            )
+            metrics.update(_extract_secondary_metrics(retrieval_metrics))
+            metrics.update(_extract_debug_metrics(retrieval_metrics, step_metrics))
+
         metrics["thresholds/failed_count"] = len(failed_thresholds)
         if metrics:
             run.log(metrics)

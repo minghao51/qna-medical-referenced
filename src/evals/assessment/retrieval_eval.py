@@ -125,6 +125,10 @@ def evaluate_retrieval(
         "bm25_ranked_hits": 0,
         "fused_ranked_hits": 0,
     }
+    hyde_queries_count = 0
+    hyde_hit_values: list[float] = []
+    hyde_mrr_values: list[float] = []
+    hyde_source_hit_values: list[float] = []
 
     for item in dataset:
         query = item["query"]
@@ -213,6 +217,7 @@ def evaluate_retrieval(
             "exact_chunk_hit": exact_chunk_hit,
             "evidence_hit": evidence_hit,
             "topic_false_positive_rate": topic_false_positive_rate,
+            "hyde_enabled": bool(getattr(trace.retrieval, "score_weights", {}).get("hyde_enabled", False)),
         }
         if item.get("label_confidence") == "high":
             high_conf_hit_values.append(row_metrics["hit_rate_at_k"])
@@ -239,6 +244,12 @@ def evaluate_retrieval(
         query_embedding_latencies.append(
             float(getattr(trace.retrieval, "score_weights", {}).get("query_embedding_timing_ms", 0))
         )
+        hyde_enabled = bool(getattr(trace.retrieval, "score_weights", {}).get("hyde_enabled", False))
+        if hyde_enabled:
+            hyde_queries_count += 1
+            hyde_hit_values.append(row_metrics["hit_rate_at_k"])
+            hyde_mrr_values.append(row_metrics["mrr"])
+            hyde_source_hit_values.append(row_metrics["source_hit"])
         category = str(item.get("query_category") or "uncategorized")
         task_type = str(item.get("task_type") or "unspecified")
         source_type = expected_source_type_for_item(item)
@@ -318,6 +329,11 @@ def evaluate_retrieval(
         if high_conf_evidence_values
         else mean(evidence_hit_values),
         "topic_false_positive_rate": mean(topic_false_positive_values),
+        "hyde_enabled": hyde_queries_count > 0,
+        "hyde_queries_count": hyde_queries_count,
+        "hyde_hit_rate": mean(hyde_hit_values) if hyde_hit_values else None,
+        "hyde_mrr": mean(hyde_mrr_values) if hyde_mrr_values else None,
+        "hyde_source_hit_rate": mean(hyde_source_hit_values) if hyde_source_hit_values else None,
         "retrieval_options": dict(retrieval_options or {}),
         "by_query_category": {k: _slice_aggregate(v) for k, v in sorted(by_query_category.items())},
         "by_task_type": {k: _slice_aggregate(v) for k, v in sorted(by_task_type.items())},

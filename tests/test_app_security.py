@@ -15,13 +15,24 @@ class DummyLLMClient:
 
 
 def _build_client(
-    monkeypatch, tmp_path: Path, *, api_keys: str = "secret-key", rate_limit: int = 10
+    monkeypatch,
+    tmp_path: Path,
+    *,
+    api_keys: str | None = "secret-key",
+    rate_limit: int = 10,
+    anonymous_chat_rate_limit: int = 2,
+    trust_proxy_headers: bool = False,
 ):
     monkeypatch.setattr("src.app.factory.validate_security_configuration", lambda: None)
     monkeypatch.setattr("src.app.factory.initialize_runtime_index", lambda: None)
     monkeypatch.setattr("src.app.middleware.rate_limit.RATE_LIMIT_DB", tmp_path / "rate_limits.db")
     monkeypatch.setattr(settings, "api_keys", api_keys)
     monkeypatch.setattr(settings, "api_keys_json", None)
+    monkeypatch.setattr(settings, "anonymous_chat_rate_limit_per_minute", anonymous_chat_rate_limit)
+    monkeypatch.setattr(settings, "anonymous_browser_cookie_name", "anon_browser_id")
+    monkeypatch.setattr(settings, "chat_session_cookie_name", "chat_session_id")
+    monkeypatch.setattr(settings, "chat_session_cookie_max_age_seconds", 3600)
+    monkeypatch.setattr(settings, "trust_proxy_headers", trust_proxy_headers)
     APIKeyConfig.reload()
     app = create_app()
     app.state.llm_client = DummyLLMClient()
@@ -107,3 +118,136 @@ def test_evaluation_ablation_returns_consistent_error(monkeypatch, tmp_path: Pat
 
     assert response.status_code == 500
     assert response.json()["detail"] == "Failed to load ablation results"
+
+
+def test_anonymous_chat_rate_limit_scoped_by_browser_cookie(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "src.app.routes.chat.process_chat_message",
+        lambda **kwargs: {
+            "response": "ok",
+            "sources": [{"label": "doc", "source": "example.com", "url": "https://example.com"}],
+            "pipeline": None,
+        },
+    )
+    client = _build_client(
+        monkeypatch,
+        tmp_path,
+        api_keys=None,
+        rate_limit=50,
+        anonymous_chat_rate_limit=2,
+    )
+
+    first = client.post("/chat", json={"message": "hello", "session_id": "s1"})
+    second = client.post("/chat", json={"message": "again", "session_id": "s1"})
+    third = client.post("/chat", json={"message": "blocked", "session_id": "s1"})
+
+    assert first.status_code == 200
+    assert first.cookies.get("anon_browser_id")
+    assert second.status_code == 200
+    assert third.status_code == 429
+
+    other_browser = TestClient(client.app)
+    fresh = other_browser.post("/chat", json={"message": "new browser", "session_id": "s2"})
+    assert fresh.status_code == 200
+
+
+def test_anonymous_chat_uses_forwarded_ip_when_proxy_headers_enabled(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "src.app.routes.chat.process_chat_message",
+        lambda **kwargs: {
+            "response": "ok",
+            "sources": [{"label": "doc", "source": "example.com", "url": "https://example.com"}],
+            "pipeline": None,
+        },
+    )
+    client = _build_client(
+        monkeypatch,
+        tmp_path,
+        api_keys=None,
+        rate_limit=50,
+        anonymous_chat_rate_limit=1,
+        trust_proxy_headers=True,
+    )
+
+    first = client.post(
+        "/chat",
+        headers={"X-Forwarded-For": "198.51.100.10, 10.0.0.1"},
+        json={"message": "hello", "session_id": "s1"},
+    )
+    second = client.post(
+        "/chat",
+        headers={"X-Forwarded-For": "198.51.100.10, 10.0.0.1"},
+        json={"message": "blocked", "session_id": "s1"},
+    )
+    third = client.post(
+        "/chat",
+        headers={"X-Forwarded-For": "203.0.113.7, 10.0.0.1"},
+        json={"message": "allowed", "session_id": "s1"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert third.status_code == 200
+
+
+def test_anonymous_chat_limit_still_applies_when_global_limit_disabled(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "src.app.routes.chat.process_chat_message",
+        lambda **kwargs: {
+            "response": "ok",
+            "sources": [{"label": "doc", "source": "example.com", "url": "https://example.com"}],
+            "pipeline": None,
+        },
+    )
+    client = _build_client(
+        monkeypatch,
+        tmp_path,
+        api_keys=None,
+        rate_limit=0,
+        anonymous_chat_rate_limit=1,
+    )
+
+    first = client.post("/chat", json={"message": "hello", "session_id": "s1"})
+    second = client.post("/chat", json={"message": "blocked", "session_id": "s1"})
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+
+
+def test_chat_history_isolated_by_server_session_cookie(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "src.app.routes.chat.process_chat_message",
+        lambda **kwargs: {
+            "response": f"ok:{kwargs['session_id']}",
+            "sources": [],
+            "pipeline": None,
+        },
+    )
+    client_a = _build_client(monkeypatch, tmp_path, api_keys=None, rate_limit=50)
+    client_b = TestClient(client_a.app)
+
+    first = client_a.post("/chat", json={"message": "hello", "session_id": "shared-client-value"})
+    second = client_b.post("/chat", json={"message": "hello", "session_id": "shared-client-value"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.cookies.get("chat_session_id")
+    assert second.cookies.get("chat_session_id")
+    assert first.cookies.get("chat_session_id") != second.cookies.get("chat_session_id")
+    assert first.json()["response"] != second.json()["response"]
+
+
+def test_clear_history_rotates_chat_session_cookie(monkeypatch, tmp_path: Path):
+    client = _build_client(monkeypatch, tmp_path, api_keys=None, rate_limit=50)
+
+    initial = client.get("/history")
+    original_cookie = initial.cookies.get("chat_session_id")
+
+    cleared = client.delete("/history")
+    rotated_cookie = cleared.cookies.get("chat_session_id")
+
+    assert initial.status_code == 200
+    assert cleared.status_code == 200
+    assert original_cookie
+    assert rotated_cookie
+    assert rotated_cookie != original_cookie

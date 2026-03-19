@@ -37,6 +37,7 @@ python_functions = ["test_*"]
 markers = [
     "live_api: requires live Qwen API access",
     "deepeval: marks tests as DeepEval integration tests (slow, requires API)",
+    "e2e_real_apis: marks tests as end-to-end tests with real API integrations (requires ENABLE_REAL_API_TESTS=1)",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')"
 ]
 
@@ -50,7 +51,32 @@ ignore = ["E501"]
 
 [dependency-groups]
 dev = [
+    "mypy>=1.19.1",
     "playwright>=1.58.0",
     "pytest>=9.0.2",
     "ruff>=0.15.1",
 ]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = [
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+]
+disable_error_code = [
+    "import-untyped",
+    "annotation-unchecked",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "nltk.*",
+    "google.*",
+    "deepeval.*",
+]
+ignore_missing_imports = true

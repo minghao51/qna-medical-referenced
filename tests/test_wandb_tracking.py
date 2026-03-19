@@ -38,6 +38,13 @@ class _FakeRun:
         self.finished = True
 
 
+class _FlakyDefineMetricRun(_FakeRun):
+    def define_metric(self, name: str, **kwargs) -> None:
+        if name == "retrieval/mrr":
+            raise RuntimeError("unsupported metric definition")
+        super().define_metric(name, **kwargs)
+
+
 class _FakeWandb:
     def __init__(self):
         self.run = _FakeRun()
@@ -73,6 +80,7 @@ def test_log_assessment_to_wandb_logs_metrics_and_artifacts(monkeypatch, tmp_pat
                     "notes": "nightly run",
                     "mode": "offline",
                     "log_artifacts": True,
+                    "metrics_verbosity": "debug",
                 }
             },
         },
@@ -110,4 +118,28 @@ def test_log_assessment_to_wandb_logs_metrics_and_artifacts(monkeypatch, tmp_pat
     assert fake_wandb.run.logged[0]["l6_answer_quality/metric_error_rate"] == 0.0
     assert fake_wandb.run.logged[0]["steps/l3/quality_histogram/low"] == 1
     assert fake_wandb.run.logged_artifacts[0].added_dirs == [str(run_dir)]
+    assert fake_wandb.run.finished is True
+
+
+def test_log_assessment_to_wandb_tolerates_define_metric_failures(monkeypatch, tmp_path: Path):
+    fake_wandb = _FakeWandb()
+    fake_wandb.run = _FlakyDefineMetricRun()
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+
+    run_dir = tmp_path / "20260308T101010.123456Z_baseline"
+    run_dir.mkdir()
+
+    tracking = log_assessment_to_wandb(
+        experiment={"tracking": {"wandb": {"enabled": True, "project": "demo-project"}}},
+        summary={"status": "ok", "duration_s": 1.5, "failed_thresholds_count": 0},
+        manifest={"experiment": {"variant": None}},
+        step_metrics={},
+        retrieval_metrics={"hit_rate_at_k": 0.9, "mrr": 0.8},
+        l6_answer_quality_metrics={},
+        run_dir=run_dir,
+        failed_thresholds=[],
+    )
+
+    assert tracking["status"] == "logged"
+    assert fake_wandb.run.logged
     assert fake_wandb.run.finished is True

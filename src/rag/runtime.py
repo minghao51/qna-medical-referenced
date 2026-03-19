@@ -53,6 +53,8 @@ class RetrievalDiversityConfig:
     mmr_lambda: float = _MMR_LAMBDA
     enable_diversification: bool = True
     search_mode: str = _RRF_SEARCH_MODE  # rrf_hybrid | semantic_only | bm25_only | legacy_hybrid
+    enable_hyde: bool = False  # HyDE query expansion (disabled by default for backward compatibility)
+    hyde_max_length: int = 200  # Maximum length for HyDE hypothetical answers
 
 
 def get_runtime_retrieval_config() -> dict[str, Any]:
@@ -81,10 +83,27 @@ def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> Retrie
         "legacy_hybrid",
     }:
         cfg.search_mode = _RRF_SEARCH_MODE
+    # Validate HyDE configuration
+    cfg.enable_hyde = bool(cfg.enable_hyde)
+    cfg.hyde_max_length = max(50, min(500, int(cfg.hyde_max_length)))
     return cfg
 
 
-def _expand_queries(query: str) -> list[str]:
+def _expand_queries(query: str, hyde_client: Any = None, enable_hyde: bool = False) -> list[str]:
+    """Expand query using multiple techniques: tokenization, acronym expansion, and optionally HyDE.
+
+    Args:
+        query: The user's original query
+        hyde_client: Optional LLM client for HyDE expansion (not used in sync version)
+        enable_hyde: Whether to enable HyDE expansion (not effective in sync version)
+
+    Returns:
+        List of expanded query variants
+
+    Note:
+        For full HyDE functionality, use _expand_queries_async instead.
+        This synchronous version does not perform LLM-based HyDE expansion.
+    """
     query = str(query or "").strip()
     if not query:
         return []
@@ -109,7 +128,60 @@ def _expand_queries(query: str) -> list[str]:
     return deduped
 
 
-def _build_index_from_sources(vector_store) -> None:
+async def _expand_queries_async(
+    query: str,
+    hyde_client: Any = None,
+    enable_hyde: bool = False,
+    hyde_max_length: int = 200,
+) -> list[str]:
+    """Async version of query expansion with HyDE support.
+
+    Args:
+        query: The user's original query
+        hyde_client: Optional LLM client for HyDE expansion
+        enable_hyde: Whether to enable HyDE expansion
+        hyde_max_length: Maximum length for HyDE hypothetical answers
+
+    Returns:
+        List of expanded query variants (original + HyDE if enabled)
+    """
+    from src.rag.hyde import expand_query_with_hyde_async
+
+    # Get base query expansions (tokenization, acronyms)
+    base_queries = _expand_queries(query)
+
+    # If HyDE is disabled, return base expansions only
+    if not enable_hyde or not hyde_client:
+        return base_queries
+
+    # Generate HyDE expansion
+    try:
+        hyde_queries = await expand_query_with_hyde_async(
+            query=query,
+            client=hyde_client,
+            enable_hyde=True,
+            max_length=hyde_max_length,
+        )
+
+        # Combine base queries with HyDE queries, removing duplicates
+        all_queries = base_queries + hyde_queries
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for q in all_queries:
+            normalized = " ".join(q.split())
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                deduped.append(normalized)
+
+        logger.debug(f"HyDE expanded query '{query[:50]}...' to {len(deduped)} variants")
+        return deduped
+
+    except Exception as e:
+        logger.error(f"HyDE expansion failed for query '{query}': {e}, falling back to base expansion")
+        return base_queries
+
+
+def _build_index_from_sources(vector_store) -> dict[str, Any]:
     build_start = time.time()
     loader = ReferenceDataLoader()
     pdf_docs = get_documents()
@@ -511,6 +583,136 @@ def retrieve_context_with_trace(
     return context, chat_sources, pipeline_trace
 
 
+async def retrieve_context_with_trace_async(
+    query: str,
+    top_k: int = 5,
+    retrieval_options: dict[str, Any] | None = None,
+    hyde_client: Any = None,
+):
+    """
+    Async version of retrieve_context_with_trace with HyDE support.
+
+    Retrieve context with detailed pipeline trace information, optionally
+    using HyDE query expansion for improved retrieval quality.
+
+    Args:
+        query: The user's query
+        top_k: Number of documents to retrieve
+        retrieval_options: Optional retrieval configuration overrides
+        hyde_client: Optional LLM client for HyDE expansion
+
+    Returns:
+        tuple: (context, sources, pipeline_trace)
+            - context: Formatted context string for LLM
+            - sources: List of source names
+            - pipeline_trace: Dictionary with detailed pipeline metadata
+    """
+    from src.rag.trace_models import (
+        ContextStage,
+        GenerationStage,
+        PipelineTrace,
+        RetrievalStage,
+        RetrievedDocument,
+    )
+
+    total_start = time.time()
+    cfg = _resolve_retrieval_config(retrieval_options)
+
+    initialize_runtime_index()
+    vector_store = get_vector_store()
+
+    fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
+
+    # Use async retrieval with HyDE support
+    results, retrieval_trace = await _retrieve_candidates_with_trace_async(
+        vector_store,
+        query,
+        fetch_k,
+        cfg.search_mode,
+        hyde_client=hyde_client,
+        enable_hyde=cfg.enable_hyde,
+        hyde_max_length=cfg.hyde_max_length,
+    )
+
+    results = _diversify_results(
+        results,
+        top_k=top_k,
+        mmr_lambda=cfg.mmr_lambda,
+        overfetch_multiplier=cfg.overfetch_multiplier,
+        max_chunks_per_source_page=cfg.max_chunks_per_source_page,
+        max_chunks_per_source=cfg.max_chunks_per_source,
+        enable_diversification=cfg.enable_diversification,
+    )
+
+    retrieved_docs = []
+    for r in results:
+        metadata = r.get("metadata", {})
+        retrieved_docs.append(
+            RetrievedDocument(
+                id=r["id"],
+                content=r["content"],
+                source=r["source"],
+                page=r.get("page"),
+                semantic_score=r["semantic_score"],
+                keyword_score=r["keyword_score"],
+                source_prior=r.get("source_prior", 0.0),
+                source_boost=r.get("source_prior", 0.0),
+                combined_score=r["combined_score"],
+                rank=r["rank"],
+                semantic_rank=r.get("semantic_rank"),
+                bm25_rank=r.get("bm25_rank"),
+                fused_rank=r.get("fused_rank"),
+                fused_score=r.get("fused_score"),
+                chunk_quality_score=r.get("quality_score"),
+                content_type=r.get("content_type"),
+                section_path=r.get("section_path", []),
+                logical_name=metadata.get("logical_name"),
+                source_url=metadata.get("source_url"),
+            )
+        )
+
+    retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
+    retrieval_stage = RetrievalStage(
+        query=query,
+        top_k=top_k,
+        documents=retrieved_docs,
+        score_weights={
+            **retrieval_trace.get("score_weights", {}),
+            "embedding_model": retrieval_trace.get("embedding_model"),
+            "query_embedding_timing_ms": retrieval_trace.get("query_embedding_timing_ms", 0),
+            "search_mode": cfg.search_mode,
+            "expanded_queries": retrieval_trace.get("expanded_queries", []),
+            "hyde_enabled": retrieval_trace.get("hyde_enabled", False),
+            "enable_diversification": cfg.enable_diversification,
+            "mmr_lambda": cfg.mmr_lambda,
+            "overfetch_multiplier": cfg.overfetch_multiplier,
+            "max_chunks_per_source_page": cfg.max_chunks_per_source_page,
+            "max_chunks_per_source": cfg.max_chunks_per_source,
+        },
+        timing_ms=retrieval_timing_ms,
+    )
+
+    context, source_labels, chat_sources = build_context_and_sources(results)
+    context_stage = ContextStage(
+        total_chunks=len(results),
+        total_chars=len(context),
+        sources=source_labels,
+        preview=context[:200] + "..." if len(context) > 200 else context,
+    )
+
+    generation_stage = GenerationStage(model=settings.model_name, timing_ms=0, tokens_estimate=None)
+
+    total_time_ms = int((time.time() - total_start) * 1000)
+    pipeline_trace = PipelineTrace(
+        retrieval=retrieval_stage,
+        context=context_stage,
+        generation=generation_stage,
+        total_time_ms=total_time_ms,
+    )
+
+    return context, chat_sources, pipeline_trace
+
+
 def get_full_context() -> str:
     loader = ReferenceDataLoader()
     ranges = loader.load_reference_ranges()
@@ -521,6 +723,7 @@ def get_full_context() -> str:
 def get_context(query: str | None = None) -> Tuple[str, List[Any]]:
     if query:
         return retrieve_context(query)
+    return "", []
 
 
 def _merge_result_sets(result_sets: list[list[dict]], top_k: int) -> list[dict]:
@@ -575,4 +778,35 @@ def _retrieve_candidates_with_trace(
     merged_trace["expanded_queries"] = expanded_queries
     merged_trace["candidate_traces"] = traces
     return merged_results, merged_trace
-    return get_full_context(), []
+
+
+async def _retrieve_candidates_with_trace_async(
+    vector_store,
+    query: str,
+    top_k: int,
+    search_mode: str,
+    hyde_client: Any = None,
+    enable_hyde: bool = False,
+    hyde_max_length: int = 200,
+) -> tuple[list[dict], dict]:
+    """Async version of _retrieve_candidates_with_trace with HyDE support."""
+    expanded_queries = await _expand_queries_async(
+        query,
+        hyde_client=hyde_client,
+        enable_hyde=enable_hyde,
+        hyde_max_length=hyde_max_length,
+    )
+    result_sets: list[list[dict]] = []
+    traces: list[dict] = []
+    for expanded_query in expanded_queries:
+        results, trace = vector_store.similarity_search_with_trace(
+            expanded_query, top_k=top_k, search_mode=search_mode
+        )
+        result_sets.append(results)
+        traces.append(trace)
+    merged_results = _merge_traced_result_sets(result_sets, top_k=top_k)
+    merged_trace = traces[0] if traces else {}
+    merged_trace["expanded_queries"] = expanded_queries
+    merged_trace["candidate_traces"] = traces
+    merged_trace["hyde_enabled"] = enable_hyde
+    return merged_results, merged_trace

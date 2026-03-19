@@ -1,7 +1,6 @@
 """Tests for DeepEval evaluation API endpoints."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -36,6 +35,7 @@ def test_answer_quality_endpoint_loads_results(client, tmp_path):
         assert data["run_dir"] == "test_run"
         assert len(data["results"]) == 2
 
+
 @pytest.mark.skip(reason="Full evaluation test requires API keys and working metrics")
 def test_evaluate_single_endpoint(client):
     """Test single answer evaluation endpoint."""
@@ -46,4 +46,5 @@ def test_evaluate_single_endpoint(client):
 def test_l6_is_valid_stage():
     """Test that l6 is now a valid stage."""
     from src.app.routes.evaluation import VALID_STAGES
+
     assert "l6" in VALID_STAGES

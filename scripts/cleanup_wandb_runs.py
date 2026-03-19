@@ -24,6 +24,7 @@ from datetime import datetime
 
 try:
     import importlib
+
     wandb = importlib.import_module("wandb")
 except ImportError as exc:
     print(f"Error: {exc}", file=sys.stderr)
@@ -88,9 +89,7 @@ def parse_args() -> argparse.Namespace:
 def validate_args(args: argparse.Namespace) -> None:
     """Validate command-line arguments."""
     if args.no_dry_run and not (args.delete_all or args.keep_last or args.before):
-        logger.error(
-            "Must specify --delete-all, --keep-last, or --before when using --no-dry-run"
-        )
+        logger.error("Must specify --delete-all, --keep-last, or --before when using --no-dry-run")
         sys.exit(1)
 
     if args.before:
@@ -128,7 +127,8 @@ def filter_runs_by_date(runs: list, before_date: str) -> list:
     """Filter runs to delete those older than specified date."""
     cutoff = datetime.strptime(before_date, "%Y-%m-%d")
     runs_to_delete = [
-        r for r in runs
+        r
+        for r in runs
         if datetime.strptime(r.created_at.split(".")[0], "%Y-%m-%dT%H:%M:%S") < cutoff
     ]
     logger.info(f"Deleting {len(runs_to_delete)} runs created before {before_date}")
@@ -212,7 +212,9 @@ def main() -> int:
         if delete_run(run, dry_run):
             success_count += 1
 
-    logger.info(f"Successfully {'processed' if dry_run else 'deleted'} {success_count}/{len(runs_to_delete)} runs")
+    logger.info(
+        f"Successfully {'processed' if dry_run else 'deleted'} {success_count}/{len(runs_to_delete)} runs"
+    )
 
     if dry_run:
         logger.info("To actually delete, re-run with --no-dry-run")

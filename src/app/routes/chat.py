@@ -11,18 +11,19 @@ Example request:
     curl -X POST http://localhost:8000/chat \\
       -H "Content-Type: application/json" \\
       -d '{
-        "message": "What is a normal cholesterol level?",
-        "session_id": "user-123"
+        "message": "What is a normal cholesterol level?"
       }'
 """
 
 import logging
 from typing import Union
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 
 from src.app.logging import log_event
 from src.app.schemas import ChatRequest, ChatResponse
+from src.app.session import ensure_chat_session
+from src.config import settings
 from src.rag.trace_models import ChatResponseWithPipeline
 from src.usecases.chat import process_chat_message
 
@@ -40,6 +41,7 @@ router = APIRouter()
 )
 def chat(
     request: Request,
+    response: Response,
     payload: ChatRequest,
     include_pipeline: bool = Query(
         False,
@@ -49,7 +51,7 @@ def chat(
     """Process a chat message using RAG (Retrieval-Augmented Generation).
 
     This endpoint:
-    1. Retrieves the user's session history (if session_id provided)
+    1. Retrieves the user's session history from a server-issued session cookie
     2. Searches the vector database for relevant medical documents
     3. Generates a response using Qwen LLM with retrieved context
     4. Saves the conversation to history
@@ -57,7 +59,7 @@ def chat(
 
     Args:
         request: FastAPI request object (used to access app.state.llm_client)
-        payload: Chat request containing message and optional session_id
+        payload: Chat request containing message and optional deprecated session_id
         include_pipeline: If True, returns detailed pipeline trace with:
             - Retrieval timing and document counts
             - Generation timing
@@ -80,8 +82,7 @@ def chat(
         Standard request:
             POST /chat
             {
-                "message": "What is a normal cholesterol level?",
-                "session_id": "user-123"
+                "message": "What is a normal cholesterol level?"
             }
 
         Response:
@@ -99,8 +100,7 @@ def chat(
         With pipeline trace:
             POST /chat?include_pipeline=true
             {
-                "message": "What is diabetes?",
-                "session_id": "user-123"
+                "message": "What is diabetes?"
             }
 
         Response:
@@ -120,13 +120,14 @@ def chat(
             }
     """
     try:
+        session_id = ensure_chat_session(request, response)
         llm_client = getattr(request.app.state, "llm_client", None)
         history_store = request.app.state.chat_history_store
         result = process_chat_message(
             llm_client=llm_client,
             history_store=history_store,
             message=payload.message,
-            session_id=payload.session_id,
+            session_id=session_id,
             include_pipeline=include_pipeline,
             top_k=5,
         )
@@ -145,7 +146,8 @@ def chat(
             logging.ERROR,
             "chat_failed",
             request_id=getattr(request.state, "request_id", None),
-            session_id=payload.session_id,
+            session_id=getattr(request.state, "chat_session_id", None)
+            or request.cookies.get(settings.chat_session_cookie_name),
             include_pipeline=include_pipeline,
             auth_key_id=getattr(getattr(request.state, "auth", None), "key_id", None),
         )

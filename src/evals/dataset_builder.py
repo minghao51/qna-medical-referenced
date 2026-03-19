@@ -143,8 +143,10 @@ def _load_cached_dataset_manifest(run_dir: Path) -> dict[str, Any]:
 
 def _resolve_cached_dataset_path(
     compatibility_contract: dict[str, Any],
+    *,
+    artifact_dir: str | Path = "data/evals",
 ) -> tuple[Path | None, str | None, list[dict[str, Any]]]:
-    evals_dir = Path("data/evals")
+    evals_dir = Path(artifact_dir)
     latest_pointer = evals_dir / "latest_run.txt"
     candidate_run_dirs: list[Path] = []
 
@@ -523,6 +525,7 @@ def build_retrieval_dataset(
     min_label_confidence: str = "low",
     reuse_cached_dataset: bool = False,
     reuse_requirements: dict[str, Any] | None = None,
+    artifact_dir: str | Path = "data/evals",
 ) -> dict[str, Any]:
     resolved_dataset_path = Path(dataset_path) if dataset_path else None
     reused_cached_dataset = False
@@ -544,7 +547,8 @@ def build_retrieval_dataset(
     )
     if resolved_dataset_path is None and reuse_cached_dataset:
         resolved_dataset_path, reused_from_run_dir, reuse_rejections = _resolve_cached_dataset_path(
-            compatibility_contract
+            compatibility_contract,
+            artifact_dir=artifact_dir,
         )
         reused_cached_dataset = resolved_dataset_path is not None
         if resolved_dataset_path is None:

@@ -20,6 +20,7 @@ def test_load_experiment_file_normalizes_defaults():
     assert config["ingestion"]["source_chunk_configs"]["pdf"]["chunk_size"] == 650
     assert config["tracking"]["wandb"]["enabled"] is False
     assert config["tracking"]["wandb"]["project"] == "qna-medical-referenced"
+    assert config["tracking"]["wandb"]["metrics_verbosity"] == "standard"
 
 
 def test_load_experiment_file_rejects_unknown_version(tmp_path: Path):

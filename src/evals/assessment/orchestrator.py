@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.config import settings
-from src.evals.artifacts import ArtifactStore
+from src.config.paths import DATA_RAW_DIR
+from src.evals.artifacts import (
+    ArtifactStore,
+    build_run_identity,
+    find_reusable_run,
+    update_run_index,
+    write_latest_pointer,
+)
 from src.evals.dataset_builder import build_retrieval_dataset
 from src.evals.schemas import AssessmentConfig, AssessmentResult
 from src.experiments.wandb_tracking import log_assessment_to_wandb
@@ -28,6 +35,66 @@ from .retrieval_eval import evaluate_retrieval, run_diversity_sweep, run_retriev
 from .thresholds import DEFAULT_THRESHOLDS, evaluate_thresholds
 
 __all__ = ["evaluate_answers_deepeval", "run_assessment"]
+
+
+def _load_json_if_exists(path: Path) -> Any:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return payload
+
+
+def _load_failed_thresholds_for_run(run_dir: Path) -> list[dict[str, Any]]:
+    summary = _load_json_if_exists(run_dir / "summary.json")
+    failed = summary.get("failed_thresholds") if isinstance(summary, dict) else None
+    if isinstance(failed, list):
+        return failed
+    step_findings = _load_json_if_exists(run_dir / "step_findings.json")
+    findings = step_findings if isinstance(step_findings, list) else []
+    return [
+        item
+        for item in findings
+        if isinstance(item, dict) and str(item.get("stage")) == "threshold"
+    ]
+
+
+def _directory_snapshot(dir_path: Path) -> dict[str, Any]:
+    if not dir_path.exists():
+        return {"exists": False, "entries": []}
+    entries: list[dict[str, Any]] = []
+    for path in sorted(
+        (item for item in dir_path.rglob("*") if item.is_file()), key=lambda p: str(p)
+    ):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        entries.append(
+            {
+                "path": str(path.relative_to(dir_path)),
+                "size": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns,
+            }
+        )
+    return {"exists": True, "entries": entries}
+
+
+def _build_input_provenance(
+    *,
+    dataset_path: Path | None,
+    raw_data_dir: Path,
+    sha256_file_fn: Callable[[str | Path | None], str | None],
+) -> dict[str, Any]:
+    snapshot = _directory_snapshot(raw_data_dir)
+    return {
+        "dataset_file_sha256": sha256_file_fn(dataset_path),
+        "download_manifest_sha256": sha256_file_fn(raw_data_dir / "download_manifest.json"),
+        "raw_data_snapshot": snapshot,
+        "raw_data_snapshot_sha256": build_run_identity(config=snapshot, git_head=None),
+    }
 
 
 def run_assessment(
@@ -54,6 +121,7 @@ def run_assessment(
     disable_structured_chunking: bool = False,
     disable_bm25: bool = False,
     export_failed_generations: bool = False,
+    force_rerun: bool = False,
     retrieval_options: dict[str, Any] | None = None,
     run_retrieval_ablations: bool = False,
     run_diversity_sweep: bool = False,
@@ -139,7 +207,35 @@ def run_assessment(
         run_diversity_sweep=run_diversity_sweep,
         diversity_sweep=dict(diversity_sweep or {}),
         experiment_config=experiment_config,
+        force_rerun=force_rerun,
     )
+    config_payload = asdict(config)
+    git_revision = git_head_fn()
+    input_provenance = _build_input_provenance(
+        dataset_path=config.dataset_path,
+        raw_data_dir=DATA_RAW_DIR,
+        sha256_file_fn=sha256_file_fn,
+    )
+    run_identity = build_run_identity(
+        config={"assessment": config_payload, "input_provenance": input_provenance},
+        git_head=git_revision,
+    )
+    reusable_run_dir = None if config.force_rerun else find_reusable_run(config.artifact_dir, run_identity)
+    if reusable_run_dir is not None:
+        write_latest_pointer(config.artifact_dir, reusable_run_dir)
+        reused_summary = _load_json_if_exists(reusable_run_dir / "summary.json")
+        reused_summary["dedup"] = {
+            "reused_existing_run": True,
+            "matched_run_dir": str(reusable_run_dir),
+            "run_identity": run_identity,
+            "force_rerun": False,
+        }
+        return AssessmentResult(
+            run_dir=reusable_run_dir,
+            status=str(reused_summary.get("status", "ok")),
+            failed_thresholds=_load_failed_thresholds_for_run(reusable_run_dir),
+            summary=reused_summary,
+        )
 
     experiment_runtime = configure_runtime_for_experiment_fn(config.experiment_config)
     index_preparation: dict[str, Any] = {"status": "not_requested"}
@@ -184,8 +280,10 @@ def run_assessment(
 
     store = ArtifactStore(config.artifact_dir, config.name)
     manifest = {
-        "config": asdict(config),
-        "git_head": git_head_fn(),
+        "config": config_payload,
+        "git_head": git_revision,
+        "run_identity": run_identity,
+        "input_provenance": input_provenance,
         "dashscope_key_present": key_available,
         "started_at_epoch_s": start,
         "experiment": {
@@ -231,6 +329,7 @@ def run_assessment(
             ),
             "vector_file_sha256": vector_file_sha256,
         },
+        artifact_dir=config.artifact_dir,
         dataset_split=config.dataset_split,
         min_label_confidence=config.min_label_confidence,
     )
@@ -384,6 +483,11 @@ def run_assessment(
         SUMMARY_L6_STATUS_KEY: l6_answer_quality_metrics.get("status", "unknown"),
         "failed_thresholds_count": len(failed_thresholds),
         "status": "failed" if (failed_thresholds and config.fail_on_thresholds) else "ok",
+        "dedup": {
+            "reused_existing_run": False,
+            "run_identity": run_identity,
+            "force_rerun": bool(config.force_rerun),
+        },
     }
     store.write_text(
         "summary.md",
@@ -410,6 +514,7 @@ def run_assessment(
     store.write_json("manifest.json", manifest)
     store.write_json("summary.json", summary)
     store.write_latest_pointer()
+    update_run_index(config.artifact_dir, run_identity=run_identity, run_dir=store.run_dir)
 
     status = "failed" if (failed_thresholds and config.fail_on_thresholds) else "ok"
     return AssessmentResult(

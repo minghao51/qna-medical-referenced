@@ -165,7 +165,7 @@ class VectorStore:
             metadatas.append(meta)
 
         embeddings, embedding_stats = self._embed_with_stats(texts, effective_batch_size)
-        stats = {
+        stats: dict[str, Any] = {
             "attempted": len(documents),
             "inserted": 0,
             "skipped_duplicate_id": 0,
@@ -241,10 +241,10 @@ class VectorStore:
             )
         return results
 
-    def _search_ranked(self, query: str, search_mode: str) -> tuple[list[dict], dict]:
+    def _search_ranked(self, query: str, search_mode: str) -> tuple[list[dict], dict[str, Any]]:
         self._rebuild_index_if_needed()
         mode = (search_mode or "rrf_hybrid").lower()
-        trace_info = {"search_mode": mode, "embedding_model": self.embedding_model}
+        trace_info: dict[str, Any] = {"search_mode": mode, "embedding_model": self.embedding_model}
 
         keyword_scores = self._keyword_score(query)
         query_embedding = None
@@ -262,6 +262,7 @@ class VectorStore:
                 trace_info["query_embedding_timing_ms"] = 0
         else:
             trace_info["query_embedding_timing_ms"] = 0
+
         semantic_ranked = rank_documents(
             documents=self.documents,
             keyword_scores={},
@@ -282,6 +283,51 @@ class VectorStore:
             keyword_weight=self.keyword_weight,
             boost_weight=self.boost_weight,
         )
+
+        if mode == "semantic_only":
+            ranked = semantic_ranked
+            for rank, row in enumerate(ranked, start=1):
+                row["semantic_rank"] = rank
+                row["bm25_rank"] = None
+                row["fused_rank"] = rank
+                row["fused_score"] = row["combined_score"]
+        elif mode in {"bm25_only", "keyword_only"}:
+            ranked = keyword_ranked
+            for rank, row in enumerate(ranked, start=1):
+                row["semantic_rank"] = None
+                row["bm25_rank"] = rank
+                row["fused_rank"] = rank
+                row["fused_score"] = row["combined_score"]
+        elif mode == "legacy_hybrid":
+            ranked = rank_documents(
+                documents=self.documents,
+                keyword_scores=keyword_scores,
+                query_embedding=query_embedding if use_semantic else None,
+                use_semantic=use_semantic,
+                hybrid=True,
+                semantic_weight=self.semantic_weight,
+                keyword_weight=self.keyword_weight,
+                boost_weight=self.boost_weight,
+            )
+            for rank, row in enumerate(ranked, start=1):
+                row["semantic_rank"] = next(
+                    (i for i, v in enumerate(semantic_ranked, start=1) if v["idx"] == row["idx"]),
+                    None,
+                )
+                row["bm25_rank"] = next(
+                    (i for i, v in enumerate(keyword_ranked, start=1) if v["idx"] == row["idx"]),
+                    None,
+                )
+                row["fused_rank"] = rank
+                row["fused_score"] = row["combined_score"]
+        else:
+            ranked = reciprocal_rank_fusion(semantic_ranked, keyword_ranked)
+
+        trace_info["candidate_counts"] = {
+            "semantic": len(semantic_ranked),
+            "bm25": len(keyword_ranked),
+            "final": len(ranked),
+        }
 
         if mode == "semantic_only":
             ranked = semantic_ranked

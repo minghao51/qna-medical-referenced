@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
+import secrets
 import sqlite3
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.app.logging import log_event
@@ -18,6 +19,8 @@ from src.config import RATE_LIMIT_DB, settings
 from .auth import EXEMPT_PATHS
 
 logger = logging.getLogger(__name__)
+
+ANONYMOUS_CHAT_PATHS = {"/chat"}
 
 
 @dataclass
@@ -123,13 +126,16 @@ rate_limiter = RateLimiter(requests_per_minute=settings.rate_limit_per_minute)
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if rate_limiter.requests_per_minute <= 0 or request.url.path in EXEMPT_PATHS:
+        if request.url.path in EXEMPT_PATHS:
             return await call_next(request)
 
         auth = getattr(request.state, "auth", None)
-        client_ip = request.client.host if request.client else "unknown"
-        rate_key = f"auth:{auth.key_id}" if auth else f"ip:{client_ip}"
-        decision = rate_limiter.check_rate_limit(rate_key)
+        rate_key, limit = self._build_rate_limit_key(request, auth)
+        if limit <= 0:
+            response = await call_next(request)
+            self._attach_browser_cookie(request, response, auth)
+            return response
+        decision = rate_limiter.backend.check(key=rate_key, limit=limit)
         if not decision.allowed:
             log_event(
                 logger,
@@ -148,10 +154,69 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             response.headers["X-RateLimit-Limit"] = str(decision.limit)
             response.headers["X-RateLimit-Remaining"] = "0"
             response.headers["X-RateLimit-Reset"] = str(decision.retry_after)
+            self._attach_browser_cookie(request, response, auth)
             return response
 
         response = await call_next(request)
         response.headers["X-RateLimit-Limit"] = str(decision.limit)
         response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
         response.headers["X-RateLimit-Reset"] = "0"
+        self._attach_browser_cookie(request, response, auth)
         return response
+
+    def _build_rate_limit_key(self, request: Request, auth) -> tuple[str, int]:
+        if auth:
+            return f"auth:{auth.key_id}", rate_limiter.requests_per_minute
+
+        client_ip = self._get_client_ip(request)
+        limit = rate_limiter.requests_per_minute
+
+        if request.url.path in ANONYMOUS_CHAT_PATHS:
+            browser_id = self._get_or_create_browser_id(request)
+            limit = settings.anonymous_chat_rate_limit_per_minute
+            return f"anon-chat:{client_ip}:{browser_id}", limit
+
+        return f"ip:{client_ip}", limit
+
+    @staticmethod
+    def _get_client_ip(request: Request) -> str:
+        if settings.trust_proxy_headers:
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                first_hop = forwarded_for.split(",")[0].strip()
+                if first_hop:
+                    return first_hop
+            real_ip = request.headers.get("X-Real-IP", "").strip()
+            if real_ip:
+                return real_ip
+
+        return request.client.host if request.client else "unknown"
+
+    @staticmethod
+    def _get_or_create_browser_id(request: Request) -> str:
+        cookie_name = settings.anonymous_browser_cookie_name
+        browser_id = request.cookies.get(cookie_name)
+        if browser_id:
+            return browser_id
+
+        browser_id = secrets.token_urlsafe(24)
+        request.state.rate_limit_browser_id = browser_id
+        return browser_id
+
+    @staticmethod
+    def _attach_browser_cookie(request: Request, response: Response, auth) -> None:
+        if auth or request.url.path not in ANONYMOUS_CHAT_PATHS:
+            return
+
+        browser_id = getattr(request.state, "rate_limit_browser_id", None)
+        if not browser_id:
+            return
+
+        response.set_cookie(
+            key=settings.anonymous_browser_cookie_name,
+            value=browser_id,
+            max_age=60 * 60 * 24 * 365,
+            httponly=True,
+            samesite="lax",
+            secure=not settings.is_development,
+        )

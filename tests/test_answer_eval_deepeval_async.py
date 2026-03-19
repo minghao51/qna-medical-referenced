@@ -147,7 +147,9 @@ async def test_evaluate_answers_deepeval_marks_timeouts_as_metric_errors(monkeyp
             _FakeMetric("FaithfulnessMetric", 0.4),
         ],
     )
-    monkeypatch.setattr("src.evals.assessment.answer_eval.settings.deepeval_metric_timeout_seconds", 0)
+    monkeypatch.setattr(
+        "src.evals.assessment.answer_eval.settings.deepeval_metric_timeout_seconds", 0
+    )
 
     results, aggregate = await evaluate_answers_deepeval(
         [{"query_id": "q1", "query": "test query"}],

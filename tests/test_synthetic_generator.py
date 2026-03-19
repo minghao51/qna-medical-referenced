@@ -13,17 +13,17 @@ def test_synthetic_generator_structure():
     fixture_path = Path(__file__).parent / "fixtures" / "sample_medical.txt"
 
     # Mock both Synthesizer and ContextConstructionConfig to avoid needing API keys
-    with patch("src.evals.synthetic.generator.Synthesizer") as mock_synthesizer_class, \
-         patch("src.evals.synthetic.generator.ContextConstructionConfig"):
+    with (
+        patch("src.evals.synthetic.generator.Synthesizer") as mock_synthesizer_class,
+        patch("src.evals.synthetic.generator.ContextConstructionConfig"),
+    ):
         mock_synthesizer = MagicMock()
         mock_synthesizer_class.return_value = mock_synthesizer
         mock_goldens = [MagicMock(), MagicMock()]
         mock_synthesizer.generate_goldens_from_docs.return_value = mock_goldens
 
         goldens = generate_synthetic_dataset(
-            document_paths=[fixture_path],
-            num_questions=2,
-            output_path="/tmp/test_synthetic.json"
+            document_paths=[fixture_path], num_questions=2, output_path="/tmp/test_synthetic.json"
         )
 
         # Verify synthesizer was called correctly

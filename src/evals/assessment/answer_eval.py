@@ -212,32 +212,43 @@ async def _evaluate_metric(
         reason = None
         error = None
         status = "ok"
-        try:
-            await asyncio.wait_for(
-                safe_a_measure(
-                    metric,
-                    test_case,
-                    ignore_errors=False,
-                    skip_on_missing_params=False,
-                ),
-                timeout=max(1, int(getattr(settings, "deepeval_metric_timeout_seconds", 90))),
-            )
-            score = metric.score if metric.score is not None else None
-            reason = getattr(metric, "reason", None)
-            error = getattr(metric, "error", None)
-            if error is not None or score is None:
+        max_retries = 2
+        timeout_seconds = max(1, int(getattr(settings, "deepeval_metric_timeout_seconds", 90)))
+
+        for attempt in range(max_retries):
+            try:
+                await asyncio.wait_for(
+                    safe_a_measure(
+                        metric,
+                        test_case,
+                        ignore_errors=False,
+                        skip_on_missing_params=False,
+                    ),
+                    timeout=timeout_seconds,
+                )
+                score = metric.score if metric.score is not None else None
+                reason = getattr(metric, "reason", None)
+                error = getattr(metric, "error", None)
+                if error is not None or score is None:
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1 * (attempt + 1))
+                        continue
+                    status = "error"
+                break
+            except TimeoutError:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1 * (attempt + 1))
+                    continue
+                error = f"metric_timeout:{timeout_seconds}s (after {max_retries} retries)"
+                reason = getattr(metric, "reason", None)
                 status = "error"
-        except TimeoutError:
-            error = (
-                "metric_timeout:"
-                f"{max(1, int(getattr(settings, 'deepeval_metric_timeout_seconds', 90)))}s"
-            )
-            reason = getattr(metric, "reason", None)
-            status = "error"
-        except Exception as exc:
-            error = str(exc)
-            reason = getattr(metric, "reason", None)
-            status = "error"
+                break
+            except Exception as exc:
+                error = str(exc)
+                reason = getattr(metric, "reason", None)
+                status = "error"
+                break
+
         return {
             "status": status,
             "score": score,

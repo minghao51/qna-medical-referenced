@@ -7,7 +7,12 @@ from pydantic import BaseModel, Field, field_validator
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
-    session_id: Optional[str] = Field("default", min_length=1, max_length=128)
+    session_id: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=128,
+        description="Deprecated. Session ownership is determined by a server-issued cookie.",
+    )
     user_context: Optional[str] = None
 
     @field_validator("message", mode="before")

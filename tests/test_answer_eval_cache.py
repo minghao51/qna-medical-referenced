@@ -100,7 +100,9 @@ async def test_evaluate_answers_deepeval_reuses_cached_answer(monkeypatch, tmp_p
 
 
 @pytest.mark.asyncio
-async def test_evaluate_answers_deepeval_cache_key_changes_with_retrieval_options(monkeypatch, tmp_path):
+async def test_evaluate_answers_deepeval_cache_key_changes_with_retrieval_options(
+    monkeypatch, tmp_path
+):
     cache_dir = tmp_path / "cache"
     retrieval_calls = 0
 
