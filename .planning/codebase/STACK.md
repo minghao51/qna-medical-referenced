@@ -1,58 +1,40 @@
 # Tech Stack
 
-## Backend (Python)
+## Languages & Runtimes
+- **Backend**: Python 3.13 with UV package manager
+- **Frontend**: TypeScript with Svelte 5 framework
+- **Runtime**: FastAPI (backend) + Vite (frontend)
 
-### Runtime & Framework
-- **Python Version**: 3.13
-- **Web Framework**: FastAPI
-- **Package Manager**: uv
+## Core Frameworks
+- **Backend**: FastAPI, Pydantic, Uvicorn ASGI server
+- **Frontend**: SvelteKit 2.50.2, Vite build tool, TypeScript strict mode
+- **Testing**: Playwright (E2E), Pytest (unit), DeepEval (LLM evaluation)
 
-### LLM Providers
-- **Primary**: Alibaba Dashscope (Qwen models)
-  - qwen3.5-flash
-  - qwen3.5-plus
-  - qwen3.5-max
-- **Backup/Alternative**: Google Gemini API
+## Key Dependencies
 
-### Data & Storage
-- **Vector Database**: Custom file-based vector store (SQLite-based)
-- **Document Processing**:
-  - pypdf - PDF parsing
-  - pdfplumber - Advanced PDF extraction
-  - beautifulsoup4 - HTML parsing
-  - trafilatura - Web content extraction
+### Backend (pyproject.toml)
+- **LLM Integration**: OpenAI client, Qwen/Dashscope (Alibaba), LiteLLM
+- **Document Processing**: PyPDF, PDFPlumber, BeautifulSoup4, Trafilatura
+- **Web Framework**: FastAPI, Starlette
+- **Data/Storage**: Pydantic settings
+- **Development**: Ruff (linter/formatter), pytest
 
-### Testing & Quality
-- **Testing Framework**: pytest
-- **E2E Testing**: Playwright
-- **Linting/Formatting**: ruff
-  - Line length: 100 characters
-  - Rules: E, F, I, N, W
+### Frontend (frontend/package.json)
+- **UI Framework**: SvelteKit 2.50.2
+- **Build Tool**: Vite
+- **Language**: TypeScript (strict mode)
+- **Visualization**: Chart.js, Highlight.js
+- **Testing**: Playwright for E2E testing
 
-### Monitoring & Observability
-- **Experiment Tracking**: Weights & Biases (wandb)
-- **Pipeline Tracing**: Custom trace models for debugging
+## Configuration Files
+- `/Users/minghao/Desktop/personal/qna_medical_referenced/pyproject.toml` - Python dependencies and tool config
+- `/Users/minghao/Desktop/personal/qna_medical_referenced/frontend/package.json` - Frontend dependencies
+- `/Users/minghao/Desktop/personal/qna_medical_referenced/frontend/tsconfig.json` - TypeScript config
+- `/Users/minghao/Desktop/personal/qna_medical_referenced/docker-compose.yml` - Container orchestration
+- `/Users/minghao/Desktop/personal/qna_medical_referenced/.env.example` - Environment template
 
-## Frontend (TypeScript/JavaScript)
-
-### Framework & Tooling
-- **Framework**: SvelteKit 2.50.2
-- **Build Tool**: Vite 7.3.1
-- **Language**: TypeScript (strict mode enabled)
-- **Adapter**: Node.js adapter
-
-### Visualization & UI
-- **Charting**: Chart.js 4.5.1
-- **E2E Testing**: Playwright 1.58.2
-
-## Containerization
-
-### Orchestration
-- **Docker Compose**: Multi-service architecture
-  - Backend service (FastAPI)
-  - Frontend service (SvelteKit)
-  - Test service
-
-### Deployment
-- Production-ready containerization
-- Environment-specific configurations
+## Architecture Pattern
+- **RAG System**: Retrieval-Augmented Generation for medical Q&A
+- **REST API**: Separate frontend/backend architecture
+- **Containerization**: Docker with multi-stage builds
+- **Async Processing**: Event-driven async operations

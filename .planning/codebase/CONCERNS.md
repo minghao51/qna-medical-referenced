@@ -1,224 +1,115 @@
-# Code Concerns
+# Codebase Concerns
 
-## High Priority Issues
+## Security Issues
 
-### Large Complex Files
+### Critical: Hardcoded API Keys
+- **Location**: Multiple test files
+- **Risk**: API key exposure in version control
+- **Files Affected**: Various test files in `tests/`
+- **Recommendation**: Move to environment variables or test fixtures
 
-#### Files Requiring Refactoring
+### Configuration Management
+- **Issue**: Environment variable management complexity
+- **Impact**: Potential for misconfiguration
+- **Recommendation**: Centralized config validation
 
-**1. src/evals/pipeline_assessment.py (3,748 lines)**
-- **Issue**: Extremely large file, difficult to maintain
-- **Impact**: Hard to navigate, test, and debug
-- **Recommendation**: Split into multiple modules by functionality
-  - Assessment orchestration
-  - Metric calculation
-  - Artifact management
-  - Reporting
+## Code Quality & Maintainability
 
-**2. src/evals/step_checks.py (1,355 lines)**
-- **Issue**: Large validation file
-- **Impact**: Complex to understand and modify
-- **Recommendation**: Split by step type or domain
+### Large Files Requiring Refactoring
+- **`src/app/routes/evaluation.py`**: 878 lines
+  - **Issue**: Excessive complexity
+  - **Impact**: Hard to maintain and test
+  - **Recommendation**: Split into smaller modules
 
-**3. src/ingestion/steps/chunk_text.py (1,334 lines)**
-- **Issue**: Large chunking implementation
-- **Impact**: Difficult to test edge cases
-- **Recommendation**: Extract strategies into separate modules
+- **`src/rag/runtime.py`**: 578 lines
+  - **Issue**: Multiple responsibilities
+  - **Impact**: Difficult to test individual features
+  - **Recommendation**: Extract smaller functions/classes
 
-### Circular Dependencies
+### Import Complexity
+- **Issue**: Complex import structures
+- **Impact**: Potential circular dependencies
+- **Location**: Various modules
+- **Recommendation**: Review and simplify imports
 
-#### Import Cycles
-- **Location**: `src/models.py` ↔ `src.rag.trace_models`
-- **Impact**: Potential initialization issues
-- **Recommendation**: Refactor to eliminate circular imports
-  - Move shared models to separate module
-  - Use dependency injection
+## Performance Concerns
 
-#### Complex Dependency Chains
-- **Location**: `src/evals/pipeline_assessment.py`
-- **Issue**: Imports from many submodules
-- **Impact**: Tight coupling, difficult to test
-- **Recommendation**: Use dependency inversion principle
+### String Operations
+- **Issue**: Inefficient string operations in some areas
+- **Impact**: Potential performance bottleneck
+- **Recommendation**: Use f-strings and proper string building
 
-## Security Concerns
+### Document Processing
+- **Issue**: No caching for repeated document access
+- **Impact**: Redundant processing
+- **Recommendation**: Implement caching layer
 
-### API Key Management
+## Technical Debt
 
-#### Current Implementation
-```python
-# Comma-separated string in memory
-api_keys = settings.dashscope_api_key.split(",")
-```
+### Magic Numbers
+- **Issue**: Hardcoded values without constants
+- **Impact**: Difficult to tune parameters
+- **Recommendation**: Extract to configuration
 
-#### Issues
-- Keys stored as comma-separated string
-- No rotation mechanism
-- No audit trail
+### Error Handling
+- **Issue**: Inconsistent error messages
+- **Impact**: Harder debugging
+- **Recommendation**: Standardize error format
 
-#### Recommendations
-- Implement key rotation
-- Add audit logging
-- Use secure vault for production
-- Implement rate limiting
+### Test Coverage Gaps
+- **Issue**: Some edge cases not covered
+- **Impact**: Potential runtime failures
+- **Recommendation**: Add boundary condition tests
 
-### Missing Security Features
+## Documentation Debt
 
-#### Rate Limiting
-- **Status**: Not implemented
-- **Risk**: API abuse, cost overrun
-- **Recommendation**: Add rate limiting middleware
+### Missing Docstrings
+- **Issue**: Some functions lack documentation
+- **Impact**: Harder for new developers
+- **Recommendation**: Add Google-style docstrings
 
-#### Input Validation
-- **Status**: Partial (Pydantic schemas)
-- **Gaps**: May need additional sanitization
-- **Recommendation**: Security audit of endpoints
+### API Documentation
+- **Issue**: Some endpoints lack detailed docs
+- **Impact**: API usability
+- **Recommendation**: Expand OpenAPI/Swagger docs
 
-#### Authentication
-- **Status**: No authentication on endpoints
-- **Risk**: Unauthorized access
-- **Recommendation**: Add authentication if deploying publicly
+## Dependencies
 
-## Performance Issues
+### Version Pinning
+- **Issue**: Some dependencies not pinned
+- **Impact**: Potential breakage
+- **Recommendation**: Lock versions in requirements
 
-### Memory Usage
+### Unused Dependencies
+- **Issue**: Possible unused packages
+- **Impact**: Larger image size
+- **Recommendation**: Audit and remove
 
-#### Large File Impact
-- **Files**: 3,000+ line files
-- **Issue**: High memory footprint
-- **Recommendation**: Module splitting reduces memory
-
-### Caching
-
-#### Current State
-- No caching layer for frequent operations
-- Repeated computations
-- **Recommendation**:
-  - Cache embeddings
-  - Cache frequent queries
-  - Use LRU for hot data
-
-### Database Operations
-
-#### Current Issues
-- Synchronous operations may block requests
-- No connection pooling
-- **Recommendation**:
-  - Implement async database operations
-  - Add connection pooling
-  - Consider moving to PostgreSQL with pgvector
-
-### Scalability Limitations
-
-#### File-Based Storage
-- **Current**: SQLite-based vector store
-- **Limitation**: Single-instance only
-- **Bottleneck**: No horizontal scaling
-- **Recommendation**: Consider dedicated vector database for production
-
-## Code Quality Issues
-
-### Inconsistent Error Handling
-
-#### Patterns Observed
-- Some functions raise exceptions
-- Others return error values
-- **Recommendation**: Standardize on exception-based error handling
-
-### Missing Type Annotations
-
-#### Locations
-- Some functions lack complete type hints
-- **Impact**: Reduced IDE support, potential runtime errors
-- **Recommendation**: Enforce strict type checking with mypy or similar
+## Monitoring & Observability
 
 ### Logging Gaps
+- **Issue**: Insufficient logging in some flows
+- **Impact**: Harder debugging in production
+- **Recommendation**: Add structured logging
 
-#### Issues
-- Inconsistent logging levels
-- Missing context in some error messages
-- **Recommendation**:
-  - Implement structured logging
-  - Add request IDs for tracing
-  - Standardize log formats
+### Metrics
+- **Issue**: Limited runtime metrics
+- **Impact**: Difficult performance tuning
+- **Recommendation**: Add Prometheus/metrics export
 
-## Testing Gaps
+## Recommendations Priority
 
-### Missing Integration Tests
+### High Priority
+1. Remove hardcoded API keys from tests
+2. Refactor large files (>500 lines)
+3. Fix security issues
 
-#### Areas Needing Coverage
-- End-to-end workflow tests
-- Multi-component interactions
-- **Recommendation**: Add comprehensive integration tests
-
-### No Load Testing
-
-#### Gap
-- No performance testing under load
-- **Risk**: Performance degradation in production
-- **Recommendation**:
-  - Add load testing framework
-  - Test with realistic query volumes
-  - Benchmark before releases
-
-### Limited Edge Case Coverage
-
-#### Areas to Improve
-- Empty result handling
-- Malformed input handling
-- API failure scenarios
-- **Recommendation**: Add comprehensive edge case tests
-
-## Documentation Concerns
-
-### Missing Documentation
-
-#### Areas Needing Docs
-- API documentation (OpenAPI/Swagger)
-- Architecture decision records
-- Deployment guides
-- **Recommendation**: Create comprehensive documentation
-
-### Out-of-Date Comments
-
-#### Issue
-- Some comments may not match current code
-- **Recommendation**: Audit and update comments
-
-## Technical Debt Summary
-
-### Immediate Actions (High Priority)
-1. Split `pipeline_assessment.py` into smaller modules
-2. Resolve circular dependencies
-3. Implement rate limiting
-4. Add authentication for production deployment
-
-### Short-Term Actions (Medium Priority)
-1. Refactor large files (>500 lines)
-2. Implement caching layer
-3. Add structured logging
+### Medium Priority
 4. Improve error handling consistency
+5. Add missing docstrings
+6. Optimize performance bottlenecks
 
-### Long-Term Actions (Lower Priority)
-1. Consider PostgreSQL with pgvector for vector storage
-2. Implement comprehensive integration tests
-3. Add load testing framework
-4. Create detailed API documentation
-
-## Positive Findings
-
-### Security Strengths
-- ✓ No hardcoded secrets in source code
-- ✓ API keys properly managed via environment variables
-- ✓ Input validation with Pydantic
-
-### Code Quality Strengths
-- ✓ Clear architectural patterns
-- ✓ Comprehensive docstrings
-- ✓ Type hints used consistently
-- ✓ Good test coverage for critical paths
-
-### Architecture Strengths
-- ✓ Clean separation of concerns
-- ✓ Modular design
-- ✓ Containerized deployment
-- ✓ Pipeline tracing for debugging
+### Low Priority
+7. Clean up imports
+8. Audit dependencies
+9. Improve logging coverage

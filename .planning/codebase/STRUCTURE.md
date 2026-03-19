@@ -1,113 +1,66 @@
-# Codebase Structure
+# Directory Structure
 
-## Top-Level Directory Layout
-
+## Root Layout
 ```
 qna_medical_referenced/
-├── src/                    # Python source code
-│   ├── app/               # HTTP layer (FastAPI)
-│   ├── usecases/          # Business logic orchestration
-│   ├── rag/               # Runtime RAG implementation
-│   ├── ingestion/         # Offline data pipeline
-│   ├── infra/             # External integrations
-│   ├── config/            # Configuration management
-│   ├── cli/               # Command-line entry points
-│   └── evals/             # Evaluation system
-├── frontend/              # SvelteKit application
-│   ├── src/
-│   │   ├── routes/       # SvelteKit routes
-│   │   ├── lib/          # Shared utilities
-│   │   └── components/   # Reusable components
-│   ├── static/           # Static assets
-│   └── tests/            # Frontend tests
-├── data/                 # Runtime data storage
-│   ├── documents/        # Indexed documents
-│   ├── vectors/          # Vector embeddings
-│   └── chat_history/     # Conversation history
-├── docs/                 # Documentation
-├── tests/                # Backend test suite
-├── scripts/              # Utility scripts
-├── .planning/            # Planning documentation
-└── pyproject.toml        # Python dependencies
+├── src/                    # Backend source code
+├── frontend/               # SvelteKit frontend
+├── tests/                  # Python test suite
+├── experiments/            # Experiment configurations
+├── scripts/                # Utility scripts
+├── docs/                   # Documentation
+├── docker-compose.yml      # Container orchestration
+├── pyproject.toml         # Python dependencies
+└── .env.example           # Environment template
 ```
 
-## Source Code Structure (`src/`)
+## Backend Structure (`src/`)
 
-### HTTP Layer (`src/app/`)
 ```
-app/
-├── factory.py           # FastAPI app factory
-├── routes/             # API endpoints
-│   ├── chat.py         # Chat completion endpoint
-│   ├── ingest.py       # Ingestion management
-│   └── eval_routes.py  # Evaluation endpoints
-└── schemas/            # Pydantic models
-    ├── chat.py         # Chat request/response schemas
-    └── common.py       # Shared schemas
-```
-
-### Business Logic (`src/usecases/`)
-```
-usecases/
-└── chat.py             # Chat use case orchestration
-```
-
-### RAG Implementation (`src/rag/`)
-```
-rag/
-├── runtime.py          # RAG runtime engine
-├── formatting.py       # Response formatting
-└── trace_models.py     # Pipeline tracing models
-```
-
-### Ingestion Pipeline (`src/ingestion/`)
-```
-ingestion/
-├── steps/             # Processing steps
-│   ├── download_web.py    # Web content download
-│   ├── convert_html.py    # HTML to markdown
-│   ├── load_pdfs.py       # PDF loading
-│   ├── load_markdown.py   # Markdown loading
-│   └── chunk_text.py      # Text chunking
-└── indexing/           # Indexing and search
-    ├── embedding.py       # Embedding generation
-    ├── vector_store.py    # Vector search
-    └── persistence.py     # Storage management
-```
-
-### Infrastructure (`src/infra/`)
-```
-infra/
-└── llm/               # LLM clients
-    ├── dashscope.py   # Alibaba Dashscope client
-    └── base.py        # Base LLM interface
-```
-
-### Configuration (`src/config/`)
-```
-config/
-├── settings.py        # Application settings
-└── paths.py           # Path configuration
-```
-
-### CLI Entry Points (`src/cli/`)
-```
-cli/
-├── serve.py           # Start HTTP server
-├── ingest.py          # Run ingestion pipeline
-└── eval_pipeline.py   # Run evaluation
-```
-
-### Evaluation System (`src/evals/`)
-```
-evals/
-├── pipeline_assessment.py  # Main evaluation framework
-├── step_checks.py          # Pipeline step validation
-├── schemas.py              # Evaluation schemas
-├── metrics/                # Metric implementations
-│   ├── retrieval.py        # Retrieval metrics
-│   └── ranking.py          # Ranking metrics
-└── artifacts/              # Artifact management
+src/
+├── app/                    # FastAPI application layer
+│   ├── factory.py         # App factory
+│   ├── routes/            # API endpoints
+│   │   ├── chat.py        # Chat endpoints
+│   │   ├── evaluation.py  # Evaluation endpoints
+│   │   └── health.py      # Health check
+│   └── schemas/           # Pydantic models
+│
+├── cli/                    # CLI entry points
+│   ├── serve.py           # Start server
+│   ├── ingest.py          # Document ingestion
+│   └── eval_pipeline.py   # Evaluation pipeline
+│
+├── config/                 # Configuration
+│   ├── settings.py        # Pydantic settings
+│   └── paths.py           # Path management
+│
+├── evals/                  # Evaluation system
+│   ├── assessment/        # Quality assessment
+│   │   └── orchestrator.py
+│   ├── artifacts.py       # Evaluation artifacts
+│   └── dataset_builder.py # Test dataset builder
+│
+├── infra/                  # Infrastructure layer
+│   ├── llm/               # LLM clients
+│   │   └── qwen_client.py
+│   └── storage/           # Storage backends
+│       └── file_chat_history_store.py
+│
+├── ingestion/              # Document processing
+│   ├── chunkers.py        # Text chunking strategies
+│   └── pipeline.py        # Ingestion pipeline
+│
+├── rag/                    # RAG core
+│   └── runtime.py         # Retrieval runtime
+│
+├── usecases/               # Application orchestration
+│   ├── chat.py            # Chat use case
+│   └── evaluation.py      # Evaluation use case
+│
+└── experiments/            # Experiment tracking
+    ├── wandb_tracking.py  # W&B integration
+    └── config.py          # Experiment config
 ```
 
 ## Frontend Structure (`frontend/`)
@@ -115,63 +68,60 @@ evals/
 ```
 frontend/
 ├── src/
-│   ├── routes/        # SvelteKit routes
-│   │   +page.svelte       # Main chat interface
-│   │   +layout.ts         # Root layout
-│   │   └── +server.ts     # Server endpoints
-│   ├── lib/           # Utilities
-│   │   └── components/    # Reusable components
-├── static/           # Static assets
-├── tests/            # Playwright tests
-│   ├── chat.spec.ts
-│   └── setup.ts
-└── package.json      # Dependencies
+│   ├── routes/            # SvelteKit routes
+│   │   ├── +page.svelte           # Chat interface
+│   │   └── eval/
+│   │       └── +page.svelte       # Evaluation dashboard
+│   │
+│   ├── lib/
+│   │   ├── components/     # UI components
+│   │   └── utils/          # Utility functions
+│   │   └── types.ts        # TypeScript interfaces
+│   │
+│   └── app.css            # Global styles
+│
+├── package.json           # Dependencies
+├── tsconfig.json          # TypeScript config
+└── vite.config.ts         # Vite build config
 ```
 
 ## Test Structure (`tests/`)
 
 ```
 tests/
-├── conftest.py                    # Shared fixtures
-├── test_settings.py               # Configuration tests
-├── test_eval_metrics.py           # Metric tests
-├── test_chunker.py                # Chunking tests
-├── test_embedding.py              # Embedding tests
-├── test_retrieval.py              # Retrieval tests
-├── test_eval_artifacts.py         # Artifact tests
-├── test_pipeline_assessment_smoke.py  # Integration tests
-├── test_eval_pipeline_cli.py      # CLI tests
-└── test_runtime_index_initialization.py  # Index tests
+├── test_answer_eval_*.py     # Evaluation tests
+├── test_chat_*.py            # Chat functionality tests
+├── test_dataset_builder.py   # Dataset builder tests
+├── test_eval_pipeline_*.py   # Pipeline tests
+├── test_experiment_config.py # Config tests
+├── test_medical_metrics.py   # Domain metrics tests
+├── test_orchestrator_*.py    # Orchestrator tests
+├── test_pipeline_*.py        # Pipeline integration tests
+├── test_synthetic_generator.py # Data generation tests
+└── test_wandb_tracking.py    # W&B integration tests
 ```
 
+## Key Files
+
+### Configuration
+- `src/config/settings.py` - Centralized Pydantic settings
+- `.env.example` - Environment variable template
+
+### Core Logic
+- `src/usecases/chat.py` - Chat orchestration
+- `src/rag/runtime.py` - RAG retrieval logic
+- `src/evals/assessment/orchestrator.py` - Evaluation orchestration
+
+### API Routes
+- `src/app/routes/chat.py` - Chat endpoints
+- `src/app/routes/evaluation.py` - Evaluation endpoints
+- `src/app/routes/health.py` - Health check
+
+### Frontend Types
+- `frontend/src/lib/types.ts` - TypeScript interfaces
+
 ## Naming Conventions
-
-### Files
-- **Python modules**: `snake_case.py`
-- **Test files**: `test_*.py`
-- **Svelte components**: `*.svelte`
-- **TypeScript files**: `*.ts`
-
-### Directories
-- **Source code**: `src/`
-- **Tests**: Mirror source structure under `tests/`
-- **Documentation**: `docs/`
-- **Data**: `data/`
-
-### Imports
-- **Absolute imports preferred**: `from src.config import settings`
-- **Third-party**: After standard library
-- **Local**: Organized by module
-
-## Key Locations
-
-| Purpose | Location |
-|---------|----------|
-| Main server entry point | `src/cli/serve.py` |
-| Chat endpoint | `src/app/routes/chat.py` |
-| RAG runtime | `src/rag/runtime.py` |
-| Vector store | `src/ingestion/indexing/vector_store.py` |
-| Settings | `src/config/settings.py` |
-| Frontend main page | `frontend/src/routes/+page.svelte` |
-| Evaluation framework | `src/evals/pipeline_assessment.py` |
-| LLM client | `src/infra/llm/dashscope.py` |
+- **Python**: `snake_case` for files and functions
+- **TypeScript/Svelte**: `camelCase` for files, `PascalCase` for components
+- **Tests**: `test_*.py` prefix
+- **Config**: `*.yaml` for experiments, `.env` for environment

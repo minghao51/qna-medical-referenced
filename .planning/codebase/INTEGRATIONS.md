@@ -1,65 +1,39 @@
 # External Integrations
 
-## LLM APIs
-
-### Alibaba Dashscope (Primary)
-- **Purpose**: Main LLM provider for chat and embeddings
-- **Models**:
-  - qwen3.5-flash - Fast responses
-  - qwen3.5-plus - Balanced performance
-  - qwen3.5-max - Highest quality
-  - text-embedding-v4 - Embeddings
-- **Configuration**: Environment variable `DASHSCOPE_API_KEY`
-- **Error Handling**: Retry logic with exponential backoff
-
-### Google Gemini (Backup)
-- **Purpose**: Alternative LLM provider
-- **Configuration**: Available but not primary
-- **Usage**: Fallback option for redundancy
+## LLM Providers
+- **Alibaba Dashscope API** - Primary LLM provider (Qwen models)
+  - Client: `src/infra/llm/qwen_client.py`
+  - Models: Qwen series for chat and completion
 
 ## Experiment Tracking
+- **Weights & Biases (W&B)** - Experiment monitoring and logging
+  - Integration: `src/experiments/wandb_tracking.py`
+  - Configuration: `src/experiments/config.py`
+  - Used for: RAG pipeline evaluation, metrics tracking
 
-### Weights & Biases (wandb)
-- **Purpose**: Track evaluation experiments and metrics
-- **Features**:
-  - Pipeline assessment logging
-  - Metric tracking (hit rate, NDCG, precision, recall)
-  - Artifact management
-- **Configuration**: Optional, enabled via environment
+## Web Services & APIs
+- **HTTPX** - Async HTTP client for API calls
+  - Used for external service communication
+
+## Document Processing
+- **PyPDF** - PDF text extraction
+- **PDFPlumber** - Advanced PDF parsing
+- **BeautifulSoup4** - HTML parsing
+- **Trafilatura** - Web content extraction
 
 ## Data Storage
+- **File-based Chat History** - `src/infra/storage/file_chat_history_store.py`
+  - Session persistence in local filesystem
+- **Vector Store** - ChromaDB (implied from RAG architecture)
 
-### File-Based Persistence
-- **Documents**: Local file system storage
-- **Vectors**: Custom SQLite-based vector store
-- **Chat History**: File-based persistence
-- **Location**: `data/` directory
+## Development Tools
+- **Docker Compose** - Multi-container orchestration
+- **UV** - Python package management and virtualization
 
-## Internal Services
+## Monitoring & Logging
+- **Structured JSON Logging** - Request ID tracking
+- **W&B Integration** - Experiment metrics and artifacts
 
-### Vector Store
-- **Implementation**: Custom (not ChromaDB)
-- **Capabilities**:
-  - Semantic search
-  - Keyword search
-  - Hybrid search
-  - MMR reranking for diversity
-
-## Web Scraping (Offline)
-
-### Document Sources
-- **PDF Processing**: pypdf, pdfplumber
-- **HTML Parsing**: beautifulsoup4
-- **Content Extraction**: trafilatura
-- **Usage**: Ingestion pipeline for knowledge base
-
-## API Configuration
-
-### Authentication
-- API keys managed via environment variables
-- No hardcoded secrets in codebase
-- Comma-separated string format for multiple keys
-
-### Rate Limiting
-- **Current**: No rate limiting implemented
-- **Note**: Potential concern for production use
+## Authentication
+- Environment-based configuration (`.env` files)
+- No external auth provider currently implemented

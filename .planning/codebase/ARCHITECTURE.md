@@ -1,153 +1,95 @@
 # Architecture
 
-## Design Principles
+## Design Pattern
+**Clean Architecture with Hexagonal Design Principles**
 
-### Layered Architecture
-Clear separation of concerns across layers:
-1. **HTTP Layer** (`src/app/`) - FastAPI routes and endpoints
-2. **Business Logic** (`src/usecases/`) - Use case orchestration
-3. **Domain** (`src/models.py`) - Core domain models
-4. **Infrastructure** (`src/infra/`) - External integrations
-
-### Hexagonal Architecture
-- Core domain logic surrounded by adapters
-- Infrastructure isolated from business rules
-- Testable components with clear boundaries
-
-### Pipeline Pattern
-Separate flows for runtime and offline processing:
-- **Runtime**: Chat requests → RAG pipeline → LLM → Response
-- **Offline**: Download → Process → Chunk → Embed → Index → Store
-
-## Core Components
-
-### RAG Pipeline
-- **Location**: `src/rag/`
-- **Components**:
-  - Runtime retrieval and context generation
-  - Hybrid search (semantic + keyword)
-  - MMR reranking for result diversity
-  - Configurable retrieval parameters
-
-### Ingestion Pipeline
-- **Location**: `src/ingestion/`
-- **Components**:
-  - Steps: download, convert, chunk, embed, index
-  - Indexing: vector store management
-  - Persistence: document and embedding storage
-
-### Evaluation System
-- **Location**: `src/evals/`
-- **Components**:
-  - Pipeline assessment framework
-  - Metric calculation (hit rate, NDCG, precision, recall)
-  - Artifact management
-  - Step-by-step validation
-
-## Data Flow
-
-### Runtime Request Flow
-```
-HTTP Request
-    ↓
-FastAPI Route (src/app/routes/)
-    ↓
-Use Case (src/usecases/)
-    ↓
-RAG Runtime (src/rag/runtime.py)
-    ↓
-Vector Store (src/ingestion/indexing/vector_store.py)
-    ↓
-LLM Client (src/infra/llm/)
-    ↓
-Response Formatting (src/rag/formatting.py)
-    ↓
-HTTP Response
-```
-
-### Offline Ingestion Flow
-```
-Source URLs/Files
-    ↓
-Download (src/ingestion/steps/download_web.py)
-    ↓
-Convert (src/ingestion/steps/convert_html.py, load_pdfs.py, load_markdown.py)
-    ↓
-Chunk (src/ingestion/steps/chunk_text.py)
-    ↓
-Embed (src/ingestion/indexing/embedding.py)
-    ↓
-Index (src/ingestion/indexing/vector_store.py)
-    ↓
-Persist (src/ingestion/indexing/persistence.py)
-```
-
-## Key Abstractions
-
-### Document Model
-- Content, metadata, and embeddings
-- Source tracking and provenance
-- Chunked representation for retrieval
-
-### Retrieval Configuration
-- Top-k result control
-- Diversity parameters
-- Hybrid search weights
-- MMR reranking settings
-
-### Pipeline Trace
-- Observability for debugging
-- Step-by-step execution tracking
-- Performance metrics
+The application follows a layered architecture with clear separation of concerns:
+- **Domain Layer**: Core business logic and entities
+- **Application Layer**: Use cases and orchestration
+- **Infrastructure Layer**: External services and integrations
+- **Interface Layer**: API routes and CLI commands
 
 ## Entry Points
 
-### Backend Services
-- **HTTP Server**: `src/cli/serve.py` - FastAPI on port 8000
-- **Ingestion CLI**: `src/cli/ingest.py` - Data pipeline runner
-- **Evaluation CLI**: `src/cli/eval_pipeline.py` - Quality assessment
+### Backend
+- **API Server**: `src/app/factory.py` - FastAPI application factory
+- **CLI Commands**:
+  - `src/cli/serve.py` - Start development server
+  - `src/cli/ingest.py` - Document ingestion pipeline
+  - `src/cli/eval_pipeline.py` - Evaluation pipeline
 
 ### Frontend
-- **Main Interface**: `frontend/src/routes/+page.svelte` - Port 5173
-- **Build**: SvelteKit with Vite
+- **Chat Interface**: `frontend/src/routes/+page.svelte`
+- **Evaluation Dashboard**: `frontend/src/routes/eval/+page.svelte`
 
-## Configuration Management
+## Key Patterns
 
-### Centralized Settings
-- **Location**: `src/config/settings.py`
-- **Framework**: Pydantic BaseSettings
-- **Features**:
-  - Environment variable loading
-  - Type-safe configuration
-  - Default values for development
+### Factory Pattern
+- Application factory in `src/app/factory.py`
+- LLM client factory for provider abstraction
 
-### Path Management
-- **Location**: `src/config/paths.py`
-- **Purpose**: Centralized path resolution
-- **Components**:
-  - Data directories
-  - Model paths
-  - Cache locations
+### Dependency Injection
+- Throughout the application for testability
+- Pydantic settings for configuration injection
 
-## Factory Pattern
+### Repository Pattern
+- Data access abstraction in `src/infra/`
+- Chat history store interface
 
-### Application Factory
-- **Location**: `src/app/factory.py`
-- **Purpose**: Create and configure FastAPI app
-- **Responsibilities**:
-  - Route registration
-  - Middleware setup
-  - CORS configuration
-  - Dependency injection
+### Pipeline Pattern
+- Document ingestion: `src/ingestion/`
+- RAG processing: `src/rag/runtime.py`
 
-## Deployment Architecture
+### Strategy Pattern
+- Chunking strategies: `src/ingestion/chunkers.py`
+- Search modes: diversification strategies
 
-### Containerization
-- Docker Compose multi-service setup
-- Separate containers for backend and frontend
-- Shared volume for data persistence
+## Data Flow
 
-### Scalability Considerations
-- Stateless HTTP layer
-- File-based storage (single-instance limitation)
-- No connection pooling (potential bottleneck)
+```
+User Request
+    ↓
+Routes (src/app/routes/)
+    ↓
+Use Cases (src/usecases/)
+    ↓
+Domain (src/rag/, src/evals/)
+    ↓
+Infrastructure (src/infra/)
+    ↓
+External Services (LLM, Storage)
+```
+
+## Critical Abstractions
+
+### RAG Runtime
+- **File**: `src/rag/runtime.py`
+- **Purpose**: Retrieval with diversification
+- **Key Methods**: Search, chunk, rank, synthesize
+
+### LLM Client
+- **File**: `src/infra/llm/qwen_client.py`
+- **Purpose**: Qwen API interface
+- **Abstraction**: Provider-agnostic LLM interface
+
+### Chat History
+- **File**: `src/infra/storage/file_chat_history_store.py`
+- **Purpose**: Session persistence
+- **Storage**: Filesystem-based
+
+### Evaluation Orchestrator
+- **File**: `src/evals/assessment/orchestrator.py`
+- **Purpose**: Quality assessment pipeline
+- **Integration**: DeepEval for LLM evaluation
+
+## API Surface
+- **Health**: `GET /health`
+- **Chat**: `POST /api/chat` - Chat completions
+- **History**: `GET/POST /api/history` - Chat session management
+- **Evaluation**: `POST /api/evaluate` - Quality assessment
+
+## Architecture Strengths
+- Clear layer separation
+- Comprehensive dependency injection
+- Modular pipeline design
+- Extensive monitoring and evaluation
