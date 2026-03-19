@@ -57,7 +57,7 @@ Useful endpoints:
 
 - `GET /health`
 - `POST /chat`
-- `GET /history/{session_id}`
+- `GET /history`
 
 ## 5. Build the local search index
 
@@ -119,6 +119,7 @@ uv run python -m src.cli.eval_pipeline --variant my-experiment
 ```
 
 See `docs/architecture/overview.md` for evaluation system details.
+See `docs/local-workflows.md` for the recommended operator workflow that combines ingestion, serving, frontend, and eval runs.
 
 ## Troubleshooting
 

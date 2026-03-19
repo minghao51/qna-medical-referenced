@@ -20,7 +20,7 @@ Inline \`code\` still works.
 `;
 
 async function mockChatApi(page: Page) {
-	await page.route('**/history/**', async (route) => {
+	await page.route('**/history**', async (route) => {
 		if (route.request().method() === 'DELETE') {
 			await route.fulfill({ status: 204, body: '' });
 			return;

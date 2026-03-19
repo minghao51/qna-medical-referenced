@@ -3,11 +3,11 @@ FROM oven/bun:1.2.5-alpine AS builder
 
 WORKDIR /app
 
-COPY frontend/package.json ./package.json
-COPY frontend/bun.lock ./bun.lock
+COPY package.json ./package.json
+COPY bun.lock ./bun.lock
 RUN bun install --frozen-lockfile
 
-COPY frontend/ ./
+COPY . ./
 RUN bun run build
 
 # Stage 2: Runtime
@@ -19,6 +19,8 @@ ENV HOST=0.0.0.0
 ENV PORT=5173
 ENV NODE_ENV=production
 
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/build ./build
 
 EXPOSE 5173

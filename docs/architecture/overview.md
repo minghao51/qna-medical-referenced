@@ -208,7 +208,8 @@ API Response → Confidence Calculator → Visual Components
 |----------|--------|-------------|
 | `/chat` | POST | Send chat message |
 | `/chat?include_pipeline=true` | POST | Chat with pipeline data |
-| `/history/{session_id}` | GET | Load chat history |
+| `/history` | GET | Load chat history for the current anonymous session |
+| `/history` | DELETE | Clear chat history and rotate to a fresh anonymous session |
 | `/evaluation/latest` | GET | Latest evaluation metrics |
 | `/evaluation/history?limit=10` | GET | Historical evaluation data |
 
@@ -255,4 +256,3 @@ The application uses a custom `MarkdownRenderer` component for rendering chat me
 - Max-width: 1400px (up from 800px)
 - Optimal line length: 75ch on wide screens
 - Mobile-optimized with scrollable tables
-

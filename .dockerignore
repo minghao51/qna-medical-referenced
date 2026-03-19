@@ -10,7 +10,12 @@ dist/
 !.env.example
 .vscode/
 .idea/
+frontend/
 data/raw/
+data/evals/
+data/processed/
+data/chat_history.json
+data/rate_limits.db
 docs/
 *.md
 !README.md

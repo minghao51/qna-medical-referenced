@@ -207,6 +207,45 @@ Maximum number of requests allowed per minute per client.
 - Set to `10` for strict rate limiting
 - Set to `0` to disable rate limiting (not recommended for production)
 
+#### `ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE`
+**Default:** `12`
+
+Maximum unauthenticated `POST /chat` requests allowed per minute for a single anonymous browser and IP pair.
+
+**What it does:**
+- Issues an anonymous browser cookie for `/chat` traffic when API key auth is not used
+- Applies a tighter limit to the expensive LLM-backed chat endpoint
+- Helps prevent one NATed office or school from forcing all anonymous users into the same bucket
+
+#### `ANONYMOUS_BROWSER_COOKIE_NAME`
+**Default:** `anon_browser_id`
+
+Cookie name used for the anonymous browser identifier that supports `/chat` rate limiting.
+
+#### `CHAT_SESSION_COOKIE_NAME`
+**Default:** `chat_session_id`
+
+Cookie name used for the server-issued anonymous chat session.
+
+#### `CHAT_SESSION_COOKIE_MAX_AGE_SECONDS`
+**Default:** `2592000`
+
+Lifetime of the anonymous chat session cookie in seconds. The default is 30 days.
+
+#### `CHAT_HISTORY_TTL_SECONDS`
+**Default:** `2592000`
+
+Retention window for file-backed anonymous chat history in seconds. Expired sessions are pruned during normal history reads and writes.
+
+#### `TRUST_PROXY_HEADERS`
+**Default:** `false`
+
+Whether to trust `X-Forwarded-For` and `X-Real-IP` when resolving the client IP address.
+
+**When to set:**
+- Set to `true` only when the backend is behind your own trusted reverse proxy or load balancer
+- Keep `false` for local development or direct internet exposure
+
 ### DeepEval Evaluation Configuration
 
 The evaluation pipeline supports LLM-as-a-judge evaluation via DeepEval framework.

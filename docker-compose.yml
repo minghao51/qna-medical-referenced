@@ -4,23 +4,20 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runtime
+    volumes:
+      - ./src:/app/src:ro
     ports:
       - "8000:8000"
     environment:
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
       - MODEL_NAME=${MODEL_NAME:-qwen3.5-flash}
       - RATE_LIMIT_PER_MINUTE=0
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
-        reservations:
-          memory: 512M
-          cpus: '0.5'
+    cpus: 1.0
+    mem_limit: 1g
+    mem_reservation: 512m
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -28,8 +25,8 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
       target: runtime
     ports:
       - "5173:5173"
@@ -38,14 +35,9 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-        reservations:
-          memory: 128M
-          cpus: '0.25'
+    cpus: 0.5
+    mem_limit: 256m
+    mem_reservation: 128m
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:5173"]
@@ -54,24 +46,19 @@ services:
       retries: 5
 
   test:
-    image: mcr.microsoft.com/playwright:v1.58.2-jammy
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.test
+    profiles:
+      - test
     working_dir: /app
-    volumes:
-      - .:/app
     environment:
       - CI=true
       - PLAYWRIGHT_BASE_URL=http://frontend:5173
       - API_URL=http://backend:8000
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-    command: >
-      sh -c "npm install -g bun@1.2.5 && cd frontend && bun install --frozen-lockfile && bunx playwright test"
+    cpus: 2.0
+    mem_limit: 2g
+    mem_reservation: 1g
     depends_on:
       frontend:
         condition: service_healthy

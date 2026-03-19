@@ -103,6 +103,12 @@ export interface RetrievalMetrics {
 	exact_chunk_hit_rate_high_conf?: number;
 	evidence_hit_rate_high_conf?: number;
 	topic_false_positive_rate?: number;
+	// HyDe (Hypothetical Document Embeddings) metrics
+	hyde_enabled?: boolean;
+	hyde_queries_count?: number;
+	hyde_hit_rate?: number;
+	hyde_mrr?: number;
+	hyde_source_hit_rate?: number;
 }
 
 export interface L6AnswerQualityMetric {

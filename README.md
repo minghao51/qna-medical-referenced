@@ -11,6 +11,7 @@ Medical Q&A system with:
 For setup and day-to-day usage, use the docs in this order:
 
 - `docs/quickstart.md` for local setup
+- `docs/local-workflows.md` for canonical ingestion, serving, and evaluation commands
 - `docs/configuration.md` for environment variables and runtime settings
 - `docs/architecture/overview.md` for repository structure
 - `docs/testing/backend-tests.md` and `docs/testing/playwright.md` for test workflows
@@ -58,8 +59,8 @@ tests/          Backend test suite
 - `GET /`
 - `GET /health`
 - `POST /chat`
-- `GET /history/{session_id}`
-- `DELETE /history/{session_id}`
+- `GET /history`
+- `DELETE /history`
 - `GET /evaluation/latest`
 - `GET /evaluation/runs`
 - `GET /evaluation/history`

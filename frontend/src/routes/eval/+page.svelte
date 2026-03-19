@@ -30,11 +30,7 @@
 	let historyData = $state<EvaluationHistoryResponse | null>(null);
 	let historyLoading = $state(true);
 	let selectedTrendMetric = $state<'hit_rate' | 'mrr' | 'latency'>('hit_rate');
-	let historySource = $state<'local' | 'wandb' | 'all'>('all');
-	let wandbProject = $state('');
-	let wandbEntity = $state('');
 	let experimentFilter = $state('');
-	let selectedHistorySource = $state<'all' | 'local' | 'wandb'>('all');
 	let selectedRunKey = $state('');
 	let urlStateReady = false;
 
@@ -123,12 +119,7 @@
 	}
 
 	function buildHistoryUrl(): string {
-		const params = new URLSearchParams({
-			limit: '20',
-			source: historySource
-		});
-		if (wandbProject.trim()) params.set('wandb_project', wandbProject.trim());
-		if (wandbEntity.trim()) params.set('wandb_entity', wandbEntity.trim());
+		const params = new URLSearchParams({ limit: '20' });
 		return `${API_URL}/evaluation/history?${params.toString()}`;
 	}
 
@@ -152,11 +143,6 @@
 		selectedStages = params.get('stages')?.split(',').filter(Boolean) || [...allStages];
 		selectedTrendMetric =
 			(params.get('metric') as 'hit_rate' | 'mrr' | 'latency' | null) || 'hit_rate';
-		historySource = (params.get('source') as 'local' | 'wandb' | 'all' | null) || 'all';
-		selectedHistorySource =
-			(params.get('visible') as 'all' | 'local' | 'wandb' | null) || 'all';
-		wandbProject = params.get('project') || '';
-		wandbEntity = params.get('entity') || '';
 		compareMode = params.get('compare') === '1';
 		baselineRun = params.get('baseline') || '';
 		compareRun = params.get('candidate') || '';
@@ -173,10 +159,6 @@
 			params.set('stages', selectedStages.join(','));
 		}
 		if (selectedTrendMetric !== 'hit_rate') params.set('metric', selectedTrendMetric);
-		if (historySource !== 'all') params.set('source', historySource);
-		if (selectedHistorySource !== 'all') params.set('visible', selectedHistorySource);
-		if (wandbProject.trim()) params.set('project', wandbProject.trim());
-		if (wandbEntity.trim()) params.set('entity', wandbEntity.trim());
 		if (compareMode) params.set('compare', '1');
 		if (baselineRun) params.set('baseline', baselineRun);
 		if (compareRun) params.set('candidate', compareRun);
@@ -245,21 +227,10 @@
 	}
 
 	function selectionKey(run: EvaluationHistoryRun): string {
-		if (run.source === 'wandb') {
-			return `wandb:${run.wandb_run_id || run.run_dir}`;
-		}
 		return `local:${run.run_dir}`;
 	}
 
 	function runDetailUrl(run: EvaluationHistoryRun): string {
-		if (run.source === 'wandb') {
-			const ref = encodeURIComponent(run.wandb_run_id || run.run_dir);
-			const params = new URLSearchParams();
-			if (wandbProject.trim()) params.set('wandb_project', wandbProject.trim());
-			if (wandbEntity.trim()) params.set('wandb_entity', wandbEntity.trim());
-			const query = params.toString();
-			return `${API_URL}/evaluation/wandb/run/${ref}${query ? `?${query}` : ''}`;
-		}
 		return `${API_URL}/evaluation/run/${encodeURIComponent(run.run_dir)}`;
 	}
 
@@ -351,7 +322,6 @@
 	function filteredHistoryRuns(): EvaluationHistoryRun[] {
 		const runs = historyData?.runs || [];
 		return runs.filter((run) => {
-			if (selectedHistorySource !== 'all' && run.source !== selectedHistorySource) return false;
 			if (!experimentFilter.trim()) return true;
 			const haystack = [
 				run.experiment_name,
@@ -373,7 +343,10 @@
 
 	async function showMetricDrillDown(stage: string, metricName: string, currentValue: number) {
 		try {
-			const res = await fetch(`${API_URL}/evaluation/steps/${stage}/records?limit=100`);
+			const url = stage === 'l6'
+				? `${API_URL}/evaluation/l6/records?limit=100`
+				: `${API_URL}/evaluation/steps/${stage}/records?limit=100`;
+			const res = await fetch(url);
 			if (res.ok) {
 				const data = await res.json();
 				drillDownModal = {
@@ -382,23 +355,25 @@
 					stage: stage,
 					currentValue: currentValue,
 					records: data.records || [],
-					historicalData: filteredHistoryRuns()
-						.map((run) => {
-							const value = run.retrieval_metrics?.[metricName as keyof typeof run.retrieval_metrics];
-							if (value !== undefined) {
-								return {
-									timestamp: formatRunTimestamp(run, {
-										month: 'short',
-										day: 'numeric',
-										hour: 'numeric',
-										minute: '2-digit'
-									}),
-									value: typeof value === 'number' ? value : 0
-								};
-							}
-							return null;
-						})
-						.filter(Boolean) as Array<{ timestamp: string; value: number }>
+					historicalData: stage === 'l6'
+						? []
+						: filteredHistoryRuns()
+							.map((run) => {
+								const value = run.retrieval_metrics?.[metricName as keyof typeof run.retrieval_metrics];
+								if (value !== undefined) {
+									return {
+										timestamp: formatRunTimestamp(run, {
+											month: 'short',
+											day: 'numeric',
+											hour: 'numeric',
+											minute: '2-digit'
+										}),
+										value: typeof value === 'number' ? value : 0
+									};
+								}
+								return null;
+							})
+							.filter(Boolean) as Array<{ timestamp: string; value: number }>
 				};
 			}
 		} catch (e) {
@@ -424,9 +399,15 @@
 	<nav class="nav-bar">
 		<a href="/" class="nav-link">Chat</a>
 		<a href="/eval" class="nav-link active">Pipeline Eval</a>
+		<a href="/docs/pipeline" class="nav-link">Pipeline Docs</a>
 	</nav>
 	<header>
 		<div class="header-left">
+			<a href="https://github.com/anomalyco/qna_medical_referenced" target="_blank" rel="noopener noreferrer" class="github-link" aria-label="View on GitHub">
+				<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+					<path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+				</svg>
+			</a>
 			<h1>Pipeline Quality Assessment</h1>
 			{#if data?.summary}
 				<span class="status-badge" style="background: {getStatusColor(data.summary.status)}">
@@ -513,14 +494,6 @@
 				<h2>Historical Trending</h2>
 				<div class="history-controls">
 					<div class="metric-selector">
-						<label for="history-source">Source:</label>
-						<select bind:value={historySource} id="history-source" onchange={loadHistory}>
-							<option value="all">Local + W&B</option>
-							<option value="local">Local only</option>
-							<option value="wandb">W&B only</option>
-						</select>
-					</div>
-					<div class="metric-selector">
 						<label for="trend-metric">Metric:</label>
 						<select bind:value={selectedTrendMetric} id="trend-metric">
 							<option value="hit_rate">Hit Rate & MRR</option>
@@ -528,23 +501,9 @@
 							<option value="latency">Latency</option>
 						</select>
 					</div>
-					<div class="metric-selector compact-input">
-						<label for="wandb-project">W&B Project:</label>
-						<input id="wandb-project" bind:value={wandbProject} placeholder="auto or project" />
-					</div>
-					<div class="metric-selector compact-input">
-						<label for="wandb-entity">Entity:</label>
-						<input id="wandb-entity" bind:value={wandbEntity} placeholder="optional" />
-					</div>
 					<button class="action-btn" onclick={loadHistory}>Reload History</button>
 				</div>
 				<div class="history-controls">
-					<label for="history-source-filter">Visible Runs:</label>
-					<select bind:value={selectedHistorySource} id="history-source-filter">
-						<option value="all">All Sources</option>
-						<option value="local">Local</option>
-						<option value="wandb">W&amp;B</option>
-					</select>
 					<input
 						type="text"
 						placeholder="Filter by experiment, variant, or index hash"
@@ -577,11 +536,6 @@
 					</span>
 				</div>
 			</div>
-			{#if historyData.warnings?.length}
-				<div class="history-warning">
-					{historyData.warnings.join(' ')}
-				</div>
-			{/if}
 			{#if filteredHistoryRuns().length >= 2}
 				{@const latestRun = filteredHistoryRuns()[0]}
 				{@const previousRun = filteredHistoryRuns()[1]}
@@ -728,7 +682,6 @@
 					>
 							<div class="history-run-meta">
 								<div class="history-run-title">
-									<span class="source-pill" class:wandb={run.source === 'wandb'}>{run.source}</span>
 									<strong>{historyLabel(run)}</strong>
 								</div>
 							<span class="history-run-subtitle">
@@ -1284,6 +1237,35 @@
 							</div>
 						</section>
 					{/if}
+					{#if rm.hyde_enabled}
+						<section class="retrieval-subsection">
+							<h3>HyDe Query Expansion</h3>
+							<div class="metrics-grid">
+								<div class="metric-card">
+									<span class="metric-label">HyDe Queries</span>
+									<span class="metric-value">{rm.hyde_queries_count ?? 'N/A'}</span>
+								</div>
+								{#if rm.hyde_hit_rate !== undefined && rm.hyde_hit_rate !== null}
+									<div class="metric-card">
+										<span class="metric-label">HyDe Hit Rate</span>
+										<span class="metric-value highlight">{formatPercent(rm.hyde_hit_rate)}</span>
+									</div>
+								{/if}
+								{#if rm.hyde_mrr !== undefined && rm.hyde_mrr !== null}
+									<div class="metric-card">
+										<span class="metric-label">HyDe MRR</span>
+										<span class="metric-value highlight">{rm.hyde_mrr.toFixed(3)}</span>
+									</div>
+								{/if}
+								{#if rm.hyde_source_hit_rate !== undefined && rm.hyde_source_hit_rate !== null}
+									<div class="metric-card">
+										<span class="metric-label">HyDe Source Hit</span>
+										<span class="metric-value">{formatPercent(rm.hyde_source_hit_rate)}</span>
+									</div>
+								{/if}
+							</div>
+						</section>
+					{/if}
 				</section>
 			{/if}
 
@@ -1345,33 +1327,74 @@
 			{/if}
 
 			{#if data.summary?.l6_answer_quality_metrics && data.summary.l6_answer_quality_metrics.status !== 'skipped'}
+				{@const l6 = data.summary.l6_answer_quality_metrics}
 				<section class="rag-section">
 					<h2>L6 Answer Quality</h2>
 					<div class="rag-stats">
 						<div class="metric-card">
 							<span class="metric-label">L6 Status</span>
-							<span class="metric-value">{data.summary.l6_answer_quality_metrics.status}</span>
+							<span class="metric-value">{l6.status}</span>
 						</div>
 						<div class="metric-card">
 							<span class="metric-label">Query Count Scored</span>
-							<span class="metric-value">{data.summary.l6_answer_quality_metrics.query_count_scored ?? data.summary.l6_answer_quality_metrics.query_count ?? 'N/A'}</span>
+							<span class="metric-value">{l6.query_count_scored ?? l6.query_count ?? 'N/A'}</span>
 						</div>
 						<div class="metric-card">
 							<span class="metric-label">Metric Error Rate</span>
 							<span class="metric-value">
-								{data.summary.l6_answer_quality_metrics.metric_error_rate !== undefined
-									? formatPercent(data.summary.l6_answer_quality_metrics.metric_error_rate)
+								{l6.metric_error_rate !== undefined
+									? formatPercent(l6.metric_error_rate)
 									: 'N/A'}
 							</span>
 						</div>
-						<div class="metric-card">
+						<button
+							type="button"
+							class="metric-card clickable metric-card-button"
+							onclick={() => showMetricDrillDown('l6', 'answer_relevancy', l6.answer_relevancy?.mean ?? 0)}
+						>
 							<span class="metric-label">Answer Relevancy</span>
-							<span class="metric-value">{data.summary.l6_answer_quality_metrics.answer_relevancy?.mean?.toFixed(2) || 'N/A'}</span>
-						</div>
-						<div class="metric-card">
+							<span class="metric-value">{l6.answer_relevancy?.mean?.toFixed(2) || 'N/A'}</span>
+						</button>
+						<button
+							type="button"
+							class="metric-card clickable metric-card-button"
+							onclick={() => showMetricDrillDown('l6', 'faithfulness', l6.faithfulness?.mean ?? 0)}
+						>
 							<span class="metric-label">Faithfulness</span>
-							<span class="metric-value">{data.summary.l6_answer_quality_metrics.faithfulness?.mean?.toFixed(2) || 'N/A'}</span>
-						</div>
+							<span class="metric-value">{l6.faithfulness?.mean?.toFixed(2) || 'N/A'}</span>
+						</button>
+						<button
+							type="button"
+							class="metric-card clickable metric-card-button"
+							onclick={() => showMetricDrillDown('l6', 'factual_accuracy', l6.factual_accuracy?.mean ?? 0)}
+						>
+							<span class="metric-label">Factual Accuracy</span>
+							<span class="metric-value">{l6.factual_accuracy?.mean?.toFixed(2) || 'N/A'}</span>
+						</button>
+						<button
+							type="button"
+							class="metric-card clickable metric-card-button"
+							onclick={() => showMetricDrillDown('l6', 'completeness', l6.completeness?.mean ?? 0)}
+						>
+							<span class="metric-label">Completeness</span>
+							<span class="metric-value">{l6.completeness?.mean?.toFixed(2) || 'N/A'}</span>
+						</button>
+						<button
+							type="button"
+							class="metric-card clickable metric-card-button"
+							onclick={() => showMetricDrillDown('l6', 'clinical_relevance', l6.clinical_relevance?.mean ?? 0)}
+						>
+							<span class="metric-label">Clinical Relevance</span>
+							<span class="metric-value">{l6.clinical_relevance?.mean?.toFixed(2) || 'N/A'}</span>
+						</button>
+						<button
+							type="button"
+							class="metric-card clickable metric-card-button"
+							onclick={() => showMetricDrillDown('l6', 'clarity', l6.clarity?.mean ?? 0)}
+						>
+							<span class="metric-label">Clarity</span>
+							<span class="metric-value">{l6.clarity?.mean?.toFixed(2) || 'N/A'}</span>
+						</button>
 					</div>
 				</section>
 			{/if}
@@ -1459,6 +1482,26 @@
 	.refresh-btn:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+
+	.github-link {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		color: #333;
+		border-radius: 6px;
+		transition: background 0.2s;
+	}
+
+	.github-link:hover {
+		background: #e0e0e0;
+	}
+
+	.github-link svg {
+		width: 22px;
+		height: 22px;
 	}
 
 	.status-badge {
@@ -1728,22 +1771,6 @@
 
 	.history-link:hover {
 		text-decoration: underline;
-	}
-
-	.source-pill {
-		font-size: 0.72rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		padding: 0.2rem 0.45rem;
-		border-radius: 999px;
-		background: #e8f5e9;
-		color: #256029;
-	}
-
-	.source-pill.wandb {
-		background: #fff1e6;
-		color: #a64b00;
 	}
 
 	.history-search {
