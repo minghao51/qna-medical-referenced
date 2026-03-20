@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -7,6 +8,10 @@ from src.app.middleware.auth import APIKeyConfig
 from src.app.middleware.rate_limit import RateLimiter
 from src.config import settings
 from src.infra.storage.file_chat_history_store import FileChatHistoryStore
+
+
+def _parse_sse_events(response) -> list[dict]:
+    return [json.loads(line[6:]) for line in response.text.split("\n") if line.startswith("data: ")]
 
 
 class DummyLLMClient:
@@ -61,13 +66,21 @@ def test_chat_requires_valid_api_key(monkeypatch, tmp_path: Path):
 
 
 def test_chat_success_and_rate_limit_headers(monkeypatch, tmp_path: Path):
+    async def mock_stream_chat_message(**kwargs):
+        yield (
+            "ok",
+            {
+                "done": True,
+                "sources": [
+                    {"label": "doc", "source": "example.com", "url": "https://example.com"}
+                ],
+                "pipeline": None,
+            },
+        )
+
     monkeypatch.setattr(
-        "src.app.routes.chat.process_chat_message",
-        lambda **kwargs: {
-            "response": "ok",
-            "sources": [{"label": "doc", "source": "example.com", "url": "https://example.com"}],
-            "pipeline": None,
-        },
+        "src.app.routes.chat.stream_chat_message",
+        mock_stream_chat_message,
     )
     client = _build_client(monkeypatch, tmp_path, rate_limit=2)
 
@@ -121,13 +134,21 @@ def test_evaluation_ablation_returns_consistent_error(monkeypatch, tmp_path: Pat
 
 
 def test_anonymous_chat_rate_limit_scoped_by_browser_cookie(monkeypatch, tmp_path: Path):
+    async def mock_stream_chat_message(**kwargs):
+        yield (
+            "ok",
+            {
+                "done": True,
+                "sources": [
+                    {"label": "doc", "source": "example.com", "url": "https://example.com"}
+                ],
+                "pipeline": None,
+            },
+        )
+
     monkeypatch.setattr(
-        "src.app.routes.chat.process_chat_message",
-        lambda **kwargs: {
-            "response": "ok",
-            "sources": [{"label": "doc", "source": "example.com", "url": "https://example.com"}],
-            "pipeline": None,
-        },
+        "src.app.routes.chat.stream_chat_message",
+        mock_stream_chat_message,
     )
     client = _build_client(
         monkeypatch,
@@ -152,13 +173,21 @@ def test_anonymous_chat_rate_limit_scoped_by_browser_cookie(monkeypatch, tmp_pat
 
 
 def test_anonymous_chat_uses_forwarded_ip_when_proxy_headers_enabled(monkeypatch, tmp_path: Path):
+    async def mock_stream_chat_message(**kwargs):
+        yield (
+            "ok",
+            {
+                "done": True,
+                "sources": [
+                    {"label": "doc", "source": "example.com", "url": "https://example.com"}
+                ],
+                "pipeline": None,
+            },
+        )
+
     monkeypatch.setattr(
-        "src.app.routes.chat.process_chat_message",
-        lambda **kwargs: {
-            "response": "ok",
-            "sources": [{"label": "doc", "source": "example.com", "url": "https://example.com"}],
-            "pipeline": None,
-        },
+        "src.app.routes.chat.stream_chat_message",
+        mock_stream_chat_message,
     )
     client = _build_client(
         monkeypatch,
@@ -191,13 +220,21 @@ def test_anonymous_chat_uses_forwarded_ip_when_proxy_headers_enabled(monkeypatch
 
 
 def test_anonymous_chat_limit_still_applies_when_global_limit_disabled(monkeypatch, tmp_path: Path):
+    async def mock_stream_chat_message(**kwargs):
+        yield (
+            "ok",
+            {
+                "done": True,
+                "sources": [
+                    {"label": "doc", "source": "example.com", "url": "https://example.com"}
+                ],
+                "pipeline": None,
+            },
+        )
+
     monkeypatch.setattr(
-        "src.app.routes.chat.process_chat_message",
-        lambda **kwargs: {
-            "response": "ok",
-            "sources": [{"label": "doc", "source": "example.com", "url": "https://example.com"}],
-            "pipeline": None,
-        },
+        "src.app.routes.chat.stream_chat_message",
+        mock_stream_chat_message,
     )
     client = _build_client(
         monkeypatch,
@@ -215,13 +252,19 @@ def test_anonymous_chat_limit_still_applies_when_global_limit_disabled(monkeypat
 
 
 def test_chat_history_isolated_by_server_session_cookie(monkeypatch, tmp_path: Path):
+    async def mock_stream_chat_message(**kwargs):
+        yield (
+            f"ok:{kwargs['session_id']}",
+            {
+                "done": True,
+                "sources": [],
+                "pipeline": None,
+            },
+        )
+
     monkeypatch.setattr(
-        "src.app.routes.chat.process_chat_message",
-        lambda **kwargs: {
-            "response": f"ok:{kwargs['session_id']}",
-            "sources": [],
-            "pipeline": None,
-        },
+        "src.app.routes.chat.stream_chat_message",
+        mock_stream_chat_message,
     )
     client_a = _build_client(monkeypatch, tmp_path, api_keys=None, rate_limit=50)
     client_b = TestClient(client_a.app)
@@ -234,7 +277,9 @@ def test_chat_history_isolated_by_server_session_cookie(monkeypatch, tmp_path: P
     assert first.cookies.get("chat_session_id")
     assert second.cookies.get("chat_session_id")
     assert first.cookies.get("chat_session_id") != second.cookies.get("chat_session_id")
-    assert first.json()["response"] != second.json()["response"]
+    first_events = _parse_sse_events(first)
+    second_events = _parse_sse_events(second)
+    assert first_events[0]["content"] != second_events[0]["content"]
 
 
 def test_clear_history_rotates_chat_session_cookie(monkeypatch, tmp_path: Path):

@@ -19,11 +19,11 @@ import json
 import logging
 
 from fastapi import APIRouter, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from src.app.logging import log_event
 from src.app.schemas import ChatRequest
-from src.app.session import get_chat_session_id
+from src.app.session import ensure_chat_session, get_chat_session_id
 from src.config import settings
 from src.usecases.chat import stream_chat_message
 
@@ -38,7 +38,9 @@ async def chat_stream_generator(
     include_pipeline: bool,
 ):
     try:
-        session_id = get_chat_session_id(request) or "default"
+        session_id = (
+            getattr(request.state, "chat_session_id") or get_chat_session_id(request) or "default"
+        )
         llm_client = getattr(request.app.state, "llm_client", None)
         history_store = request.app.state.chat_history_store
 
@@ -55,16 +57,31 @@ async def chat_stream_generator(
                 yield f"data: {event}\n\n"
 
             if metadata.get("done"):
-                event = json.dumps(
-                    {
-                        "content": "",
-                        "done": True,
-                        "sources": metadata.get("sources", []),
-                        "pipeline": metadata.get("pipeline"),
-                        "error": metadata.get("error"),
-                    }
-                )
-                yield f"data: {event}\n\n"
+                sources_data = metadata.get("sources", [])
+                if sources_data and hasattr(sources_data[0], "model_dump"):
+                    sources_data = [
+                        s.model_dump() if hasattr(s, "model_dump") else s for s in sources_data
+                    ]
+                pipeline_data = metadata.get("pipeline")
+                if pipeline_data is not None and hasattr(pipeline_data, "model_dump"):
+                    pipeline_data = pipeline_data.model_dump()
+                try:
+                    event = json.dumps(
+                        {
+                            "content": "",
+                            "done": True,
+                            "sources": sources_data,
+                            "pipeline": pipeline_data,
+                            "error": metadata.get("error"),
+                        }
+                    )
+                    yield f"data: {event}\n\n"
+                except Exception as e:
+                    logger.error("Failed to serialize SSE event: %s", e)
+                    error_event = json.dumps(
+                        {"content": "", "done": True, "error": "Serialization error"}
+                    )
+                    yield f"data: {error_event}\n\n"
 
     except Exception:
         log_event(
@@ -94,7 +111,12 @@ async def chat(
         description="Include detailed pipeline trace with timing information for debugging",
     ),
 ):
+    response = Response()
+    ensure_chat_session(request, response)
+    headers = {k: v for k, v in dict(response.headers).items() if k.lower() != "content-length"}
+
     return StreamingResponse(
         chat_stream_generator(request, payload, include_pipeline),
         media_type="text/event-stream",
+        headers=headers,
     )
