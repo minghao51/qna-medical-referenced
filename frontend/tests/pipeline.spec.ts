@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 
 const API_URL = process.env.API_URL || 'http://localhost:8000';
 const assistantMessage = 'LDL cholesterol is often called "bad" cholesterol because elevated levels increase cardiovascular risk.';
@@ -59,6 +59,15 @@ const mockPipeline = {
 	total_time_ms: 540
 };
 
+async function isBackendAvailable(request: APIRequestContext): Promise<boolean> {
+	try {
+		const response = await request.get(`${API_URL}/health`, { timeout: 3000 });
+		return response.ok();
+	} catch {
+		return false;
+	}
+}
+
 async function mockChatResponse(page: Page, includePipeline = true) {
 	const sseBody = [
 		`data: ${JSON.stringify({ content: assistantMessage, done: false })}\n\n`,
@@ -105,8 +114,10 @@ test.describe('Pipeline Visualization', () => {
 	test('can toggle pipeline details on', async ({ page }) => {
 		const checkbox = page.locator('.pipeline-toggle input[type="checkbox"]');
 
-		await expect(checkbox).not.toBeChecked();
+		await expect(checkbox).toBeChecked();
 
+		await checkbox.uncheck();
+		await expect(checkbox).not.toBeChecked();
 		await checkbox.check();
 		await expect(checkbox).toBeChecked();
 	});
@@ -329,16 +340,16 @@ test.describe('Sources Display', () => {
 		await sendMessage(page, 'What is LDL cholesterol?');
 		await expectAssistantResponse(page);
 
-		const sources = page.locator('.sources');
+		const sources = page.locator('.sources-panel');
 		await expect(sources).toBeVisible();
-		await expect(sources).toContainText('Sources:');
-		await expect(page.locator('.sources-list .source-item')).toHaveCount(2);
-		await expect(page.locator('.sources-list .source-item').first()).toContainText('1.');
+		await expect(sources).toContainText('Sources');
+		await expect(page.locator('.sources-list .source-card')).toHaveCount(2);
+		await expect(page.locator('.sources-list .source-card').first()).toContainText('1.');
 		await expect(page.locator('.sources-list .source-link').first()).toHaveAttribute(
 			'href',
 			'https://www.moh.gov.sg/resources-statistics/reports/lipids-guidance'
 		);
-		await expect(page.locator('.sources-list .source-item').first()).toContainText('Official');
+		await expect(page.locator('.sources-list .source-card').first()).toContainText('Official');
 	});
 
 	test('legacy string sources still render during rollout', async ({ page }) => {
@@ -358,7 +369,7 @@ test.describe('Sources Display', () => {
 
 		await sendMessage(page, 'What is LDL cholesterol?');
 		await expectAssistantResponse(page);
-		await expect(page.locator('.sources-list .source-item')).toHaveCount(2);
+		await expect(page.locator('.sources-list .source-card')).toHaveCount(2);
 		await expect(page.locator('.sources-list')).toContainText('plain source title');
 	});
 });
@@ -367,6 +378,7 @@ test.describe('API Integration', () => {
 	test.setTimeout(60000);
 
 	test('backend health endpoint responds', async ({ request }) => {
+		test.skip(!(await isBackendAvailable(request)), 'requires a live backend at API_URL');
 		const response = await request.get(`${API_URL}/health`);
 		expect(response.status()).toBe(200);
 
@@ -375,6 +387,7 @@ test.describe('API Integration', () => {
 	});
 
 	test('backend root endpoint responds', async ({ request }) => {
+		test.skip(!(await isBackendAvailable(request)), 'requires a live backend at API_URL');
 		const response = await request.get(`${API_URL}/`);
 		expect(response.status()).toBe(200);
 
@@ -383,6 +396,7 @@ test.describe('API Integration', () => {
 	});
 
 	test('evaluation ablation endpoint returns expected shape', async ({ request }) => {
+		test.skip(!(await isBackendAvailable(request)), 'requires a live backend at API_URL');
 		const response = await request.get(`${API_URL}/evaluation/ablation`);
 		expect(response.status()).toBe(200);
 
@@ -404,6 +418,7 @@ test.describe('Chat with Pipeline Enabled', () => {
 	test.beforeAll(async ({ playwright }) => {
 		const request = await playwright.request.newContext();
 		try {
+			test.skip(!(await isBackendAvailable(request)), 'requires a live backend at API_URL');
 			const response = await request.post(`${API_URL}/chat?include_pipeline=true`, {
 				data: {
 					message: 'What is normal cholesterol?',

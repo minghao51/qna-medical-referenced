@@ -1,6 +1,101 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const API_URL = process.env.API_URL || 'http://localhost:8000';
+const evaluationFixture = {
+	run_dir: '20260320T101010.123456Z_baseline',
+	step_metrics: {
+		l1: {
+			aggregate: {
+				pairs_evaluated: 12,
+				markdown_empty_rate: 0.02,
+				retention_ratio_mean: 0.88,
+				content_density_mean: 0.74,
+				boilerplate_ratio_mean: 0.12,
+				heading_preservation_rate_mean: 0.91,
+				table_preservation_rate_mean: 0.66,
+				page_classification_distribution: {
+					article: 8,
+					'navigation-heavy': 2,
+					'index/listing': 2
+				}
+			},
+			records: [],
+			findings: []
+		},
+		l2: {
+			aggregate: {
+				pdf_file_count: 6,
+				page_extraction_coverage: 0.97,
+				empty_page_rate: 0.01,
+				extractor_fallback_rate: 0.11,
+				low_confidence_page_rate: 0.06,
+				ocr_required_rate: 0.03
+			},
+			records: [],
+			findings: []
+		},
+		l3: {
+			aggregate: {
+				document_count: 24,
+				chunk_count: 180,
+				duplicate_chunk_rate: 0.03,
+				boundary_cut_rate: 0.04,
+				observed_overlap_mean: 0.18,
+				table_row_split_violations: 0,
+				chunk_quality_histogram: {
+					high: 120,
+					medium: 50,
+					low: 10
+				},
+				section_integrity_rate: 0.93,
+				low_quality_chunk_exclusion_rate: 0.07
+			},
+			records: [],
+			findings: []
+		}
+	},
+	retrieval_metrics: {
+		query_count: 25,
+		hit_rate_at_k: 0.84,
+		precision_at_k: 0.63,
+		recall_at_k: 0.79,
+		mrr: 0.71,
+		ndcg_at_k: 0.76,
+		source_hit_rate: 0.8,
+		exact_chunk_hit_rate: 0.56,
+		evidence_hit_rate: 0.68,
+		latency_p50_ms: 120,
+		latency_p95_ms: 240,
+		hit_rate_at_k_high_conf: 0.89,
+		mrr_high_conf: 0.78,
+		dedup_hit_rate_at_k: 0.81,
+		dedup_precision_at_k: 0.66,
+		dedup_mrr: 0.69,
+		unique_source_hit_rate_at_k: 0.74,
+		unique_source_precision_at_k: 0.6,
+		duplicate_source_ratio_mean: 0.12,
+		duplicate_doc_ratio_mean: 0.08,
+		exact_chunk_hit_rate_high_conf: 0.61,
+		evidence_hit_rate_high_conf: 0.73,
+		topic_false_positive_rate: 0.09
+	}
+};
+
+async function mockEvaluationApi(page: Page) {
+	await page.route(`${API_URL}/evaluation/latest`, async (route) => {
+		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(evaluationFixture) });
+	});
+	await page.route(`${API_URL}/evaluation/history?*`, async (route) => {
+		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) });
+	});
+	await page.route(`${API_URL}/evaluation/ablation`, async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ ablation_runs: [], message: 'No ablation runs yet' })
+		});
+	});
+}
 
 async function proxyBrowserApiRequests(page: Page) {
 	if (API_URL === 'http://localhost:8000') return;
@@ -17,6 +112,7 @@ test.describe('Quality Metrics Dashboard', () => {
 
 	test.beforeEach(async ({ page }) => {
 		await proxyBrowserApiRequests(page);
+		await mockEvaluationApi(page);
 		await page.goto('/eval');
 		await page.waitForSelector('.eval-container', { timeout: 15000 });
 		await page.waitForSelector('.step-card, .retrieval-section', { timeout: 15000 });
