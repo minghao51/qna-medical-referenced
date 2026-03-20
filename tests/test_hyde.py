@@ -10,26 +10,26 @@ Tests cover:
 - Configuration and validation
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import Mock, patch
 
 from src.rag.hyde import (
-    generate_hypothetical_answer,
     expand_query_with_hyde,
     expand_query_with_hyde_async,
+    generate_hypothetical_answer,
     should_enable_hyde,
     validate_hyde_config,
 )
 from src.rag.runtime import (
-    retrieve_context_with_trace_async,
-    _expand_queries_async,
     _resolve_retrieval_config,
+    retrieve_context_with_trace_async,
 )
-
 
 # =============================================================================
 # HyDE Generation Tests
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_generate_hypothetical_answer_basic():
@@ -91,7 +91,7 @@ async def test_generate_hypothetical_answer_handles_llm_errors():
     query = "Test query"
 
     # Mock LLM to raise error
-    with patch.object(client, 'generate', side_effect=Exception("API Error")):
+    with patch.object(client, "generate", side_effect=Exception("API Error")):
         answer = await generate_hypothetical_answer(query, client, max_length=200)
 
         # Should return empty string on error
@@ -101,6 +101,7 @@ async def test_generate_hypothetical_answer_handles_llm_errors():
 # =============================================================================
 # Query Expansion Tests
 # =============================================================================
+
 
 def test_expand_query_with_hyde_disabled():
     """Test that expansion returns original query when HyDE is disabled."""
@@ -180,7 +181,7 @@ async def test_expand_query_with_hyde_async_handles_generation_failure():
     query = "Test query"
 
     # Mock LLM to fail
-    with patch.object(client, 'generate', side_effect=Exception("API Error")):
+    with patch.object(client, "generate", side_effect=Exception("API Error")):
         queries = await expand_query_with_hyde_async(
             query,
             client,
@@ -195,6 +196,7 @@ async def test_expand_query_with_hyde_async_handles_generation_failure():
 # =============================================================================
 # Configuration Tests
 # =============================================================================
+
 
 def test_should_enable_hyde_explicit_true():
     """Test that explicit True setting enables HyDE."""
@@ -246,6 +248,7 @@ def test_validate_hyde_config_clamps_max_length():
 # =============================================================================
 # Integration Tests
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_hyde_integration_with_retrieval():
@@ -304,10 +307,12 @@ async def test_hyde_backward_compatibility():
 @pytest.mark.asyncio
 async def test_runtime_config_with_hyde():
     """Test that runtime config properly handles HyDE settings."""
-    config = _resolve_retrieval_config({
-        "enable_hyde": True,
-        "hyde_max_length": 300,
-    })
+    config = _resolve_retrieval_config(
+        {
+            "enable_hyde": True,
+            "hyde_max_length": 300,
+        }
+    )
 
     assert config.enable_hyde is True
     assert config.hyde_max_length == 300
@@ -325,6 +330,7 @@ async def test_runtime_config_defaults_hyde_disabled():
 # =============================================================================
 # Edge Case Tests
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_hyde_with_special_characters():
@@ -373,7 +379,7 @@ async def test_hyde_with_duplicate_queries():
     query = "What is LDL?"
 
     # Mock to return same query as hypothetical
-    with patch.object(client, 'generate', return_value=query):
+    with patch.object(client, "generate", return_value=query):
         queries = await expand_query_with_hyde_async(
             query,
             client,
@@ -394,11 +400,13 @@ async def test_hyde_with_duplicate_queries():
 # Performance Tests
 # =============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_hyde_performance_impact():
     """Test that HyDE doesn't significantly impact performance."""
     import time
+
     from src.infra.llm.qwen_client import get_client
 
     client = get_client()
@@ -406,7 +414,7 @@ async def test_hyde_performance_impact():
 
     # Measure without HyDE
     start = time.time()
-    queries_without = await expand_query_with_hyde_async(
+    await expand_query_with_hyde_async(
         query,
         client,
         enable_hyde=False,
@@ -416,7 +424,7 @@ async def test_hyde_performance_impact():
 
     # Measure with HyDE
     start = time.time()
-    queries_with = await expand_query_with_hyde_async(
+    await expand_query_with_hyde_async(
         query,
         client,
         enable_hyde=True,

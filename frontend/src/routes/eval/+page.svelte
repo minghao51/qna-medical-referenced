@@ -7,6 +7,7 @@
 		EvaluationHistoryResponse,
 		EvaluationHistoryRun,
 		EvaluationResponse,
+		L6AnswerQualityMetrics,
 		RetrievalMetrics,
 		StepMetrics
 	} from '$lib/types';
@@ -32,16 +33,8 @@
 	let selectedTrendMetric = $state<'hit_rate' | 'mrr' | 'latency'>('hit_rate');
 	let experimentFilter = $state('');
 	let selectedRunKey = $state('');
+	let historyRunsExpanded = $state(false);
 	let urlStateReady = false;
-
-	// Comparison mode
-	let compareMode = $state(false);
-	let baselineRun = $state<string>('');
-	let compareRun = $state<string>('');
-	let comparisonData = $state<{ baseline: EvaluationResponse | null; comparison: EvaluationResponse | null }>({
-		baseline: null,
-		comparison: null
-	});
 
 	// Filtering
 	let searchQuery = $state('');
@@ -143,9 +136,6 @@
 		selectedStages = params.get('stages')?.split(',').filter(Boolean) || [...allStages];
 		selectedTrendMetric =
 			(params.get('metric') as 'hit_rate' | 'mrr' | 'latency' | null) || 'hit_rate';
-		compareMode = params.get('compare') === '1';
-		baselineRun = params.get('baseline') || '';
-		compareRun = params.get('candidate') || '';
 		selectedRunKey = params.get('run') || '';
 	}
 
@@ -159,9 +149,6 @@
 			params.set('stages', selectedStages.join(','));
 		}
 		if (selectedTrendMetric !== 'hit_rate') params.set('metric', selectedTrendMetric);
-		if (compareMode) params.set('compare', '1');
-		if (baselineRun) params.set('baseline', baselineRun);
-		if (compareRun) params.set('candidate', compareRun);
 		if (selectedRunKey) params.set('run', selectedRunKey);
 
 		const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
@@ -259,15 +246,6 @@
 		}
 	}
 
-	async function loadComparisonData() {
-		if (baselineRun) {
-			comparisonData.baseline = await loadRun(baselineRun);
-		}
-		if (compareRun) {
-			comparisonData.comparison = await loadRun(compareRun);
-		}
-	}
-
 	async function handleExportCSV() {
 		if (data) {
 			await exportToCSV(data);
@@ -282,13 +260,6 @@
 
 	async function handleExportCharts() {
 		await exportCharts();
-	}
-
-	function getMetricDelta(baseline: number, comparison: number): { value: number; positive: boolean | null } {
-		const delta = comparison - baseline;
-		if (delta > 0) return { value: delta, positive: true };
-		if (delta < 0) return { value: delta, positive: false };
-		return { value: 0, positive: null };
 	}
 
 	function historyLabel(run: EvaluationHistoryRun): string {
@@ -319,6 +290,115 @@
 		return typeof value === 'number' ? value : 0;
 	}
 
+	function l6MetricMean(
+		metrics: Partial<L6AnswerQualityMetrics> | undefined,
+		key: keyof Pick<
+			L6AnswerQualityMetrics,
+			| 'factual_accuracy'
+			| 'completeness'
+			| 'clinical_relevance'
+			| 'clarity'
+			| 'answer_relevancy'
+			| 'faithfulness'
+		>
+	): number | null {
+		const value = metrics?.[key];
+		return value && typeof value === 'object' && 'mean' in value && typeof value.mean === 'number'
+			? value.mean
+			: null;
+	}
+
+	function formatDecimal(value: number | null | undefined, digits = 2): string {
+		return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : 'N/A';
+	}
+
+	function deltaClass(positive: boolean | null): string {
+		if (positive === true) return 'positive';
+		if (positive === false) return 'negative';
+		return '';
+	}
+
+	function hitRateDelta(latest: EvaluationHistoryRun, previous: EvaluationHistoryRun): { value: number; positive: boolean | null } {
+		const curr = latest.retrieval_metrics?.hit_rate_at_k ?? 0;
+		const prev = previous.retrieval_metrics?.hit_rate_at_k ?? 0;
+		const diff = (curr - prev) * 100;
+		return { value: diff, positive: diff > 0 ? true : diff < 0 ? false : null };
+	}
+
+	function mrrDelta(latest: EvaluationHistoryRun, previous: EvaluationHistoryRun): { value: number; positive: boolean | null } {
+		const curr = latest.retrieval_metrics?.mrr ?? 0;
+		const prev = previous.retrieval_metrics?.mrr ?? 0;
+		const diff = curr - prev;
+		return { value: diff, positive: diff > 0 ? true : diff < 0 ? false : null };
+	}
+
+	function latencyDelta(latest: EvaluationHistoryRun, previous: EvaluationHistoryRun): { value: number; positive: boolean | null } {
+		const curr = latest.retrieval_metrics?.latency_p50_ms ?? 0;
+		const prev = previous.retrieval_metrics?.latency_p50_ms ?? 0;
+		const diff = curr - prev;
+		return { value: diff, positive: diff < 0 ? true : diff > 0 ? false : null };
+	}
+
+	function thresholdDelta(latest: EvaluationHistoryRun | undefined, previous: EvaluationHistoryRun | undefined): number {
+		return ((latest?.failed_thresholds_count ?? 0) - (previous?.failed_thresholds_count ?? 0));
+	}
+
+	type DeltaEntry = { label: string; current: string; delta: string; positive: boolean | null };
+
+	function computeDeltas(latest: EvaluationHistoryRun, previous: EvaluationHistoryRun): DeltaEntry[] {
+		const entries: DeltaEntry[] = [];
+		const hrDelta = hitRateDelta(latest, previous);
+		entries.push({
+			label: 'Hit Rate @k',
+			current: `${(retrievalMetric(latest, 'hit_rate_at_k') * 100).toFixed(1)}%`,
+			delta: formatDelta(hrDelta.value, 1, ' pts'),
+			positive: hrDelta.positive
+		});
+		const mDelta = mrrDelta(latest, previous);
+		entries.push({
+			label: 'MRR',
+			current: retrievalMetric(latest, 'mrr').toFixed(3),
+			delta: formatDelta(mDelta.value, 3),
+			positive: mDelta.positive
+		});
+		const lDelta = latencyDelta(latest, previous);
+		entries.push({
+			label: 'Latency p50',
+			current: `${retrievalMetric(latest, 'latency_p50_ms').toFixed(0)}ms`,
+			delta: formatDelta(lDelta.value, 0, 'ms'),
+			positive: lDelta.positive
+		});
+		entries.push({
+			label: 'Failed Thresholds',
+			current: String(latest.failed_thresholds_count || 0),
+			delta: formatDelta(thresholdDelta(latest, previous), 0),
+			positive: thresholdDelta(latest, previous) < 0 ? true : thresholdDelta(latest, previous) > 0 ? false : null
+		});
+		const l6Curr = l6MetricMean(latest.l6_answer_quality_metrics, 'answer_relevancy');
+		const l6Prev = l6MetricMean(previous.l6_answer_quality_metrics, 'answer_relevancy');
+		if (l6Curr !== null || l6Prev !== null) {
+			const diff = (l6Curr ?? 0) - (l6Prev ?? 0);
+			entries.push({
+				label: 'DeepEval Relevancy',
+				current: formatDecimal(l6Curr),
+				delta: formatDelta(diff, 2),
+				positive: diff > 0 ? true : diff < 0 ? false : null
+			});
+		}
+		if (latest.retrieval_metrics?.hyde_enabled || previous.retrieval_metrics?.hyde_enabled) {
+			const hydeCurr = latest.retrieval_metrics?.hyde_hit_rate ?? 0;
+			const hydePrev = previous.retrieval_metrics?.hyde_hit_rate ?? 0;
+			const hydeDiff = (hydeCurr - hydePrev) * 100;
+			entries.push({
+				label: 'HyDE Hit Rate',
+				current: hydeCurr > 0 ? formatPercent(hydeCurr) : 'N/A',
+				delta: formatDelta(hydeDiff, 1, ' pts'),
+				positive: hydeDiff > 0 ? true : hydeDiff < 0 ? false : null
+			});
+		}
+		return entries;
+	}
+
 	function filteredHistoryRuns(): EvaluationHistoryRun[] {
 		const runs = historyData?.runs || [];
 		return runs.filter((run) => {
@@ -334,6 +414,21 @@
 				.toLowerCase();
 			return haystack.includes(experimentFilter.trim().toLowerCase());
 		});
+	}
+
+	function runMetricLabels(run: EvaluationHistoryRun): string[] {
+		const labels: string[] = [];
+		labels.push(`Hit ${((run.retrieval_metrics?.hit_rate_at_k || 0) * 100).toFixed(1)}%`);
+		labels.push(`MRR ${(run.retrieval_metrics?.mrr || 0).toFixed(3)}`);
+		labels.push(`p50 ${(run.retrieval_metrics?.latency_p50_ms || 0).toFixed(0)}ms`);
+		if (run.retrieval_metrics?.hyde_enabled) {
+			labels.push(`HyDE ${run.retrieval_metrics?.hyde_hit_rate !== undefined && run.retrieval_metrics?.hyde_hit_rate !== null ? formatPercent(run.retrieval_metrics.hyde_hit_rate) : 'on'}`);
+		}
+		const l6Rel = l6MetricMean(run.l6_answer_quality_metrics, 'answer_relevancy');
+		if (l6Rel !== null) {
+			labels.push(`DeepEval ${formatDecimal(l6Rel)}`);
+		}
+		return labels;
 	}
 
 	$effect(() => {
@@ -388,9 +483,6 @@
 			const selected = await loadRun(selectedRunKey);
 			if (selected) data = selected;
 		}
-		if (compareMode && (baselineRun || compareRun)) {
-			await loadComparisonData();
-		}
 		urlStateReady = true;
 	});
 </script>
@@ -400,14 +492,14 @@
 		<a href="/" class="nav-link">Chat</a>
 		<a href="/eval" class="nav-link active">Pipeline Eval</a>
 		<a href="/docs/pipeline" class="nav-link">Pipeline Docs</a>
+		<a href="https://github.com/anomalyco/qna_medical_referenced" target="_blank" rel="noopener noreferrer" class="nav-github-link" aria-label="View on GitHub">
+			<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+				<path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+			</svg>
+		</a>
 	</nav>
 	<header>
 		<div class="header-left">
-			<a href="https://github.com/anomalyco/qna_medical_referenced" target="_blank" rel="noopener noreferrer" class="github-link" aria-label="View on GitHub">
-				<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-					<path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-				</svg>
-			</a>
 			<h1>Pipeline Quality Assessment</h1>
 			{#if data?.summary}
 				<span class="status-badge" style="background: {getStatusColor(data.summary.status)}">
@@ -421,9 +513,6 @@
 			<HealthScoreBadge score={healthScore} grade={healthGrade} />
 		{/if}
 		<div class="header-actions">
-			<button class="action-btn compare-btn" onclick={() => compareMode = !compareMode} class:active={compareMode}>
-				{compareMode ? 'Exit Compare' : 'Compare Runs'}
-			</button>
 			<button class="action-btn" onclick={handleExportCSV} disabled={!data}>Export CSV</button>
 			<button class="action-btn" onclick={handleExportJSON} disabled={!data}>Export JSON</button>
 			<button class="action-btn" onclick={handleExportCharts} disabled={!data}>Export Charts</button>
@@ -442,33 +531,6 @@
 			</div>
 			<div class="charts-grid">
 				<LoadingSkeleton count={2} type="card" height="200px" />
-			</div>
-		</section>
-	{/if}
-
-	<!-- Comparison Controls -->
-	{#if compareMode && historyData?.runs}
-		<section class="comparison-controls-section">
-			<h3>Compare Runs</h3>
-			<div class="comparison-controls">
-				<div class="control-group">
-					<label for="baseline-run">Baseline Run:</label>
-					<select id="baseline-run" bind:value={baselineRun} onchange={loadComparisonData}>
-						<option value="">Select baseline...</option>
-						{#each filteredHistoryRuns() as run}
-							<option value={selectionKey(run)}>{historyLabel(run)} [{run.source}]</option>
-						{/each}
-					</select>
-				</div>
-				<div class="control-group">
-					<label for="comparison-run">Comparison Run:</label>
-					<select id="comparison-run" bind:value={compareRun} onchange={loadComparisonData}>
-						<option value="">Select comparison...</option>
-						{#each filteredHistoryRuns() as run}
-							<option value={selectionKey(run)}>{historyLabel(run)} [{run.source}]</option>
-						{/each}
-					</select>
-				</div>
 			</div>
 		</section>
 	{/if}
@@ -536,9 +598,44 @@
 					</span>
 				</div>
 			</div>
+			{#if data}
+				<section class="selected-run-strip">
+					<div>
+						<h3>Selected Run Signals</h3>
+						<p>{selectedRunLabel()} · {data.run_dir}</p>
+					</div>
+					<div class="selected-run-strip-grid">
+						<div class="mini-signal-card">
+							<span class="mini-signal-label">Hit Rate @k</span>
+							<strong>{formatPercent(data.retrieval_metrics?.hit_rate_at_k || 0)}</strong>
+						</div>
+						<div class="mini-signal-card">
+							<span class="mini-signal-label">MRR</span>
+							<strong>{formatDecimal(data.retrieval_metrics?.mrr, 3)}</strong>
+						</div>
+						<div class="mini-signal-card">
+							<span class="mini-signal-label">HyDE Hit Rate</span>
+							<strong>
+								{data.retrieval_metrics?.hyde_enabled && data.retrieval_metrics?.hyde_hit_rate !== undefined && data.retrieval_metrics?.hyde_hit_rate !== null
+									? formatPercent(data.retrieval_metrics.hyde_hit_rate)
+									: 'Not enabled'}
+							</strong>
+						</div>
+						<div class="mini-signal-card">
+							<span class="mini-signal-label">DeepEval Relevancy</span>
+							<strong>{formatDecimal(l6MetricMean(data.summary?.l6_answer_quality_metrics, 'answer_relevancy'))}</strong>
+						</div>
+						<div class="mini-signal-card">
+							<span class="mini-signal-label">DeepEval Faithfulness</span>
+							<strong>{formatDecimal(l6MetricMean(data.summary?.l6_answer_quality_metrics, 'faithfulness'))}</strong>
+						</div>
+					</div>
+				</section>
+			{/if}
 			{#if filteredHistoryRuns().length >= 2}
 				{@const latestRun = filteredHistoryRuns()[0]}
 				{@const previousRun = filteredHistoryRuns()[1]}
+				{@const deltas = computeDeltas(latestRun, previousRun)}
 				<section class="delta-strip">
 					<div class="delta-strip-header">
 						<div>
@@ -552,46 +649,15 @@
 						</button>
 					</div>
 					<div class="delta-grid">
-						<div class="delta-card">
-							<span class="delta-label">Hit Rate @k</span>
-							<strong>{(retrievalMetric(latestRun, 'hit_rate_at_k') * 100).toFixed(1)}%</strong>
-							<span
-								class:positive={(retrievalMetric(latestRun, 'hit_rate_at_k') - retrievalMetric(previousRun, 'hit_rate_at_k')) * 100 > 0}
-								class:negative={(retrievalMetric(latestRun, 'hit_rate_at_k') - retrievalMetric(previousRun, 'hit_rate_at_k')) * 100 < 0}
-							>
-								{formatDelta((retrievalMetric(latestRun, 'hit_rate_at_k') - retrievalMetric(previousRun, 'hit_rate_at_k')) * 100, 1, ' pts')}
-							</span>
-						</div>
-						<div class="delta-card">
-							<span class="delta-label">MRR</span>
-							<strong>{retrievalMetric(latestRun, 'mrr').toFixed(3)}</strong>
-							<span
-								class:positive={retrievalMetric(latestRun, 'mrr') - retrievalMetric(previousRun, 'mrr') > 0}
-								class:negative={retrievalMetric(latestRun, 'mrr') - retrievalMetric(previousRun, 'mrr') < 0}
-							>
-								{formatDelta(retrievalMetric(latestRun, 'mrr') - retrievalMetric(previousRun, 'mrr'), 3)}
-							</span>
-						</div>
-						<div class="delta-card">
-							<span class="delta-label">Latency p50</span>
-							<strong>{retrievalMetric(latestRun, 'latency_p50_ms').toFixed(0)}ms</strong>
-							<span
-								class:positive={retrievalMetric(latestRun, 'latency_p50_ms') - retrievalMetric(previousRun, 'latency_p50_ms') < 0}
-								class:negative={retrievalMetric(latestRun, 'latency_p50_ms') - retrievalMetric(previousRun, 'latency_p50_ms') > 0}
-							>
-								{formatDelta(retrievalMetric(latestRun, 'latency_p50_ms') - retrievalMetric(previousRun, 'latency_p50_ms'), 0, 'ms')}
-							</span>
-						</div>
-						<div class="delta-card">
-							<span class="delta-label">Failed Thresholds</span>
-							<strong>{latestRun.failed_thresholds_count || 0}</strong>
-							<span
-								class:positive={(latestRun.failed_thresholds_count || 0) - (previousRun.failed_thresholds_count || 0) < 0}
-								class:negative={(latestRun.failed_thresholds_count || 0) - (previousRun.failed_thresholds_count || 0) > 0}
-							>
-								{formatDelta((latestRun.failed_thresholds_count || 0) - (previousRun.failed_thresholds_count || 0), 0)}
-							</span>
-						</div>
+						{#each deltas as entry}
+							<div class="delta-card">
+								<span class="delta-label">{entry.label}</span>
+								<strong>{entry.current}</strong>
+								<span class:positive={entry.positive === true} class:negative={entry.positive === false}>
+									{entry.delta}
+								</span>
+							</div>
+						{/each}
 					</div>
 				</section>
 			{/if}
@@ -665,141 +731,57 @@
 					</div>
 				{/if}
 			</div>
-			<div class="history-run-list">
-				{#each filteredHistoryRuns() as run}
-					<div
-						class="history-run-card"
-						class:selected={isSelectedRun(run)}
-						role="button"
-						tabindex="0"
-						onclick={() => selectRun(selectionKey(run))}
-						onkeydown={(event) => {
-							if (event.key === 'Enter' || event.key === ' ') {
-								event.preventDefault();
-								selectRun(selectionKey(run));
-							}
-						}}
-					>
-							<div class="history-run-meta">
-								<div class="history-run-title">
-									<strong>{historyLabel(run)}</strong>
-								</div>
-							<span class="history-run-subtitle">
-								{formatRunTimestampWithZone(run)} · {run.run_dir}
-							</span>
-							</div>
-						<div class="history-run-metrics">
-							<span>Hit {((run.retrieval_metrics?.hit_rate_at_k || 0) * 100).toFixed(1)}%</span>
-							<span>MRR {(run.retrieval_metrics?.mrr || 0).toFixed(3)}</span>
-							<span>p50 {(run.retrieval_metrics?.latency_p50_ms || 0).toFixed(0)}ms</span>
-						</div>
-						<div class="history-run-tags">
-							{#if run.variant_name}<span class="history-tag">variant: {run.variant_name}</span>{/if}
-							{#if run.index_config_hash}<span class="history-tag">index: {run.index_config_hash.slice(0, 8)}</span>{/if}
-							{#if run.wandb_url}
-								<a class="history-link" href={run.wandb_url} target="_blank" rel="noreferrer" onclick={(event) => event.stopPropagation()}>Open W&amp;B</a>
-							{/if}
-						</div>
-					</div>
-				{/each}
+			<div class="history-run-toggle-row">
+				<p class="history-run-toggle-copy">
+					Recent runs are collapsed by default so the trend charts stay in view.
+				</p>
+				<button class="action-btn secondary-btn" onclick={() => (historyRunsExpanded = !historyRunsExpanded)}>
+					{historyRunsExpanded ? 'Hide run list' : `Show ${filteredHistoryRuns().length} runs`}
+				</button>
 			</div>
-		</section>
-	{/if}
-
-	<!-- Comparison View -->
-	{#if compareMode && comparisonData.baseline && comparisonData.comparison}
-		<section class="comparison-view">
-			<h2>Run Comparison</h2>
-			<div class="comparison-grid">
-				<div class="comparison-col">
-					<h3>Baseline</h3>
-					<p class="run-id">{comparisonData.baseline.run_dir}</p>
-					{#if comparisonData.baseline.wandb_url}
-						<p class="run-link-row">
-							<a href={comparisonData.baseline.wandb_url} target="_blank" rel="noreferrer">Open W&amp;B run</a>
-						</p>
-					{/if}
-					{#if comparisonData.baseline.retrieval_metrics}
-						<div class="metrics-grid compact">
-							<div class="metric-card">
-								<span class="metric-label">Hit Rate</span>
-								<span class="metric-value">{formatPercent(comparisonData.baseline.retrieval_metrics.hit_rate_at_k)}</span>
+			{#if historyRunsExpanded}
+				<div class="history-run-list">
+					{#each filteredHistoryRuns() as run}
+						<div
+							class="history-run-card"
+							class:selected={isSelectedRun(run)}
+							role="button"
+							tabindex="0"
+							onclick={() => selectRun(selectionKey(run))}
+							onkeydown={(event) => {
+								if (event.key === 'Enter' || event.key === ' ') {
+									event.preventDefault();
+									selectRun(selectionKey(run));
+								}
+							}}
+						>
+								<div class="history-run-meta">
+									<div class="history-run-title">
+										<strong>{historyLabel(run)}</strong>
+										{#if isSelectedRun(run)}
+											<span class="history-tag selected-tag">Selected</span>
+										{/if}
+									</div>
+								<span class="history-run-subtitle">
+									{formatRunTimestampWithZone(run)} · {run.run_dir}
+								</span>
+								</div>
+							<div class="history-run-metrics">
+								{#each runMetricLabels(run) as label}
+									<span>{label}</span>
+								{/each}
 							</div>
-							<div class="metric-card">
-								<Tooltip text={metricDefinitions['mrr']}><span class="metric-label">MRR</span></Tooltip>
-								<span class="metric-value">{comparisonData.baseline.retrieval_metrics.mrr.toFixed(3)}</span>
-							</div>
-							<div class="metric-card">
-								<Tooltip text={metricDefinitions['latency_p50_ms']}><span class="metric-label">Latency p50</span></Tooltip>
-								<span class="metric-value">{comparisonData.baseline.retrieval_metrics.latency_p50_ms.toFixed(0)}ms</span>
+							<div class="history-run-tags">
+								{#if run.variant_name}<span class="history-tag">variant: {run.variant_name}</span>{/if}
+								{#if run.index_config_hash}<span class="history-tag">index: {run.index_config_hash.slice(0, 8)}</span>{/if}
+								{#if run.wandb_url}
+									<a class="history-link" href={run.wandb_url} target="_blank" rel="noreferrer" onclick={(event) => event.stopPropagation()}>Open W&amp;B</a>
+								{/if}
 							</div>
 						</div>
-					{/if}
+					{/each}
 				</div>
-				<div class="comparison-col">
-					<h3>Comparison</h3>
-					<p class="run-id">{comparisonData.comparison.run_dir}</p>
-					{#if comparisonData.comparison.wandb_url}
-						<p class="run-link-row">
-							<a href={comparisonData.comparison.wandb_url} target="_blank" rel="noreferrer">Open W&amp;B run</a>
-						</p>
-					{/if}
-					{#if comparisonData.comparison.retrieval_metrics}
-						<div class="metrics-grid compact">
-							<div class="metric-card">
-								<span class="metric-label">Hit Rate</span>
-								<span class="metric-value">{formatPercent(comparisonData.comparison.retrieval_metrics.hit_rate_at_k)}</span>
-							</div>
-							<div class="metric-card">
-								<Tooltip text={metricDefinitions['mrr']}><span class="metric-label">MRR</span></Tooltip>
-								<span class="metric-value">{comparisonData.comparison.retrieval_metrics.mrr.toFixed(3)}</span>
-							</div>
-							<div class="metric-card">
-								<Tooltip text={metricDefinitions['latency_p50_ms']}><span class="metric-label">Latency p50</span></Tooltip>
-								<span class="metric-value">{comparisonData.comparison.retrieval_metrics.latency_p50_ms.toFixed(0)}ms</span>
-							</div>
-						</div>
-					{/if}
-				</div>
-					<div class="comparison-col">
-						<h3>Delta</h3>
-						<p class="run-id">Change</p>
-						{#if comparisonData.baseline.retrieval_metrics && comparisonData.comparison.retrieval_metrics}
-							{@const hitRateDelta = getMetricDelta(
-								comparisonData.baseline.retrieval_metrics.hit_rate_at_k,
-								comparisonData.comparison.retrieval_metrics.hit_rate_at_k
-							)}
-							{@const mrrDelta = getMetricDelta(
-								comparisonData.baseline.retrieval_metrics.mrr,
-								comparisonData.comparison.retrieval_metrics.mrr
-							)}
-							{@const latencyDelta = getMetricDelta(
-								comparisonData.baseline.retrieval_metrics.latency_p50_ms,
-								comparisonData.comparison.retrieval_metrics.latency_p50_ms
-							)}
-							<div class="metrics-grid compact">
-								<div class="metric-card">
-									<span class="metric-label">Hit Rate</span>
-									<span class="metric-value delta" class:positive={hitRateDelta.positive === true} class:negative={hitRateDelta.positive === false}>
-										{hitRateDelta.positive === true ? '+' : ''}{(hitRateDelta.value * 100).toFixed(1)}%
-									</span>
-								</div>
-								<div class="metric-card">
-									<Tooltip text={metricDefinitions['mrr']}><span class="metric-label">MRR</span></Tooltip>
-									<span class="metric-value delta" class:positive={mrrDelta.positive === true} class:negative={mrrDelta.positive === false}>
-										{mrrDelta.positive === true ? '+' : ''}{mrrDelta.value.toFixed(3)}
-									</span>
-								</div>
-								<div class="metric-card">
-									<Tooltip text={metricDefinitions['latency_p50_ms']}><span class="metric-label">Latency p50</span></Tooltip>
-									<span class="metric-value delta" class:positive={latencyDelta.positive === false} class:negative={latencyDelta.positive === true}>
-										{latencyDelta.positive === true ? '+' : ''}{latencyDelta.value.toFixed(0)}ms
-									</span>
-								</div>
-						</div>
-					{/if}
-				</div>
-			</div>
+			{/if}
 		</section>
 	{/if}
 
@@ -1239,7 +1221,7 @@
 					{/if}
 					{#if rm.hyde_enabled}
 						<section class="retrieval-subsection">
-							<h3>HyDe Query Expansion</h3>
+							<h3>HyDE Query Expansion</h3>
 							<div class="metrics-grid">
 								<div class="metric-card">
 									<span class="metric-label">HyDe Queries</span>
@@ -1329,7 +1311,7 @@
 			{#if data.summary?.l6_answer_quality_metrics && data.summary.l6_answer_quality_metrics.status !== 'skipped'}
 				{@const l6 = data.summary.l6_answer_quality_metrics}
 				<section class="rag-section">
-					<h2>L6 Answer Quality</h2>
+					<h2>DeepEval Answer Quality</h2>
 					<div class="rag-stats">
 						<div class="metric-card">
 							<span class="metric-label">L6 Status</span>
@@ -1445,6 +1427,25 @@
 		color: #1976d2;
 	}
 
+	.nav-github-link {
+		margin-left: auto;
+		display: flex;
+		align-items: center;
+		padding: 0.5rem;
+		color: #666;
+		border-radius: 4px;
+	}
+
+	.nav-github-link:hover {
+		background: #f0f0f0;
+		color: #333;
+	}
+
+	.nav-github-link svg {
+		width: 20px;
+		height: 20px;
+	}
+
 	header {
 		display: flex;
 		justify-content: space-between;
@@ -1482,26 +1483,6 @@
 	.refresh-btn:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
-	}
-
-	.github-link {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 36px;
-		height: 36px;
-		color: #333;
-		border-radius: 6px;
-		transition: background 0.2s;
-	}
-
-	.github-link:hover {
-		background: #e0e0e0;
-	}
-
-	.github-link svg {
-		width: 22px;
-		height: 22px;
 	}
 
 	.status-badge {
@@ -1567,13 +1548,6 @@
 		border-color: #2196f3;
 	}
 
-	.compact-input input {
-		padding: 0.4rem 0.75rem;
-		border: 1px solid #ddd;
-		border-radius: 4px;
-		font-size: 0.9rem;
-	}
-
 	.history-summary {
 		display: flex;
 		gap: 2rem;
@@ -1623,6 +1597,51 @@
 		background: #fff4e5;
 		color: #8a5700;
 		font-size: 0.9rem;
+	}
+
+	.selected-run-strip {
+		margin-bottom: 1.5rem;
+		padding: 1rem;
+		border: 1px solid #d7e6ff;
+		border-radius: 10px;
+		background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+	}
+
+	.selected-run-strip h3 {
+		margin: 0 0 0.25rem;
+		font-size: 1rem;
+	}
+
+	.selected-run-strip p {
+		margin: 0 0 1rem;
+		font-size: 0.9rem;
+		color: #607086;
+	}
+
+	.selected-run-strip-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.mini-signal-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.85rem 1rem;
+		background: rgba(255, 255, 255, 0.92);
+		border-radius: 8px;
+		border: 1px solid rgba(62, 111, 190, 0.12);
+	}
+
+	.mini-signal-label {
+		font-size: 0.8rem;
+		color: #607086;
+	}
+
+	.mini-signal-card strong {
+		font-size: 1.05rem;
+		color: #1c2b39;
 	}
 
 	.delta-strip {
@@ -1694,6 +1713,21 @@
 		margin-top: 1.5rem;
 	}
 
+	.history-run-toggle-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 1.5rem;
+		flex-wrap: wrap;
+	}
+
+	.history-run-toggle-copy {
+		margin: 0;
+		color: #607086;
+		font-size: 0.92rem;
+	}
+
 	.history-run-card {
 		border: 1px solid #e6e6e6;
 		border-radius: 10px;
@@ -1760,6 +1794,11 @@
 		border-radius: 999px;
 		background: #eef2ff;
 		color: #3547a5;
+	}
+
+	.selected-tag {
+		background: #dbeafe;
+		color: #1d4ed8;
 	}
 
 	.history-link {
@@ -2184,12 +2223,6 @@
 		cursor: not-allowed;
 	}
 
-	.compare-btn.active {
-		background: #e3f2fd;
-		border-color: #2196f3;
-		color: #1976d2;
-	}
-
 	/* Filters Section */
 	.filters-section {
 		background: white;
@@ -2225,113 +2258,6 @@
 		box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
 	}
 
-	/* Comparison Controls */
-	.comparison-controls-section {
-		background: #e3f2fd;
-		border: 1px solid #bbdefb;
-		border-radius: 8px;
-		padding: 1rem 1.5rem;
-		margin-bottom: 1.5rem;
-	}
-
-	.comparison-controls-section h3 {
-		font-size: 1.1rem;
-		margin: 0 0 1rem 0;
-		color: #1976d2;
-	}
-
-	.comparison-controls {
-		display: flex;
-		gap: 2rem;
-		flex-wrap: wrap;
-	}
-
-	.control-group {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		min-width: 250px;
-	}
-
-	.control-group label {
-		font-size: 0.85rem;
-		color: #555;
-		font-weight: 500;
-	}
-
-	.control-group select {
-		padding: 0.5rem 0.75rem;
-		border: 1px solid #ddd;
-		border-radius: 4px;
-		font-size: 0.9rem;
-		background: white;
-	}
-
-	/* Comparison View */
-	.comparison-view {
-		background: white;
-		border: 1px solid #e0e0e0;
-		border-radius: 8px;
-		padding: 1.5rem;
-		margin-bottom: 2rem;
-	}
-
-	.comparison-view h2 {
-		font-size: 1.25rem;
-		margin-bottom: 1rem;
-		color: #333;
-	}
-
-	.comparison-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 1.5rem;
-	}
-
-	.comparison-col h3 {
-		font-size: 1rem;
-		margin-bottom: 0.5rem;
-		color: #555;
-	}
-
-	.run-id {
-		font-size: 0.8rem;
-		color: #999;
-		margin-bottom: 1rem;
-		font-family: monospace;
-	}
-
-	.run-link-row {
-		margin: -0.5rem 0 1rem;
-		font-size: 0.85rem;
-	}
-
-	.run-link-row a {
-		color: #0f62fe;
-		text-decoration: none;
-	}
-
-	.run-link-row a:hover {
-		text-decoration: underline;
-	}
-
-	.metrics-grid.compact {
-		grid-template-columns: 1fr;
-		gap: 0.5rem;
-	}
-
-	.metric-value.delta {
-		font-weight: 700;
-	}
-
-	.metric-value.delta.positive {
-		color: #4caf50;
-	}
-
-	.metric-value.delta.negative {
-		color: #f44336;
-	}
-
 	/* Responsive adjustments */
 	@media (max-width: 768px) {
 		.eval-container {
@@ -2364,10 +2290,6 @@
 		.filters-section {
 			flex-direction: column;
 			gap: 1rem;
-		}
-
-		.comparison-grid {
-			grid-template-columns: 1fr;
 		}
 
 		.steps-grid {

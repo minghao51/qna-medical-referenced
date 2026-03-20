@@ -230,6 +230,73 @@ Instructions:
             raise last_exception
         raise RuntimeError("Unexpected error in async retry logic")
 
+    async def a_generate_stream(self, prompt: str, context: str = ""):
+        """Stream response tokens from Qwen using async generator.
+
+        Yields each token as it arrives from the model.
+
+        Args:
+            prompt: User's question
+            context: Retrieved context
+
+        Yields:
+            str: Individual tokens from the model response
+        """
+        last_exception: Exception | None = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                stream = await self.async_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a medical information assistant that provides educational information about lab tests and health screening results.",
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""You are a helpful medical information assistant.
+Based on the following reference information, answer the user's question.
+
+Reference Information:
+{context}
+
+User Question: {prompt}
+
+Instructions:
+- Provide evidence-based information
+- Always recommend consulting with a healthcare provider
+- Include relevant reference ranges when applicable
+- Mention potential controversies or limitations of tests
+- Do not provide medical diagnoses
+""",
+                        },
+                    ],
+                    temperature=0.7,
+                    max_tokens=2048,
+                    stream=True,
+                )
+
+                async for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+                return
+            except Exception as e:
+                last_exception = e
+                if attempt < MAX_RETRIES - 1:
+                    delay = INITIAL_DELAY * (2**attempt)
+                    logger.warning(
+                        "Stream attempt %s failed: %s. Retrying in %ss...",
+                        attempt + 1,
+                        e,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("All %s stream attempts failed: %s", MAX_RETRIES, e)
+        if last_exception:
+            raise last_exception
+        raise RuntimeError("Unexpected error in stream retry logic")
+
 
 def get_client() -> QwenClient:
     """Factory function to create a QwenClient instance.

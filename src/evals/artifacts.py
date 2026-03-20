@@ -70,7 +70,9 @@ def _load_run_index(base_dir: Path) -> dict[str, Any]:
 def _write_run_index(base_dir: Path, payload: dict[str, Any]) -> Path:
     path = _run_index_path(base_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(to_serializable(payload), indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(
+        json.dumps(to_serializable(payload), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     return path
 
 

@@ -25,16 +25,16 @@ from pathlib import Path
 import pytest
 
 from src.config import settings
+from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 from src.ingestion.indexing.vector_store import get_vector_store, set_vector_store_runtime_config
 from src.ingestion.steps.chunk_text import chunk_documents
 from src.ingestion.steps.load_pdfs import get_documents
 from src.rag.runtime import initialize_runtime_index, retrieve_context_with_trace
-from src.evals.assessment.answer_eval import evaluate_answers_deepeval
-
 
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 @pytest.fixture(scope="session")
 def real_api_config():
@@ -42,7 +42,7 @@ def real_api_config():
     return {
         "dashscope_api_key": os.getenv("DASHSCOPE_API_KEY"),
         "wandb_project": os.getenv("WANDB_PROJECT"),
-        "enable_real_tests": os.getenv("ENABLE_REAL_API_TESTS") == "1"
+        "enable_real_tests": os.getenv("ENABLE_REAL_API_TESTS") == "1",
     }
 
 
@@ -63,6 +63,7 @@ def temp_vector_store():
         try:
             # Import and save original vector dir
             from src.ingestion.indexing import persistence
+
             original_vector_dir = persistence.VECTOR_DIR
             persistence.VECTOR_DIR = Path(tmpdir)
 
@@ -74,7 +75,7 @@ def temp_vector_store():
                 "boost_weight": 0.2,
                 "embedding_model": settings.embedding_model,
                 "embedding_batch_size": settings.embedding_batch_size,
-                "index_metadata": {"test": True}
+                "index_metadata": {"test": True},
             }
             set_vector_store_runtime_config(test_config)
 
@@ -108,6 +109,7 @@ def sample_manifest_path(real_api_config, skip_without_real_apis, tmp_path):
 # L0: Document Download Tests
 # =============================================================================
 
+
 @pytest.mark.e2e_real_apis
 @pytest.mark.slow
 async def test_l0_real_pdf_download(skip_without_real_apis):
@@ -119,7 +121,6 @@ async def test_l0_real_pdf_download(skip_without_real_apis):
     - File is not empty
     """
     from src.ingestion.steps.download_pdfs import download_pdf_if_not_exists
-    from src.config import DATA_RAW_DIR
 
     # Test URL from a known medical guideline
     test_url = "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/2019-ESC-EAS-Guidelines-for-the-management-of-dyslipidaemias"
@@ -130,7 +131,9 @@ async def test_l0_real_pdf_download(skip_without_real_apis):
     # Verify download succeeded or file already exists
     if result_path:
         assert result_path.exists(), "Downloaded file does not exist"
-        assert result_path.stat().st_size > 1000, f"Downloaded PDF is too small: {result_path.stat().st_size} bytes"
+        assert result_path.stat().st_size > 1000, (
+            f"Downloaded PDF is too small: {result_path.stat().st_size} bytes"
+        )
 
 
 # =============================================================================
@@ -141,6 +144,7 @@ async def test_l0_real_pdf_download(skip_without_real_apis):
 # =============================================================================
 # L3: Chunking Tests
 # =============================================================================
+
 
 @pytest.mark.e2e_real_apis
 def test_l3_real_document_chunking(temp_vector_store, skip_without_real_apis):
@@ -175,6 +179,7 @@ def test_l3_real_document_chunking(temp_vector_store, skip_without_real_apis):
 # L4-L5: Vector Store & Retrieval Tests
 # =============================================================================
 
+
 @pytest.mark.e2e_real_apis
 @pytest.mark.slow
 @pytest.mark.asyncio
@@ -202,9 +207,7 @@ async def test_l4_l5_vector_store_and_retrieval(temp_vector_store, skip_without_
     # Test semantic search
     medical_query = "What is the LDL cholesterol target for secondary prevention?"
     results = temp_vector_store.similarity_search(
-        medical_query,
-        top_k=5,
-        search_mode="semantic_only"
+        medical_query, top_k=5, search_mode="semantic_only"
     )
 
     # Verify search results
@@ -214,9 +217,7 @@ async def test_l4_l5_vector_store_and_retrieval(temp_vector_store, skip_without_
 
     # Test hybrid search
     hybrid_results = temp_vector_store.similarity_search(
-        medical_query,
-        top_k=5,
-        search_mode="rrf_hybrid"
+        medical_query, top_k=5, search_mode="rrf_hybrid"
     )
 
     assert len(hybrid_results) > 0, "No hybrid search results"
@@ -240,7 +241,9 @@ def test_l5_retrieval_with_runtime_api(skip_without_real_apis):
     init_result = initialize_runtime_index(rebuild=True)
 
     # Verify initialization
-    assert init_result["status"] in ["ready", "built"], f"Unexpected status: {init_result['status']}"
+    assert init_result["status"] in ["ready", "built"], (
+        f"Unexpected status: {init_result['status']}"
+    )
     assert init_result["vector_document_count"] > 0, "No documents in index"
 
     # Test retrieval with trace
@@ -268,6 +271,7 @@ def test_l5_retrieval_with_runtime_api(skip_without_real_apis):
 # L6: Answer Generation & Evaluation Tests
 # =============================================================================
 
+
 @pytest.mark.e2e_real_apis
 @pytest.mark.slow
 @pytest.mark.asyncio
@@ -280,8 +284,8 @@ async def test_l6_answer_generation_with_real_llm(skip_without_real_apis):
     - Sources are cited
     - Generation completes in reasonable time
     """
-    from src.rag.runtime import retrieve_context
     from src.infra.llm.qwen_client import get_client
+    from src.rag.runtime import retrieve_context
 
     # Retrieve context
     query = "What is the recommended LDL-C target for secondary prevention?"
@@ -293,8 +297,7 @@ async def test_l6_answer_generation_with_real_llm(skip_without_real_apis):
     # Generate answer
     client = get_client()
     answer = client.generate(
-        prompt=f"Answer this question based on the context: {query}",
-        context=context
+        prompt=f"Answer this question based on the context: {query}", context=context
     )
 
     # Verify answer
@@ -315,10 +318,7 @@ async def test_l6_deepeval_evaluation_with_real_apis(skip_without_real_apis):
     - Results are properly formatted
     """
     dataset = [
-        {
-            "query": "What is the LDL-C target for secondary prevention?",
-            "query_id": "e2e_test_001"
-        }
+        {"query": "What is the LDL-C target for secondary prevention?", "query_id": "e2e_test_001"}
     ]
 
     # Run evaluation
@@ -344,7 +344,7 @@ async def test_l6_deepeval_evaluation_with_real_apis(skip_without_real_apis):
         "clinical_relevance",
         "clarity",
         "answer_relevancy",
-        "faithfulness"
+        "faithfulness",
     ]
 
     for metric_name in expected_metrics:
@@ -368,6 +368,7 @@ async def test_l6_deepeval_evaluation_with_real_apis(skip_without_real_apis):
 # =============================================================================
 # End-to-End Pipeline Tests
 # =============================================================================
+
 
 @pytest.mark.e2e_real_apis
 @pytest.mark.slow
@@ -416,13 +417,12 @@ async def test_e2e_complete_pipeline(skip_without_real_apis, tmp_path):
     assert "metrics" in eval_results[0], "L6: No metrics computed"
 
     # Verify artifact persistence
-    from src.ingestion.artifacts import SourceArtifact, persist_source_artifact
 
     artifact = SourceArtifact(
         source_id="e2e_test",
         source_path="test",
         source_type="test",
-        metadata={"test": "e2e_complete_pipeline"}
+        metadata={"test": "e2e_complete_pipeline"},
     )
     artifact_path = persist_source_artifact(artifact)
     assert artifact_path.exists(), "Artifact not persisted"

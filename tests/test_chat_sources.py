@@ -142,7 +142,9 @@ def test_chat_route_with_pipeline_returns_structured_sources(monkeypatch, tmp_pa
     assert body["pipeline"]["context"]["sources"] == ["HealthHub page 2"]
 
 
-def test_history_routes_ignore_legacy_session_id_and_use_cookie_session(monkeypatch, tmp_path: Path):
+def test_history_routes_ignore_legacy_session_id_and_use_cookie_session(
+    monkeypatch, tmp_path: Path
+):
     client = _build_client(monkeypatch, tmp_path)
     store = client.app.state.chat_history_store
 

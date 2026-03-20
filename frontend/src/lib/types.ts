@@ -198,6 +198,7 @@ export interface EvaluationHistoryRun {
 	duration_s?: number;
 	failed_thresholds_count?: number;
 	retrieval_metrics?: Partial<RetrievalMetrics>;
+	l6_answer_quality_metrics?: Partial<L6AnswerQualityMetrics>;
 	source: 'local' | 'wandb' | string;
 	experiment_name?: string;
 	variant_name?: string;

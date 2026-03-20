@@ -53,7 +53,9 @@ class RetrievalDiversityConfig:
     mmr_lambda: float = _MMR_LAMBDA
     enable_diversification: bool = True
     search_mode: str = _RRF_SEARCH_MODE  # rrf_hybrid | semantic_only | bm25_only | legacy_hybrid
-    enable_hyde: bool = False  # HyDE query expansion (disabled by default for backward compatibility)
+    enable_hyde: bool = (
+        False  # HyDE query expansion (disabled by default for backward compatibility)
+    )
     hyde_max_length: int = 200  # Maximum length for HyDE hypothetical answers
 
 
@@ -177,7 +179,9 @@ async def _expand_queries_async(
         return deduped
 
     except Exception as e:
-        logger.error(f"HyDE expansion failed for query '{query}': {e}, falling back to base expansion")
+        logger.error(
+            f"HyDE expansion failed for query '{query}': {e}, falling back to base expansion"
+        )
         return base_queries
 
 

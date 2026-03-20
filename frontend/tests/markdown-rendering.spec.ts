@@ -33,15 +33,16 @@ async function mockChatApi(page: Page) {
 		});
 	});
 
-	await page.route('**/chat**', async (route) => {
+	const sseBody = [
+		`data: ${JSON.stringify({ content: markdownFixture, done: false })}\n\n`,
+		`data: ${JSON.stringify({ content: '', done: true, sources: [], pipeline: null })}\n\n`
+	].join('');
+
+	await page.route(/\/chat/, async (route) => {
 		await route.fulfill({
 			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				response: markdownFixture,
-				sources: [],
-				pipeline: null
-			})
+			contentType: 'text/event-stream',
+			body: sseBody
 		});
 	});
 }

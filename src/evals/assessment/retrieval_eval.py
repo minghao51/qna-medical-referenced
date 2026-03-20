@@ -217,7 +217,9 @@ def evaluate_retrieval(
             "exact_chunk_hit": exact_chunk_hit,
             "evidence_hit": evidence_hit,
             "topic_false_positive_rate": topic_false_positive_rate,
-            "hyde_enabled": bool(getattr(trace.retrieval, "score_weights", {}).get("hyde_enabled", False)),
+            "hyde_enabled": bool(
+                getattr(trace.retrieval, "score_weights", {}).get("hyde_enabled", False)
+            ),
         }
         if item.get("label_confidence") == "high":
             high_conf_hit_values.append(row_metrics["hit_rate_at_k"])
@@ -244,7 +246,9 @@ def evaluate_retrieval(
         query_embedding_latencies.append(
             float(getattr(trace.retrieval, "score_weights", {}).get("query_embedding_timing_ms", 0))
         )
-        hyde_enabled = bool(getattr(trace.retrieval, "score_weights", {}).get("hyde_enabled", False))
+        hyde_enabled = bool(
+            getattr(trace.retrieval, "score_weights", {}).get("hyde_enabled", False)
+        )
         if hyde_enabled:
             hyde_queries_count += 1
             hyde_hit_values.append(row_metrics["hit_rate_at_k"])

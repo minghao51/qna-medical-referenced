@@ -94,7 +94,9 @@ class FileChatHistoryStore:
                 normalized[session_id] = session
         return normalized
 
-    def _normalize_session(self, raw_session: Any, default_updated_at: int) -> dict[str, Any] | None:
+    def _normalize_session(
+        self, raw_session: Any, default_updated_at: int
+    ) -> dict[str, Any] | None:
         if isinstance(raw_session, list):
             messages = [message for message in raw_session if isinstance(message, dict)]
             updated_at = self._derive_updated_at(messages, default_updated_at)

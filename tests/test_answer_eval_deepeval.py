@@ -46,8 +46,12 @@ async def test_evaluate_answers_deepeval_basic():
         if score is not None:
             assert 0 <= score <= 1, f"{metric_name} score {score} not in range [0, 1]"
         else:
-            assert metric_data["status"] == "error", f"{metric_name} has None score but status is {metric_data['status']}"
-            assert metric_data.get("error") is not None, f"{metric_name} has None score but no error message"
+            assert metric_data["status"] == "error", (
+                f"{metric_name} has None score but status is {metric_data['status']}"
+            )
+            assert metric_data.get("error") is not None, (
+                f"{metric_name} has None score but no error message"
+            )
 
     # Check aggregate stats
     assert aggregate["query_count"] == 1

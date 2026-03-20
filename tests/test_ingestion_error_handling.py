@@ -10,37 +10,34 @@ Tests cover:
 - Invalid input validation
 """
 
-import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 import tempfile
+from pathlib import Path
+from unittest.mock import Mock, patch
 
+import pytest
+
+from src.ingestion.indexing.vector_store import VectorStore
 from src.ingestion.steps.chunk_text import chunk_documents
 from src.ingestion.steps.load_pdfs import get_documents
-from src.ingestion.indexing.vector_store import VectorStore
-
 
 # =============================================================================
 # Network Failure Tests
 # =============================================================================
 
+
 @pytest.mark.asyncio
 async def test_network_timeout_with_retry():
     """Test that network timeouts trigger retry logic."""
-    from src.ingestion.steps.download_pdfs import download_pdf
 
-    with patch('httpx.AsyncClient.get') as mock_get:
+    with patch("httpx.AsyncClient.get") as mock_get:
         # Mock timeout on first attempt, success on second
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.content = b"%PDF-1.4\n%test content"
-        mock_response.headers = {'content-type': 'application/pdf'}
+        mock_response.headers = {"content-type": "application/pdf"}
 
         # First call times out, second succeeds
-        mock_get.side_effect = [
-            Exception("Timeout"),
-            mock_response
-        ]
+        mock_get.side_effect = [Exception("Timeout"), mock_response]
 
         # Note: This test documents expected behavior - actual retry logic
         # may be implemented at a different level
@@ -52,12 +49,12 @@ async def test_partial_download_recovery():
     """Test that partial downloads are handled correctly."""
     from src.ingestion.steps.download_pdfs import download_pdf
 
-    with patch('httpx.AsyncClient.get') as mock_get:
+    with patch("httpx.AsyncClient.get") as mock_get:
         mock_response = Mock()
         mock_response.status_code = 200
         # Simulate partial content
         mock_response.content = b"%PDF-1.4\n%partial"
-        mock_response.headers = {'content-type': 'application/pdf'}
+        mock_response.headers = {"content-type": "application/pdf"}
         mock_response.raise_for_status = Mock()
 
         mock_get.return_value = mock_response
@@ -72,6 +69,7 @@ async def test_partial_download_recovery():
 # =============================================================================
 # Malformed Document Tests
 # =============================================================================
+
 
 def test_corrupted_pdf_handling():
     """Test that corrupted PDF files are handled gracefully."""
@@ -88,7 +86,7 @@ def test_corrupted_pdf_handling():
         with pytest.raises((PdfStreamError, Exception)):
             reader = PdfReader(str(corrupted_file))
             # If we get here without exception, verify we handle empty pages
-            pages = len(reader.pages)
+            _ = len(reader.pages)
 
 
 def test_empty_html_handling():
@@ -111,13 +109,7 @@ def test_empty_html_handling():
 
 def test_empty_markdown_handling():
     """Test that empty markdown files don't crash chunking."""
-    empty_docs = [
-        {
-            "content": "",
-            "source": "empty.md",
-            "id": "empty_1"
-        }
-    ]
+    empty_docs = [{"content": "", "source": "empty.md", "id": "empty_1"}]
 
     # Should handle empty content gracefully
     result = chunk_documents(empty_docs)
@@ -130,21 +122,15 @@ def test_empty_markdown_handling():
 # Empty Dataset Tests
 # =============================================================================
 
+
 def test_retrieval_with_empty_vector_store():
     """Test that retrieval with empty vector store doesn't crash."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory():
         # Create empty vector store
-        store = VectorStore(
-            collection_name="test_empty",
-            embedding_model="text-embedding-v4"
-        )
+        store = VectorStore(collection_name="test_empty", embedding_model="text-embedding-v4")
 
         # Try search with no documents
-        results = store.similarity_search(
-            "test query",
-            top_k=5,
-            search_mode="semantic_only"
-        )
+        results = store.similarity_search("test query", top_k=5, search_mode="semantic_only")
 
         # Should return empty list, not crash
         assert results == []
@@ -180,6 +166,7 @@ def test_evaluation_with_empty_dataset():
 # =============================================================================
 # Invalid Input Tests
 # =============================================================================
+
 
 def test_none_query_handling():
     """Test that None queries are handled correctly."""
@@ -226,10 +213,7 @@ def test_invalid_retrieval_options():
     context, sources = retrieve_context(
         "test query",
         top_k=3,
-        retrieval_options={
-            "invalid_option": "value",
-            "search_mode": "invalid_mode"
-        }
+        retrieval_options={"invalid_option": "value", "search_mode": "invalid_mode"},
     )
 
     # Should fall back to defaults
@@ -241,9 +225,9 @@ def test_invalid_retrieval_options():
 # Error Message Validation Tests
 # =============================================================================
 
+
 def test_clear_error_messages_for_missing_files():
     """Test that missing file errors have clear messages."""
-    from src.ingestion.steps.load_pdfs import get_documents
 
     # This should work even if no PDFs exist
     result = get_documents()
@@ -257,7 +241,7 @@ def test_api_key_error_messages():
     from src.config import settings
 
     # If API key is missing, should have clear default
-    assert hasattr(settings, 'dashscope_api_key')
+    assert hasattr(settings, "dashscope_api_key")
 
     # Should be empty string or test key if not set
     assert isinstance(settings.dashscope_api_key, str)
@@ -267,13 +251,14 @@ def test_api_key_error_messages():
 # Edge Case: Special Characters in Content
 # =============================================================================
 
+
 def test_special_characters_in_chunks():
     """Test that special characters are handled correctly."""
     docs = [
         {
-            "content": "Test with émojis 🎉 and spëcial çharacters <>&\"",
+            "content": 'Test with émojis 🎉 and spëcial çharacters <>&"',
             "source": "special.txt",
-            "id": "special_1"
+            "id": "special_1",
         }
     ]
 
@@ -290,13 +275,7 @@ def test_very_long_document():
     # Create a very long document
     long_content = "This is a test sentence. " * 10000  # ~200k chars
 
-    docs = [
-        {
-            "content": long_content,
-            "source": "long.txt",
-            "id": "long_1"
-        }
-    ]
+    docs = [{"content": long_content, "source": "long.txt", "id": "long_1"}]
 
     # Should handle long documents by chunking
     result = chunk_documents(docs)
@@ -309,19 +288,16 @@ def test_very_long_document():
 # Edge Case: Duplicate Document IDs
 # =============================================================================
 
+
 def test_duplicate_document_ids():
     """Test that duplicate document IDs are handled."""
     docs = [
-        {
-            "content": "First document",
-            "source": "test.txt",
-            "id": "duplicate_id"
-        },
+        {"content": "First document", "source": "test.txt", "id": "duplicate_id"},
         {
             "content": "Second document",
             "source": "test.txt",
-            "id": "duplicate_id"  # Same ID
-        }
+            "id": "duplicate_id",  # Same ID
+        },
     ]
 
     # Should handle duplicates
@@ -335,13 +311,14 @@ def test_duplicate_document_ids():
 # Edge Case: Metadata Handling
 # =============================================================================
 
+
 def test_missing_metadata_fields():
     """Test that missing metadata fields are handled."""
     docs = [
         {
             "content": "Test content",
             # Missing 'source' field
-            "id": "test_1"
+            "id": "test_1",
         }
     ]
 
@@ -358,7 +335,7 @@ def test_none_metadata_values():
         {
             "content": "Test content",
             "source": None,  # None value
-            "id": "test_1"
+            "id": "test_1",
         }
     ]
 

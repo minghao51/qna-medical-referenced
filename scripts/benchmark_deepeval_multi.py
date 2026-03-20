@@ -82,69 +82,77 @@ def _generate_markdown_report(benchmark_data: dict[str, Any]) -> str:
 
     # Cold cache summary
     cold = benchmark_data["cold_run"]
-    lines.extend([
-        "### Cold Cache (First Run)",
-        "",
-        f"- **Total Time**: {_format_duration(cold['total_elapsed_s'])}",
-        f"- **Mean Latency**: {cold['mean_latency_ms']:.1f}ms",
-        f"- **P50 Latency**: {cold['p50_latency_ms']:.1f}ms",
-        f"- **P95 Latency**: {cold['p95_latency_ms']:.1f}ms",
-        f"- **P99 Latency**: {cold['p99_latency_ms']:.1f}ms",
-        f"- **Min Latency**: {cold['min_latency_ms']:.1f}ms",
-        f"- **Max Latency**: {cold['max_latency_ms']:.1f}ms",
-        f"- **Throughput**: {cold['throughput_qps']:.2f} queries/second",
-        "",
-    ])
+    lines.extend(
+        [
+            "### Cold Cache (First Run)",
+            "",
+            f"- **Total Time**: {_format_duration(cold['total_elapsed_s'])}",
+            f"- **Mean Latency**: {cold['mean_latency_ms']:.1f}ms",
+            f"- **P50 Latency**: {cold['p50_latency_ms']:.1f}ms",
+            f"- **P95 Latency**: {cold['p95_latency_ms']:.1f}ms",
+            f"- **P99 Latency**: {cold['p99_latency_ms']:.1f}ms",
+            f"- **Min Latency**: {cold['min_latency_ms']:.1f}ms",
+            f"- **Max Latency**: {cold['max_latency_ms']:.1f}ms",
+            f"- **Throughput**: {cold['throughput_qps']:.2f} queries/second",
+            "",
+        ]
+    )
 
     # Warm cache summary
     warm = benchmark_data["warm_run"]
-    lines.extend([
-        "### Warm Cache (Second Run)",
-        "",
-        f"- **Total Time**: {_format_duration(warm['total_elapsed_s'])}",
-        f"- **Mean Latency**: {warm['mean_latency_ms']:.1f}ms",
-        f"- **P50 Latency**: {warm['p50_latency_ms']:.1f}ms",
-        f"- **P95 Latency**: {warm['p95_latency_ms']:.1f}ms",
-        f"- **P99 Latency**: {warm['p99_latency_ms']:.1f}ms",
-        f"- **Min Latency**: {warm['min_latency_ms']:.1f}ms",
-        f"- **Max Latency**: {warm['max_latency_ms']:.1f}ms",
-        f"- **Throughput**: {warm['throughput_qps']:.2f} queries/second",
-        "",
-    ])
+    lines.extend(
+        [
+            "### Warm Cache (Second Run)",
+            "",
+            f"- **Total Time**: {_format_duration(warm['total_elapsed_s'])}",
+            f"- **Mean Latency**: {warm['mean_latency_ms']:.1f}ms",
+            f"- **P50 Latency**: {warm['p50_latency_ms']:.1f}ms",
+            f"- **P95 Latency**: {warm['p95_latency_ms']:.1f}ms",
+            f"- **P99 Latency**: {warm['p99_latency_ms']:.1f}ms",
+            f"- **Min Latency**: {warm['min_latency_ms']:.1f}ms",
+            f"- **Max Latency**: {warm['max_latency_ms']:.1f}ms",
+            f"- **Throughput**: {warm['throughput_qps']:.2f} queries/second",
+            "",
+        ]
+    )
 
     # Cache effectiveness
-    speedup = cold['mean_latency_ms'] / warm['mean_latency_ms'] if warm['mean_latency_ms'] > 0 else 0
-    lines.extend([
-        "### Cache Effectiveness",
-        "",
-        f"- **Speedup**: {speedup:.2f}x",
-        f"- **Time Saved**: {_format_duration(cold['total_elapsed_s'] - warm['total_elapsed_s'])}",
-        "",
-        "---",
-        "",
-        "## Detailed Metrics",
-        "",
-        "### Latency Distribution",
-        "",
-        "| Metric | Cold Cache | Warm Cache | Improvement |",
-        "|--------|------------|------------|-------------|",
-        f"| Mean | {cold['mean_latency_ms']:.1f}ms | {warm['mean_latency_ms']:.1f}ms | {((cold['mean_latency_ms'] - warm['mean_latency_ms']) / cold['mean_latency_ms'] * 100):.1f}% |",
-        f"| P50 | {cold['p50_latency_ms']:.1f}ms | {warm['p50_latency_ms']:.1f}ms | {((cold['p50_latency_ms'] - warm['p50_latency_ms']) / cold['p50_latency_ms'] * 100):.1f}% |",
-        f"| P95 | {cold['p95_latency_ms']:.1f}ms | {warm['p95_latency_ms']:.1f}ms | {((cold['p95_latency_ms'] - warm['p95_latency_ms']) / cold['p95_latency_ms'] * 100):.1f}% |",
-        f"| P99 | {cold['p99_latency_ms']:.1f}ms | {warm['p99_latency_ms']:.1f}ms | {((cold['p99_latency_ms'] - warm['p99_latency_ms']) / cold['p99_latency_ms'] * 100):.1f}% |",
-        "",
-        "### Cache Statistics",
-        "",
-        f"- **Cold Run Cache Hits**: {cold['cache_hits']:.1f}%",
-        f"- **Warm Run Cache Hits**: {warm['cache_hits']:.1f}%",
-        "",
-        "---",
-        "",
-        "## Individual Query Results",
-        "",
-        "| Query ID | Latency (Cold) | Latency (Warm) | Speedup |",
-        "|----------|----------------|----------------|---------|",
-    ])
+    speedup = (
+        cold["mean_latency_ms"] / warm["mean_latency_ms"] if warm["mean_latency_ms"] > 0 else 0
+    )
+    lines.extend(
+        [
+            "### Cache Effectiveness",
+            "",
+            f"- **Speedup**: {speedup:.2f}x",
+            f"- **Time Saved**: {_format_duration(cold['total_elapsed_s'] - warm['total_elapsed_s'])}",
+            "",
+            "---",
+            "",
+            "## Detailed Metrics",
+            "",
+            "### Latency Distribution",
+            "",
+            "| Metric | Cold Cache | Warm Cache | Improvement |",
+            "|--------|------------|------------|-------------|",
+            f"| Mean | {cold['mean_latency_ms']:.1f}ms | {warm['mean_latency_ms']:.1f}ms | {((cold['mean_latency_ms'] - warm['mean_latency_ms']) / cold['mean_latency_ms'] * 100):.1f}% |",
+            f"| P50 | {cold['p50_latency_ms']:.1f}ms | {warm['p50_latency_ms']:.1f}ms | {((cold['p50_latency_ms'] - warm['p50_latency_ms']) / cold['p50_latency_ms'] * 100):.1f}% |",
+            f"| P95 | {cold['p95_latency_ms']:.1f}ms | {warm['p95_latency_ms']:.1f}ms | {((cold['p95_latency_ms'] - warm['p95_latency_ms']) / cold['p95_latency_ms'] * 100):.1f}% |",
+            f"| P99 | {cold['p99_latency_ms']:.1f}ms | {warm['p99_latency_ms']:.1f}ms | {((cold['p99_latency_ms'] - warm['p99_latency_ms']) / cold['p99_latency_ms'] * 100):.1f}% |",
+            "",
+            "### Cache Statistics",
+            "",
+            f"- **Cold Run Cache Hits**: {cold['cache_hits']:.1f}%",
+            f"- **Warm Run Cache Hits**: {warm['cache_hits']:.1f}%",
+            "",
+            "---",
+            "",
+            "## Individual Query Results",
+            "",
+            "| Query ID | Latency (Cold) | Latency (Warm) | Speedup |",
+            "|----------|----------------|----------------|---------|",
+        ]
+    )
 
     # Individual query results
     for query_result in benchmark_data["individual_queries"]:
@@ -154,13 +162,15 @@ def _generate_markdown_report(benchmark_data: dict[str, Any]) -> str:
         speedup = cold_lat / warm_lat if warm_lat > 0 else 0
         lines.append(f"| {query_id} | {cold_lat:.1f}ms | {warm_lat:.1f}ms | {speedup:.2f}x |")
 
-    lines.extend([
-        "",
-        "---",
-        "",
-        "## Recommendations",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "---",
+            "",
+            "## Recommendations",
+            "",
+        ]
+    )
 
     # Generate recommendations based on performance
     if speedup > 2:
@@ -170,12 +180,12 @@ def _generate_markdown_report(benchmark_data: dict[str, Any]) -> str:
     else:
         lines.append("- ⚠️ Cache effectiveness is low - investigate cache hit rates")
 
-    if cold['p95_latency_ms'] > 10000:
+    if cold["p95_latency_ms"] > 10000:
         lines.append("- ⚠️ P95 latency is high - consider optimizing for tail latency")
     else:
         lines.append("- ✅ Latency is within acceptable range")
 
-    if warm['throughput_qps'] < 0.5:
+    if warm["throughput_qps"] < 0.5:
         lines.append("- ⚠️ Throughput is low - consider concurrent query processing")
     else:
         lines.append("- ✅ Throughput is acceptable for expected load")
@@ -228,10 +238,12 @@ async def benchmark_multi_query(
                 query_start = time.time()
 
                 # Prepare dataset with single query
-                dataset = [{
-                    "query": query_data["query"],
-                    "query_id": query_data.get("query_id", f"query_{i}")
-                }]
+                dataset = [
+                    {
+                        "query": query_data["query"],
+                        "query_id": query_data.get("query_id", f"query_{i}"),
+                    }
+                ]
 
                 # Run evaluation
                 results, aggregate = await evaluate_answers_deepeval(
@@ -252,11 +264,13 @@ async def benchmark_multi_query(
                     hits = sum(1 for v in cache_info.values() if v is True)
                     cache_hit_rates.append(hits / total_operations if total_operations > 0 else 0)
 
-                    individual_results.append({
-                        "query_id": query_data.get("query_id", f"query_{i}"),
-                        "latency_ms": query_elapsed * 1000,
-                        "cache_hit_rate": cache_hit_rates[-1],
-                    })
+                    individual_results.append(
+                        {
+                            "query_id": query_data.get("query_id", f"query_{i}"),
+                            "latency_ms": query_elapsed * 1000,
+                            "cache_hit_rate": cache_hit_rates[-1],
+                        }
+                    )
 
             total_elapsed = time.time() - start_time
 
@@ -295,18 +309,20 @@ async def benchmark_multi_query(
         query_id = query_data.get("query_id", f"query_{i}")
         cold_result = next(
             (r for r in cold_run["individual_results"] if r["query_id"] == query_id),
-            {"latency_ms": 0}
+            {"latency_ms": 0},
         )
         warm_result = next(
             (r for r in warm_run["individual_results"] if r["query_id"] == query_id),
-            {"latency_ms": 0}
+            {"latency_ms": 0},
         )
 
-        individual_queries.append({
-            "query_id": query_id,
-            "cold_latency_ms": cold_result["latency_ms"],
-            "warm_latency_ms": warm_result["latency_ms"],
-        })
+        individual_queries.append(
+            {
+                "query_id": query_id,
+                "cold_latency_ms": cold_result["latency_ms"],
+                "warm_latency_ms": warm_result["latency_ms"],
+            }
+        )
 
     return {
         "config": {
@@ -339,7 +355,9 @@ async def benchmark_multi_query(
         "individual_queries": individual_queries,
         "summary": {
             "total_queries": len(queries),
-            "speedup": cold_run["mean_latency_ms"] / warm_run["mean_latency_ms"] if warm_run["mean_latency_ms"] > 0 else 0,
+            "speedup": cold_run["mean_latency_ms"] / warm_run["mean_latency_ms"]
+            if warm_run["mean_latency_ms"] > 0
+            else 0,
         },
     }
 
@@ -347,17 +365,15 @@ async def benchmark_multi_query(
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark multi-query DeepEval evaluation")
     parser.add_argument(
-        "--queries",
-        default="tests/fixtures/golden_queries.json",
-        help="Path to queries JSON file"
+        "--queries", default="tests/fixtures/golden_queries.json", help="Path to queries JSON file"
     )
     parser.add_argument("--top-k", type=int, default=3, help="Number of documents to retrieve")
     parser.add_argument("--search-mode", default="rrf_hybrid", help="Search mode for retrieval")
-    parser.add_argument("--cache-dir", default=None, help="Cache directory (default: from settings)")
     parser.add_argument(
-        "--output",
-        default=None,
-        help="Output file for benchmark report (default: stdout)"
+        "--cache-dir", default=None, help="Cache directory (default: from settings)"
+    )
+    parser.add_argument(
+        "--output", default=None, help="Output file for benchmark report (default: stdout)"
     )
     args = parser.parse_args()
 
@@ -373,10 +389,12 @@ async def main() -> None:
     # Extract golden queries
     queries = []
     for i, q in enumerate(queries_data.get("golden_queries", [])):
-        queries.append({
-            "query": q["query"],
-            "query_id": q.get("query_id", f"query_{i}"),
-        })
+        queries.append(
+            {
+                "query": q["query"],
+                "query_id": q.get("query_id", f"query_{i}"),
+            }
+        )
 
     print(f"Loaded {len(queries)} queries")
 

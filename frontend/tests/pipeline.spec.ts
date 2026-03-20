@@ -60,26 +60,16 @@ const mockPipeline = {
 };
 
 async function mockChatResponse(page: Page, includePipeline = true) {
-	await page.route('**/chat?**', async (route) => {
-		await route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				response: assistantMessage,
-				sources: structuredSources,
-				...(includePipeline ? { pipeline: mockPipeline } : {})
-			})
-		});
-	});
+	const sseBody = [
+		`data: ${JSON.stringify({ content: assistantMessage, done: false })}\n\n`,
+		`data: ${JSON.stringify({ content: '', done: true, sources: structuredSources, ...(includePipeline ? { pipeline: mockPipeline } : {}) })}\n\n`
+	].join('');
 
-	await page.route('**/chat', async (route) => {
+	await page.route(/\/chat/, async (route) => {
 		await route.fulfill({
 			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				response: assistantMessage,
-				sources: structuredSources
-			})
+			contentType: 'text/event-stream',
+			body: sseBody
 		});
 	});
 }
@@ -352,26 +342,17 @@ test.describe('Sources Display', () => {
 	});
 
 	test('legacy string sources still render during rollout', async ({ page }) => {
-		await page.unroute('**/chat?**');
-		await page.unroute('**/chat');
-		await page.route('**/chat?**', async (route) => {
+		await page.unrouteAll();
+		const legacySources = ['healthhub.sg', 'plain source title'];
+		const sseBody = [
+			`data: ${JSON.stringify({ content: assistantMessage, done: false })}\n\n`,
+			`data: ${JSON.stringify({ content: '', done: true, sources: legacySources, pipeline: null })}\n\n`
+		].join('');
+		await page.route(/\/chat/, async (route) => {
 			await route.fulfill({
 				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					response: assistantMessage,
-					sources: ['healthhub.sg', 'plain source title']
-				})
-			});
-		});
-		await page.route('**/chat', async (route) => {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					response: assistantMessage,
-					sources: ['healthhub.sg', 'plain source title']
-				})
+				contentType: 'text/event-stream',
+				body: sseBody
 			});
 		});
 
@@ -434,7 +415,25 @@ test.describe('Chat with Pipeline Enabled', () => {
 			});
 
 			expect(response.status()).toBe(200);
-			pipelineResponse = await response.json();
+			const body = await response.text();
+			const parts = body.split('data: ').filter(s => s.trim());
+			let fullResponse = { response: '', sources: [], pipeline: null };
+			for (const part of parts) {
+				const dataStr = part.replace(/\n\n$/, '').replace(/\n$/, '');
+				try {
+					const data = JSON.parse(dataStr);
+					if (data.content) {
+						fullResponse.response += data.content;
+					}
+					if (data.done && data.sources) {
+						fullResponse.sources = data.sources;
+						fullResponse.pipeline = data.pipeline;
+					}
+				} catch (e) {
+					// Skip malformed JSON
+				}
+			}
+			pipelineResponse = fullResponse;
 			expect(pipelineResponse).toHaveProperty('pipeline');
 		} finally {
 			await request.dispose();
@@ -525,7 +524,7 @@ test.describe('Error Handling', () => {
 	});
 
 	test('displays error when API fails', async ({ page }) => {
-		await page.unroute('**/chat?**');
+		await page.unroute('**/chat?*');
 		await page.unroute('**/chat');
 		await page.route('**/chat', async (route) => {
 			await route.abort('failed');
@@ -534,9 +533,9 @@ test.describe('Error Handling', () => {
 		await sendMessage(page, 'Test message');
 
 		await page.waitForTimeout(500);
-		const error = page.locator('.error');
+		const error = page.locator('.error-message');
 		if (await error.count() > 0) {
-			await expect(error).toBeVisible();
+			await expect(error.first()).toBeVisible();
 		}
 	});
 });

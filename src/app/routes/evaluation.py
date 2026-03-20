@@ -239,6 +239,7 @@ def _local_history_runs(limit: int) -> list[dict[str, Any]]:
         retrieval = _read_retrieval_metrics(run_dir)
         manifest = _read_json_if_exists(run_dir / "manifest.json")
         experiment_cfg = dict(((manifest.get("config") or {}).get("experiment_config")) or {})
+        l6_metrics = summary.get(SUMMARY_L6_METRICS_KEY, {})
         result_runs.append(
             {
                 "run_dir": str(run_dir.name),
@@ -254,7 +255,13 @@ def _local_history_runs(limit: int) -> list[dict[str, Any]]:
                     "latency_p95_ms": retrieval.get("latency_p95_ms", 0),
                     "precision_at_k": retrieval.get("precision_at_k", 0),
                     "recall_at_k": retrieval.get("recall_at_k", 0),
+                    "hyde_enabled": retrieval.get("hyde_enabled", False),
+                    "hyde_queries_count": retrieval.get("hyde_queries_count", 0),
+                    "hyde_hit_rate": retrieval.get("hyde_hit_rate"),
+                    "hyde_mrr": retrieval.get("hyde_mrr"),
+                    "hyde_source_hit_rate": retrieval.get("hyde_source_hit_rate"),
                 },
+                "l6_answer_quality_metrics": l6_metrics if isinstance(l6_metrics, dict) else {},
                 "source": "local",
                 "experiment_name": (experiment_cfg.get("metadata") or {}).get("name"),
                 "variant_name": experiment_cfg.get("variant_name"),
@@ -309,6 +316,7 @@ def _aggregate_history_summary(runs: list[dict[str, Any]]) -> dict[str, Any]:
         else 0,
         "sources": source_breakdown,
     }
+
 
 @router.get(
     "/evaluation/latest",

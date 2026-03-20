@@ -15,131 +15,57 @@ Example request:
       }'
 """
 
+import json
 import logging
-from typing import Union
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import StreamingResponse
 
 from src.app.logging import log_event
-from src.app.schemas import ChatRequest, ChatResponse
-from src.app.session import ensure_chat_session
+from src.app.schemas import ChatRequest
+from src.app.session import get_chat_session_id
 from src.config import settings
-from src.rag.trace_models import ChatResponseWithPipeline
-from src.usecases.chat import process_chat_message
+from src.usecases.chat import stream_chat_message
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.post(
-    "/chat",
-    response_model=Union[ChatResponse, ChatResponseWithPipeline],
-    summary="Process chat message with RAG",
-    description="Process a user message using retrieval-augmented generation. "
-    "Retrieves relevant medical documents and generates an evidence-based response.",
-)
-def chat(
+async def chat_stream_generator(
     request: Request,
-    response: Response,
     payload: ChatRequest,
-    include_pipeline: bool = Query(
-        False,
-        description="Include detailed pipeline trace with timing information for debugging",
-    ),
+    include_pipeline: bool,
 ):
-    """Process a chat message using RAG (Retrieval-Augmented Generation).
-
-    This endpoint:
-    1. Retrieves the user's session history from a server-issued session cookie
-    2. Searches the vector database for relevant medical documents
-    3. Generates a response using Qwen LLM with retrieved context
-    4. Saves the conversation to history
-    5. Returns the response with source citations
-
-    Args:
-        request: FastAPI request object (used to access app.state.llm_client)
-        payload: Chat request containing message and optional deprecated session_id
-        include_pipeline: If True, returns detailed pipeline trace with:
-            - Retrieval timing and document counts
-            - Generation timing
-            - Individual pipeline step details
-
-    Returns:
-        ChatResponse: Standard response with:
-            - response: Generated answer text
-            - sources: List of retrieved document sources
-
-        ChatResponseWithPipeline (if include_pipeline=True): Extended response with:
-            - response: Generated answer text
-            - sources: List of retrieved document sources
-            - pipeline: Detailed trace with timing metrics
-
-    Raises:
-        HTTPException(500): If an error occurs during processing
-
-    Example:
-        Standard request:
-            POST /chat
-            {
-                "message": "What is a normal cholesterol level?"
-            }
-
-        Response:
-            {
-                "response": "According to medical guidelines...",
-                "sources": [
-                    {
-                        "source": "healthhub.sg",
-                        "title": "Cholesterol Screening",
-                        "url": "https://www.healthhub.sg/..."
-                    }
-                ]
-            }
-
-        With pipeline trace:
-            POST /chat?include_pipeline=true
-            {
-                "message": "What is diabetes?"
-            }
-
-        Response:
-            {
-                "response": "Diabetes is a chronic condition...",
-                "sources": [...],
-                "pipeline": {
-                    "retrieval": {
-                        "timing_ms": 150,
-                        "num_candidates": 5
-                    },
-                    "generation": {
-                        "timing_ms": 1200
-                    },
-                    "total_time_ms": 1350
-                }
-            }
-    """
     try:
-        session_id = ensure_chat_session(request, response)
+        session_id = get_chat_session_id(request) or "default"
         llm_client = getattr(request.app.state, "llm_client", None)
         history_store = request.app.state.chat_history_store
-        result = process_chat_message(
+
+        async for content, metadata in stream_chat_message(
             llm_client=llm_client,
             history_store=history_store,
             message=payload.message,
             session_id=session_id,
             include_pipeline=include_pipeline,
             top_k=5,
-        )
+        ):
+            if content:
+                event = json.dumps({"content": content, "done": False})
+                yield f"data: {event}\n\n"
 
-        if include_pipeline:
-            return ChatResponseWithPipeline(
-                response=result["response"],
-                sources=result["sources"],
-                pipeline=result["pipeline"],
-            )
+            if metadata.get("done"):
+                event = json.dumps(
+                    {
+                        "content": "",
+                        "done": True,
+                        "sources": metadata.get("sources", []),
+                        "pipeline": metadata.get("pipeline"),
+                        "error": metadata.get("error"),
+                    }
+                )
+                yield f"data: {event}\n\n"
 
-        return ChatResponse(response=result["response"], sources=result["sources"])
     except Exception:
         log_event(
             logger,
@@ -151,4 +77,24 @@ def chat(
             include_pipeline=include_pipeline,
             auth_key_id=getattr(getattr(request.state, "auth", None), "key_id", None),
         )
-        raise
+        error_event = json.dumps({"content": "", "done": True, "error": "An error occurred"})
+        yield f"data: {error_event}\n\n"
+
+
+@router.post(
+    "/chat",
+    summary="Process chat message with RAG (streaming)",
+    description="Process a user message using retrieval-augmented generation with streaming response.",
+)
+async def chat(
+    request: Request,
+    payload: ChatRequest,
+    include_pipeline: bool = Query(
+        False,
+        description="Include detailed pipeline trace with timing information for debugging",
+    ),
+):
+    return StreamingResponse(
+        chat_stream_generator(request, payload, include_pipeline),
+        media_type="text/event-stream",
+    )

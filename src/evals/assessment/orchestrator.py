@@ -220,7 +220,9 @@ def run_assessment(
         config={"assessment": config_payload, "input_provenance": input_provenance},
         git_head=git_revision,
     )
-    reusable_run_dir = None if config.force_rerun else find_reusable_run(config.artifact_dir, run_identity)
+    reusable_run_dir = (
+        None if config.force_rerun else find_reusable_run(config.artifact_dir, run_identity)
+    )
     if reusable_run_dir is not None:
         write_latest_pointer(config.artifact_dir, reusable_run_dir)
         reused_summary = _load_json_if_exists(reusable_run_dir / "summary.json")

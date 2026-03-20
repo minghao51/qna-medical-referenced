@@ -60,6 +60,10 @@ def test_evaluation_history_returns_local_runs_only(monkeypatch, tmp_path):
                 "status": "ok",
                 "duration_s": 1,
                 "failed_thresholds_count": 0,
+                "l6_answer_quality_metrics": {
+                    "status": "ok",
+                    "answer_relevancy": {"mean": 0.81, "count": 1},
+                },
                 "tracking": {"wandb": {"run_url": "https://wandb/local"}},
             }
         ),
@@ -74,6 +78,9 @@ def test_evaluation_history_returns_local_runs_only(monkeypatch, tmp_path):
                 "ndcg_at_k": 0.3,
                 "latency_p50_ms": 10,
                 "latency_p95_ms": 20,
+                "hyde_enabled": True,
+                "hyde_queries_count": 1,
+                "hyde_hit_rate": 0.75,
             }
         ),
         encoding="utf-8",
@@ -97,6 +104,9 @@ def test_evaluation_history_returns_local_runs_only(monkeypatch, tmp_path):
     assert history["summary"]["sources"]["local"] == 1
     assert history["sources"]["mode"] == "local"
     assert history["runs"][0]["wandb_url"] == "https://wandb/local"
+    assert history["runs"][0]["retrieval_metrics"]["hyde_enabled"] is True
+    assert history["runs"][0]["retrieval_metrics"]["hyde_hit_rate"] == 0.75
+    assert history["runs"][0]["l6_answer_quality_metrics"]["answer_relevancy"]["mean"] == 0.81
 
 
 def test_evaluation_history_excludes_incomplete_and_zero_query_runs(monkeypatch, tmp_path):

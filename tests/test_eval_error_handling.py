@@ -10,16 +10,16 @@ Tests cover:
 - Invalid input validation
 """
 
-import pytest
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 import asyncio
+from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 
 # =============================================================================
 # API Timeout Tests
 # =============================================================================
+
 
 @pytest.mark.asyncio
 @pytest.mark.deepeval
@@ -27,16 +27,14 @@ async def test_dashscope_api_timeout_retry():
     """Test that Dashscope API timeouts trigger retry logic."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {"query": "Test query", "query_id": "timeout_test_001"}
-    ]
+    dataset = [{"query": "Test query", "query_id": "timeout_test_001"}]
 
     # Mock timeout scenario
-    with patch('src.infra.llm.qwen_client.QwenClient.generate') as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
         # First call times out, second succeeds
         mock_gen.side_effect = [
             Exception("Timeout"),
-            "Test answer with sufficient content to pass evaluation."
+            "Test answer with sufficient content to pass evaluation.",
         ]
 
         try:
@@ -55,14 +53,11 @@ async def test_dashscope_api_timeout_retry():
 async def test_cache_during_failures():
     """Test that cache still works during API failures."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
-    from src.evals.artifacts import ArtifactStore
 
-    dataset = [
-        {"query": "Cache test query", "query_id": "cache_test_001"}
-    ]
+    dataset = [{"query": "Cache test query", "query_id": "cache_test_001"}]
 
     # Run once to populate cache
-    with patch('src.infra.llm.qwen_client.QwenClient.generate') as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
         mock_gen.return_value = "Cached answer for testing."
 
         try:
@@ -83,15 +78,14 @@ async def test_cache_during_failures():
 # Partial Result Tests
 # =============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.deepeval
 async def test_partial_results_on_some_failures():
     """Test that partial results are returned when some metrics fail."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {"query": "Partial test query", "query_id": "partial_test_001"}
-    ]
+    dataset = [{"query": "Partial test query", "query_id": "partial_test_001"}]
 
     # Mock some metrics to fail
     async def mock_safe_measure(metric, test_case, **kwargs):
@@ -102,8 +96,7 @@ async def test_partial_results_on_some_failures():
         metric.score = 0.8
         metric.reason = "mock success"
 
-    with patch('src.evals.assessment.answer_eval.safe_a_measure', side_effect=mock_safe_measure):
-
+    with patch("src.evals.assessment.answer_eval.safe_a_measure", side_effect=mock_safe_measure):
         try:
             results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
 
@@ -116,7 +109,6 @@ async def test_partial_results_on_some_failures():
 
                 # Some metrics may have failed
                 metrics = result["metrics"]
-                failed_count = sum(1 for m in metrics.values() if m.get("status") == "error")
 
                 # Should have at least attempted metrics
                 assert len(metrics) > 0
@@ -129,14 +121,13 @@ async def test_partial_results_on_some_failures():
 # Invalid Input Tests
 # =============================================================================
 
+
 @pytest.mark.asyncio
 async def test_none_query_in_dataset():
     """Test that None queries in dataset are handled."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {"query": None, "query_id": "none_test_001"}
-    ]
+    dataset = [{"query": None, "query_id": "none_test_001"}]
 
     # Should handle None query
     try:
@@ -154,9 +145,7 @@ async def test_empty_string_query():
     """Test that empty string queries are handled."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {"query": "", "query_id": "empty_test_001"}
-    ]
+    dataset = [{"query": "", "query_id": "empty_test_001"}]
 
     # Should handle empty query
     try:
@@ -174,9 +163,7 @@ async def test_negative_top_k():
     """Test that negative top_k values are handled."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {"query": "Test query", "query_id": "topk_test_001"}
-    ]
+    dataset = [{"query": "Test query", "query_id": "topk_test_001"}]
 
     # Should handle negative top_k
     try:
@@ -194,9 +181,7 @@ async def test_zero_top_k():
     """Test that zero top_k values are handled."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {"query": "Test query", "query_id": "zero_topk_001"}
-    ]
+    dataset = [{"query": "Test query", "query_id": "zero_topk_001"}]
 
     # Should handle zero top_k
     results, aggregate = await evaluate_answers_deepeval(dataset, top_k=0)
@@ -208,6 +193,7 @@ async def test_zero_top_k():
 # =============================================================================
 # Artifact Error Tests
 # =============================================================================
+
 
 def test_artifact_store_with_invalid_path():
     """Test that artifact store handles invalid paths."""
@@ -226,16 +212,14 @@ def test_artifact_store_with_invalid_path():
 
 def test_artifact_write_failure():
     """Test that artifact write failures are handled."""
-    from src.evals.schemas import AssessmentResult
     from pathlib import Path
+
+    from src.evals.schemas import AssessmentResult
 
     # Try to create result with invalid data
     try:
         result = AssessmentResult(
-            run_dir=Path("/invalid/path"),
-            status="test",
-            failed_thresholds=[],
-            summary={}
+            run_dir=Path("/invalid/path"), status="test", failed_thresholds=[], summary={}
         )
 
         # Should create object
@@ -249,6 +233,7 @@ def test_artifact_write_failure():
 # Concurrent Evaluation Error Tests
 # =============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.deepeval
 async def test_concurrent_evaluation_with_failures():
@@ -256,27 +241,21 @@ async def test_concurrent_evaluation_with_failures():
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
     # Multiple queries
-    dataset = [
-        {"query": f"Query {i}", "query_id": f"concurrent_{i}"}
-        for i in range(5)
-    ]
+    dataset = [{"query": f"Query {i}", "query_id": f"concurrent_{i}"} for i in range(5)]
 
     # Mock some to fail
-    with patch('src.infra.llm.qwen_client.QwenClient.generate') as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
         # Alternate between success and failure
         mock_gen.side_effect = [
             "Answer 1",
             Exception("API Error"),
             "Answer 3",
             "Answer 4",
-            "Answer 5"
+            "Answer 5",
         ]
 
         try:
-            results, aggregate = await evaluate_answers_deepeval(
-                dataset,
-                top_k=3
-            )
+            results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
 
             # Should return partial results
             assert len(results) <= 5
@@ -292,18 +271,17 @@ async def test_concurrent_evaluation_with_failures():
 # Metric Calculation Error Tests
 # =============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.deepeval
 async def test_metric_calculation_with_invalid_context():
     """Test that metrics handle invalid context gracefully."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {"query": "Test query", "query_id": "context_test_001"}
-    ]
+    dataset = [{"query": "Test query", "query_id": "context_test_001"}]
 
     # Mock retrieval to return empty context
-    with patch('src.rag.runtime.retrieve_context') as mock_retrieve:
+    with patch("src.rag.runtime.retrieve_context") as mock_retrieve:
         mock_retrieve.return_value = ("", [])  # Empty context
 
         try:
@@ -315,10 +293,6 @@ async def test_metric_calculation_with_invalid_context():
 
                 # Some metrics may fail due to empty context
                 metrics = results[0]["metrics"]
-                failed_metrics = [
-                    name for name, data in metrics.items()
-                    if data.get("status") == "error"
-                ]
 
                 # Should have attempted all metrics
                 assert len(metrics) >= 0
@@ -333,9 +307,7 @@ async def test_metric_timeout_handling():
     """Test that individual metric timeouts don't crash evaluation."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {"query": "Timeout test", "query_id": "timeout_metric_001"}
-    ]
+    dataset = [{"query": "Timeout test", "query_id": "timeout_metric_001"}]
 
     # Mock metric calculation to timeout
     async def timeout_safe_measure(metric, test_case, **kwargs):
@@ -348,14 +320,12 @@ async def test_metric_timeout_handling():
         del timeout
         raise TimeoutError("synthetic metric timeout")
 
-    with patch('src.evals.assessment.answer_eval.safe_a_measure', side_effect=timeout_safe_measure):
-        with patch('src.evals.assessment.answer_eval.asyncio.wait_for', side_effect=timeout_wait_for):
-
+    with patch("src.evals.assessment.answer_eval.safe_a_measure", side_effect=timeout_safe_measure):
+        with patch(
+            "src.evals.assessment.answer_eval.asyncio.wait_for", side_effect=timeout_wait_for
+        ):
             try:
-                results, aggregate = await evaluate_answers_deepeval(
-                    dataset,
-                    top_k=3
-                )
+                results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
 
                 # Should handle timeout
                 if len(results) > 0:
@@ -363,8 +333,7 @@ async def test_metric_timeout_handling():
 
                     # At least some metrics should have error status
                     error_metrics = [
-                        name for name, data in metrics.items()
-                        if data.get("status") == "error"
+                        name for name, data in metrics.items() if data.get("status") == "error"
                     ]
 
                     assert len(metrics) > 0
@@ -378,20 +347,19 @@ async def test_metric_timeout_handling():
 # Edge Case: Very Long Responses
 # =============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.deepeval
 async def test_very_long_response_handling():
     """Test that very long LLM responses are handled."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {"query": "Long response test", "query_id": "long_001"}
-    ]
+    dataset = [{"query": "Long response test", "query_id": "long_001"}]
 
     # Mock very long response
     long_response = "This is a detailed answer. " * 1000  # ~20k chars
 
-    with patch('src.infra.llm.qwen_client.QwenClient.generate') as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
         mock_gen.return_value = long_response
 
         try:
@@ -402,12 +370,15 @@ async def test_very_long_response_handling():
                 assert len(results[0]["answer"]) > 1000
         except Exception as e:
             # Should handle gracefully
-            assert "length" in str(e).lower() or "size" in str(e).lower() or "token" in str(e).lower()
+            assert (
+                "length" in str(e).lower() or "size" in str(e).lower() or "token" in str(e).lower()
+            )
 
 
 # =============================================================================
 # Edge Case: Unicode and Special Characters
 # =============================================================================
+
 
 @pytest.mark.asyncio
 @pytest.mark.deepeval
@@ -415,14 +386,9 @@ async def test_unicode_in_query_and_response():
     """Test that Unicode characters are handled correctly."""
     from src.evals.assessment.answer_eval import evaluate_answers_deepeval
 
-    dataset = [
-        {
-            "query": "What is the recommended LDL-C target? 价值观",
-            "query_id": "unicode_001"
-        }
-    ]
+    dataset = [{"query": "What is the recommended LDL-C target? 价值观", "query_id": "unicode_001"}]
 
-    with patch('src.infra.llm.qwen_client.QwenClient.generate') as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
         mock_gen.return_value = "The recommended target is < 1.8 mmol/L. 价值观测试"
 
         try:
@@ -434,4 +400,8 @@ async def test_unicode_in_query_and_response():
                 assert "价值观" in answer or "target" in answer.lower()
         except Exception as e:
             # Should handle encoding errors
-            assert "unicode" in str(e).lower() or "encoding" in str(e).lower() or "character" in str(e).lower()
+            assert (
+                "unicode" in str(e).lower()
+                or "encoding" in str(e).lower()
+                or "character" in str(e).lower()
+            )

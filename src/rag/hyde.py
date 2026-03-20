@@ -25,8 +25,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from src.config import settings
-
 if TYPE_CHECKING:
     from src.infra.llm.qwen_client import QwenClient
 
@@ -75,15 +73,12 @@ async def generate_hypothetical_answer(
         logger.warning("Cannot generate hypothetical answer for empty query")
         return ""
 
-    prompt = HYPOTHETICAL_ANSWER_PROMPT_TEMPLATE.format(
-        max_length=max_length,
-        query=query.strip()
-    )
+    prompt = HYPOTHETICAL_ANSWER_PROMPT_TEMPLATE.format(max_length=max_length, query=query.strip())
 
     try:
         hypothetical = client.generate(
             prompt=prompt,
-            context=""  # No context for hypothetical answer generation
+            context="",  # No context for hypothetical answer generation
         )
 
         # Clean up the response

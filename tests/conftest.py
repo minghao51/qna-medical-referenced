@@ -32,7 +32,9 @@ def pytest_collection_modifyitems(config, items):
 
     # Skip real API E2E tests unless explicitly enabled
     if not REAL_API_TESTS_ENABLED:
-        skip_real_api = pytest.mark.skip(reason="Set ENABLE_REAL_API_TESTS=1 to run real API E2E tests")
+        skip_real_api = pytest.mark.skip(
+            reason="Set ENABLE_REAL_API_TESTS=1 to run real API E2E tests"
+        )
         for item in items:
             if "e2e_real_apis" in item.keywords:
                 item.add_marker(skip_real_api)

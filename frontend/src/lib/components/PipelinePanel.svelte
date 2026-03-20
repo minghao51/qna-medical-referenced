@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PipelineTrace, RetrievedDocument } from '$lib/types';
 	import { calculateConfidence, getStageStatus } from '$lib/confidenceCalculator';
+	import { formatScore } from '$lib/utils/format';
 	import StepCard from './StepCard.svelte';
 	import ConfidenceBadge from './ConfidenceBadge.svelte';
 	import MetricBar from './MetricBar.svelte';
@@ -15,10 +16,6 @@
 
 	let selectedDocument: RetrievedDocument | null = $state(null);
 	let activeFlowStage: 'retrieval' | 'context' | 'generation' | null = $state(null);
-
-	function formatScore(score: number): string {
-		return (score * 100).toFixed(1);
-	}
 
 	const statusIcons = {
 		success: '✓',

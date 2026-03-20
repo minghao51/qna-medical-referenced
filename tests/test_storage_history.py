@@ -34,9 +34,13 @@ def test_file_chat_history_store_prunes_expired_sessions(tmp_path, monkeypatch):
         "stale-session": {
             "version": 2,
             "updated_at": current_time - 61,
-            "messages": [{"role": "user", "content": "expired", "timestamp": (current_time - 61) * 1000}],
+            "messages": [
+                {"role": "user", "content": "expired", "timestamp": (current_time - 61) * 1000}
+            ],
         },
-        "fresh-session": json.loads((tmp_path / "history.json").read_text(encoding="utf-8"))["fresh-session"],
+        "fresh-session": json.loads((tmp_path / "history.json").read_text(encoding="utf-8"))[
+            "fresh-session"
+        ],
     }
     (tmp_path / "history.json").write_text(json.dumps(stale_payload), encoding="utf-8")
 
