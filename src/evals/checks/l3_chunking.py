@@ -11,6 +11,14 @@ from src.ingestion.steps.chunk_text import TextChunker
 from src.ingestion.steps.load_pdfs import get_documents
 
 
+def _float_metric(value: Any, default: float = 0.0) -> float:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    return default
+
+
 def assess_l3_chunking_quality(
     chunk_size: int = 800,
     chunk_overlap: int = 150,
@@ -75,13 +83,17 @@ def assess_l3_chunking_quality(
             low_quality_excluded / max(1, len(chunks) + low_quality_excluded)
         ),
         "chunk_quality_histogram": {
-            "high": sum(1 for c in chunks if float(c.get("quality_score", 1.0)) >= 0.8),
-            "medium": sum(1 for c in chunks if 0.55 <= float(c.get("quality_score", 1.0)) < 0.8),
-            "low": sum(1 for c in chunks if float(c.get("quality_score", 1.0)) < 0.55),
+            "high": sum(
+                1 for c in chunks if _float_metric(c.get("quality_score", 1.0), 1.0) >= 0.8
+            ),
+            "medium": sum(
+                1 for c in chunks if 0.55 <= _float_metric(c.get("quality_score", 1.0), 1.0) < 0.8
+            ),
+            "low": sum(1 for c in chunks if _float_metric(c.get("quality_score", 1.0), 1.0) < 0.55),
         },
     }
     findings = []
-    if aggregate["duplicate_chunk_rate"] > 0.05:
+    if _float_metric(aggregate.get("duplicate_chunk_rate")) > 0.05:
         findings.append(
             {"severity": "warning", "message": "Duplicate chunk rate exceeds 5%", "stage": "L3"}
         )

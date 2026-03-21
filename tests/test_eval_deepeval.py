@@ -6,13 +6,13 @@ from deepeval.test_case import LLMTestCase
 
 from src.evals.metrics.medical import METRIC_SPECS
 
+pytestmark = [pytest.mark.deepeval, pytest.mark.slow, pytest.mark.live_api]
+
 
 def _metric_for(key: str):
     return next(spec for spec in METRIC_SPECS if spec.key == key).create()
 
 
-@pytest.mark.deepeval
-@pytest.mark.slow
 def test_medical_factual_accuracy():
     test_case = LLMTestCase(
         input="What is the LDL-C target for secondary prevention?",
@@ -25,8 +25,6 @@ def test_medical_factual_accuracy():
     assert_test(test_case, [_metric_for("factual_accuracy")])
 
 
-@pytest.mark.deepeval
-@pytest.mark.slow
 def test_medical_completeness():
     test_case = LLMTestCase(
         input="What are the side effects of statins?",
@@ -41,8 +39,6 @@ def test_medical_completeness():
     assert_test(test_case, [metric])
 
 
-@pytest.mark.deepeval
-@pytest.mark.slow
 def test_medical_clinical_relevance():
     test_case = LLMTestCase(
         input="Is aspirin recommended for primary prevention?",
@@ -55,8 +51,6 @@ def test_medical_clinical_relevance():
     assert_test(test_case, [_metric_for("clinical_relevance")])
 
 
-@pytest.mark.deepeval
-@pytest.mark.slow
 def test_factual_accuracy_detects_hallucination():
     test_case = LLMTestCase(
         input="What is the LDL-C target?",

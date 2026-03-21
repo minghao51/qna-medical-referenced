@@ -14,6 +14,14 @@ from src.evals.checks.shared import count_false, safe_mean, safe_median
 from src.ingestion.artifacts import load_source_artifact
 
 
+def _float_metric(value: Any, default: float = 0.0) -> float:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    return default
+
+
 def assess_l1_html_markdown_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
     data_dir = Path(data_raw_dir or DATA_RAW_DIR)
     html_files = sorted(data_dir.glob("*.html"))
@@ -71,9 +79,15 @@ def assess_l1_html_markdown_quality(data_raw_dir: Path | None = None) -> dict[st
                         sum(1 for block in structured_blocks if block.get("block_type") == "table"),
                     )
                 ),
+                "html_extractor_strategy": artifact_meta.get(
+                    "html_extractor_strategy", "trafilatura_bs"
+                ),
+                "selected_extractor": artifact_meta.get("selected_extractor", "trafilatura"),
+                "cascade_depth": artifact_meta.get("cascade_depth", 1),
             }
         )
 
+    cascade_depths = [int(r.get("cascade_depth", 1)) for r in records]
     aggregate = {
         "pairs_evaluated": len(records),
         "markdown_missing_rate": (count_false(records, "md_exists") / len(records))
@@ -85,22 +99,32 @@ def assess_l1_html_markdown_quality(data_raw_dir: Path | None = None) -> dict[st
         "low_retention_rate": (sum(1 for r in retention_ratios if r < 0.05) / len(retention_ratios))
         if retention_ratios
         else 0.0,
-        "content_density_mean": safe_mean([float(r.get("content_density", 0.0)) for r in records]),
+        "content_density_mean": safe_mean(
+            [_float_metric(r.get("content_density", 0.0)) for r in records]
+        ),
         "boilerplate_ratio_mean": safe_mean(
-            [float(r.get("boilerplate_suspicion", 0.0)) for r in records]
+            [_float_metric(r.get("boilerplate_suspicion", 0.0)) for r in records]
         ),
         "heading_preservation_rate_mean": safe_mean(
-            [float(r.get("heading_preservation_rate", 0.0)) for r in records]
+            [_float_metric(r.get("heading_preservation_rate", 0.0)) for r in records]
         ),
         "table_preservation_rate_mean": safe_mean(
-            [float(r.get("table_preservation_rate", 0.0)) for r in records]
+            [_float_metric(r.get("table_preservation_rate", 0.0)) for r in records]
         ),
         "page_classification_distribution": dict(
             Counter(str(r.get("page_type", "unknown")) for r in records)
         ),
+        "html_extractor_strategy": dict(
+            Counter(str(r.get("html_extractor_strategy", "trafilatura_bs")) for r in records)
+        ),
+        "selected_extractor_distribution": dict(
+            Counter(str(r.get("selected_extractor", "unknown")) for r in records)
+        ),
+        "cascade_depth_mean": safe_mean([float(d) for d in cascade_depths]),
+        "cascade_depth_distribution": dict(Counter(cascade_depths)),
     }
     findings = []
-    if aggregate["markdown_empty_rate"] > 0.1:
+    if _float_metric(aggregate.get("markdown_empty_rate")) > 0.1:
         findings.append(
             {"severity": "warning", "message": "High empty markdown rate", "stage": "L1"}
         )

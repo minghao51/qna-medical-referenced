@@ -8,7 +8,7 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from deepeval.metrics.indicator import safe_a_measure
 from deepeval.test_case import LLMTestCase
@@ -106,7 +106,10 @@ def _resolve_cache_paths(
 
 def _trace_to_dict(trace: Any) -> dict[str, Any]:
     if hasattr(trace, "model_dump"):
-        return trace.model_dump()
+        payload = trace.model_dump()
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        return {}
     return trace if isinstance(trace, dict) else {}
 
 
@@ -284,7 +287,7 @@ async def _evaluate_case_metrics(
         cached_metrics = cached_payload.get("metrics")
         cached_scores = cached_payload.get("score_updates")
         if isinstance(cached_metrics, dict) and isinstance(cached_scores, dict):
-            metrics = {
+            cached_metric_results = {
                 key: {**dict(value), "cached": True}
                 for key, value in cached_metrics.items()
                 if isinstance(value, dict)
@@ -293,11 +296,12 @@ async def _evaluate_case_metrics(
                 str(key): (float(value) if value is not None else None)
                 for key, value in cached_scores.items()
             }
-            return metrics, score_updates, True
+            return cached_metric_results, score_updates, True
 
-    metrics = medical_metrics.create_medical_metrics()
+    metric_instances = medical_metrics.create_medical_metrics()
     metric_map = {
-        spec.key: metric for spec, metric in zip(medical_metrics.METRIC_SPECS, metrics, strict=True)
+        spec.key: metric
+        for spec, metric in zip(medical_metrics.METRIC_SPECS, metric_instances, strict=True)
     }
     semaphore = asyncio.Semaphore(metric_concurrency)
     payloads = await asyncio.gather(
@@ -355,7 +359,7 @@ def _aggregate_metric_results(
     }
 
 
-async def _evaluate_answer_quality_async(
+async def evaluate_answer_quality_async(
     dataset: list[dict[str, Any]],
     top_k: int,
     cache_dir: Path | None = None,
@@ -387,7 +391,7 @@ async def _evaluate_answer_quality_async(
         cache_namespace=cache_namespace,
     )
     query_semaphore = asyncio.Semaphore(query_concurrency)
-    score_buckets = {spec.key: [] for spec in medical_metrics.METRIC_SPECS}
+    score_buckets: dict[str, list[float]] = {spec.key: [] for spec in medical_metrics.METRIC_SPECS}
     error_buckets = {spec.key: 0 for spec in medical_metrics.METRIC_SPECS}
     query_count_scored = 0
 
@@ -462,7 +466,7 @@ def evaluate_answer_quality(
     cache_namespace: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     return asyncio.run(
-        _evaluate_answer_quality_async(
+        evaluate_answer_quality_async(
             dataset,
             top_k,
             cache_dir=cache_dir,
@@ -472,21 +476,4 @@ def evaluate_answer_quality(
     )
 
 
-async def evaluate_answers_deepeval(
-    dataset: list[dict[str, Any]],
-    top_k: int,
-    cache_dir: Path | None = None,
-    retrieval_options: dict[str, Any] | None = None,
-    cache_namespace: dict[str, Any] | None = None,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Backward-compatible async alias for the canonical L6 answer quality path."""
-    return await _evaluate_answer_quality_async(
-        dataset,
-        top_k,
-        cache_dir=cache_dir,
-        retrieval_options=retrieval_options,
-        cache_namespace=cache_namespace,
-    )
-
-
-__all__ = ["evaluate_answer_quality", "evaluate_answers_deepeval"]
+__all__ = ["evaluate_answer_quality", "evaluate_answer_quality_async"]

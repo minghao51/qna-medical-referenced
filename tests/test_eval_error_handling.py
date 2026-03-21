@@ -25,7 +25,7 @@ import pytest
 @pytest.mark.deepeval
 async def test_dashscope_api_timeout_retry():
     """Test that Dashscope API timeouts trigger retry logic."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "Test query", "query_id": "timeout_test_001"}]
 
@@ -38,7 +38,7 @@ async def test_dashscope_api_timeout_retry():
         ]
 
         try:
-            results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # If it succeeds, verify results
             if len(results) > 0:
@@ -52,7 +52,7 @@ async def test_dashscope_api_timeout_retry():
 @pytest.mark.deepeval
 async def test_cache_during_failures():
     """Test that cache still works during API failures."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "Cache test query", "query_id": "cache_test_001"}]
 
@@ -61,10 +61,10 @@ async def test_cache_during_failures():
         mock_gen.return_value = "Cached answer for testing."
 
         try:
-            results1, _ = await evaluate_answers_deepeval(dataset, top_k=3)
+            results1, _ = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Run again - should use cache
-            results2, _ = await evaluate_answers_deepeval(dataset, top_k=3)
+            results2, _ = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Results should be consistent
             if len(results1) > 0 and len(results2) > 0:
@@ -83,7 +83,7 @@ async def test_cache_during_failures():
 @pytest.mark.deepeval
 async def test_partial_results_on_some_failures():
     """Test that partial results are returned when some metrics fail."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "Partial test query", "query_id": "partial_test_001"}]
 
@@ -98,7 +98,7 @@ async def test_partial_results_on_some_failures():
 
     with patch("src.evals.assessment.answer_eval.safe_a_measure", side_effect=mock_safe_measure):
         try:
-            results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Should return results even with some failures
             if len(results) > 0:
@@ -125,13 +125,13 @@ async def test_partial_results_on_some_failures():
 @pytest.mark.asyncio
 async def test_none_query_in_dataset():
     """Test that None queries in dataset are handled."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": None, "query_id": "none_test_001"}]
 
     # Should handle None query
     try:
-        results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+        results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
         # Should return results or handle gracefully
         assert isinstance(results, list)
@@ -143,13 +143,13 @@ async def test_none_query_in_dataset():
 @pytest.mark.asyncio
 async def test_empty_string_query():
     """Test that empty string queries are handled."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "", "query_id": "empty_test_001"}]
 
     # Should handle empty query
     try:
-        results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+        results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
         # Should return results or handle gracefully
         assert isinstance(results, list)
@@ -161,13 +161,13 @@ async def test_empty_string_query():
 @pytest.mark.asyncio
 async def test_negative_top_k():
     """Test that negative top_k values are handled."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "Test query", "query_id": "topk_test_001"}]
 
     # Should handle negative top_k
     try:
-        results, aggregate = await evaluate_answers_deepeval(dataset, top_k=-1)
+        results, aggregate = await evaluate_answer_quality_async(dataset, top_k=-1)
 
         # Should clamp to valid range or return empty
         assert isinstance(results, list)
@@ -179,12 +179,12 @@ async def test_negative_top_k():
 @pytest.mark.asyncio
 async def test_zero_top_k():
     """Test that zero top_k values are handled."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "Test query", "query_id": "zero_topk_001"}]
 
     # Should handle zero top_k
-    results, aggregate = await evaluate_answers_deepeval(dataset, top_k=0)
+    results, aggregate = await evaluate_answer_quality_async(dataset, top_k=0)
 
     # Should return results with no context
     assert isinstance(results, list)
@@ -238,7 +238,7 @@ def test_artifact_write_failure():
 @pytest.mark.deepeval
 async def test_concurrent_evaluation_with_failures():
     """Test that concurrent evaluations handle failures gracefully."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     # Multiple queries
     dataset = [{"query": f"Query {i}", "query_id": f"concurrent_{i}"} for i in range(5)]
@@ -255,7 +255,7 @@ async def test_concurrent_evaluation_with_failures():
         ]
 
         try:
-            results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Should return partial results
             assert len(results) <= 5
@@ -276,7 +276,7 @@ async def test_concurrent_evaluation_with_failures():
 @pytest.mark.deepeval
 async def test_metric_calculation_with_invalid_context():
     """Test that metrics handle invalid context gracefully."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "Test query", "query_id": "context_test_001"}]
 
@@ -285,7 +285,7 @@ async def test_metric_calculation_with_invalid_context():
         mock_retrieve.return_value = ("", [])  # Empty context
 
         try:
-            results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Should still generate results
             if len(results) > 0:
@@ -305,7 +305,7 @@ async def test_metric_calculation_with_invalid_context():
 @pytest.mark.deepeval
 async def test_metric_timeout_handling():
     """Test that individual metric timeouts don't crash evaluation."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "Timeout test", "query_id": "timeout_metric_001"}]
 
@@ -325,7 +325,7 @@ async def test_metric_timeout_handling():
             "src.evals.assessment.answer_eval.asyncio.wait_for", side_effect=timeout_wait_for
         ):
             try:
-                results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+                results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
                 # Should handle timeout
                 if len(results) > 0:
@@ -352,7 +352,7 @@ async def test_metric_timeout_handling():
 @pytest.mark.deepeval
 async def test_very_long_response_handling():
     """Test that very long LLM responses are handled."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "Long response test", "query_id": "long_001"}]
 
@@ -363,7 +363,7 @@ async def test_very_long_response_handling():
         mock_gen.return_value = long_response
 
         try:
-            results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Should handle long response
             if len(results) > 0:
@@ -384,7 +384,7 @@ async def test_very_long_response_handling():
 @pytest.mark.deepeval
 async def test_unicode_in_query_and_response():
     """Test that Unicode characters are handled correctly."""
-    from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+    from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
     dataset = [{"query": "What is the recommended LDL-C target? 价值观", "query_id": "unicode_001"}]
 
@@ -392,7 +392,7 @@ async def test_unicode_in_query_and_response():
         mock_gen.return_value = "The recommended target is < 1.8 mmol/L. 价值观测试"
 
         try:
-            results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Should handle Unicode
             if len(results) > 0:

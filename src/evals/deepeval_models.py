@@ -29,6 +29,7 @@ class QwenModel(DeepEvalBaseLLM):
             model: Model identifier string
         """
         self.model = model
+        self.model_name = model
         self.client = OpenAI(
             api_key=settings.dashscope_api_key,
             base_url=settings.qwen_base_url,
@@ -42,13 +43,13 @@ class QwenModel(DeepEvalBaseLLM):
             max_retries=2,
         )
 
-    def load_model(self):
+    def load_model(self) -> "QwenModel":
         """Load and return the model.
 
         Returns:
-            Model identifier string
+            Self as QwenModel instance
         """
-        return self.model
+        return self
 
     def generate(self, prompt: str) -> str:
         """Generate text synchronously.
@@ -60,13 +61,13 @@ class QwenModel(DeepEvalBaseLLM):
             Generated text response
         """
         response = self.client.chat.completions.create(
-            model=self.model,
+            model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=settings.judge_temperature,
             max_tokens=settings.judge_max_tokens,
         )
         if response.choices and response.choices[0].message.content:
-            return response.choices[0].message.content
+            return str(response.choices[0].message.content)
         return ""
 
     async def a_generate(self, prompt: str) -> str:
@@ -79,13 +80,13 @@ class QwenModel(DeepEvalBaseLLM):
             Generated text response
         """
         response = await self.async_client.chat.completions.create(
-            model=self.model,
+            model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=settings.judge_temperature,
             max_tokens=settings.judge_max_tokens,
         )
         if response.choices and response.choices[0].message.content:
-            return response.choices[0].message.content
+            return str(response.choices[0].message.content)
         return ""
 
     def get_model_name(self) -> str:
@@ -94,7 +95,7 @@ class QwenModel(DeepEvalBaseLLM):
         Returns:
             Model identifier string
         """
-        return self.model
+        return self.model_name
 
     def supports_json_mode(self) -> bool:
         return False

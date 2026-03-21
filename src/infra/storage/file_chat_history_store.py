@@ -113,12 +113,12 @@ class FileChatHistoryStore:
         if not isinstance(raw_messages, list):
             raw_messages = []
         messages = [message for message in raw_messages if isinstance(message, dict)]
-        updated_at = self._coerce_updated_at(raw_session.get("updated_at"))
-        if updated_at is None:
-            updated_at = self._derive_updated_at(messages, default_updated_at)
+        normalized_updated_at = self._coerce_updated_at(raw_session.get("updated_at"))
+        if normalized_updated_at is None:
+            normalized_updated_at = self._derive_updated_at(messages, default_updated_at)
         return {
             "version": SESSION_SCHEMA_VERSION,
-            "updated_at": updated_at,
+            "updated_at": normalized_updated_at,
             "messages": messages,
         }
 

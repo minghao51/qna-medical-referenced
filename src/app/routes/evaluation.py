@@ -167,7 +167,7 @@ def _read_json_if_exists(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text())  # type: ignore[no-any-return]
     except Exception:
         return {}
 
@@ -179,7 +179,7 @@ def _read_failed_thresholds(run_dir: Path) -> list[dict[str, Any]]:
         return [item for item in explicit if isinstance(item, dict)]
 
     step_findings = _read_json_if_exists(run_dir / "step_findings.json")
-    findings = step_findings if isinstance(step_findings, list) else []
+    findings: list[dict[str, Any]] = step_findings if isinstance(step_findings, list) else []
     threshold_findings = []
     for finding in findings:
         if not isinstance(finding, dict):
@@ -207,7 +207,7 @@ def _normalize_ablation_payload(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {"ablation_runs": [], "message": "No ablation results available"}
 
-    preferred_baselines = ("legacy_hybrid", "hybrid_rrf", "rrf_hybrid")
+    preferred_baselines = ("rrf_hybrid",)
     baseline_strategy = next(
         (strategy for strategy in preferred_baselines if strategy in payload),
         next(iter(payload), None),
@@ -278,7 +278,7 @@ def _local_history_runs(limit: int) -> list[dict[str, Any]]:
 
 
 def _aggregate_history_summary(runs: list[dict[str, Any]]) -> dict[str, Any]:
-    metrics_tracking = {
+    metrics_tracking: dict[str, list[float]] = {
         "hit_rate_at_k": [],
         "mrr": [],
         "ndcg_at_k": [],
@@ -367,7 +367,7 @@ def get_latest_evaluation() -> dict[str, Any]:
     retrieval_metrics_path = run_dir / "retrieval_metrics.json"
     manifest_path = run_dir / "manifest.json"
 
-    result = {"run_dir": str(run_dir.name)}
+    result: dict[str, Any] = {"run_dir": str(run_dir.name)}
 
     if summary_path.exists():
         result["summary"] = json.loads(summary_path.read_text())
@@ -510,7 +510,7 @@ def get_evaluation_run(run_dir: str) -> dict[str, Any]:
     if not target_dir.exists():
         raise HTTPException(status_code=404, detail=f"Run directory not found: {run_dir}")
 
-    result = {"run_dir": run_dir}
+    result: dict[str, Any] = {"run_dir": run_dir}
 
     summary_path = target_dir / "summary.json"
     step_metrics_path = target_dir / "step_metrics.json"
@@ -729,7 +729,10 @@ def get_step_metrics(stage: str) -> dict[str, Any]:
     step_metrics = json.loads(step_metrics_path.read_text())
     if stage_name not in step_metrics:
         raise HTTPException(status_code=404, detail="Stage not found in metrics")
-    return step_metrics[stage_name]
+    stage_metrics = step_metrics[stage_name]
+    if not isinstance(stage_metrics, dict):
+        raise HTTPException(status_code=500, detail="Stage metrics are malformed")
+    return dict(stage_metrics)
 
 
 @router.get(

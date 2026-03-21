@@ -12,6 +12,14 @@ from src.evals.checks.shared import safe_median
 from src.ingestion.artifacts import load_source_artifact
 
 
+def _float_metric(value: Any, default: float = 0.0) -> float:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    return default
+
+
 def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
     data_dir = Path(data_raw_dir or DATA_RAW_DIR)
     pdf_files = sorted(data_dir.glob("*.pdf"))
@@ -75,6 +83,12 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
                     "ocr_required_pages", ocr_required_pages
                 ),
                 "suspected_table_count": suspected_tables,
+                "pdf_extractor_strategy": artifact_meta.get(
+                    "pdf_extractor_strategy", "pypdf_pdfplumber"
+                ),
+                "pdf_table_extractor": artifact_meta.get("pdf_table_extractor", "heuristic"),
+                "camelot_table_pages": artifact_meta.get("camelot_table_pages", 0),
+                "camelot_total_rows": artifact_meta.get("camelot_total_rows", 0),
             }
         )
 
@@ -104,8 +118,14 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
         )
         if records
         else 0.0,
+        "pdf_extractor_strategy": (
+            set(r.get("pdf_extractor_strategy", "pypdf_pdfplumber") for r in records)
+        ),
+        "pdf_table_extractor": (set(r.get("pdf_table_extractor", "heuristic") for r in records)),
+        "camelot_total_table_pages": sum(int(r.get("camelot_table_pages", 0)) for r in records),
+        "camelot_total_rows": sum(int(r.get("camelot_total_rows", 0)) for r in records),
     }
-    if aggregate["empty_page_rate"] > 0.2:
+    if _float_metric(aggregate.get("empty_page_rate")) > 0.2:
         findings.append(
             {
                 "severity": "warning",

@@ -19,9 +19,12 @@ Example:
 
 import logging
 from contextlib import asynccontextmanager
+from typing import Awaitable, Callable, cast
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 from src.app.exceptions import (
     AppError,
@@ -40,6 +43,8 @@ from src.rag import initialize_runtime_index
 
 configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
+
+ExceptionHandler = Callable[[Request, Exception], Response | Awaitable[Response]]
 
 
 @asynccontextmanager
@@ -122,8 +127,10 @@ def create_app() -> FastAPI:
     app.include_router(chat_router)
     app.include_router(history_router)
     app.include_router(evaluation_router)
-    app.add_exception_handler(AppError, app_error_handler)
-    app.add_exception_handler(HTTPException, http_exception_handler)
+    request_exception_handler = cast(ExceptionHandler, app_error_handler)
+    http_request_exception_handler = cast(ExceptionHandler, http_exception_handler)
+    app.add_exception_handler(AppError, request_exception_handler)
+    app.add_exception_handler(HTTPException, http_request_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
     return app
 

@@ -6,7 +6,7 @@ import json
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from src.config import settings
 from src.config.paths import DATA_RAW_DIR
@@ -22,7 +22,7 @@ from src.evals.schemas import AssessmentConfig, AssessmentResult
 from src.experiments.wandb_tracking import log_assessment_to_wandb
 from src.rag.runtime import configure_runtime_for_experiment, initialize_runtime_index
 
-from .answer_eval import evaluate_answer_quality, evaluate_answers_deepeval
+from .answer_eval import evaluate_answer_quality
 from .l6_contract import (
     L6_ANSWER_QUALITY_METRICS,
     L6_ANSWER_QUALITY_ROWS,
@@ -34,7 +34,7 @@ from .reporting import git_head, render_summary, sha256_file
 from .retrieval_eval import evaluate_retrieval, run_diversity_sweep, run_retrieval_ablations
 from .thresholds import DEFAULT_THRESHOLDS, evaluate_thresholds
 
-__all__ = ["evaluate_answers_deepeval", "run_assessment"]
+__all__ = ["evaluate_answer_quality", "run_assessment"]
 
 
 def _load_json_if_exists(path: Path) -> Any:
@@ -195,7 +195,7 @@ def run_assessment(
         reuse_cached_dataset=reuse_cached_dataset,
         fail_on_thresholds=fail_on_thresholds,
         thresholds=thresholds,
-        retrieval_options=resolved_retrieval_options or None,
+        retrieval_options=resolved_retrieval_options,
         dataset_split=dataset_split,
         min_label_confidence=min_label_confidence,
         retrieval_mode=retrieval_mode,
@@ -299,15 +299,28 @@ def run_assessment(
     store.write_json("manifest.json", manifest)
 
     l5_collection_name = experiment_runtime.get("vector_store", {}).get("collection_name")
+    if (
+        audit_l0_download_fn is None
+        or assess_l1_html_markdown_quality_fn is None
+        or assess_l2_pdf_quality_fn is None
+        or assess_l3_chunking_quality_fn is None
+        or assess_l4_reference_quality_fn is None
+        or assess_l5_index_quality_fn is None
+    ):
+        raise ValueError("Assessment stage functions must be provided")
+    audit_l0 = cast(Callable[[], dict[str, Any]], audit_l0_download_fn)
+    assess_l1 = cast(Callable[[], dict[str, Any]], assess_l1_html_markdown_quality_fn)
+    assess_l2 = cast(Callable[[], dict[str, Any]], assess_l2_pdf_quality_fn)
+    assess_l3 = cast(Callable[[], dict[str, Any]], assess_l3_chunking_quality_fn)
+    assess_l4 = cast(Callable[[], dict[str, Any]], assess_l4_reference_quality_fn)
+    assess_l5 = cast(Callable[..., dict[str, Any]], assess_l5_index_quality_fn)
     step_metrics = {
-        "l0": audit_l0_download_fn(),
-        "l1": assess_l1_html_markdown_quality_fn(),
-        "l2": assess_l2_pdf_quality_fn(),
-        "l3": assess_l3_chunking_quality_fn(),
-        "l4": assess_l4_reference_quality_fn(),
-        "l5": assess_l5_index_quality_fn(collection_name=l5_collection_name)
-        if l5_collection_name
-        else assess_l5_index_quality_fn(),
+        "l0": audit_l0(),
+        "l1": assess_l1(),
+        "l2": assess_l2(),
+        "l3": assess_l3(),
+        "l4": assess_l4(),
+        "l5": assess_l5(collection_name=l5_collection_name) if l5_collection_name else assess_l5(),
     }
     step_findings: list[dict[str, Any]] = []
     for stage in step_metrics.values():
