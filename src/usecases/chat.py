@@ -33,7 +33,7 @@ from typing import Any, AsyncGenerator, Optional
 from src.app.exceptions import UpstreamServiceError
 from src.infra.llm import get_client
 from src.infra.storage.interfaces import ChatHistoryStore
-from src.rag import retrieve_context, retrieve_context_with_trace
+from src.rag import retrieve_context, retrieve_context_with_trace, retrieve_context_with_trace_async
 
 logger = logging.getLogger(__name__)
 
@@ -179,17 +179,20 @@ async def stream_chat_message(
 
     pipeline_trace = None
     chat_start = time.time()
+    client = llm_client or get_client()
 
     if include_pipeline:
-        context, sources, pipeline_trace = retrieve_context_with_trace(message, top_k=top_k)
+        context, sources, pipeline_trace = await retrieve_context_with_trace_async(
+            message,
+            top_k=top_k,
+            hyde_client=client,
+        )
     else:
         context, sources = retrieve_context(message, top_k=top_k)
 
     full_context = _compose_full_context(history_context, context)
 
     gen_start = time.time()
-    client = llm_client or get_client()
-
     accumulated_response = ""
 
     try:
@@ -235,3 +238,4 @@ async def stream_chat_message(
             )
         except Exception as e:
             logger.error("Failed to yield error event: %s", e)
+        raise UpstreamServiceError("An error occurred processing your request") from exc

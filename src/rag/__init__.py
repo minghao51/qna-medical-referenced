@@ -5,6 +5,7 @@ from src.rag.runtime import (
     initialize_vector_store,
     retrieve_context,
     retrieve_context_with_trace,
+    retrieve_context_with_trace_async,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "initialize_vector_store",
     "retrieve_context",
     "retrieve_context_with_trace",
+    "retrieve_context_with_trace_async",
 ]

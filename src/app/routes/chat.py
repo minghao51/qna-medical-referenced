@@ -37,6 +37,7 @@ async def chat_stream_generator(
     payload: ChatRequest,
     include_pipeline: bool,
 ):
+    sent_terminal_event = False
     try:
         session_id = (
             getattr(request.state, "chat_session_id") or get_chat_session_id(request) or "default"
@@ -75,12 +76,14 @@ async def chat_stream_generator(
                             "error": metadata.get("error"),
                         }
                     )
+                    sent_terminal_event = True
                     yield f"data: {event}\n\n"
                 except Exception as e:
                     logger.error("Failed to serialize SSE event: %s", e)
                     error_event = json.dumps(
                         {"content": "", "done": True, "error": "Serialization error"}
                     )
+                    sent_terminal_event = True
                     yield f"data: {error_event}\n\n"
 
     except Exception:
@@ -94,8 +97,9 @@ async def chat_stream_generator(
             include_pipeline=include_pipeline,
             auth_key_id=getattr(getattr(request.state, "auth", None), "key_id", None),
         )
-        error_event = json.dumps({"content": "", "done": True, "error": "An error occurred"})
-        yield f"data: {error_event}\n\n"
+        if not sent_terminal_event:
+            error_event = json.dumps({"content": "", "done": True, "error": "An error occurred"})
+            yield f"data: {error_event}\n\n"
 
 
 @router.post(

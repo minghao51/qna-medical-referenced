@@ -38,6 +38,8 @@ def build_source_payload(result: dict) -> dict:
         source_type=source_type,
         explicit_class=metadata.get("source_class"),
         page_type=metadata.get("page_type"),
+        logical_name=logical_name,
+        domain=domain,
     )
     return {
         "canonical_label": canonical_label,
