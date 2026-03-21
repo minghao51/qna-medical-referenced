@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -15,6 +16,52 @@ if "DASHSCOPE_API_KEY" not in os.environ or not os.environ.get("DASHSCOPE_API_KE
 
 
 LIVE_QWEN_ENABLED = os.environ.get("RUN_LIVE_QWEN_TESTS") == "1"
+
+
+@pytest.fixture
+def golden_conversations_fixture() -> list[dict]:
+    """Load golden conversations from fixture file.
+
+    Returns:
+        List of normalized conversation records from golden_conversations.json
+    """
+    from src.evals.dataset_builder import normalize_golden_conversations
+
+    fixture_path = Path(__file__).parent / "fixtures" / "golden_conversations.json"
+    return normalize_golden_conversations(fixture_path)
+
+
+@pytest.fixture
+def golden_conversations_raw() -> dict[str, object]:
+    """Load raw golden conversations fixture without normalization.
+
+    Returns:
+        Raw dictionary from golden_conversations.json
+    """
+    fixture_path = Path(__file__).parent / "fixtures" / "golden_conversations.json"
+    data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    return data
+
+
+@pytest.fixture
+def multi_turn_categories() -> list[str]:
+    """List of valid multi-turn conversation categories."""
+    return ["contextual_followup", "clarification", "topic_shift", "cross_document"]
+
+
+@pytest.fixture
+def multi_turn_difficulties() -> list[str]:
+    """List of valid difficulty levels."""
+    return ["easy", "medium", "hard"]
+
+
+@pytest.fixture
+def multi_turn_splits() -> list[str]:
+    """List of valid dataset splits."""
+    return ["dev", "test", "regression"]
+
+
 _LIVE_QWEN_PRECHECK: str | None = None
 
 # Real API E2E tests flag

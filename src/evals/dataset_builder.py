@@ -65,10 +65,46 @@ def normalize_golden_queries(fixture_path: Path) -> list[dict[str, Any]]:
     return [r for r in records if r["query"]]
 
 
+def normalize_golden_conversations(fixture_path: Path) -> list[dict[str, Any]]:
+    """Normalize multi-turn conversation golden data from fixture file.
+
+    Args:
+        fixture_path: Path to golden_conversations.json
+
+    Returns:
+        List of normalized conversation records suitable for evaluation
+    """
+    data = json.loads(Path(fixture_path).read_text(encoding="utf-8"))
+    records = []
+    for i, item in enumerate(data.get("golden_conversations", []), start=1):
+        turns = item.get("turns", [])
+        user_turns = [t for t in turns if t.get("role") == "user"]
+        records.append(
+            {
+                "conversation_id": item.get("conversation_id", f"mt_{i:03d}"),
+                "scenario": item.get("scenario", "").strip(),
+                "conversation_category": item.get("conversation_category", "contextual_followup"),
+                "turns": turns,
+                "user_turn_count": len(user_turns),
+                "expected_outcome": item.get("expected_outcome", "").strip(),
+                "turn_level_expected_keywords": list(item.get("turn_level_expected_keywords", [])),
+                "turn_level_expected_sources": list(item.get("turn_level_expected_sources", [])),
+                "context": list(item.get("context", [])),
+                "difficulty": item.get("difficulty", "medium"),
+                "dataset_split": item.get("dataset_split")
+                or _assign_split(item.get("source_family", "")),
+                "source_family": item.get("source_family", "unknown"),
+            }
+        )
+    return [r for r in records if r["turns"] and r["scenario"]]
+
+
 def _normalize_cached_dataset(dataset_path: Path) -> list[dict[str, Any]]:
     data = json.loads(dataset_path.read_text(encoding="utf-8"))
     if isinstance(data, dict) and "golden_queries" in data:
         return normalize_golden_queries(dataset_path)
+    if isinstance(data, dict) and "golden_conversations" in data:
+        return normalize_golden_conversations(dataset_path)
     if isinstance(data, list):
         return [
             item for item in data if isinstance(item, dict) and str(item.get("query", "")).strip()

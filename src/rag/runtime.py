@@ -62,6 +62,7 @@ class RetrievalDiversityConfig:
     search_mode: str = _RRF_SEARCH_MODE
     enable_hyde: bool = False
     hyde_max_length: int = 200  # Maximum length for HyDE hypothetical answers
+    enable_hype: bool = False  # Use pre-stored HyPE questions at retrieval time
 
 
 def get_runtime_retrieval_config() -> dict[str, Any]:
@@ -86,6 +87,7 @@ def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> Retrie
     # Validate HyDE configuration
     cfg.enable_hyde = bool(cfg.enable_hyde)
     cfg.hyde_max_length = max(50, min(500, int(cfg.hyde_max_length)))
+    cfg.enable_hype = bool(cfg.enable_hype) or bool(getattr(settings, "hype_enabled", False))
     return cfg
 
 
@@ -470,7 +472,20 @@ def retrieve_context(
 
     vector_store = get_vector_store()
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
-    results = _retrieve_candidates(vector_store, query, fetch_k, cfg.search_mode)
+    expanded_queries = _expand_queries(query)
+    expanded_queries, _ = _extend_with_hype_questions(
+        vector_store,
+        query,
+        expanded_queries,
+        enable_hype=cfg.enable_hype,
+    )
+    results = _retrieve_candidates(
+        vector_store,
+        query,
+        fetch_k,
+        cfg.search_mode,
+        pre_expanded_queries=expanded_queries,
+    )
     results = _diversify_results(
         results,
         top_k=top_k,
@@ -512,8 +527,19 @@ def retrieve_context_with_trace(
     vector_store = get_vector_store()
 
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
+    expanded_queries = _expand_queries(query)
+    expanded_queries, selected_hype_questions = _extend_with_hype_questions(
+        vector_store,
+        query,
+        expanded_queries,
+        enable_hype=cfg.enable_hype,
+    )
     results, retrieval_trace = _retrieve_candidates_with_trace(
-        vector_store, query, fetch_k, cfg.search_mode
+        vector_store,
+        query,
+        fetch_k,
+        cfg.search_mode,
+        pre_expanded_queries=expanded_queries,
     )
     results = _diversify_results(
         results,
@@ -652,6 +678,15 @@ async def retrieve_context_with_trace_async(
     )
     query_expansion_timing_ms = int((time.time() - query_expansion_start) * 1000)
 
+    expanded_queries, selected_hype_questions = _extend_with_hype_questions(
+        vector_store,
+        query,
+        expanded_queries,
+        enable_hype=cfg.enable_hype,
+    )
+    if selected_hype_questions:
+        logger.debug(f"HyPE: expanded to {len(expanded_queries)} total queries")
+
     # Use async retrieval with HyDE support (pass pre-expanded queries to avoid double expansion)
     retrieval_start = time.time()
     results, retrieval_trace = await _retrieve_candidates_with_trace_async(
@@ -677,7 +712,9 @@ async def retrieve_context_with_trace_async(
             skipped=False,
             details={
                 "expanded_queries": expanded_queries,
+                "selected_hype_questions": selected_hype_questions,
                 "hyde_enabled": cfg.enable_hyde,
+                "hype_enabled": cfg.enable_hype,
             },
         )
     )
@@ -779,6 +816,8 @@ async def retrieve_context_with_trace_async(
             "search_mode": cfg.search_mode,
             "expanded_queries": retrieval_trace.get("expanded_queries", []),
             "hyde_enabled": retrieval_trace.get("hyde_enabled", False),
+            "hype_enabled": cfg.enable_hype,
+            "selected_hype_questions": selected_hype_questions,
             "enable_diversification": cfg.enable_diversification,
             "mmr_lambda": cfg.mmr_lambda,
             "overfetch_multiplier": cfg.overfetch_multiplier,
@@ -823,6 +862,25 @@ def get_context(query: str | None = None) -> tuple[str, list[ChatSource]]:
     return "", []
 
 
+def _extend_with_hype_questions(
+    vector_store,
+    query: str,
+    expanded_queries: list[str],
+    *,
+    enable_hype: bool,
+    limit: int = 5,
+) -> tuple[list[str], list[str]]:
+    if not enable_hype:
+        return expanded_queries, []
+
+    selected_hype_questions = vector_store.search_hypothetical_questions(query, limit=limit)
+    combined_queries = list(expanded_queries)
+    for question in selected_hype_questions:
+        if question not in combined_queries:
+            combined_queries.append(question)
+    return combined_queries, selected_hype_questions
+
+
 def _merge_result_sets(result_sets: list[list[dict]], top_k: int) -> list[dict]:
     merged: dict[str, dict] = {}
     for results in result_sets:
@@ -849,8 +907,17 @@ def _merge_traced_result_sets(result_sets: list[list[dict]], top_k: int) -> list
     return merged
 
 
-def _retrieve_candidates(vector_store, query: str, top_k: int, search_mode: str) -> list[dict]:
-    expanded_queries = _expand_queries(query)
+def _retrieve_candidates(
+    vector_store,
+    query: str,
+    top_k: int,
+    search_mode: str,
+    *,
+    pre_expanded_queries: list[str] | None = None,
+) -> list[dict]:
+    expanded_queries = (
+        pre_expanded_queries if pre_expanded_queries is not None else _expand_queries(query)
+    )
     result_sets = [
         vector_store.similarity_search(expanded_query, top_k=top_k, search_mode=search_mode)
         for expanded_query in expanded_queries
@@ -859,9 +926,16 @@ def _retrieve_candidates(vector_store, query: str, top_k: int, search_mode: str)
 
 
 def _retrieve_candidates_with_trace(
-    vector_store, query: str, top_k: int, search_mode: str
+    vector_store,
+    query: str,
+    top_k: int,
+    search_mode: str,
+    *,
+    pre_expanded_queries: list[str] | None = None,
 ) -> tuple[list[dict], dict]:
-    expanded_queries = _expand_queries(query)
+    expanded_queries = (
+        pre_expanded_queries if pre_expanded_queries is not None else _expand_queries(query)
+    )
     result_sets: list[list[dict]] = []
     traces: list[dict] = []
     for expanded_query in expanded_queries:

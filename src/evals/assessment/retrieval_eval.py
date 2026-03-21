@@ -369,6 +369,46 @@ def retrieval_ablation_configs(
     ]
 
 
+def hype_ablation_configs(
+    base_options: dict[str, Any] | None = None,
+) -> list[tuple[str, dict[str, Any]]]:
+    """Ablation configs for HyPE (Hypothetical Prompt Embedding) evaluation.
+
+    Tests the impact of HyPE at different sample rates and in combination with HyDE.
+    HyPE generates hypothetical questions at index time, storing them in chunk metadata
+    for zero-LLM-cost query expansion at retrieval time.
+    """
+    base = dict(base_options or {})
+    return [
+        ("hype_disabled", {**base, "enable_hype": False, "enable_hyde": False}),
+        ("hype_10pct", {**base, "enable_hype": True, "enable_hyde": False}),
+        (
+            "hype_50pct",
+            {**base, "enable_hype": True, "enable_hyde": False, "hype_sample_rate": 0.5},
+        ),
+        (
+            "hype_100pct",
+            {**base, "enable_hype": True, "enable_hyde": False, "hype_sample_rate": 1.0},
+        ),
+        ("hyde_only", {**base, "enable_hype": False, "enable_hyde": True}),
+        ("hype_plus_hyde", {**base, "enable_hype": True, "enable_hyde": True}),
+    ]
+
+
+def run_hype_ablations(
+    dataset: list[dict[str, Any]],
+    top_k: int,
+    *,
+    base_options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run HyPE ablation study to evaluate HyPE impact on retrieval quality."""
+    outputs: dict[str, Any] = {}
+    for name, options in hype_ablation_configs(base_options):
+        _, metrics = evaluate_retrieval(dataset, top_k, retrieval_options=options)
+        outputs[name] = metrics
+    return outputs
+
+
 def run_retrieval_ablations(
     dataset: list[dict[str, Any]],
     top_k: int,

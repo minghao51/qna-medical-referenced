@@ -1,0 +1,91 @@
+schema_version: 1
+metadata:
+  name: baseline_expanded_768dim
+  description: Consolidated best variants for expanded 768-dim corpus
+  owner: local
+  hypothesis: Best extraction + chunking + retrieval variants for expanded medical corpus
+  tags: [baseline, rag, 768dim, expanded]
+
+ingestion:
+  page_classification_enabled: true
+  index_only_classified_pages: true
+  html_extractor_mode: auto
+  structured_chunking_enabled: true
+  source_chunk_configs:
+    pdf:
+      chunk_size: 480
+      chunk_overlap: 64
+      strategy: recursive
+      min_chunk_size: 140
+    markdown:
+      chunk_size: 480
+      chunk_overlap: 64
+      strategy: recursive
+      min_chunk_size: 80
+
+embedding_index:
+  collection_name: medical_docs
+  collection_name_suffix: expanded_768dim
+  embedding_model: text-embedding-v4
+  embedding_batch_size: 10
+  semantic_weight: 0.6
+  keyword_weight: 0.2
+  boost_weight: 0.2
+  rebuild_policy: if_missing_or_stale
+  materialize_html: true
+
+retrieval:
+  top_k: 5
+  search_mode: rrf_hybrid
+  enable_diversification: true
+  mmr_lambda: 0.75
+  overfetch_multiplier: 4
+  max_chunks_per_source_page: 2
+  max_chunks_per_source: 3
+
+dataset:
+  path: tests/fixtures/golden_queries.json
+  split: regression
+  min_label_confidence: medium
+  enable_llm_generation: false
+
+evaluation:
+  artifact_dir: data/evals_expanded
+  include_answer_eval: true
+  disable_llm_judging: false
+  fail_on_thresholds: false
+  run_retrieval_ablations: true
+
+variants:
+  - name: best_combined
+    description: chunk_small + combined_best (pymupdf+camelot+html2md)
+    overrides:
+      ingestion:
+        pdf_extractor_strategy: pymupdf_pdfplumber
+        pdf_table_extractor: camelot
+        html_extractor_strategy: html2md_trafilatura_bs
+
+  - name: rrf_mmr_tuned
+    description: Higher MMR lambda (0.9) for more diverse results
+    overrides:
+      retrieval:
+        mmr_lambda: 0.9
+        overfetch_multiplier: 6
+
+  - name: chonkie_semantic
+    description: Semantic chunking for comparison
+    overrides:
+      ingestion:
+        source_chunk_configs:
+          pdf:
+            strategy: chonkie_semantic
+            chunk_size: 512
+          markdown:
+            strategy: chonkie_semantic
+            chunk_size: 512
+
+  - name: html_fullcascade
+    description: Full HTML extraction cascade
+    overrides:
+      ingestion:
+        html_extractor_strategy: full_cascade

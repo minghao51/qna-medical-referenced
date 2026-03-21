@@ -250,3 +250,55 @@ def validate_hyde_config(
         )
 
     return enable_hyde, validated_max_length
+
+
+HYPE_QUESTION_PROMPT_TEMPLATE = """Given this medical document chunk, generate {count} question(s) that this chunk would answer.
+Focus on specific medical terminology, clinical values, and guideline recommendations.
+
+Document chunk:
+{chunk}
+
+Generate {count} question(s), each on its own line. Be specific and use medical terminology."""
+
+
+async def generate_hypothetical_questions(
+    chunk: str,
+    client: "QwenClient",
+    count: int = 2,
+) -> list[str]:
+    """Generate hypothetical questions that a chunk could answer.
+
+    This is used for HyPE (Hypothetical Prompt Embedding) — generating
+    questions at index time that chunks could answer, stored in metadata
+    for zero-LLM-cost query expansion at retrieval time.
+
+    Args:
+        chunk: The document chunk text
+        client: QwenClient instance for LLM generation
+        count: Number of questions to generate (1-2)
+
+    Returns:
+        List of question strings that the chunk could answer
+    """
+    if not chunk or not chunk.strip():
+        logger.warning("Cannot generate hypothetical questions for empty chunk")
+        return []
+
+    count = max(1, min(2, int(count)))
+    prompt = HYPE_QUESTION_PROMPT_TEMPLATE.format(count=count, chunk=chunk.strip())
+
+    try:
+        response = client.generate(prompt=prompt, context="")
+        questions = []
+        for line in response.strip().split("\n"):
+            line = line.strip()
+            if line and not line.startswith("-"):
+                line = line.lstrip("0123456789. )").strip()
+            if line and len(line) > 10:
+                questions.append(line)
+        result = questions[:count]
+        logger.debug(f"Generated {len(result)} hypothetical questions for chunk: {chunk[:50]}...")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to generate hypothetical questions: {e}")
+        return []

@@ -17,7 +17,10 @@ import time
 
 
 def run_pipeline(
-    skip_download: bool = False, force_rebuild: bool = False, force_html_convert: bool = False
+    skip_download: bool = False,
+    force_rebuild: bool = False,
+    force_html_convert: bool = False,
+    enable_hype: bool = False,
 ) -> None:
     """Run the full offline corpus refresh pipeline in sequence."""
     print("=" * 70)
@@ -35,6 +38,7 @@ def run_pipeline(
     print(f"L1: HTML -> Markdown         {'[RUNNING]' if not skip_download else '[SKIPPED]'}")
     print("L2: Load PDF documents       [RUNNING]")
     print("L3: Chunk documents          [RUNNING]")
+    print(f"L3b: Generate HyPE questions {'[RUNNING]' if enable_hype else '[SKIPPED]'}")
     print("L4: Load reference data      [RUNNING]")
     print(f"L5: Embed & store vectors    {'[FORCE REBUILD]' if force_rebuild else '[RUNNING]'}")
     print("L6: Initialize RAG           [RUNNING]")
@@ -52,7 +56,7 @@ def run_pipeline(
     from src.rag.runtime import initialize_runtime_index
 
     step_count = 0
-    total_steps = 8 if not skip_download else 6
+    total_steps = 9 if not skip_download else 6
 
     if not skip_download:
         print(f"[{step_count + 1}/{total_steps}] L0: Downloading web content...")
@@ -90,14 +94,41 @@ def run_pipeline(
     chunks.extend(markdown_chunks)
     print()
 
+    if enable_hype:
+        print(f"[{step_count + 1}/{total_steps}] L3b: Generate HyPE questions...")
+        from src.config import settings
+        from src.infra.llm.qwen_client import get_client
+        from src.ingestion.steps.hype import generate_hype_questions_for_chunks
+
+        hype_client = get_client()
+        hype_questions = asyncio.run(
+            generate_hype_questions_for_chunks(
+                chunks=chunks,
+                client=hype_client,
+                sample_rate=settings.hype_sample_rate,
+                max_chunks=settings.hype_max_chunks,
+                questions_per_chunk=settings.hype_questions_per_chunk,
+            )
+        )
+        print(f"  HyPE questions generated for {len(hype_questions)} chunks")
+        for doc in chunks:
+            if doc["id"] in hype_questions:
+                doc.setdefault("metadata", {})
+                doc["metadata"]["hypothetical_questions"] = hype_questions[doc["id"]]
+        print()
+    else:
+        print("[SKIPPED] L3b: Generate HyPE questions (disabled)")
+        print()
+        hype_questions = {}
+    step_count += 1
+
     print(f"[{step_count + 1}/{total_steps}] L4: Loading reference data...")
     ref_loader = ReferenceDataLoader()
     ref_docs = ref_loader.load_reference_ranges_as_docs()
     print(f"  Loaded {len(ref_docs)} reference documents")
     print()
-    step_count += 1
 
-    print(f"[{step_count + 1}/{total_steps}] L5: Embedding and storing vectors...")
+    print(f"[{step_count + 2}/{total_steps}] L5: Embedding and storing vectors...")
     all_docs = chunks + ref_docs
     print(f"  Total documents to embed: {len(all_docs)}")
     vector_store = get_vector_store()
@@ -112,12 +143,11 @@ def run_pipeline(
         f"skipped_duplicate_content={add_stats['skipped_duplicate_content']}"
     )
     print()
-    step_count += 1
+    step_count += 2
 
     print(f"[{step_count + 1}/{total_steps}] L6: Initializing RAG pipeline...")
     initialize_runtime_index(rebuild=False)
     print()
-    step_count += 1
 
     total_time = time.time() - total_start
 
@@ -145,12 +175,18 @@ def main() -> None:
         action="store_true",
         help="Force re-convert HTML to Markdown (overwrite existing)",
     )
+    parser.add_argument(
+        "--enable-hype",
+        action="store_true",
+        help="Enable HyPE question generation at ingestion time",
+    )
     args = parser.parse_args()
 
     run_pipeline(
         skip_download=args.skip_download,
         force_rebuild=args.force,
         force_html_convert=args.force_html,
+        enable_hype=args.enable_hype,
     )
 
 

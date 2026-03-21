@@ -290,6 +290,39 @@ class Settings(BaseSettings):
     Environment variable: HYDE_MAX_LENGTH
     """
 
+    hype_enabled: bool = False
+    """Enable HyPE (Hypothetical Prompt Embedding) at ingestion time.
+
+    Generates hypothetical questions for a sample of chunks, stored in metadata
+    for zero-LLM-cost query expansion at retrieval time.
+
+    Default: False
+    Environment variable: HYPE_ENABLED
+    """
+
+    hype_sample_rate: float = 0.1
+    """Fraction of chunks to sample for HyPE generation (0.0-1.0).
+
+    Weighted by quality_score — higher quality chunks have higher selection probability.
+
+    Default: 0.1 (10%%)
+    Environment variable: HYPE_SAMPLE_RATE
+    """
+
+    hype_max_chunks: int = 500
+    """Maximum number of chunks to generate HyPE questions for per ingestion.
+
+    Default: 500
+    Environment variable: HYPE_MAX_CHUNKS
+    """
+
+    hype_questions_per_chunk: int = 2
+    """Number of hypothetical questions to generate per chunk (1-2).
+
+    Default: 2
+    Environment variable: HYPE_QUESTIONS_PER_CHUNK
+    """
+
     @property
     def is_development(self) -> bool:
         return self.environment.strip().lower() in {"development", "dev", "local", "test"}

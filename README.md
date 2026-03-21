@@ -1,5 +1,7 @@
 # Health Screening Interpreter
 
+> **Project Purpose:** This repository explores ingestion, evaluation, retrieval, and RAG (Retrieval-Augmented Generation) pipeline strategies for medical Q&A systems. It serves as a testbed for comparing different approaches to document processing, query expansion, and quality assessment.
+
 Medical Q&A system with:
 
 - a FastAPI backend for chat, history, and evaluation APIs
@@ -61,13 +63,38 @@ frontend/       Svelte frontend
 docs/           Current docs, plans, and historical reports
 scripts/        Small operational scripts
 tests/          Backend test suite
+  test_chat_multi_turn.py      # Multi-turn session tests
+  test_eval_multi_turn.py      # DeepEval conversation evaluation
+  fixtures/
+    golden_conversations.json  # 15 conversations across 4 categories
 ```
+
+## Multi-Turn Conversations
+
+The system supports session-based multi-turn conversations with:
+- Cookie-backed session persistence (see `docs/anonymous-sessions.md`)
+- Context building from chat history
+- Turn-level source and keyword verification
+- Golden conversations dataset for testing (15 conversations across 4 categories)
+
+Testing:
+- `tests/test_chat_multi_turn.py` - Session persistence and context tests
+- `tests/test_eval_multi_turn.py` - DeepEval conversation evaluation
+
+## Query Expansion
+
+The system supports multiple query expansion layers:
+- **HyDE (Hypothetical Document Embeddings)**: Query-time hypothetical answer generation
+- **HyPE (Hypothetical Prompt Embeddings)**: Index-time hypothetical question generation
+- Acronym expansion, keyword focus, tokenization
+
+See `docs/architecture/pipeline-strategies.md` for detailed comparison.
 
 ## API Surface
 
 - `GET /`
 - `GET /health`
-- `POST /chat`
+- `POST /chat` - Supports multi-turn via session cookies
 - `GET /history`
 - `DELETE /history`
 - `GET /evaluation/latest`

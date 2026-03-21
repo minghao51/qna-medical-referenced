@@ -30,6 +30,7 @@ src/
   ingestion/              # Offline ingestion/indexing internals
     pipeline.py           # compatibility shim to usecases.pipeline
     steps/                # download/convert/load/chunk/reference steps
+      hype.py             # HyPE (index-time query expansion)
     indexing/             # vector store + embedding/search/persistence helpers
 
   evals/                  # Pipeline quality assessment
@@ -65,9 +66,9 @@ Flow:
 
 1. `src.app.routes.chat` receives the request.
 2. `src.usecases.chat.process_chat_message` orchestrates retrieval + generation + history persistence.
-3. `src.rag.runtime` retrieves context from the vector store.
+3. `src.rag.runtime` retrieves context from the vector store (with multi-turn context building).
 4. `src.infra.llm.qwen_client.QwenClient` generates the answer.
-5. `src.infra.storage.chat_history_store` stores conversation history.
+5. `src.infra.storage.chat_history_store` stores conversation history (session-based for multi-turn).
 
 ### Offline ingestion (`src.ingestion`)
 
@@ -80,9 +81,10 @@ Flow:
 3. `src.ingestion.steps.convert_html` (HTML -> Markdown)
 4. `src.ingestion.steps.load_pdfs`
 5. `src.ingestion.steps.chunk_text`
-6. `src.ingestion.steps.load_reference_data`
-7. `src.ingestion.indexing.vector_store` (embedding + persistence)
-8. `src.rag.runtime.initialize_runtime_index()` confirms runtime index availability
+6. `src.ingestion.steps.hype` (HyPE query expansion - index-time hypothetical question generation)
+7. `src.ingestion.steps.load_reference_data`
+8. `src.ingestion.indexing.vector_store` (embedding + persistence)
+9. `src.rag.runtime.initialize_runtime_index()` confirms runtime index availability
 
 ### Evaluation system (`src.evals`, `src.app.routes.evaluation`)
 
@@ -95,6 +97,8 @@ Components:
 - `src.evals.dataset_builder` - builds evaluation datasets from fixtures and synthetic generation
 - `src.evals.artifacts` - manages versioned evaluation artifacts on disk
 - `src.cli.eval_pipeline` - CLI entrypoint for running evaluations
+- Multi-turn evaluation with DeepEval's ConversationalGEval
+- Golden conversations dataset (15 conversations across 4 categories)
 
 Evaluation CLI:
 ```bash

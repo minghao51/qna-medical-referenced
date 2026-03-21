@@ -184,6 +184,8 @@ class VectorStore:
                 meta["next_chunk_id"] = doc["next_chunk_id"]
             if "section_sibling_rank" in doc:
                 meta["section_sibling_rank"] = doc["section_sibling_rank"]
+            if "hypothetical_questions" in doc_metadata:
+                meta["hypothetical_questions"] = doc_metadata["hypothetical_questions"]
             metadatas.append(meta)
 
         embeddings, embedding_stats = self._embed_with_stats(texts, effective_batch_size)
@@ -453,6 +455,57 @@ class VectorStore:
 
         trace_info["timing_ms"] = int((time.time() - start_time) * 1000)
         return results, trace_info
+
+    def get_hypothetical_questions(self) -> dict[str, list[str]]:
+        """Return all pre-stored HyPE questions from chunk metadata.
+
+        Returns:
+            Dict mapping chunk_id -> list of hypothetical question strings.
+            Only chunks with hypothetical_questions in metadata are included.
+        """
+        result: dict[str, list[str]] = {}
+        for i, doc_id in enumerate(self.documents.get("ids", [])):
+            meta = self.documents["metadatas"][i]
+            if meta and "hypothetical_questions" in meta:
+                result[doc_id] = meta["hypothetical_questions"]
+        return result
+
+    def search_hypothetical_questions(self, query: str, *, limit: int = 5) -> list[str]:
+        """Return the most query-relevant HyPE questions from chunk metadata.
+
+        This keeps HyPE scoped to questions that overlap with the user's query
+        instead of injecting every hypothetical question from the whole corpus.
+        """
+        query_tokens = set(self._tokenize(query))
+        if not query_tokens:
+            return []
+
+        scored: list[tuple[float, str]] = []
+        for meta in self.documents.get("metadatas", []):
+            if not meta:
+                continue
+            quality_score = float(meta.get("quality_score", 1.0))
+            for question in meta.get("hypothetical_questions", []):
+                question_tokens = set(self._tokenize(question))
+                overlap = len(query_tokens & question_tokens)
+                if overlap <= 0:
+                    continue
+                coverage = overlap / len(query_tokens)
+                precision = overlap / max(1, len(question_tokens))
+                score = (0.7 * coverage) + (0.3 * precision) + (0.05 * quality_score)
+                scored.append((score, question))
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        selected: list[str] = []
+        seen: set[str] = set()
+        for _, question in scored:
+            normalized = " ".join(str(question).split())
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                selected.append(normalized)
+            if len(selected) >= limit:
+                break
+        return selected
 
     def clear(self):
         self.documents = empty_documents()

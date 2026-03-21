@@ -11,6 +11,7 @@ This folder is organized by purpose, not by chronology.
 - `anonymous-sessions.md` for cookie-backed chat history behavior
 - `admin-api-auth.md` for optional backend API-key usage
 - `architecture/overview.md` for the repository map
+- `architecture/pipeline-strategies.md` for comprehensive pipeline DAGs and strategy reference (HyDE vs HyPE, chunking, search modes)
 - `architecture/rag-system.md` for ingestion and retrieval flow
 - `evaluation/pipeline_quality_assessment_plan.md` for the implemented evaluation system
 - `testing/backend-tests.md` for backend test commands

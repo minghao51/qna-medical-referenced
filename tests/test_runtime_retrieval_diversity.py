@@ -1,4 +1,5 @@
-from src.rag.runtime import _diversify_results
+from src.ingestion.indexing.vector_store import VectorStore
+from src.rag.runtime import _diversify_results, _extend_with_hype_questions
 
 
 def test_diversify_results_limits_repeated_source_page():
@@ -35,3 +36,54 @@ def test_diversify_results_can_be_disabled():
     ]
     diversified = _diversify_results(results, top_k=2, enable_diversification=False)
     assert [r["id"] for r in diversified] == ["a", "b"]
+
+
+def test_search_hypothetical_questions_only_returns_query_relevant_matches():
+    store = VectorStore(collection_name="test_hype_search")
+    store.clear()
+    store.documents = {
+        "ids": ["a", "b"],
+        "contents": ["chunk a", "chunk b"],
+        "embeddings": [[], []],
+        "metadatas": [
+            {
+                "quality_score": 1.0,
+                "hypothetical_questions": [
+                    "What is the LDL-C target for secondary prevention?",
+                    "When should high-intensity statin therapy be used?",
+                ],
+            },
+            {
+                "quality_score": 1.0,
+                "hypothetical_questions": [
+                    "How should pre-diabetes meal planning work?",
+                ],
+            },
+        ],
+        "content_hashes": [],
+        "index_metadata": {},
+    }
+
+    matches = store.search_hypothetical_questions("LDL target for diabetes", limit=5)
+
+    assert matches
+    assert "LDL-C target" in matches[0]
+    assert all("pre-diabetes" not in match.lower() for match in matches)
+
+
+def test_extend_with_hype_questions_only_adds_selected_matches():
+    class StubVectorStore:
+        def search_hypothetical_questions(self, query: str, *, limit: int = 5) -> list[str]:
+            assert query == "ldl question"
+            assert limit == 5
+            return ["related question", "existing query"]
+
+    expanded, selected = _extend_with_hype_questions(
+        StubVectorStore(),
+        "ldl question",
+        ["existing query"],
+        enable_hype=True,
+    )
+
+    assert selected == ["related question", "existing query"]
+    assert expanded == ["existing query", "related question"]
