@@ -88,6 +88,37 @@ def test_chunker_preserves_section_and_neighbor_metadata():
     assert "next_chunk_id" in chunks[0]
 
 
+def test_chunker_preserves_ingestion_source_metadata():
+    chunker = TextChunker(chunk_size=80, chunk_overlap=10)
+    docs = [
+        {
+            "id": "md1",
+            "source": "guide.md",
+            "content": "Cholesterol guidance content",
+            "metadata": {
+                "logical_name": "Cholesterol guide",
+                "source_url": "https://example.org/guide",
+                "source_type": "html",
+                "source_class": "guideline_html",
+                "page_type": "article",
+                "canonical_label": "Cholesterol guide",
+                "domain": "example.org",
+                "domain_type": "organization",
+            },
+        }
+    ]
+
+    chunks = chunker.chunk_documents(docs)
+
+    assert len(chunks) == 1
+    assert chunks[0]["metadata"]["logical_name"] == "Cholesterol guide"
+    assert chunks[0]["metadata"]["source_url"] == "https://example.org/guide"
+    assert chunks[0]["metadata"]["source_type"] == "html"
+    assert chunks[0]["metadata"]["source_class"] == "guideline_html"
+    assert chunks[0]["metadata"]["canonical_label"] == "Cholesterol guide"
+    assert chunks[0]["metadata"]["domain_type"] == "organization"
+
+
 def test_dataset_builder_filters_split_and_label_confidence(tmp_path: Path):
     dataset_file = tmp_path / "dataset.json"
     dataset_file.write_text(

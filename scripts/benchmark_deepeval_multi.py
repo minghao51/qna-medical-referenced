@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from src.config import settings
-from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
 
 def _count_entries(path: Path) -> int:
@@ -246,7 +246,7 @@ async def benchmark_multi_query(
                 ]
 
                 # Run evaluation
-                results, aggregate = await evaluate_answers_deepeval(
+                results, aggregate = await evaluate_answer_quality_async(
                     dataset,
                     top_k=top_k,
                     cache_dir=cache_dir,

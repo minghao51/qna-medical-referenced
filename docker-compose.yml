@@ -6,6 +6,7 @@ services:
       target: runtime
     volumes:
       - ./src:/app/src:ro
+      - ./data/evals:/app/data/evals
     ports:
       - "8000:8000"
     environment:
@@ -28,6 +29,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: runtime
+      args:
+        - VITE_API_URL=http://localhost:8000
     ports:
       - "5173:5173"
     environment:

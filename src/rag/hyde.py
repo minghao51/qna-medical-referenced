@@ -90,7 +90,7 @@ async def generate_hypothetical_answer(
             hypothetical = " ".join(words[:max_length])
 
         logger.debug(f"Generated hypothetical answer for query: {query[:50]}...")
-        return hypothetical
+        return str(hypothetical)
 
     except Exception as e:
         logger.error(f"Failed to generate hypothetical answer for query '{query}': {e}")

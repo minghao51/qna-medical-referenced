@@ -208,6 +208,9 @@ def _base_defaults() -> dict[str, Any]:
             "page_classification_enabled": True,
             "index_only_classified_pages": True,
             "html_extractor_mode": "auto",
+            "html_extractor_strategy": "trafilatura_bs",
+            "pdf_extractor_strategy": "pypdf_pdfplumber",
+            "pdf_table_extractor": "heuristic",
             "structured_chunking_enabled": True,
             "source_chunk_configs": deepcopy(DEFAULT_SOURCE_CHUNK_CONFIGS),
         },
@@ -283,6 +286,15 @@ def _normalize_experiment_dict(data: dict[str, Any], *, file_path: Path) -> dict
 
     ingestion = dict(merged.get("ingestion", {}))
     ingestion["html_extractor_mode"] = str(ingestion.get("html_extractor_mode", "auto")).lower()
+    ingestion["html_extractor_strategy"] = str(
+        ingestion.get("html_extractor_strategy", "trafilatura_bs")
+    ).lower()
+    ingestion["pdf_extractor_strategy"] = str(
+        ingestion.get("pdf_extractor_strategy", "pypdf_pdfplumber")
+    ).lower()
+    ingestion["pdf_table_extractor"] = str(
+        ingestion.get("pdf_table_extractor", "heuristic")
+    ).lower()
     ingestion["source_chunk_configs"] = _normalize_source_chunk_configs(
         ingestion.get("source_chunk_configs")
     )

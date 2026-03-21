@@ -5,9 +5,9 @@ from src.evals.assessment.orchestrator import run_assessment
 
 def test_deepeval_import_exists():
     """Test that DeepEval function is importable."""
-    from src.evals.assessment.orchestrator import evaluate_answers_deepeval
+    from src.evals.assessment.orchestrator import evaluate_answer_quality
 
-    assert callable(evaluate_answers_deepeval)
+    assert callable(evaluate_answer_quality)
 
 
 def test_orchestrator_runs_l6_answer_quality_evaluator(tmp_path):

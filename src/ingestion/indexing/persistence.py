@@ -2,13 +2,14 @@
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 from src.config import VECTOR_DIR
 
 __all__ = ["VECTOR_DIR", "empty_documents", "load_documents", "save_documents"]
 
 
-def empty_documents() -> dict:
+def empty_documents() -> dict[str, Any]:
     return {
         "ids": [],
         "contents": [],
@@ -19,10 +20,10 @@ def empty_documents() -> dict:
     }
 
 
-def load_documents(path: Path) -> dict:
+def load_documents(path: Path) -> dict[str, Any]:
     if path.exists():
         with open(path, "r", encoding="utf-8") as f:
-            loaded = json.load(f)
+            loaded = cast(dict[str, Any], json.load(f))
             if "index_metadata" not in loaded:
                 loaded["index_metadata"] = {}
             return loaded

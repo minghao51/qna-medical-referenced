@@ -25,7 +25,7 @@ def _canonical_json(value: Any) -> str:
 
 
 def to_serializable(value: Any) -> Any:
-    if is_dataclass(value):
+    if is_dataclass(value) and not isinstance(value, type):
         return {k: to_serializable(v) for k, v in asdict(value).items()}
     if isinstance(value, Path):
         return str(value)

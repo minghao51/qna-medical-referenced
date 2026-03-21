@@ -1,10 +1,10 @@
-"""Tests for DeepEval answer evaluation caching."""
+"""Tests for answer evaluation caching."""
 
 import json
 
 import pytest
 
-from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
 
 class _Trace:
@@ -29,7 +29,7 @@ class _Metric:
 
 
 @pytest.mark.asyncio
-async def test_evaluate_answers_deepeval_reuses_cached_answer(monkeypatch, tmp_path):
+async def test_evaluate_answer_quality_async_reuses_cached_answer(monkeypatch, tmp_path):
     cache_dir = tmp_path / "cache"
     retrieval_calls = 0
     answer_calls = 0
@@ -70,14 +70,14 @@ async def test_evaluate_answers_deepeval_reuses_cached_answer(monkeypatch, tmp_p
     )
 
     dataset = [{"query": "cached query", "query_id": "q1"}]
-    await evaluate_answers_deepeval(
+    await evaluate_answer_quality_async(
         dataset,
         top_k=3,
         cache_dir=cache_dir,
         retrieval_options={"search_mode": "rrf_hybrid"},
         cache_namespace={"index_hash": "abc"},
     )
-    await evaluate_answers_deepeval(
+    await evaluate_answer_quality_async(
         dataset,
         top_k=3,
         cache_dir=cache_dir,
@@ -100,7 +100,7 @@ async def test_evaluate_answers_deepeval_reuses_cached_answer(monkeypatch, tmp_p
 
 
 @pytest.mark.asyncio
-async def test_evaluate_answers_deepeval_cache_key_changes_with_retrieval_options(
+async def test_evaluate_answer_quality_async_cache_key_changes_with_retrieval_options(
     monkeypatch, tmp_path
 ):
     cache_dir = tmp_path / "cache"
@@ -130,10 +130,10 @@ async def test_evaluate_answers_deepeval_cache_key_changes_with_retrieval_option
     )
 
     dataset = [{"query": "cached query", "query_id": "q1"}]
-    await evaluate_answers_deepeval(
+    await evaluate_answer_quality_async(
         dataset, top_k=3, cache_dir=cache_dir, retrieval_options={"search_mode": "rrf_hybrid"}
     )
-    await evaluate_answers_deepeval(
+    await evaluate_answer_quality_async(
         dataset, top_k=3, cache_dir=cache_dir, retrieval_options={"search_mode": "semantic_only"}
     )
 

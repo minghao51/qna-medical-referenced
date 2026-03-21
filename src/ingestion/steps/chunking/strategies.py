@@ -5,14 +5,6 @@ from __future__ import annotations
 import re
 
 
-def find_legacy_split(text: str, start: int, end: int) -> int:
-    for sep in ["\n\n", "\n", ". "]:
-        last_sep = text.rfind(sep, start, end)
-        if last_sep > start:
-            return last_sep + len(sep)
-    return end
-
-
 def find_recursive_split(
     text: str,
     start: int,

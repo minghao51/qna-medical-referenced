@@ -10,6 +10,7 @@ Tests cover:
 - Invalid input validation
 """
 
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -18,7 +19,16 @@ import pytest
 
 from src.ingestion.indexing.vector_store import VectorStore
 from src.ingestion.steps.chunk_text import chunk_documents
+from src.ingestion.steps.convert_html import (
+    convert_html_to_md,
+    set_html_extractor_strategy,
+)
 from src.ingestion.steps.load_pdfs import get_documents
+
+
+def _html_strategy():
+    return sys.modules["src.ingestion.steps.convert_html"].HTML_EXTRACTOR_STRATEGY
+
 
 # =============================================================================
 # Network Failure Tests
@@ -149,12 +159,12 @@ def test_evaluation_with_empty_dataset():
     import asyncio
 
     async def run_eval():
-        from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+        from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
         empty_dataset = []
 
         # Should handle empty dataset gracefully
-        results, aggregate = await evaluate_answers_deepeval(empty_dataset, top_k=3)
+        results, aggregate = await evaluate_answer_quality_async(empty_dataset, top_k=3)
 
         # Should return empty results
         assert results == []
@@ -330,7 +340,6 @@ def test_missing_metadata_fields():
 
 
 def test_none_metadata_values():
-    """Test that None values in metadata are handled."""
     docs = [
         {
             "content": "Test content",
@@ -343,3 +352,67 @@ def test_none_metadata_values():
     result = chunk_documents(docs)
 
     assert isinstance(result, list)
+
+
+# =============================================================================
+# HTML Extractor Strategy Tests
+# =============================================================================
+
+
+class TestHTMLExtractorStrategy:
+    def test_set_html_extractor_strategy_valid(self):
+        set_html_extractor_strategy("html2md_trafilatura_bs")
+        assert _html_strategy() == "html2md_trafilatura_bs"
+
+    def test_set_html_extractor_strategy_invalid_defaults_to_baseline(self):
+        set_html_extractor_strategy("invalid_strategy")
+        assert _html_strategy() == "trafilatura_bs"
+
+    def test_set_html_extractor_strategy_all_valid(self):
+        for strategy in [
+            "trafilatura_bs",
+            "html2md_trafilatura_bs",
+            "readability_bs",
+            "full_cascade",
+        ]:
+            set_html_extractor_strategy(strategy)
+            assert _html_strategy() == strategy
+
+    def test_cascade_depth_written_to_artifact(self, tmp_path: Path):
+
+        html_content = (
+            "<html><head><title>Test</title></head><body><h1>Hello</h1><p>World</p></body></html>"
+        )
+        test_html = tmp_path / "test_page.html"
+        test_html.write_text(html_content, encoding="utf-8")
+
+        set_html_extractor_strategy("trafilatura_bs")
+        result = convert_html_to_md(test_html, force=True)
+
+        if result:
+            from src.ingestion.artifacts import load_source_artifact
+
+            artifact = load_source_artifact("html", "test_page")
+            assert artifact is not None
+            meta = artifact.get("metadata", {})
+            assert "cascade_depth" in meta
+            assert isinstance(meta["cascade_depth"], int)
+            assert "html_extractor_strategy" in meta
+
+    def test_selected_extractor_written_to_artifact(self, tmp_path: Path):
+        from src.ingestion.steps.convert_html import set_html_extractor_strategy
+
+        html_content = "<html><body><p>Simple paragraph content here.</p></body></html>"
+        test_html = tmp_path / "simple_page.html"
+        test_html.write_text(html_content, encoding="utf-8")
+
+        set_html_extractor_strategy("trafilatura_bs")
+        result = convert_html_to_md(test_html, force=True)
+
+        if result:
+            from src.ingestion.artifacts import load_source_artifact
+
+            artifact = load_source_artifact("html", "simple_page")
+            assert artifact is not None
+            meta = artifact.get("metadata", {})
+            assert "selected_extractor" in meta

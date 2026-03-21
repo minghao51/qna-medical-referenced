@@ -5,6 +5,23 @@ from __future__ import annotations
 import hashlib
 import re
 
+_DOC_METADATA_KEYS = (
+    "logical_name",
+    "source_url",
+    "source_type",
+    "source_class",
+    "page_type",
+    "canonical_label",
+    "domain",
+    "domain_type",
+)
+
+
+def build_chunk_metadata(doc_metadata: dict | None = None) -> dict:
+    """Keep ingestion metadata attached to every chunk."""
+    metadata = dict(doc_metadata or {})
+    return {key: metadata.get(key) for key in _DOC_METADATA_KEYS if metadata.get(key) is not None}
+
 
 def split_markdown_sections(text: str) -> list[tuple[int, str]]:
     heading_matches = list(re.finditer(r"(?m)^#{1,6}\s+.+$", text))
@@ -61,10 +78,7 @@ def build_block_chunk(
     doc_metadata: dict | None = None,
 ) -> dict:
     text = text.strip()
-    chunk_metadata = {
-        "logical_name": doc_metadata.get("logical_name") if doc_metadata else None,
-        "source_url": doc_metadata.get("source_url") if doc_metadata else None,
-    }
+    chunk_metadata = build_chunk_metadata(doc_metadata)
     return {
         "id": f"{doc_id}_p{page}_chunk_{chunk_index}",
         "source": source,

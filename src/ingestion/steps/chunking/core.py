@@ -3,35 +3,98 @@
 from __future__ import annotations
 
 import copy
-from typing import List
+from typing import TYPE_CHECKING, List
 
 from src.ingestion.steps.chunking import config
 from src.ingestion.steps.chunking.helpers import (
     build_block_chunk,
+    build_chunk_metadata,
     hash_content,
     quality_score_for_block,
     source_kind,
     split_markdown_sections,
 )
-from src.ingestion.steps.chunking.strategies import find_legacy_split, find_recursive_split
+from src.ingestion.steps.chunking.strategies import find_recursive_split
+
+if TYPE_CHECKING:
+    from src.ingestion.steps.chunking.chonkie_adapter import ChonkieChunkerAdapter
 
 
 class TextChunker:
+    """Text chunker with support for multiple chunking strategies.
+
+    Supported strategies:
+        - recursive (default): Custom recursive chunker with quality scoring
+        - custom_recursive: Alias for recursive
+        - chonkie_recursive: Chonkie's RecursiveChunker with overlap refinement
+        - chonkie_semantic: Chonkie's SemanticChunker using Qwen embeddings
+        - chonkie_late: Chonkie's LateChunker using Qwen embeddings
+    """
+
+    SUPPORTED_STRATEGIES = {
+        "recursive",
+        "custom_recursive",
+        "chonkie_recursive",
+        "chonkie_semantic",
+        "chonkie_late",
+    }
+
     def __init__(
         self,
-        chunk_size: int = 800,
-        chunk_overlap: int = 150,
+        chunk_size: int = 512,
+        chunk_overlap: int = 64,
         strategy: str = "recursive",
-        min_chunk_size: int = 120,
+        min_chunk_size: int = 100,
+        embedding_model: str | None = None,
     ):
+        """Initialize TextChunker.
+
+        Args:
+            chunk_size: Target chunk size in tokens
+            chunk_overlap: Overlap between chunks in tokens
+            strategy: Chunking strategy to use
+            min_chunk_size: Minimum chunk size (behavior varies by strategy)
+            embedding_model: Embedding model for semantic/late strategies
+        """
+        if strategy not in self.SUPPORTED_STRATEGIES:
+            raise ValueError(
+                f"TextChunker does not support strategy '{strategy}'. "
+                f"Supported: {sorted(self.SUPPORTED_STRATEGIES)}"
+            )
+
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.strategy = strategy
         self.min_chunk_size = min_chunk_size
+        self.embedding_model = embedding_model or "text-embedding-v4"
+        self._chonkie_adapter: "ChonkieChunkerAdapter | None" = None
+
+    @property
+    def chonkie_adapter(self) -> "ChonkieChunkerAdapter | None":
+        """Lazy-load chonkie adapter for chonkie strategies."""
+        if self.strategy in ("recursive", "custom_recursive"):
+            return None
+
+        if self._chonkie_adapter is None:
+            from src.ingestion.steps.chunking.chonkie_adapter import get_chonkie_chunker
+
+            self._chonkie_adapter = get_chonkie_chunker(
+                strategy=self.strategy,
+                chunk_size=self.chunk_size,
+                chunk_overlap=self.chunk_overlap,
+                min_chunk_size=self.min_chunk_size,
+                embedding_model=self.embedding_model,
+            )
+        return self._chonkie_adapter
 
     def chunk_text(
         self, text: str, source: str = "unknown", doc_id: str = "doc", page: int = 1
     ) -> List[dict]:
+        # For chonkie strategies, delegate to adapter
+        if self.chonkie_adapter is not None:
+            return self.chonkie_adapter.chunk_text(text, source, doc_id, page)
+
+        # For recursive (custom), use existing implementation
         return self._chunk_text_with_base_index(
             text, source, doc_id, page=page, start_chunk_index=0
         )
@@ -52,7 +115,7 @@ class TextChunker:
         extractor: str | None = None,
         doc_metadata: dict | None = None,
     ) -> List[dict]:
-        chunks = []
+        chunks: list[dict] = []
         start = 0
         text_length = len(text)
 
@@ -60,16 +123,13 @@ class TextChunker:
             end = start + self.chunk_size
 
             if end < text_length:
-                if self.strategy == "legacy":
-                    end = find_legacy_split(text, start, end)
-                else:
-                    end = find_recursive_split(
-                        text,
-                        start,
-                        end,
-                        chunk_size=self.chunk_size,
-                        min_chunk_size=self.min_chunk_size,
-                    )
+                end = find_recursive_split(
+                    text,
+                    start,
+                    end,
+                    chunk_size=self.chunk_size,
+                    min_chunk_size=self.min_chunk_size,
+                )
 
             if end <= start:
                 end = min(start + self.chunk_size, text_length)
@@ -82,10 +142,7 @@ class TextChunker:
             chunk_text = raw_chunk.strip()
             if chunk_text:
                 chunk_index = start_chunk_index + len(chunks)
-                chunk_metadata = {
-                    "logical_name": doc_metadata.get("logical_name") if doc_metadata else None,
-                    "source_url": doc_metadata.get("source_url") if doc_metadata else None,
-                }
+                chunk_metadata = build_chunk_metadata(doc_metadata)
                 chunks.append(
                     {
                         "id": f"{doc_id}_p{page}_chunk_{chunk_index}",
@@ -301,10 +358,11 @@ class TextChunker:
                 self
                 if self._matches_self_config(active_cfg)
                 else TextChunker(
-                    chunk_size=int(active_cfg.get("chunk_size", self.chunk_size)),
-                    chunk_overlap=int(active_cfg.get("chunk_overlap", self.chunk_overlap)),
+                    chunk_size=int(active_cfg.get("chunk_size", self.chunk_size)),  # type: ignore[call-overload]
+                    chunk_overlap=int(active_cfg.get("chunk_overlap", self.chunk_overlap)),  # type: ignore[call-overload]
                     strategy=str(active_cfg.get("strategy", self.strategy)),
-                    min_chunk_size=int(active_cfg.get("min_chunk_size", self.min_chunk_size)),
+                    min_chunk_size=int(active_cfg.get("min_chunk_size", self.min_chunk_size)),  # type: ignore[call-overload]
+                    embedding_model=str(active_cfg.get("embedding_model", self.embedding_model)),
                 )
             )
 
@@ -355,7 +413,7 @@ class TextChunker:
                         start_chunk_index=doc_chunk_index,
                         doc_metadata=doc_metadata,
                     )
-                elif str(source).lower().endswith(".md") and doc_chunker.strategy != "legacy":
+                elif str(source).lower().endswith(".md"):
                     chunks = doc_chunker._chunk_markdown_document(
                         content,
                         source,
@@ -386,6 +444,7 @@ class TextChunker:
             and int(cfg.get("chunk_overlap", self.chunk_overlap)) == self.chunk_overlap
             and str(cfg.get("strategy", self.strategy)) == self.strategy
             and int(cfg.get("min_chunk_size", self.min_chunk_size)) == self.min_chunk_size
+            and str(cfg.get("embedding_model", self.embedding_model)) == self.embedding_model
         )
 
     @staticmethod

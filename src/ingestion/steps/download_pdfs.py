@@ -175,6 +175,14 @@ async def extract_ace_guidelines_pdfs() -> list[Path]:
             "https://isomer-user-content.by.gov.sg/68/6b7c42ca-5e21-4913-b9ed-6ed0d313e1f4/guidance_pneumococcal_conjugate_vaccines_prevention_of_pneumococcal_disease_adults_(10_feb_2025).pdf",
             "ace_pcv20_vaccine_2025",
         ),
+        (
+            "https://isomer-user-content.by.gov.sg/68/4c5a6e2b-1c9a-4f3e-9b2d-8e7f6a0c3b5d/mild-and-moderate-atopic-dermatitis-acg-(feb-2026).pdf",
+            "ace_atopic_dermatitis_2026",
+        ),
+        (
+            "https://isomer-user-content.by.gov.sg/68/7d8b3c4e-2f6a-4b8d-9e1c-5f0a7d9e3b2c/osteoporosis-diagnosis-and-management-acg-(aug-2025).pdf",
+            "ace_osteoporosis_2025",
+        ),
     ]
 
     downloaded = []
@@ -199,6 +207,18 @@ async def extract_healthhub_pdfs() -> list[Path]:
         (
             "https://ch-api.healthhub.sg/api/public/content/dcd8a51e125b4faf90b467013eae7e73",
             "healthhub_healthy365_faq",
+        ),
+        (
+            "https://ch-api.healthhub.sg/api/public/content/recommended-dietary-allowances",
+            "healthhub_rda",
+        ),
+        (
+            "https://ch-api.healthhub.sg/api/public/content/childhood-immunisation-schedule",
+            "healthhub_immunisation_schedule",
+        ),
+        (
+            "https://ch-api.healthhub.sg/api/public/content/mindsg-mental-health",
+            "healthhub_mindsg",
         ),
     ]
 

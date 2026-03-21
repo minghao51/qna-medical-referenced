@@ -356,7 +356,8 @@ def retrieval_ablation_configs(
 ) -> list[tuple[str, dict[str, Any]]]:
     base = dict(base_options or {})
     return [
-        ("legacy_hybrid", {**base, "search_mode": "legacy_hybrid", "enable_diversification": True}),
+        ("rrf_hybrid", {**base, "search_mode": "rrf_hybrid", "enable_diversification": False}),
+        ("rrf_hybrid_mmr", {**base, "search_mode": "rrf_hybrid", "enable_diversification": True}),
         (
             "semantic_only_diversified",
             {**base, "search_mode": "semantic_only", "enable_diversification": True},
@@ -365,8 +366,6 @@ def retrieval_ablation_configs(
             "bm25_only_diversified",
             {**base, "search_mode": "bm25_only", "enable_diversification": True},
         ),
-        ("rrf_hybrid", {**base, "search_mode": "rrf_hybrid", "enable_diversification": False}),
-        ("rrf_hybrid_mmr", {**base, "search_mode": "rrf_hybrid", "enable_diversification": True}),
     ]
 
 

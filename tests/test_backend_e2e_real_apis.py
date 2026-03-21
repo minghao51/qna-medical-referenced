@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 from src.config import settings
-from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 from src.ingestion.indexing.vector_store import get_vector_store, set_vector_store_runtime_config
 from src.ingestion.steps.chunk_text import chunk_documents
 from src.ingestion.steps.load_pdfs import get_documents
@@ -322,7 +322,7 @@ async def test_l6_deepeval_evaluation_with_real_apis(skip_without_real_apis):
     ]
 
     # Run evaluation
-    results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+    results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
     # Verify results
     assert len(results) == 1, "Expected 1 result"
@@ -410,7 +410,7 @@ async def test_e2e_complete_pipeline(skip_without_real_apis, tmp_path):
 
     # L6: Generate and evaluate answer
     dataset = [{"query": query, "query_id": "e2e_pipeline_001"}]
-    eval_results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+    eval_results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
     assert len(eval_results) == 1, "L6: No evaluation results"
     assert "answer" in eval_results[0], "L6: No answer generated"

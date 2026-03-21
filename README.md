@@ -19,7 +19,9 @@ For setup and day-to-day usage, use the docs in this order:
 ## Canonical Commands
 
 ```bash
-uv sync
+# Install all dependencies (including test dependencies)
+uv sync --extra test
+
 cp .env.example .env
 uv run python scripts/download_nltk_data.py
 
@@ -32,6 +34,13 @@ uv run ruff check .
 
 bash scripts/check_docs_consistency.sh
 ```
+
+**Note**: Use `uv sync --extra test` to install all test dependencies, including:
+- `pytest-asyncio` for async test support
+- `deepeval` for evaluation tests
+- Other optional dependencies
+
+For production deployments, `uv sync` alone is sufficient.
 
 The backend API serves on `http://localhost:8000`.
 

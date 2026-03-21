@@ -15,8 +15,12 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 def source_prior_for(source_class: str) -> float:
     priors = {
         "guideline_pdf": 0.15,
-        "guideline_html": 0.1,
+        "guideline_html": 0.10,
+        "ace_drug_guidance": 0.08,
+        "hpp_guideline": 0.07,
+        "healthhub_html": 0.06,
         "reference_csv": 0.12,
+        "international_html": 0.03,
         "index_page": 0.02,
     }
     return priors.get(source_class, 0.05)

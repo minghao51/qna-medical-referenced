@@ -22,33 +22,33 @@ from src.ingestion.indexing.persistence import (
 )
 from src.ingestion.indexing.search import cosine_similarity, rank_documents, reciprocal_rank_fusion
 from src.ingestion.indexing.text_utils import content_hash, sanitize_text, tokenize_text
+from src.source_metadata import (
+    canonical_source_label,
+    display_source_label,
+    infer_domain,
+    infer_domain_type,
+    normalize_source_class,
+    normalize_source_type,
+    sanitize_external_url,
+)
 
 logger = logging.getLogger(__name__)
+_VALID_SEARCH_MODES = {"rrf_hybrid", "semantic_only", "bm25_only"}
 
 
 def _source_type_for(source: str) -> str:
-    lowered = source.lower()
-    if lowered.endswith(".pdf"):
-        return "pdf"
-    if lowered.endswith(".csv"):
-        return "csv"
-    if lowered.endswith(".md") or lowered.endswith(".html"):
-        return "html"
-    return "other"
+    return normalize_source_type(source)
 
 
 def _source_class_for(source: str, metadata: dict | None = None) -> str:
-    lowered = source.lower()
-    page_type = str((metadata or {}).get("page_type", ""))
-    if lowered.endswith(".pdf"):
-        return "guideline_pdf"
-    if lowered.endswith(".csv"):
-        return "reference_csv"
-    if page_type in {"index/listing", "navigation-heavy"}:
-        return "index_page"
-    if lowered.endswith(".md") or lowered.endswith(".html"):
-        return "guideline_html"
-    return "unknown"
+    return normalize_source_class(
+        source,
+        source_type=(metadata or {}).get("source_type"),
+        explicit_class=(metadata or {}).get("source_class"),
+        page_type=(metadata or {}).get("page_type"),
+        logical_name=(metadata or {}).get("logical_name"),
+        domain=(metadata or {}).get("domain"),
+    )
 
 
 class VectorStore:
@@ -135,18 +135,40 @@ class VectorStore:
         for doc in documents:
             source = doc["source"]
             doc_metadata = doc.get("metadata", {})
+            source_url = sanitize_external_url(doc_metadata.get("source_url"))
+            source_type = (
+                doc.get("source_type")
+                or doc_metadata.get("source_type")
+                or _source_type_for(source)
+            )
+            source_class = doc.get("source_class") or _source_class_for(
+                source,
+                {
+                    **doc_metadata,
+                    "source_type": source_type,
+                    "source_class": doc.get("source_class") or doc_metadata.get("source_class"),
+                },
+            )
+            canonical_label = doc_metadata.get("canonical_label") or canonical_source_label(
+                source, doc_metadata.get("logical_name")
+            )
+            domain = doc_metadata.get("domain") or infer_domain(source_url)
+            domain_type = doc_metadata.get("domain_type") or infer_domain_type(domain)
             meta = {
                 "source": source,
-                "source_type": doc.get("source_type", _source_type_for(source)),
-                "source_class": doc.get("source_class")
-                or _source_class_for(source, doc.get("metadata")),
+                "source_type": source_type,
+                "source_class": source_class,
                 "content_type": doc.get("content_type", "paragraph"),
                 "section_path": doc.get("section_path", []),
                 "quality_score": float(doc.get("quality_score", 1.0)),
                 "extractor": doc.get("extractor")
                 or doc.get("metadata", {}).get("selected_extractor"),
                 "logical_name": doc_metadata.get("logical_name"),
-                "source_url": doc_metadata.get("source_url"),
+                "canonical_label": canonical_label,
+                "source_url": source_url,
+                "page_type": doc_metadata.get("page_type"),
+                "domain": domain,
+                "domain_type": domain_type,
             }
             if "page" in doc:
                 meta["page"] = doc["page"]
@@ -211,7 +233,7 @@ class VectorStore:
 
         self._rebuild_index_if_needed()
 
-        mode = (search_mode or ("hybrid" if hybrid else "semantic_only")).lower()
+        mode = (search_mode or ("rrf_hybrid" if hybrid else "semantic_only")).lower()
         ranked, _ = self._search_ranked(query, search_mode=mode)
         top_scores = ranked[:top_k]
 
@@ -232,10 +254,33 @@ class VectorStore:
                     "source_prior": score_info.get("source_prior", 0.0),
                     "quality_score": meta.get("quality_score", 1.0),
                     "logical_name": meta.get("logical_name"),
+                    "canonical_label": meta.get("canonical_label"),
+                    "display_label": display_source_label(
+                        meta.get("source", "unknown"),
+                        logical_name=meta.get("logical_name"),
+                        canonical_label=meta.get("canonical_label"),
+                        page=meta.get("page"),
+                    ),
                     "source_url": meta.get("source_url"),
+                    "source_type": meta.get("source_type"),
+                    "source_class": meta.get("source_class"),
+                    "domain": meta.get("domain"),
+                    "domain_type": meta.get("domain_type"),
                     "metadata": {
                         "logical_name": meta.get("logical_name"),
+                        "display_label": display_source_label(
+                            meta.get("source", "unknown"),
+                            logical_name=meta.get("logical_name"),
+                            canonical_label=meta.get("canonical_label"),
+                            page=meta.get("page"),
+                        ),
                         "source_url": meta.get("source_url"),
+                        "canonical_label": meta.get("canonical_label"),
+                        "source_type": meta.get("source_type"),
+                        "source_class": meta.get("source_class"),
+                        "page_type": meta.get("page_type"),
+                        "domain": meta.get("domain"),
+                        "domain_type": meta.get("domain_type"),
                     },
                 }
             )
@@ -244,6 +289,8 @@ class VectorStore:
     def _search_ranked(self, query: str, search_mode: str) -> tuple[list[dict], dict[str, Any]]:
         self._rebuild_index_if_needed()
         mode = (search_mode or "rrf_hybrid").lower()
+        if mode not in _VALID_SEARCH_MODES:
+            mode = "rrf_hybrid"
         trace_info: dict[str, Any] = {"search_mode": mode, "embedding_model": self.embedding_model}
 
         keyword_scores = self._keyword_score(query)
@@ -291,78 +338,11 @@ class VectorStore:
                 row["bm25_rank"] = None
                 row["fused_rank"] = rank
                 row["fused_score"] = row["combined_score"]
-        elif mode in {"bm25_only", "keyword_only"}:
+        elif mode == "bm25_only":
             ranked = keyword_ranked
             for rank, row in enumerate(ranked, start=1):
                 row["semantic_rank"] = None
                 row["bm25_rank"] = rank
-                row["fused_rank"] = rank
-                row["fused_score"] = row["combined_score"]
-        elif mode == "legacy_hybrid":
-            ranked = rank_documents(
-                documents=self.documents,
-                keyword_scores=keyword_scores,
-                query_embedding=query_embedding if use_semantic else None,
-                use_semantic=use_semantic,
-                hybrid=True,
-                semantic_weight=self.semantic_weight,
-                keyword_weight=self.keyword_weight,
-                boost_weight=self.boost_weight,
-            )
-            for rank, row in enumerate(ranked, start=1):
-                row["semantic_rank"] = next(
-                    (i for i, v in enumerate(semantic_ranked, start=1) if v["idx"] == row["idx"]),
-                    None,
-                )
-                row["bm25_rank"] = next(
-                    (i for i, v in enumerate(keyword_ranked, start=1) if v["idx"] == row["idx"]),
-                    None,
-                )
-                row["fused_rank"] = rank
-                row["fused_score"] = row["combined_score"]
-        else:
-            ranked = reciprocal_rank_fusion(semantic_ranked, keyword_ranked)
-
-        trace_info["candidate_counts"] = {
-            "semantic": len(semantic_ranked),
-            "bm25": len(keyword_ranked),
-            "final": len(ranked),
-        }
-
-        if mode == "semantic_only":
-            ranked = semantic_ranked
-            for rank, row in enumerate(ranked, start=1):
-                row["semantic_rank"] = rank
-                row["bm25_rank"] = None
-                row["fused_rank"] = rank
-                row["fused_score"] = row["combined_score"]
-        elif mode in {"bm25_only", "keyword_only"}:
-            ranked = keyword_ranked
-            for rank, row in enumerate(ranked, start=1):
-                row["semantic_rank"] = None
-                row["bm25_rank"] = rank
-                row["fused_rank"] = rank
-                row["fused_score"] = row["combined_score"]
-        elif mode == "legacy_hybrid":
-            ranked = rank_documents(
-                documents=self.documents,
-                keyword_scores=keyword_scores,
-                query_embedding=query_embedding if use_semantic else None,
-                use_semantic=use_semantic,
-                hybrid=True,
-                semantic_weight=self.semantic_weight,
-                keyword_weight=self.keyword_weight,
-                boost_weight=self.boost_weight,
-            )
-            for rank, row in enumerate(ranked, start=1):
-                row["semantic_rank"] = next(
-                    (i for i, v in enumerate(semantic_ranked, start=1) if v["idx"] == row["idx"]),
-                    None,
-                )
-                row["bm25_rank"] = next(
-                    (i for i, v in enumerate(keyword_ranked, start=1) if v["idx"] == row["idx"]),
-                    None,
-                )
                 row["fused_rank"] = rank
                 row["fused_score"] = row["combined_score"]
         else:
@@ -386,7 +366,7 @@ class VectorStore:
         search_mode: str | None = None,
     ) -> tuple[List[dict], dict]:
         start_time = time.time()
-        mode = (search_mode or ("hybrid" if hybrid else "semantic_only")).lower()
+        mode = (search_mode or ("rrf_hybrid" if hybrid else "semantic_only")).lower()
         trace_info = {
             "query": query,
             "top_k": top_k,
@@ -409,7 +389,7 @@ class VectorStore:
         semantic_start = time.time()
         ranked, search_trace = self._search_ranked(query, search_mode=mode)
         trace_info.update(search_trace)
-        if mode in {"bm25_only", "keyword_only"}:
+        if mode == "bm25_only":
             trace_info["semantic_timing_ms"] = 0
         else:
             trace_info["semantic_timing_ms"] = int((time.time() - semantic_start) * 1000)
@@ -440,10 +420,33 @@ class VectorStore:
                     "content_type": meta.get("content_type", "paragraph"),
                     "section_path": meta.get("section_path", []),
                     "logical_name": meta.get("logical_name"),
+                    "canonical_label": meta.get("canonical_label"),
+                    "display_label": display_source_label(
+                        meta.get("source", "unknown"),
+                        logical_name=meta.get("logical_name"),
+                        canonical_label=meta.get("canonical_label"),
+                        page=meta.get("page"),
+                    ),
                     "source_url": meta.get("source_url"),
+                    "source_type": meta.get("source_type"),
+                    "source_class": meta.get("source_class"),
+                    "domain": meta.get("domain"),
+                    "domain_type": meta.get("domain_type"),
                     "metadata": {
                         "logical_name": meta.get("logical_name"),
+                        "display_label": display_source_label(
+                            meta.get("source", "unknown"),
+                            logical_name=meta.get("logical_name"),
+                            canonical_label=meta.get("canonical_label"),
+                            page=meta.get("page"),
+                        ),
                         "source_url": meta.get("source_url"),
+                        "canonical_label": meta.get("canonical_label"),
+                        "source_type": meta.get("source_type"),
+                        "source_class": meta.get("source_class"),
+                        "page_type": meta.get("page_type"),
+                        "domain": meta.get("domain"),
+                        "domain_type": meta.get("domain_type"),
                     },
                 }
             )

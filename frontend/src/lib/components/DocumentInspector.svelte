@@ -14,9 +14,9 @@
 
 	let { document, query, onclose }: Props = $props();
 
-	const domainType = $derived(getDomainType(document.source));
+	const domainType = $derived(document.domain_type || getDomainType(document.domain || document.source));
 	const credibilityScore = $derived(getDomainCredibilityScore(domainType));
-	const safeSourceUrl = $derived(getSafeExternalUrl(document.source));
+	const safeSourceUrl = $derived(getSafeExternalUrl(document.source_url || document.source));
 
 	function formatScore(score: number): string {
 		return (score * 100).toFixed(1);
@@ -86,16 +86,26 @@
 				<div class="meta-row">
 					<span class="meta-label">Source:</span>
 					<span class="meta-value">
-						<SourceQualityIndicator source={document.source} />
+						<SourceQualityIndicator
+							source={document.domain || document.source_url || document.source}
+							sourceType={document.source_type}
+							domainType={domainType}
+						/>
 						{#if safeSourceUrl}
 							<a href={safeSourceUrl} target="_blank" rel="noopener noreferrer" class="source-link">
-								{document.source}
+								{document.display_label || document.canonical_label || document.logical_name || document.source}
 							</a>
 						{:else}
-							<span class="source-link invalid-source">{document.source}</span>
+							<span class="source-link invalid-source">{document.display_label || document.canonical_label || document.logical_name || document.source}</span>
 						{/if}
 					</span>
 				</div>
+				{#if document.source_type}
+					<div class="meta-row">
+						<span class="meta-label">Source type:</span>
+						<span class="meta-value">{document.source_type}</span>
+					</div>
+				{/if}
 				{#if document.page}
 					<div class="meta-row">
 						<span class="meta-label">Page:</span>

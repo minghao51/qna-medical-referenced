@@ -4,11 +4,12 @@
 		status: 'success' | 'warning' | 'error' | 'pending';
 		timing?: number;
 		active?: boolean;
+		skipped?: boolean;
 		details?: string;
 		onclick?: () => void;
 	};
 
-	let { title, status = 'pending', timing, active = false, details, onclick }: Props = $props();
+	let { title, status = 'pending', timing, active = false, skipped = false, details, onclick }: Props = $props();
 
 	const statusConfig = {
 		success: { color: '#22c55e', bgColor: '#dcfce7', icon: '✓' },
@@ -17,17 +18,29 @@
 		pending: { color: '#6b7280', bgColor: '#f3f4f6', icon: '○' }
 	};
 
-	const config = $derived(statusConfig[status]);
+	const config = $derived(skipped ? statusConfig.pending : statusConfig[status]);
 
 	function formatTiming(ms: number): string {
 		if (ms < 1000) return `${ms}ms`;
 		return `${(ms / 1000).toFixed(1)}s`;
+	}
+
+	function formatStepName(name: string): string {
+		const names: Record<string, string> = {
+			query_expansion: 'Query Expansion',
+			semantic_search: 'Semantic Search',
+			keyword_search: 'Keyword Search',
+			score_fusion: 'Fusion',
+			reranking: 'Reranking'
+		};
+		return names[name] || name;
 	}
 </script>
 
 <button 
 	class="flow-node" 
 	class:active 
+	class:skipped
 	class:clickable={onclick !== undefined}
 	onclick={onclick}
 	type="button"
@@ -35,15 +48,17 @@
 	title={details}
 >
 	<div class="node-icon">
-		{config.icon}
+		{skipped ? '○' : config.icon}
 	</div>
 	<div class="node-content">
-		<span class="node-title">{title}</span>
-		{#if timing !== undefined}
+		<span class="node-title">{formatStepName(title)}</span>
+		{#if timing !== undefined && !skipped}
 			<span class="node-timing">{formatTiming(timing)}</span>
+		{:else if skipped}
+			<span class="node-timing skipped-label">skipped</span>
 		{/if}
 	</div>
-	{#if active}
+	{#if active && !skipped}
 		<div class="pulse-ring"></div>
 	{/if}
 </button>
@@ -75,6 +90,11 @@
 
 	.flow-node.active {
 		animation: nodePulse 2s infinite;
+	}
+
+	.flow-node.skipped {
+		opacity: 0.6;
+		border-style: dashed;
 	}
 
 	@keyframes nodePulse {
@@ -117,6 +137,11 @@
 		font-size: 0.75rem;
 		color: #6b7280;
 		font-family: monospace;
+	}
+
+	.node-timing.skipped-label {
+		color: #9ca3af;
+		font-style: italic;
 	}
 
 	.pulse-ring {

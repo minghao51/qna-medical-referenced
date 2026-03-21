@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import type { ChatSource, Message } from '$lib/types';
+	import type { ChatSource, Message, SourceDomainType } from '$lib/types';
 	import PipelinePanel from '$lib/components/PipelinePanel.svelte';
 	import ConfidenceBadge from '$lib/components/ConfidenceBadge.svelte';
 	import SourceQualityIndicator from '$lib/components/SourceQualityIndicator.svelte';
+	import SourceDistributionChart from '$lib/components/SourceDistributionChart.svelte';
 	import MarkdownRenderer from '$lib/components/MarkdownRenderer.svelte';
-	import { calculateConfidence } from '$lib/confidenceCalculator';
+	import { calculateConfidence, getDomainType } from '$lib/confidenceCalculator';
 	import { getSafeExternalUrl } from '$lib/utils/url';
 	import '../lib/styles/markdown.css';
 
@@ -16,16 +17,22 @@
 	let loading = $state(false);
 	let error = $state('');
 	let showPipeline = $state(true);
-	let includePipelineForSession = $state(false);
+	let includePipelineForSession = $state(true);
 	let messagesContainer: HTMLDivElement | undefined = $state();
 	let copiedIndex: number | null = $state(null);
+	let sourcePanelTabs: Record<number, 'citations' | 'distribution'> = $state({});
 
 	type RenderableSource = {
-		label: string;
+		canonicalLabel: string;
+		displayLabel: string;
 		source: string;
 		url: string | null;
 		page?: number;
-		classifier: string;
+		sourceType: string;
+		sourceClass: string;
+		domain: string | null;
+		domainType: SourceDomainType;
+		contentType?: string;
 		key: string;
 	};
 
@@ -79,7 +86,10 @@
 			const res = await fetch(url.toString(), {
 				method: 'POST',
 				credentials: 'include',
-				headers: { 'Content-Type': 'application/json' },
+				headers: {
+					'Content-Type': 'application/json',
+					Accept: 'text/event-stream'
+				},
 				body: JSON.stringify({
 					message: userMessage
 				})
@@ -110,12 +120,11 @@
 					const dataStr = line.slice(6);
 					try {
 						const data = JSON.parse(dataStr);
-						if (data.content) {
+						// Always update content, even if empty (for final event)
+						if (data.content !== undefined) {
 							assistantMessage.content += data.content;
-							messages = [...messages.slice(0, -1), { ...assistantMessage }];
-							await tick();
-							scrollToBottom();
 						}
+						// Check if stream is done
 						if (data.done) {
 							if (data.sources) {
 								assistantMessage.sources = data.sources;
@@ -127,8 +136,11 @@
 							if (data.error) {
 								error = data.error;
 							}
-							messages = [...messages.slice(0, -1), { ...assistantMessage }];
 						}
+						// Update messages after processing each event
+						messages = [...messages.slice(0, -1), { ...assistantMessage }];
+						await tick();
+						scrollToBottom();
 					} catch (e) {
 						console.error('Failed to parse SSE data:', e);
 					}
@@ -174,28 +186,90 @@
 		return message.role === 'assistant' && message.pipeline !== undefined;
 	}
 
+	function formatTitleCase(value: string): string {
+		return value
+			.split(/[_\s-]+/)
+			.filter(Boolean)
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+			.join(' ');
+	}
+
+	function inferSourceType(source: string): string {
+		const lowered = source.toLowerCase();
+		if (lowered.endsWith('.pdf')) return 'pdf';
+		if (lowered.endsWith('.csv')) return 'reference_csv';
+		if (lowered.endsWith('.md') || lowered.endsWith('.html')) return 'html';
+		return 'other';
+	}
+
+	function sourceTypeLabel(sourceType: string): string {
+		const labels: Record<string, string> = {
+			pdf: 'PDF',
+			html: 'HTML',
+			reference_csv: 'Reference CSV',
+			other: 'Other'
+		};
+		return labels[sourceType] ?? formatTitleCase(sourceType);
+	}
+
+	function sourceClassLabel(sourceClass: string): string {
+		const labels: Record<string, string> = {
+			guideline_pdf: 'Guideline PDF',
+			guideline_html: 'Guideline HTML',
+			reference_csv: 'Reference CSV',
+			index_page: 'Index Page',
+			unknown: 'Unknown'
+		};
+		return labels[sourceClass] ?? formatTitleCase(sourceClass);
+	}
+
+	function getSourceTab(index: number): 'citations' | 'distribution' {
+		return sourcePanelTabs[index] ?? 'citations';
+	}
+
+	function setSourceTab(index: number, tab: 'citations' | 'distribution') {
+		sourcePanelTabs = { ...sourcePanelTabs, [index]: tab };
+	}
+
 	function normalizeSource(source: ChatSource | string): RenderableSource {
 		if (typeof source === 'string') {
 			const safeUrl = getSafeExternalUrl(source);
+			const domain = safeUrl ? new URL(safeUrl).hostname.toLowerCase() : null;
+			const sourceType = inferSourceType(source);
 			return {
-				label: source,
+				canonicalLabel: source,
+				displayLabel: source,
 				source,
 				url: safeUrl,
-				classifier: safeUrl ?? source,
-				key: safeUrl ?? source
+				sourceType,
+				sourceClass: sourceType === 'reference_csv' ? 'reference_csv' : 'unknown',
+				domain,
+				domainType: domain ? getDomainType(domain) : 'unknown',
+				key: `${safeUrl ?? source}::`
 			};
 		}
 
-		const safeUrl = getSafeExternalUrl(source.url);
-		const label = source.label || source.source || 'Unknown source';
-		const canonicalSource = source.source || source.url || label;
+		const safeUrl = getSafeExternalUrl(source.source_url || source.url);
+		const canonicalLabel =
+			source.canonical_label || source.display_label || source.label || source.source || 'Unknown source';
+		const displayLabel = source.display_label || source.label || canonicalLabel;
+		const canonicalSource = source.source || source.source_url || source.url || canonicalLabel;
+		const domain = source.domain || (safeUrl ? new URL(safeUrl).hostname.toLowerCase() : null);
+		const sourceType = source.source_type || inferSourceType(canonicalSource);
+		const sourceClass =
+			source.source_class || (sourceType === 'reference_csv' ? 'reference_csv' : 'unknown');
 		return {
-			label,
+			canonicalLabel,
+			displayLabel,
 			source: canonicalSource,
 			url: safeUrl,
 			page: source.page,
-			classifier: safeUrl ?? canonicalSource,
-			key: safeUrl ?? canonicalSource ?? label
+			sourceType,
+			sourceClass,
+			domain,
+			domainType: source.domain_type || (domain ? getDomainType(domain) : 'unknown'),
+			contentType: source.content_type,
+			key: `${canonicalSource}::${source.page ?? ''}`
 		};
 	}
 
@@ -211,6 +285,19 @@
 		}
 
 		return Array.from(deduped.values());
+	}
+
+	function buildDistribution(
+		sources: RenderableSource[],
+		field: 'sourceType' | 'sourceClass'
+	): Record<string, number> {
+		return sources.reduce<Record<string, number>>((acc, source) => {
+			const value = source[field];
+			if (!value || value === 'unknown') return acc;
+			const label = field === 'sourceType' ? sourceTypeLabel(value) : sourceClassLabel(value);
+			acc[label] = (acc[label] ?? 0) + 1;
+			return acc;
+		}, {});
 	}
 </script>
 
@@ -245,6 +332,8 @@
 
 		{#each messages as msg, index}
 			{@const renderableSources = getRenderableSources(msg)}
+			{@const typeDistribution = buildDistribution(renderableSources, 'sourceType')}
+			{@const classDistribution = buildDistribution(renderableSources, 'sourceClass')}
 			<div class="message {msg.role}">
 				<div class="message-header">
 					<span class="role-label">{msg.role === 'user' ? 'You' : 'Assistant'}</span>
@@ -273,23 +362,79 @@
 					{/if}
 				</div>
 				{#if renderableSources.length > 0}
-					<div class="sources">
-						<strong>Sources:</strong>
-						<ol class="sources-list">
-							{#each renderableSources as source, sourceIndex}
-								<li class="source-item">
-									<span class="source-index">{sourceIndex + 1}.</span>
-									<SourceQualityIndicator source={source.classifier} />
-									{#if source.url}
-										<a href={source.url} target="_blank" rel="noopener noreferrer" class="source-link">
-											{source.label}
-										</a>
-									{:else}
-										<span class="source-text">{source.label}</span>
-									{/if}
-								</li>
-							{/each}
-						</ol>
+					<div class="sources-panel">
+						<div class="sources-panel-header">
+							<strong>Sources</strong>
+							<div class="source-tabs">
+								<button
+									type="button"
+									class:active={getSourceTab(index) === 'citations'}
+									onclick={() => setSourceTab(index, 'citations')}
+								>
+									Citations
+								</button>
+								<button
+									type="button"
+									class:active={getSourceTab(index) === 'distribution'}
+									onclick={() => setSourceTab(index, 'distribution')}
+								>
+									Distribution
+								</button>
+							</div>
+						</div>
+						{#if getSourceTab(index) === 'citations'}
+							<ol class="sources-list">
+								{#each renderableSources as source, sourceIndex}
+									<li class="source-card">
+										<div class="source-card-top">
+											<span class="source-index">{sourceIndex + 1}.</span>
+											<div class="source-title-wrap">
+												{#if source.url}
+													<a href={source.url} target="_blank" rel="noopener noreferrer" class="source-link">
+														{source.displayLabel}
+													</a>
+												{:else}
+													<span class="source-text">{source.displayLabel}</span>
+												{/if}
+												{#if source.domain}
+													<span class="source-domain">{source.domain}</span>
+												{/if}
+											</div>
+										</div>
+										<div class="source-badges">
+											<span class="source-type-pill">{sourceTypeLabel(source.sourceType)}</span>
+											{#if source.sourceClass !== 'unknown'}
+												<span class="source-class-pill">{sourceClassLabel(source.sourceClass)}</span>
+											{/if}
+											<SourceQualityIndicator
+												source={source.domain ?? source.url ?? source.source}
+												sourceType={source.sourceType}
+												domainType={source.domainType}
+											/>
+											{#if source.contentType}
+												<span class="source-meta-pill">{formatTitleCase(source.contentType)}</span>
+											{/if}
+										</div>
+									</li>
+								{/each}
+							</ol>
+						{:else}
+							<div class="distribution-grid">
+								{#if Object.keys(typeDistribution).length > 0}
+									<div class="distribution-card">
+										<SourceDistributionChart distribution={typeDistribution} title="Source Types" height={180} />
+									</div>
+								{/if}
+								{#if Object.keys(classDistribution).length > 0}
+									<div class="distribution-card">
+										<SourceDistributionChart distribution={classDistribution} title="Source Classes" height={180} />
+									</div>
+								{/if}
+								{#if Object.keys(typeDistribution).length === 0 && Object.keys(classDistribution).length === 0}
+									<p class="distribution-empty">No structured source distribution available yet.</p>
+								{/if}
+							</div>
+						{/if}
 					</div>
 				{/if}
 				{#if hasPipeline(msg)}
@@ -569,12 +714,45 @@
 		font-weight: 600;
 	}
 
-	.sources {
+	.sources-panel {
 		margin-top: 0.5rem;
 		font-size: 0.85rem;
 		color: #666;
 		display: grid;
 		gap: 0.5rem;
+		padding: 0.75rem;
+		border: 1px solid #dbe3ec;
+		border-radius: 0.85rem;
+		background: #f8fbfd;
+	}
+
+	.sources-panel-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	.source-tabs {
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+
+	.source-tabs button {
+		border: 1px solid #c8d6e5;
+		background: white;
+		color: #456;
+		padding: 0.35rem 0.7rem;
+		border-radius: 999px;
+		font-size: 0.78rem;
+		cursor: pointer;
+	}
+
+	.source-tabs button.active {
+		background: #0f766e;
+		border-color: #0f766e;
+		color: white;
 	}
 
 	.sources-list {
@@ -585,17 +763,63 @@
 		gap: 0.45rem;
 	}
 
-	.source-item {
+	.source-card {
 		display: grid;
-		grid-template-columns: auto auto minmax(0, 1fr);
+		gap: 0.55rem;
+		padding: 0.75rem;
+		border-radius: 0.8rem;
+		background: white;
+		border: 1px solid #e2e8f0;
+	}
+
+	.source-card-top {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
 		align-items: start;
-		gap: 0.5rem;
+		gap: 0.65rem;
+	}
+
+	.source-title-wrap {
+		display: grid;
+		gap: 0.25rem;
 	}
 
 	.source-index {
 		min-width: 1.5rem;
 		font-weight: 600;
 		color: #6b7280;
+	}
+
+	.source-badges {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+
+	.source-type-pill,
+	.source-class-pill,
+	.source-meta-pill {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.2rem 0.5rem;
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 600;
+	}
+
+	.source-type-pill {
+		background: #dbeafe;
+		color: #1d4ed8;
+	}
+
+	.source-class-pill {
+		background: #dcfce7;
+		color: #15803d;
+	}
+
+	.source-meta-pill {
+		background: #fef3c7;
+		color: #b45309;
 	}
 
 	.source-link,
@@ -611,6 +835,30 @@
 
 	.source-link:hover {
 		text-decoration: underline;
+	}
+
+	.source-domain {
+		font-size: 0.8rem;
+		color: #64748b;
+	}
+
+	.distribution-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.distribution-card {
+		padding: 0.5rem;
+		background: white;
+		border: 1px solid #e2e8f0;
+		border-radius: 0.8rem;
+	}
+
+	.distribution-empty {
+		margin: 0;
+		color: #64748b;
+		font-size: 0.9rem;
 	}
 
 	.pipeline-btn {

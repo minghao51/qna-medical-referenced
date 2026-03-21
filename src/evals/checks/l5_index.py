@@ -34,6 +34,8 @@ def assess_l5_index_quality(
     content_hashes = data.get("content_hashes", [])
     lengths = [len(e) for e in embeddings if isinstance(e, list)]
     source_counter = Counter((m or {}).get("source", "unknown") for m in metadatas)
+    source_type_counter = Counter((m or {}).get("source_type", "unknown") for m in metadatas)
+    source_class_counter = Counter((m or {}).get("source_class", "unknown") for m in metadatas)
     records = [
         {
             "id": ids[i] if i < len(ids) else None,
@@ -82,6 +84,8 @@ def assess_l5_index_quality(
         if contents
         else 0.0,
         "source_distribution": dict(source_counter),
+        "source_type_distribution": dict(source_type_counter),
+        "source_class_distribution": dict(source_class_counter),
         "dedupe_effect_estimate": max(0, len(content_hashes) - len(contents)),
         "index_file_size_bytes": vector_path.stat().st_size,
     }

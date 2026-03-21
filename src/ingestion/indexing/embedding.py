@@ -48,7 +48,7 @@ def embed_texts_with_stats(
 
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
-        response = client.embeddings.create(model=model_name, input=batch)
+        response = client.embeddings.create(model=model_name, input=batch, dimensions=768)
         all_embeddings.extend([e.embedding for e in response.data])
 
     return all_embeddings, {

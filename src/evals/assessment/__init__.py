@@ -8,7 +8,7 @@ evaluation dependencies like `deepeval`.
 __all__ = [
     "DEFAULT_THRESHOLDS",
     "evaluate_answer_quality",
-    "evaluate_answers_deepeval",
+    "evaluate_answer_quality_async",
     "evaluate_retrieval",
     "evaluate_thresholds",
     "git_head",

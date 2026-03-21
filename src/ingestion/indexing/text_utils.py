@@ -103,7 +103,7 @@ def _preprocess_word(word: str) -> str:
     normalized = word.lower()
     normalized = MEDICAL_SYNONYMS.get(normalized, normalized)
     if _should_stem(normalized):
-        return STEMMER.stem(normalized)
+        return str(STEMMER.stem(normalized))
     return normalized
 
 

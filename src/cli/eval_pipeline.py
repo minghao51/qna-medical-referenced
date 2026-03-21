@@ -65,7 +65,7 @@ def main() -> None:
     parser.add_argument(
         "--retrieval-mode",
         default="rrf_hybrid",
-        choices=["rrf_hybrid", "legacy_hybrid", "semantic_only", "bm25_only"],
+        choices=["rrf_hybrid", "semantic_only", "bm25_only"],
     )
     parser.add_argument("--disable-page-classification", action="store_true")
     parser.add_argument("--disable-structured-chunking", action="store_true")
@@ -74,16 +74,10 @@ def main() -> None:
     parser.add_argument(
         "--search-mode",
         default="rrf_hybrid",
-        choices=[
-            "rrf_hybrid",
-            "legacy_hybrid",
-            "semantic_only",
-            "bm25_only",
-            "keyword_only",
-            "hybrid",
-        ],
+        choices=["rrf_hybrid", "semantic_only", "bm25_only"],
     )
     parser.add_argument("--no-diversification", action="store_true")
+    parser.add_argument("--enable-hyde", action="store_true", help="Enable HyDE query expansion")
     parser.add_argument("--mmr-lambda", type=float, default=None)
     parser.add_argument("--overfetch-multiplier", type=int, default=None)
     parser.add_argument("--max-chunks-per-source-page", type=int, default=None)
@@ -111,6 +105,8 @@ def main() -> None:
     retrieval_options: dict[str, Any] = {"search_mode": args.search_mode}
     if args.no_diversification:
         retrieval_options["enable_diversification"] = False
+    if args.enable_hyde:
+        retrieval_options["enable_hyde"] = True
     if args.mmr_lambda is not None:
         retrieval_options["mmr_lambda"] = args.mmr_lambda
     if args.overfetch_multiplier is not None:
@@ -177,6 +173,7 @@ def main() -> None:
             for flag in {
                 "--search-mode",
                 "--no-diversification",
+                "--enable-hyde",
                 "--mmr-lambda",
                 "--overfetch-multiplier",
                 "--max-chunks-per-source-page",

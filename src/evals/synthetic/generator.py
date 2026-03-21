@@ -36,8 +36,8 @@ def generate_synthetic_dataset(
             chunk_size=1024,
             chunk_overlap=50,
         ),
-        num_transformations=max(1, num_questions // len(document_paths)),
+        num_transformations=max(1, num_questions // len(document_paths)),  # type: ignore[call-arg]
     )
 
-    synthesizer.save_as(file_path=str(output_path), file_type="json")
+    synthesizer.save_as(file_path=str(output_path), file_type="json")  # type: ignore[call-arg]
     return goldens

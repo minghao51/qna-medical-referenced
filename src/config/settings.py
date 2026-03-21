@@ -275,7 +275,7 @@ class Settings(BaseSettings):
     hyde_enabled: bool = False
     """Enable HyDE (Hypothetical Document Embeddings) query expansion.
 
-    Default: False (disabled for backward compatibility)
+    Default: False
     When enabled, generates hypothetical answers to improve retrieval quality.
 
     Environment variable: HYDE_ENABLED

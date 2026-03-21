@@ -16,6 +16,7 @@
 
 	let selectedDocument: RetrievedDocument | null = $state(null);
 	let activeFlowStage: 'retrieval' | 'context' | 'generation' | null = $state(null);
+	let expandedStep: string | null = $state(null);
 
 	const statusIcons = {
 		success: '✓',
@@ -83,6 +84,74 @@
 							Source {formatScore(pipeline.retrieval.score_weights.source)}%
 						</span>
 					</div>
+
+					{#if pipeline.retrieval.steps && pipeline.retrieval.steps.length > 0}
+						<div class="steps-list">
+							<h4>Retrieval Steps</h4>
+							{#each pipeline.retrieval.steps as step}
+								<div class="step-item-wrapper">
+									<button 
+										class="step-item" 
+										class:skipped={step.skipped}
+										class:expanded={expandedStep === step.name}
+										onclick={() => expandedStep = expandedStep === step.name ? null : step.name}
+										type="button"
+									>
+										<span class="step-name">{step.name.replace(/_/g, ' ')}</span>
+										{#if step.skipped}
+											<span class="step-status skipped">skipped</span>
+										{:else}
+											<span class="step-timing">{step.timing_ms}ms</span>
+										{/if}
+										{#if !step.skipped && step.details && Object.keys(step.details).length > 0}
+											<span class="step-chevron" class:rotated={expandedStep === step.name}>▸</span>
+										{/if}
+									</button>
+									{#if expandedStep === step.name && step.details}
+										<div class="step-details">
+											{#if step.details.expanded_queries && step.details.expanded_queries.length > 0}
+												<div class="detail-group">
+													<span class="detail-label">Expanded Queries:</span>
+													<ul class="query-list">
+														{#each step.details.expanded_queries as q, i}
+															<li class="query-item" class:original={i === 0}>
+																{q}
+																{#if i === 0}<span class="query-tag">original</span>{/if}
+															</li>
+														{/each}
+													</ul>
+												</div>
+											{/if}
+											{#if step.details.hyde_enabled !== undefined}
+												<div class="detail-row">
+													<span class="detail-label">HyDE:</span>
+													<span class="detail-value">{step.details.hyde_enabled ? 'enabled' : 'disabled'}</span>
+												</div>
+											{/if}
+											{#if step.details.queries_count !== undefined}
+												<div class="detail-row">
+													<span class="detail-label">Query variants:</span>
+													<span class="detail-value">{step.details.queries_count}</span>
+												</div>
+											{/if}
+											{#if step.details.search_mode}
+												<div class="detail-row">
+													<span class="detail-label">Search mode:</span>
+													<span class="detail-value">{step.details.search_mode}</span>
+												</div>
+											{/if}
+											{#if step.details.mmr_lambda !== undefined}
+												<div class="detail-row">
+													<span class="detail-label">MMR lambda:</span>
+													<span class="detail-value">{step.details.mmr_lambda}</span>
+												</div>
+											{/if}
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
 
 					<div class="documents-list">
 						<h4>Retrieved Documents <span class="hint">(click to inspect)</span></h4>
@@ -322,6 +391,157 @@
 		font-size: 0.8rem;
 		font-weight: normal;
 		color: #888;
+	}
+
+	.steps-list {
+		margin-top: 1rem;
+		padding: 0.75rem;
+		background: #f9f9f9;
+		border-radius: 6px;
+	}
+
+	.steps-list h4 {
+		margin: 0 0 0.75rem 0;
+		font-size: 0.9rem;
+		color: #333;
+		font-weight: 600;
+	}
+
+	.step-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0.4rem 0.5rem;
+		border-bottom: 1px solid #e5e7eb;
+		font-size: 0.85rem;
+		width: 100%;
+		background: none;
+		border-left: none;
+		border-right: none;
+		border-top: none;
+		cursor: pointer;
+		transition: background 0.2s ease;
+	}
+
+	.step-item:hover {
+		background: rgba(59, 130, 246, 0.05);
+	}
+
+	.step-item.expanded {
+		background: rgba(59, 130, 246, 0.08);
+		border-bottom: none;
+	}
+
+	.step-item:last-child {
+		border-bottom: none;
+	}
+
+	.step-item.skipped {
+		opacity: 0.6;
+	}
+
+	.step-item-wrapper {
+		border-bottom: 1px solid #e5e7eb;
+	}
+
+	.step-item-wrapper:last-child {
+		border-bottom: none;
+	}
+
+	.step-name {
+		text-transform: capitalize;
+		color: #333;
+	}
+
+	.step-timing {
+		font-family: monospace;
+		color: #6b7280;
+		font-weight: 500;
+	}
+
+	.step-status.skipped {
+		color: #9ca3af;
+		font-style: italic;
+		font-size: 0.8rem;
+	}
+
+	.step-chevron {
+		color: #9ca3af;
+		font-size: 0.75rem;
+		transition: transform 0.2s ease;
+		margin-left: 0.5rem;
+	}
+
+	.step-chevron.rotated {
+		transform: rotate(90deg);
+	}
+
+	.step-details {
+		padding: 0.75rem;
+		background: white;
+		border: 1px solid #e5e7eb;
+		border-top: none;
+		margin-bottom: 0.5rem;
+		border-radius: 0 0 4px 4px;
+	}
+
+	.detail-group {
+		margin-bottom: 0.75rem;
+	}
+
+	.detail-group:last-child {
+		margin-bottom: 0;
+	}
+
+	.detail-label {
+		font-weight: 600;
+		color: #555;
+		font-size: 0.8rem;
+		display: block;
+		margin-bottom: 0.4rem;
+	}
+
+	.detail-row {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.85rem;
+		margin-bottom: 0.3rem;
+	}
+
+	.detail-value {
+		color: #333;
+		font-family: monospace;
+	}
+
+	.query-list {
+		list-style: none;
+		padding: 0;
+		margin: 0.25rem 0 0 0;
+	}
+
+	.query-item {
+		padding: 0.35rem 0.5rem;
+		background: #f9f9f9;
+		border-radius: 4px;
+		margin-bottom: 0.3rem;
+		font-size: 0.85rem;
+		color: #333;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.query-item.original {
+		border-left: 3px solid #3b82f6;
+	}
+
+	.query-tag {
+		font-size: 0.7rem;
+		background: #3b82f6;
+		color: white;
+		padding: 0.1rem 0.4rem;
+		border-radius: 999px;
+		font-weight: 600;
 	}
 
 	.doc-item {

@@ -1,6 +1,6 @@
 """Data models for the health screening interpreter chatbot."""
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -8,10 +8,18 @@ from pydantic import BaseModel, Field
 class ChatSource(BaseModel):
     """Structured citation returned with chat responses."""
 
+    canonical_label: str
+    display_label: str
+    source_url: Optional[str] = None
+    source_type: str = "other"
+    source_class: str = "unknown"
+    domain: Optional[str] = None
+    domain_type: str = "unknown"
     label: str
     source: str
     url: Optional[str] = None
     page: Optional[int] = None
+    content_type: Optional[str] = None
 
 
 class RetrievedDocument(BaseModel):
@@ -34,8 +42,23 @@ class RetrievedDocument(BaseModel):
     chunk_quality_score: Optional[float] = None
     content_type: Optional[str] = None
     section_path: list[str] = Field(default_factory=list)
+    canonical_label: Optional[str] = None
+    display_label: Optional[str] = None
     logical_name: Optional[str] = None
     source_url: Optional[str] = None
+    source_type: Optional[str] = None
+    source_class: Optional[str] = None
+    domain: Optional[str] = None
+    domain_type: Optional[str] = None
+
+
+class RetrievalStep(BaseModel):
+    """A single sub-step within the retrieval stage."""
+
+    name: str
+    timing_ms: int
+    skipped: bool = False
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class RetrievalStage(BaseModel):
@@ -46,6 +69,7 @@ class RetrievalStage(BaseModel):
     documents: list[RetrievedDocument]
     score_weights: dict
     timing_ms: int
+    steps: list[RetrievalStep] = Field(default_factory=list)
 
 
 class ContextStage(BaseModel):

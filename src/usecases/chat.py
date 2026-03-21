@@ -26,6 +26,7 @@ Example:
         print(result["response"])
 """
 
+import logging
 import time
 from typing import Any, AsyncGenerator, Optional
 
@@ -33,6 +34,8 @@ from src.app.exceptions import UpstreamServiceError
 from src.infra.llm import get_client
 from src.infra.storage.interfaces import ChatHistoryStore
 from src.rag import retrieve_context, retrieve_context_with_trace
+
+logger = logging.getLogger(__name__)
 
 
 def _build_history_context(history: list[dict[str, str]]) -> str:
@@ -212,17 +215,23 @@ async def stream_chat_message(
         )
 
     except Exception as exc:
-        history_store.save_message(resolved_session_id, "user", message)
-        if accumulated_response:
-            history_store.save_message(resolved_session_id, "assistant", accumulated_response)
+        logger.error("Error during stream: %s", exc)
+        try:
+            history_store.save_message(resolved_session_id, "user", message)
+            if accumulated_response:
+                history_store.save_message(resolved_session_id, "assistant", accumulated_response)
+        except Exception:
+            pass
 
-        yield (
-            "",
-            {
-                "done": True,
-                "sources": sources,
-                "pipeline": pipeline_trace,
-                "error": "An error occurred processing your request",
-            },
-        )
-        raise UpstreamServiceError("An error occurred processing your request") from exc
+        try:
+            yield (
+                "",
+                {
+                    "done": True,
+                    "sources": sources,
+                    "pipeline": pipeline_trace,
+                    "error": "An error occurred processing your request",
+                },
+            )
+        except Exception as e:
+            logger.error("Failed to yield error event: %s", e)

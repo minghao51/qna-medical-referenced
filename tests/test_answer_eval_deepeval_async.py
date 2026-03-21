@@ -1,10 +1,10 @@
-"""Unit tests for the async DeepEval answer evaluation path."""
+"""Unit tests for the async answer evaluation path."""
 
 import asyncio
 
 import pytest
 
-from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
 
 class _FakeTrace:
@@ -29,7 +29,7 @@ class _FakeMetric:
 
 
 @pytest.mark.asyncio
-async def test_evaluate_answers_deepeval_uses_async_generation_and_fresh_metrics(
+async def test_evaluate_answer_quality_async_uses_async_generation_and_fresh_metrics(
     monkeypatch, tmp_path
 ):
     """The async evaluator should use async answer generation and aggregate fresh metric results."""
@@ -60,7 +60,7 @@ async def test_evaluate_answers_deepeval_uses_async_generation_and_fresh_metrics
         ],
     )
 
-    results, aggregate = await evaluate_answers_deepeval(
+    results, aggregate = await evaluate_answer_quality_async(
         [{"query_id": "q1", "query": "test query"}],
         top_k=3,
         cache_dir=tmp_path / "cache",
@@ -79,7 +79,9 @@ async def test_evaluate_answers_deepeval_uses_async_generation_and_fresh_metrics
 
 
 @pytest.mark.asyncio
-async def test_evaluate_answers_deepeval_excludes_metric_errors_from_means(monkeypatch, tmp_path):
+async def test_evaluate_answer_quality_async_excludes_metric_errors_from_means(
+    monkeypatch, tmp_path
+):
     class _FailingMetric(_FakeMetric):
         async def a_measure(self, test_case, _show_indicator=False, _log_metric_to_confident=False):
             raise RuntimeError("judge unavailable")
@@ -105,7 +107,7 @@ async def test_evaluate_answers_deepeval_excludes_metric_errors_from_means(monke
         ],
     )
 
-    results, aggregate = await evaluate_answers_deepeval(
+    results, aggregate = await evaluate_answer_quality_async(
         [{"query_id": "q1", "query": "test query"}],
         top_k=3,
         cache_dir=tmp_path / "cache",
@@ -121,7 +123,7 @@ async def test_evaluate_answers_deepeval_excludes_metric_errors_from_means(monke
 
 
 @pytest.mark.asyncio
-async def test_evaluate_answers_deepeval_marks_timeouts_as_metric_errors(monkeypatch, tmp_path):
+async def test_evaluate_answer_quality_async_marks_timeouts_as_metric_errors(monkeypatch, tmp_path):
     class _SlowMetric(_FakeMetric):
         async def a_measure(self, test_case, _show_indicator=False, _log_metric_to_confident=False):
             await asyncio.sleep(1.1)
@@ -151,7 +153,7 @@ async def test_evaluate_answers_deepeval_marks_timeouts_as_metric_errors(monkeyp
         "src.evals.assessment.answer_eval.settings.deepeval_metric_timeout_seconds", 0
     )
 
-    results, aggregate = await evaluate_answers_deepeval(
+    results, aggregate = await evaluate_answer_quality_async(
         [{"query_id": "q1", "query": "test query"}],
         top_k=3,
         cache_dir=tmp_path / "cache",

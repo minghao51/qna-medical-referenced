@@ -13,6 +13,8 @@
 
 	const stageStatus = $derived(getStageStatus(pipeline.retrieval, pipeline.context, pipeline.generation));
 
+	const retrievalSteps = $derived(pipeline.retrieval.steps || []);
+
 	const stages = $derived([
 		{
 			id: 'retrieval' as const,
@@ -45,6 +47,27 @@
 			onNodeClick(stage);
 		}
 	}
+
+	function getStepDetails(step: { name: string; skipped: boolean; details: Record<string, any> }): string {
+		if (step.skipped) {
+			const reasons: Record<string, string> = {
+				query_expansion: 'Always runs',
+				semantic_search: 'Always runs',
+				keyword_search: 'Disabled (semantic-only mode)',
+				score_fusion: 'Disabled (not hybrid mode)',
+				reranking: 'Disabled (diversification off)'
+			};
+			return reasons[step.name] || 'Skipped';
+		}
+		const details: string[] = [];
+		if (step.details.expanded_queries?.length > 1) {
+			details.push(`${step.details.expanded_queries.length} queries`);
+		}
+		if (step.details.hyde_enabled) {
+			details.push('HyDE enabled');
+		}
+		return details.join(' | ') || 'Completed';
+	}
 </script>
 
 <div class="flow-diagram">
@@ -72,6 +95,31 @@
 			{/if}
 		{/each}
 	</div>
+
+	{#if activeStage === 'retrieval' && retrievalSteps.length > 0}
+		<div class="retrieval-steps">
+			<div class="steps-header">Retrieval Steps</div>
+			<div class="steps-flow">
+				{#each retrievalSteps as step, index}
+					<FlowNode
+						title={step.name}
+						status={stageStatus.retrieval}
+						timing={step.timing_ms}
+						active={false}
+						skipped={step.skipped}
+						details={getStepDetails(step)}
+					/>
+					{#if index < retrievalSteps.length - 1}
+						<div class="flow-arrow small">
+							<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</div>
+					{/if}
+				{/each}
+			</div>
+		</div>
+	{/if}
 	
 	<div class="stage-descriptions">
 		{#each stages as stage}
@@ -108,9 +156,18 @@
 		min-width: 40px;
 	}
 
+	.flow-arrow.small {
+		min-width: 20px;
+	}
+
 	.flow-arrow svg {
 		width: 24px;
 		height: 24px;
+	}
+
+	.flow-arrow.small svg {
+		width: 16px;
+		height: 16px;
 	}
 
 	.flow-arrow.active {
@@ -173,6 +230,32 @@
 		}
 	}
 
+	.retrieval-steps {
+		margin-top: 1rem;
+		padding: 1rem;
+		background: rgba(59, 130, 246, 0.05);
+		border: 1px dashed #3b82f6;
+		border-radius: 8px;
+	}
+
+	.steps-header {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: #3b82f6;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		margin-bottom: 0.75rem;
+		text-align: center;
+	}
+
+	.steps-flow {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+	}
+
 	.stage-descriptions {
 		display: flex;
 		justify-content: center;
@@ -221,6 +304,18 @@
 		.description {
 			flex-direction: row;
 			gap: 0.5rem;
+		}
+
+		.retrieval-steps {
+			margin-top: 0.75rem;
+		}
+
+		.steps-flow {
+			flex-direction: column;
+		}
+
+		.flow-arrow.small {
+			transform: rotate(90deg);
 		}
 	}
 </style>

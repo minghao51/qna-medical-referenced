@@ -1,3 +1,5 @@
+import pytest
+
 from src.ingestion.steps.chunk_text import TextChunker, chunk_documents
 
 
@@ -122,14 +124,9 @@ class TestTextChunker:
         ids = [c["id"] for c in chunks]
         assert len(ids) == len(set(ids)), "Chunk IDs should be unique"
 
-    def test_chunker_supports_legacy_strategy(self):
-        chunker = TextChunker(chunk_size=80, chunk_overlap=10, strategy="legacy")
-        chunks = chunker.chunk_text(
-            "Sentence one. Sentence two. Sentence three.", "test.pdf", "doc1"
-        )
-
-        assert len(chunks) >= 1
-        assert all("chunk_index" in c for c in chunks)
+    def test_chunker_rejects_unsupported_strategy(self):
+        with pytest.raises(ValueError, match="does not support strategy 'legacy'"):
+            TextChunker(chunk_size=80, chunk_overlap=10, strategy="legacy")
 
     def test_recursive_strategy_prefers_sentence_boundary(self):
         chunker = TextChunker(
@@ -153,7 +150,7 @@ class TestTextChunker:
         assert starts == sorted(starts)
 
     def test_source_specific_chunk_configs_apply_to_markdown(self):
-        chunker = TextChunker(chunk_size=800, chunk_overlap=150, strategy="legacy")
+        chunker = TextChunker(chunk_size=800, chunk_overlap=150, strategy="recursive")
         md = "# H1\n" + ("alpha " * 200)
         chunks = chunker.chunk_documents_with_configs(
             [{"id": "md1", "source": "doc.md", "content": md}],

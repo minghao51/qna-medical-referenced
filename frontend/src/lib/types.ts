@@ -7,9 +7,32 @@ export interface RetrievedDocument {
 	page?: number;
 	semantic_score: number;
 	keyword_score: number;
+	source_prior?: number;
 	source_boost: number;
 	combined_score: number;
 	rank: number;
+	semantic_rank?: number;
+	bm25_rank?: number;
+	fused_rank?: number;
+	fused_score?: number;
+	chunk_quality_score?: number;
+	content_type?: string;
+	section_path?: string[];
+	canonical_label?: string;
+	display_label?: string;
+	logical_name?: string;
+	source_url?: string;
+	source_type?: string;
+	source_class?: string;
+	domain?: string;
+	domain_type?: SourceDomainType;
+}
+
+export interface RetrievalStep {
+	name: string;
+	timing_ms: number;
+	skipped: boolean;
+	details: Record<string, any>;
 }
 
 export interface RetrievalStage {
@@ -22,6 +45,7 @@ export interface RetrievalStage {
 		source: number;
 	};
 	timing_ms: number;
+	steps: RetrievalStep[];
 }
 
 export interface ContextStage {
@@ -32,11 +56,21 @@ export interface ContextStage {
 }
 
 export interface ChatSource {
+	canonical_label: string;
+	display_label: string;
+	source_url?: string;
+	source_type?: string;
+	source_class?: string;
+	domain?: string;
+	domain_type?: SourceDomainType;
 	label: string;
 	source: string;
 	url?: string;
 	page?: number;
+	content_type?: string;
 }
+
+export type SourceDomainType = 'government' | 'education' | 'organization' | 'commercial' | 'unknown';
 
 export interface GenerationStage {
 	model: string;

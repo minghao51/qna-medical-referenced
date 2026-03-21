@@ -2,12 +2,19 @@
 	import { getDomainType, type DomainType } from '$lib/confidenceCalculator';
 
 	type Props = {
-		source: string;
+		source?: string | null;
+		sourceType?: string | null;
+		domainType?: DomainType | null;
 	};
 
-	let { source }: Props = $props();
+	let { source = null, sourceType = null, domainType = null }: Props = $props();
 
-	const domainType = $derived(getDomainType(source));
+	const resolvedDomainType = $derived(
+		domainType ??
+			(sourceType === 'pdf' || sourceType === 'html' || sourceType === 'reference_csv'
+				? 'organization'
+				: getDomainType(source ?? ''))
+	);
 
 	const config: Record<DomainType, { color: string; bgColor: string; label: string }> = {
 		government: {
@@ -37,14 +44,14 @@
 		}
 	};
 
-	const currentConfig = $derived(config[domainType]);
+	const currentConfig = $derived(config[resolvedDomainType]);
 </script>
 
-{#if source}
+{#if source || sourceType || domainType}
 	<span
 		class="source-badge"
 		style="--badge-color: {currentConfig.color}; --badge-bg: {currentConfig.bgColor};"
-		title="Source type: {domainType}"
+		title="Source type: {resolvedDomainType}"
 	>
 		{currentConfig.label}
 	</span>

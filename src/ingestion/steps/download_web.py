@@ -48,7 +48,7 @@ def normalize_url(url: str) -> str:
 def _load_manifest() -> dict:
     if MANIFEST_PATH.exists():
         try:
-            return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+            return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
         except Exception:
             return {"records": []}
     return {"records": []}
@@ -231,7 +231,7 @@ def get_manifest_record_by_filename(filename: str) -> dict | None:
     manifest = _load_manifest()
     for record in manifest.get("records", []):
         if record.get("filename") == filename:
-            return record
+            return record  # type: ignore[no-any-return]
     return None
 
 
@@ -240,7 +240,7 @@ def get_manifest_record_by_logical_name(logical_name: str) -> dict | None:
     manifest = _load_manifest()
     for record in manifest.get("records", []):
         if record.get("logical_name") == logical_name:
-            return record
+            return record  # type: ignore[no-any-return]
     return None
 
 
@@ -281,7 +281,7 @@ async def download_binary(url: str, timeout: int = 60) -> Optional[bytes]:
             return None
 
 
-async def _download_and_save_html(url: str, logical_name: str) -> Optional[str]:
+async def _download_and_save_html(url: str, logical_name: str, timeout: int = 30) -> Optional[str]:
     normalized_url = normalize_url(url)
     manifest = _load_manifest()
     by_url, by_hash = _manifest_indexes(manifest)
@@ -293,7 +293,7 @@ async def _download_and_save_html(url: str, logical_name: str) -> Optional[str]:
             return None
 
     print(f"Downloading: {logical_name}")
-    content = await download_url(url)
+    content = await download_url(url, timeout)
     if not content:
         _register_manifest_record(
             manifest=manifest,
@@ -420,10 +420,136 @@ async def extract_ace_clinical_guidelines() -> list[str]:
             "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/lipid-management-focus-on-cardiovascular-risk/",
             "lipid_management_guideline",
         ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/mild-and-moderate-atopic-dermatitis-acg/",
+            "atopic_dermatitis_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/heart-failure-acg/",
+            "heart_failure_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/atrial-fibrillation-acg/",
+            "atrial_fibrillation_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/chronic-kidney-disease-acg/",
+            "ckd_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/asthma-diagnosis-management/",
+            "asthma_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/obesity-weight-management-acg/",
+            "obesity_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/allergic-rhinitis-acg/",
+            "allergic_rhinitis_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/dementia-acg/",
+            "dementia_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/bipolar-disorder-acg/",
+            "bipolar_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/gord-acg/",
+            "gord_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/osteoarthritis-knee-acg/",
+            "osteoarthritis_guideline",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/stroke-management-acg/",
+            "stroke_guideline",
+        ),
     ]
 
     downloaded = []
     for url, name in guidelines:
+        result = await _download_and_save_html(url, name)
+        if result:
+            downloaded.append(result)
+    return downloaded
+
+
+async def extract_ace_cues() -> list[str]:
+    """Extract ACE CUES resources from ace-hta.gov.sg."""
+    pages = [
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-cues-overview/",
+            "ace_cues_index",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-cues/asthma-management/",
+            "ace_cues_asthma",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-cues/inhaler-technique-videos/",
+            "ace_cues_inhaler",
+        ),
+    ]
+
+    downloaded = []
+    for url, name in pages:
+        result = await _download_and_save_html(url, name)
+        if result:
+            downloaded.append(result)
+    return downloaded
+
+
+async def extract_ace_drug_guidances() -> list[str]:
+    """Extract ACE Drug Guidances from ace-hta.gov.sg."""
+    guidances = [
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/semaglutide-obesity/",
+            "semaglutide_obesity",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/empagliflozin/",
+            "empagliflozin",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/glp1-diabetes/",
+            "glp1_diabetes",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/apixaban/",
+            "apixaban",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/pcsk9-inhibitors/",
+            "pcsk9_inhibitors",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/biologics-asthma/",
+            "biologics_asthma",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/trastuzumab-deruxtecan-nsclc/",
+            "trastuzumab_deruxtecan",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/ribociclib-breast/",
+            "ribociclib_breast",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/inavolisib-breast/",
+            "inavolisib_breast",
+        ),
+        (
+            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/ustekinumab-biosimilar/",
+            "ustekinumab",
+        ),
+    ]
+
+    downloaded = []
+    for url, name in guidances:
         result = await _download_and_save_html(url, name)
         if result:
             downloaded.append(result)
@@ -444,6 +570,26 @@ async def extract_healthhub_content() -> list[str]:
             "https://www.healthhub.sg/programmes/healthiersg-screening/screening-faq",
             "healthier_sg_screening_faq",
         ),
+        (
+            "https://www.healthhub.sg/well-being-and-lifestyle/mental-wellness/",
+            "mental_wellness",
+        ),
+        (
+            "https://www.healthhub.sg/well-being-and-lifestyle/exercise-and-fitness/",
+            "exercise_fitness",
+        ),
+        (
+            "https://www.healthhub.sg/well-being-and-lifestyle/food-diet-and-nutrition/",
+            "food_nutrition",
+        ),
+        (
+            "https://www.healthhub.sg/well-being-and-lifestyle/active-ageing/",
+            "active_ageing",
+        ),
+        (
+            "https://www.healthhub.sg/well-being-and-lifestyle/personal-care/all-you-need-to-know-about-vaccinations/",
+            "vaccinations_guide",
+        ),
     ]
 
     downloaded = []
@@ -455,9 +601,33 @@ async def extract_healthhub_content() -> list[str]:
 
 
 async def extract_hpp_guidelines() -> list[str]:
-    """Extract HPP Guidelines index page."""
+    """Extract HPP/MOH Professional Guidelines."""
     pages = [
         ("https://hpp.moh.gov.sg/guidelines/", "hpp_guidelines_index"),
+        (
+            "https://hpp.moh.gov.sg/guidelines/collaborative-prescribing/",
+            "collab_prescribing_guideline",
+        ),
+        (
+            "https://hpp.moh.gov.sg/guidelines/infection-prevention-and-control-guidelines-and-standards/",
+            "infection_control_guideline",
+        ),
+        (
+            "https://hpp.moh.gov.sg/guidelines/eatwise-sg/",
+            "eatwise_sg_guideline",
+        ),
+        (
+            "https://hpp.moh.gov.sg/guidelines/practice-guide-for-tiered-care-model-for-mental-health/",
+            "mental_health_tiered_care",
+        ),
+        (
+            "https://hpp.moh.gov.sg/guidelines/medisave-for-chronic-disease-management-programme/",
+            "medisave_cdmp_guideline",
+        ),
+        (
+            "https://hpp.moh.gov.sg/guidelines/dental-fee-benchmarks/",
+            "dental_fee_benchmarks",
+        ),
     ]
 
     downloaded = []
@@ -482,6 +652,23 @@ async def extract_moh_content() -> list[str]:
     return downloaded
 
 
+async def extract_international_guidelines() -> list[str]:
+    """Extract international medical guidelines (NHS/NICE) with extended timeout."""
+    pages = [
+        ("https://www.nice.org.uk/guidance/ng28", "nice_diabetes_ng28"),
+        ("https://www.nice.org.uk/guidance/cg127", "nice_hypertension"),
+        ("https://www.nice.org.uk/guidance/cg181", "nice_lipid"),
+        ("https://www.nice.org.uk/guidance/ng236", "nice_heart_failure"),
+    ]
+
+    downloaded = []
+    for url, name in pages:
+        result = await _download_and_save_html(url, name, timeout=60)
+        if result:
+            downloaded.append(result)
+    return downloaded
+
+
 def list_downloaded_files() -> list[str]:
     """List all downloaded files in data/raw."""
     if not DATA_DIR.exists():
@@ -500,17 +687,23 @@ async def main():
 
     all_downloaded = []
 
-    print("\n[1/4] Downloading ACE Clinical Guidelines...")
+    print("\n[1/6] Downloading ACE Clinical Guidelines...")
     all_downloaded.extend(await extract_ace_clinical_guidelines())
 
-    print("\n[2/4] Downloading HealthHub content...")
+    print("\n[2/6] Downloading ACE CUES resources...")
+    all_downloaded.extend(await extract_ace_cues())
+
+    print("\n[3/6] Downloading ACE Drug Guidances...")
+    all_downloaded.extend(await extract_ace_drug_guidances())
+
+    print("\n[4/6] Downloading HealthHub content...")
     all_downloaded.extend(await extract_healthhub_content())
 
-    print("\n[3/4] Downloading HPP Guidelines...")
+    print("\n[5/6] Downloading HPP Guidelines...")
     all_downloaded.extend(await extract_hpp_guidelines())
 
-    print("\n[4/4] Downloading MOH Singapore content...")
-    all_downloaded.extend(await extract_moh_content())
+    print("\n[6/6] Downloading International Guidelines (NHS/NICE)...")
+    all_downloaded.extend(await extract_international_guidelines())
 
     print("\n" + "=" * 60)
     print(f"Download complete! Total files in data/raw: {len(list_downloaded_files())}")

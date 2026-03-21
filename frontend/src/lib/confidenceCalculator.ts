@@ -1,4 +1,11 @@
-import type { RetrievedDocument, RetrievalStage, ContextStage, GenerationStage, PipelineTrace } from './types';
+import type {
+	ContextStage,
+	GenerationStage,
+	PipelineTrace,
+	RetrievalStage,
+	RetrievedDocument,
+	SourceDomainType
+} from './types';
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
@@ -13,7 +20,7 @@ export interface ConfidenceScore {
 	};
 }
 
-export type DomainType = 'government' | 'education' | 'organization' | 'commercial' | 'unknown';
+export type DomainType = SourceDomainType;
 
 export function getDomainType(source: string): DomainType {
 	try {

@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from dataclasses import asdict, dataclass
-from typing import Any, List, Tuple
+from typing import Any
 
 from src.config import settings
 from src.ingestion.indexing.text_utils import ACRONYM_EXPANSIONS, tokenize_text
@@ -23,15 +23,21 @@ from src.ingestion.steps.chunk_text import (
 from src.ingestion.steps.convert_html import main as convert_html_main
 from src.ingestion.steps.convert_html import (
     set_html_extractor_mode,
+    set_html_extractor_strategy,
     set_page_classification_enabled,
 )
 from src.ingestion.steps.load_markdown import (
     get_markdown_documents,
     set_index_only_classified_pages,
 )
-from src.ingestion.steps.load_pdfs import get_documents
+from src.ingestion.steps.load_pdfs import (
+    get_documents,
+    set_pdf_extractor_strategy,
+    set_pdf_table_extractor,
+)
 from src.ingestion.steps.load_reference_data import ReferenceDataLoader
 from src.rag.formatting import build_context_and_sources
+from src.rag.trace_models import ChatSource
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +49,7 @@ _MAX_CHUNKS_PER_SOURCE_PAGE = 2
 _MAX_CHUNKS_PER_SOURCE = 3
 _MMR_LAMBDA = 0.75
 _RRF_SEARCH_MODE = "rrf_hybrid"
+_VALID_SEARCH_MODES = {"rrf_hybrid", "semantic_only", "bm25_only"}
 
 
 @dataclass
@@ -52,10 +59,8 @@ class RetrievalDiversityConfig:
     max_chunks_per_source: int = _MAX_CHUNKS_PER_SOURCE
     mmr_lambda: float = _MMR_LAMBDA
     enable_diversification: bool = True
-    search_mode: str = _RRF_SEARCH_MODE  # rrf_hybrid | semantic_only | bm25_only | legacy_hybrid
-    enable_hyde: bool = (
-        False  # HyDE query expansion (disabled by default for backward compatibility)
-    )
+    search_mode: str = _RRF_SEARCH_MODE
+    enable_hyde: bool = False
     hyde_max_length: int = 200  # Maximum length for HyDE hypothetical answers
 
 
@@ -75,15 +80,8 @@ def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> Retrie
     cfg.max_chunks_per_source_page = max(1, int(cfg.max_chunks_per_source_page))
     cfg.max_chunks_per_source = max(1, int(cfg.max_chunks_per_source))
     cfg.mmr_lambda = max(0.0, min(1.0, float(cfg.mmr_lambda)))
-    cfg.search_mode = str(cfg.search_mode or "hybrid").lower()
-    if cfg.search_mode not in {
-        "rrf_hybrid",
-        "hybrid",
-        "semantic_only",
-        "keyword_only",
-        "bm25_only",
-        "legacy_hybrid",
-    }:
+    cfg.search_mode = str(cfg.search_mode or _RRF_SEARCH_MODE).lower()
+    if cfg.search_mode not in _VALID_SEARCH_MODES:
         cfg.search_mode = _RRF_SEARCH_MODE
     # Validate HyDE configuration
     cfg.enable_hyde = bool(cfg.enable_hyde)
@@ -205,7 +203,7 @@ def _build_index_from_sources(vector_store) -> dict[str, Any]:
         f"(attempted={stats['attempted']}, inserted={stats['inserted']}, "
         f"duplicate_id={stats['skipped_duplicate_id']}, duplicate_content={stats['skipped_duplicate_content']})"
     )
-    return stats
+    return stats  # type: ignore[no-any-return]
 
 
 def _vector_store_runtime_signature() -> str:
@@ -300,6 +298,9 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
     set_page_classification_enabled(ingestion.get("page_classification_enabled", True))
     set_index_only_classified_pages(ingestion.get("index_only_classified_pages", True))
     set_html_extractor_mode(ingestion.get("html_extractor_mode", "auto"))
+    set_html_extractor_strategy(ingestion.get("html_extractor_strategy", "trafilatura_bs"))
+    set_pdf_extractor_strategy(ingestion.get("pdf_extractor_strategy", "pypdf_pdfplumber"))
+    set_pdf_table_extractor(ingestion.get("pdf_table_extractor", "heuristic"))
     set_structured_chunking_enabled(ingestion.get("structured_chunking_enabled", True))
     set_source_chunk_configs(ingestion.get("source_chunk_configs"))
     vector_config = {
@@ -327,6 +328,9 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
             "page_classification_enabled": ingestion.get("page_classification_enabled", True),
             "index_only_classified_pages": ingestion.get("index_only_classified_pages", True),
             "html_extractor_mode": ingestion.get("html_extractor_mode", "auto"),
+            "html_extractor_strategy": ingestion.get("html_extractor_strategy", "trafilatura_bs"),
+            "pdf_extractor_strategy": ingestion.get("pdf_extractor_strategy", "pypdf_pdfplumber"),
+            "pdf_table_extractor": ingestion.get("pdf_table_extractor", "heuristic"),
             "structured_chunking_enabled": ingestion.get("structured_chunking_enabled", True),
             "source_chunk_configs": get_source_chunk_configs(),
         },
@@ -458,7 +462,9 @@ def _diversify_results(
     return selected
 
 
-def retrieve_context(query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None):
+def retrieve_context(
+    query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None
+) -> tuple[str, list[ChatSource]]:
     initialize_runtime_index()
     cfg = _resolve_retrieval_config(retrieval_options)
 
@@ -541,8 +547,14 @@ def retrieve_context_with_trace(
                 chunk_quality_score=r.get("quality_score"),
                 content_type=r.get("content_type"),
                 section_path=r.get("section_path", []),
+                canonical_label=metadata.get("canonical_label"),
+                display_label=metadata.get("display_label"),
                 logical_name=metadata.get("logical_name"),
                 source_url=metadata.get("source_url"),
+                source_type=metadata.get("source_type"),
+                source_class=metadata.get("source_class"),
+                domain=metadata.get("domain"),
+                domain_type=metadata.get("domain_type"),
             )
         )
 
@@ -616,6 +628,7 @@ async def retrieve_context_with_trace_async(
         GenerationStage,
         PipelineTrace,
         RetrievalStage,
+        RetrievalStep,
         RetrievedDocument,
     )
 
@@ -627,7 +640,20 @@ async def retrieve_context_with_trace_async(
 
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
 
-    # Use async retrieval with HyDE support
+    steps: list[RetrievalStep] = []
+
+    # Step 1: Query Expansion
+    query_expansion_start = time.time()
+    expanded_queries = await _expand_queries_async(
+        query,
+        hyde_client=hyde_client,
+        enable_hyde=cfg.enable_hyde,
+        hyde_max_length=cfg.hyde_max_length,
+    )
+    query_expansion_timing_ms = int((time.time() - query_expansion_start) * 1000)
+
+    # Use async retrieval with HyDE support (pass pre-expanded queries to avoid double expansion)
+    retrieval_start = time.time()
     results, retrieval_trace = await _retrieve_candidates_with_trace_async(
         vector_store,
         query,
@@ -636,8 +662,55 @@ async def retrieve_context_with_trace_async(
         hyde_client=hyde_client,
         enable_hyde=cfg.enable_hyde,
         hyde_max_length=cfg.hyde_max_length,
+        pre_expanded_queries=expanded_queries,
+    )
+    retrieval_search_timing_ms = int((time.time() - retrieval_start) * 1000)
+
+    # Build steps based on config
+    search_mode = cfg.search_mode
+    is_hybrid = search_mode == "rrf_hybrid"
+
+    steps.append(
+        RetrievalStep(
+            name="query_expansion",
+            timing_ms=query_expansion_timing_ms,
+            skipped=False,
+            details={
+                "expanded_queries": expanded_queries,
+                "hyde_enabled": cfg.enable_hyde,
+            },
+        )
     )
 
+    steps.append(
+        RetrievalStep(
+            name="semantic_search",
+            timing_ms=retrieval_search_timing_ms,
+            skipped=False,
+            details={"queries_count": len(expanded_queries)},
+        )
+    )
+
+    steps.append(
+        RetrievalStep(
+            name="keyword_search",
+            timing_ms=0,
+            skipped=search_mode == "semantic_only",
+            details={"search_mode": search_mode},
+        )
+    )
+
+    steps.append(
+        RetrievalStep(
+            name="score_fusion",
+            timing_ms=0,
+            skipped=not is_hybrid,
+            details={"search_mode": search_mode},
+        )
+    )
+
+    # Step 3: Reranking/Diversification
+    reranking_start = time.time()
     results = _diversify_results(
         results,
         top_k=top_k,
@@ -646,6 +719,19 @@ async def retrieve_context_with_trace_async(
         max_chunks_per_source_page=cfg.max_chunks_per_source_page,
         max_chunks_per_source=cfg.max_chunks_per_source,
         enable_diversification=cfg.enable_diversification,
+    )
+    reranking_timing_ms = int((time.time() - reranking_start) * 1000)
+
+    steps.append(
+        RetrievalStep(
+            name="reranking",
+            timing_ms=reranking_timing_ms,
+            skipped=not cfg.enable_diversification,
+            details={
+                "mmr_lambda": cfg.mmr_lambda,
+                "overfetch_multiplier": cfg.overfetch_multiplier,
+            },
+        )
     )
 
     retrieved_docs = []
@@ -670,8 +756,14 @@ async def retrieve_context_with_trace_async(
                 chunk_quality_score=r.get("quality_score"),
                 content_type=r.get("content_type"),
                 section_path=r.get("section_path", []),
+                canonical_label=metadata.get("canonical_label"),
+                display_label=metadata.get("display_label"),
                 logical_name=metadata.get("logical_name"),
                 source_url=metadata.get("source_url"),
+                source_type=metadata.get("source_type"),
+                source_class=metadata.get("source_class"),
+                domain=metadata.get("domain"),
+                domain_type=metadata.get("domain_type"),
             )
         )
 
@@ -694,6 +786,7 @@ async def retrieve_context_with_trace_async(
             "max_chunks_per_source": cfg.max_chunks_per_source,
         },
         timing_ms=retrieval_timing_ms,
+        steps=steps,
     )
 
     context, source_labels, chat_sources = build_context_and_sources(results)
@@ -724,7 +817,7 @@ def get_full_context() -> str:
     return f"{ranges}\n\n{pdf_texts}"
 
 
-def get_context(query: str | None = None) -> Tuple[str, List[Any]]:
+def get_context(query: str | None = None) -> tuple[str, list[ChatSource]]:
     if query:
         return retrieve_context(query)
     return "", []
@@ -792,14 +885,22 @@ async def _retrieve_candidates_with_trace_async(
     hyde_client: Any = None,
     enable_hyde: bool = False,
     hyde_max_length: int = 200,
+    pre_expanded_queries: list[str] | None = None,
 ) -> tuple[list[dict], dict]:
-    """Async version of _retrieve_candidates_with_trace with HyDE support."""
-    expanded_queries = await _expand_queries_async(
-        query,
-        hyde_client=hyde_client,
-        enable_hyde=enable_hyde,
-        hyde_max_length=hyde_max_length,
-    )
+    """Async version of _retrieve_candidates_with_trace with HyDE support.
+
+    Args:
+        pre_expanded_queries: If provided, skip query expansion and use these queries directly.
+    """
+    if pre_expanded_queries is None:
+        expanded_queries = await _expand_queries_async(
+            query,
+            hyde_client=hyde_client,
+            enable_hyde=enable_hyde,
+            hyde_max_length=hyde_max_length,
+        )
+    else:
+        expanded_queries = pre_expanded_queries
     result_sets: list[list[dict]] = []
     traces: list[dict] = []
     for expanded_query in expanded_queries:

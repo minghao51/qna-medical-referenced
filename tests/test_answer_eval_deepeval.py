@@ -1,24 +1,20 @@
-"""Tests for DeepEval-based answer evaluation.
-
-Tests the evaluate_answers_deepeval function for proper integration
-with DeepEval metrics and RAG pipeline.
-"""
+"""Tests for DeepEval-based answer evaluation."""
 
 import pytest
 
-from src.evals.assessment.answer_eval import evaluate_answers_deepeval
+from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
 
 @pytest.mark.deepeval
 @pytest.mark.slow
 @pytest.mark.asyncio
-async def test_evaluate_answers_deepeval_basic():
+async def test_evaluate_answer_quality_async_basic():
     """Test basic functionality of DeepEval answer evaluation."""
     dataset = [
         {"query": "What is the LDL-C target for secondary prevention?", "query_id": "test_001"}
     ]
 
-    results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+    results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
     # Check we got results
     assert len(results) == 1
@@ -66,7 +62,7 @@ async def test_evaluate_answers_deepeval_basic():
 @pytest.mark.deepeval
 @pytest.mark.slow
 @pytest.mark.asyncio
-async def test_evaluate_answers_deepeval_multiple_queries():
+async def test_evaluate_answer_quality_async_multiple_queries():
     """Test evaluation with multiple queries."""
     dataset = [
         {"query": "What are statin side effects?"},
@@ -74,7 +70,7 @@ async def test_evaluate_answers_deepeval_multiple_queries():
         {"query": "Explain primary prevention."},
     ]
 
-    results, aggregate = await evaluate_answers_deepeval(dataset, top_k=3)
+    results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
     # Check all queries were evaluated
     assert len(results) == 3
@@ -112,11 +108,11 @@ async def test_evaluate_answers_deepeval_multiple_queries():
 @pytest.mark.deepeval
 @pytest.mark.slow
 @pytest.mark.asyncio
-async def test_evaluate_answers_deepeval_includes_trace():
+async def test_evaluate_answer_quality_async_includes_trace():
     """Test that pipeline trace information is included in results."""
     dataset = [{"query": "What is cholesterol?", "query_id": "trace_test"}]
 
-    results, _ = await evaluate_answers_deepeval(dataset, top_k=3)
+    results, _ = await evaluate_answer_quality_async(dataset, top_k=3)
 
     assert len(results) == 1
     result = results[0]

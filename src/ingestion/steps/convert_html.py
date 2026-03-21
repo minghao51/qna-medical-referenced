@@ -2,6 +2,12 @@
 """
 L1: Convert HTML files to structured markdown artifacts for RAG processing.
 Reads from data/raw/*.html and converts to data/raw/*.md.
+
+Supports pluggable extractor strategies:
+  - trafilatura_bs:        trafilatura primary + BeautifulSoup fallback (baseline)
+  - html2md_trafilatura_bs: html-to-markdown primary + trafilatura + BeautifulSoup cascade
+  - readability_bs:        readability-lxml primary + BeautifulSoup fallback
+  - full_cascade:          html-to-markdown → trafilatura → readability → BeautifulSoup
 """
 
 from __future__ import annotations
@@ -10,7 +16,7 @@ import hashlib
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
@@ -19,10 +25,39 @@ from src.config import DATA_RAW_DIR
 from src.ingestion.artifacts import SourceArtifact, persist_source_artifact
 from src.ingestion.steps.download_web import get_manifest_alias_filenames
 
+trafilatura: Any = None
+html_to_markdown: Any = None
+
 try:  # pragma: no cover - optional dependency
-    import trafilatura
+    import trafilatura  # type: ignore[assignment]
 except Exception:  # pragma: no cover - optional dependency
-    trafilatura = None
+    pass
+
+try:  # pragma: no cover - optional dependency
+    import html_to_markdown  # type: ignore[assignment]
+except Exception:  # pragma: no cover - optional dependency
+    pass
+
+try:  # pragma: no cover - optional dependency
+    from readability_lxml import readability
+except Exception:  # pragma: no cover - optional dependency
+    readability = None
+
+
+HTML_EXTRACTOR_STRATEGY = "trafilatura_bs"
+EXTRACTOR_CHAIN_DEPTH: int | None = None
+
+
+def set_html_extractor_strategy(strategy: str) -> None:
+    global HTML_EXTRACTOR_STRATEGY
+    valid = {
+        "trafilatura_bs",
+        "html2md_trafilatura_bs",
+        "readability_bs",
+        "full_cascade",
+    }
+    HTML_EXTRACTOR_STRATEGY = strategy if strategy in valid else "trafilatura_bs"
+
 
 DATA_DIR = DATA_RAW_DIR
 PAGE_CLASSIFICATION_ENABLED = True
@@ -84,6 +119,39 @@ def _trafilatura_extract(html_content: str) -> tuple[str, dict[str, Any]]:
         or ""
     )
     return markdown.strip(), {"extractor": "trafilatura", "available": True}
+
+
+def _html2md_extract(html_content: str) -> tuple[str, dict[str, Any]]:
+    if html_to_markdown is None:
+        return "", {"extractor": "html-to-markdown", "available": False}
+    try:
+        markdown = html_to_markdown.convert(html_content).strip()
+        return markdown, {"extractor": "html-to-markdown", "available": True}
+    except Exception:
+        return "", {"extractor": "html-to-markdown", "available": False, "error": True}
+
+
+def _readability_extract(html_content: str) -> tuple[str, dict[str, Any]]:
+    if readability is None:
+        return "", {"extractor": "readability-lxml", "available": False}
+    try:
+        doc = readability.Readability(
+            html_content,
+            url="",
+            logger=None,
+            options={
+                "min_text_length": 25,
+                "remove_unlikely_candidates": True,
+                "strip_unlikely_candidates": False,
+            },
+        )
+        result = doc.parse()
+        text = (result.text_content or "").strip()
+        title = result.title() or ""
+        markdown = f"# {title}\n\n{text}" if title else text
+        return markdown.strip(), {"extractor": "readability-lxml", "available": True}
+    except Exception:
+        return "", {"extractor": "readability-lxml", "available": False, "error": True}
 
 
 def _remove_noise(soup: BeautifulSoup) -> None:
@@ -282,7 +350,8 @@ def convert_html_to_md(
     raw_soup = BeautifulSoup(html_content, "html.parser")
     page_type = _classify_page(raw_soup, _visible_text(raw_soup))
 
-    primary_markdown, primary_meta = _trafilatura_extract(html_content)
+    cascade_markdown, cascade_meta, cascade_depth = _extract_markdown_cascade(html_content)
+
     fallback = _fallback_extract(html_content)
     blocks = list(fallback["structured_blocks"])
     if repeated_hashes:
@@ -290,14 +359,20 @@ def convert_html_to_md(
     fallback["structured_blocks"] = blocks
     fallback["markdown"] = _markdown_from_blocks(blocks)
 
+    selected_extractor = cascade_meta.get("extractor_used", "beautifulsoup")
+
     if HTML_EXTRACTOR_MODE == "primary_only":
-        use_fallback = False
+        markdown_content = cascade_markdown
     elif HTML_EXTRACTOR_MODE == "fallback_only":
-        use_fallback = True
+        markdown_content = fallback["markdown"]
     else:
-        use_fallback = _should_use_fallback(primary_markdown, page_type, html_content)
-    markdown_content = fallback["markdown"] if use_fallback else primary_markdown
-    selected_extractor = "beautifulsoup" if use_fallback else "trafilatura"
+        markdown_content = (
+            fallback["markdown"]
+            if _should_use_fallback(cascade_markdown, page_type, html_content)
+            else cascade_markdown
+        )
+        if markdown_content == fallback["markdown"]:
+            selected_extractor = "beautifulsoup"
 
     lines = [line.rstrip() for line in markdown_content.splitlines()]
     cleaned_lines: list[str] = []
@@ -323,12 +398,17 @@ def convert_html_to_md(
         extracted_text=fallback["visible_text"],
         structured_blocks=blocks,
         markdown_text=markdown_content,
-        best_output={"extractor": selected_extractor, "markdown": markdown_content},
+        best_output={
+            "extractor": selected_extractor,
+            "markdown": markdown_content,
+            "cascade_depth": cascade_depth,
+        },
         fallback_output={"extractor": fallback["extractor"], "markdown": fallback["markdown"]},
         metadata={
             "page_type": page_type,
             "selected_extractor": selected_extractor,
-            "primary_extractor": primary_meta,
+            "html_extractor_strategy": HTML_EXTRACTOR_STRATEGY,
+            "cascade_depth": cascade_depth,
             "html_extractor_mode": HTML_EXTRACTOR_MODE,
             "text_density": _density(markdown_content, html_content),
             "boilerplate_ratio": _boilerplate_ratio(markdown_content),
@@ -353,6 +433,69 @@ def set_html_extractor_mode(mode: str) -> None:
     if normalized not in {"auto", "primary_only", "fallback_only"}:
         normalized = "auto"
     HTML_EXTRACTOR_MODE = normalized
+
+
+def _bs_fallback_extract(html_content: str) -> dict[str, Any]:
+    soup = BeautifulSoup(html_content, "html.parser")
+    _remove_noise(soup)
+    visible_text = _visible_text(soup)
+    blocks = _collect_structured_blocks(soup)
+    markdown = _markdown_from_blocks(blocks)
+    return {
+        "extractor": "beautifulsoup",
+        "page_type": _classify_page(soup, visible_text),
+        "visible_text": visible_text,
+        "structured_blocks": blocks,
+        "markdown": markdown,
+    }
+
+
+def _build_extractor_chain() -> list[tuple[str, Callable]]:
+    if HTML_EXTRACTOR_STRATEGY == "trafilatura_bs":
+        return [
+            ("trafilatura", _trafilatura_extract),
+            ("beautifulsoup", _bs_fallback_extract),
+        ]
+    elif HTML_EXTRACTOR_STRATEGY == "html2md_trafilatura_bs":
+        return [
+            ("html-to-markdown", _html2md_extract),
+            ("trafilatura", _trafilatura_extract),
+            ("beautifulsoup", _bs_fallback_extract),
+        ]
+    elif HTML_EXTRACTOR_STRATEGY == "readability_bs":
+        return [
+            ("readability-lxml", _readability_extract),
+            ("beautifulsoup", _bs_fallback_extract),
+        ]
+    elif HTML_EXTRACTOR_STRATEGY == "full_cascade":
+        return [
+            ("html-to-markdown", _html2md_extract),
+            ("trafilatura", _trafilatura_extract),
+            ("readability-lxml", _readability_extract),
+            ("beautifulsoup", _bs_fallback_extract),
+        ]
+    return [("trafilatura", _trafilatura_extract), ("beautifulsoup", _bs_fallback_extract)]
+
+
+def _extract_markdown_cascade(html_content: str) -> tuple[str, dict[str, Any], int]:
+    chain = _build_extractor_chain()
+    for depth, (name, extractor_fn) in enumerate(chain, 1):
+        result = extractor_fn(html_content)
+        if isinstance(result, tuple):
+            markdown, meta = result
+        else:
+            markdown = result.get("markdown", "") if isinstance(result, dict) else ""
+            meta = result if isinstance(result, dict) else {}
+        if len(markdown.strip()) > 50 or name == "beautifulsoup":
+            meta["cascade_depth"] = depth
+            meta["extractor_used"] = name
+            return markdown, meta, depth
+    fallback = _bs_fallback_extract(html_content)
+    return (
+        fallback.get("markdown", ""),
+        {"extractor": "beautifulsoup", "cascade_depth": len(chain)},
+        len(chain),
+    )
 
 
 def get_html_files() -> list[Path]:

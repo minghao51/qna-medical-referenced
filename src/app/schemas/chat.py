@@ -31,10 +31,18 @@ class ChatRequest(BaseModel):
 
 
 class ChatSource(BaseModel):
+    canonical_label: str
+    display_label: str
+    source_url: Optional[str] = None
+    source_type: str = "other"
+    source_class: str = "unknown"
+    domain: Optional[str] = None
+    domain_type: str = "unknown"
     label: str
     source: str
     url: Optional[str] = None
     page: Optional[int] = None
+    content_type: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

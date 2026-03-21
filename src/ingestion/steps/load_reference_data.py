@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List
 
 from src.config import DATA_RAW_DIR
+from src.source_metadata import canonical_source_label
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,21 @@ class ReferenceDataLoader:
             for i, row in enumerate(reader):
                 content = f"{row['test_name']}: {row['normal_range']} {row['unit']} ({row['category']}) - {row['notes']}"
                 docs.append(
-                    {"id": f"ref_range_{i}", "source": "reference_ranges.csv", "content": content}
+                    {
+                        "id": f"ref_range_{i}",
+                        "source": "reference_ranges.csv",
+                        "content": content,
+                        "source_type": "reference_csv",
+                        "source_class": "reference_csv",
+                        "metadata": {
+                            "logical_name": "Lab reference ranges",
+                            "canonical_label": canonical_source_label(
+                                "reference_ranges.csv", "Lab reference ranges"
+                            ),
+                            "source_type": "reference_csv",
+                            "source_class": "reference_csv",
+                        },
+                    }
                 )
         return docs
 

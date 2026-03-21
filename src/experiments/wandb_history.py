@@ -23,12 +23,8 @@ def _to_plain_data(value: Any) -> Any:
     return value
 
 
-def _get_metric(summary: dict[str, Any], new_key: str, legacy_key: str, default: Any = 0) -> Any:
-    if new_key in summary:
-        return summary[new_key]
-    if legacy_key in summary:
-        return summary[legacy_key]
-    return default
+def _get_metric(summary: dict[str, Any], key: str, default: Any = 0) -> Any:
+    return summary.get(key, default)
 
 
 def _cache_ttl_seconds() -> int:
@@ -68,19 +64,13 @@ def _normalize_wandb_run(run: Any, *, project: str, entity: str | None = None) -
     retrieval = _to_plain_data(summary.get("retrieval_metrics", {}) or {})
     if not retrieval:
         retrieval = {
-            "hit_rate_at_k": _get_metric(summary, "retrieval/hit_rate", "retrieval.hit_rate_at_k"),
-            "mrr": _get_metric(summary, "retrieval/mrr", "retrieval.mrr"),
-            "ndcg_at_k": _get_metric(summary, "retrieval/ndcg", "retrieval.ndcg_at_k"),
-            "latency_p50_ms": _get_metric(
-                summary, "retrieval/latency_p50_ms", "retrieval.latency_p50_ms"
-            ),
-            "latency_p95_ms": _get_metric(
-                summary, "retrieval/latency_p95_ms", "retrieval.latency_p95_ms"
-            ),
-            "precision_at_k": _get_metric(
-                summary, "retrieval/precision_at_k", "retrieval.precision_at_k"
-            ),
-            "recall_at_k": _get_metric(summary, "retrieval/recall_at_k", "retrieval.recall_at_k"),
+            "hit_rate_at_k": _get_metric(summary, "retrieval/hit_rate"),
+            "mrr": _get_metric(summary, "retrieval/mrr"),
+            "ndcg_at_k": _get_metric(summary, "retrieval/ndcg"),
+            "latency_p50_ms": _get_metric(summary, "retrieval/latency_p50_ms"),
+            "latency_p95_ms": _get_metric(summary, "retrieval/latency_p95_ms"),
+            "precision_at_k": _get_metric(summary, "retrieval/precision_at_k"),
+            "recall_at_k": _get_metric(summary, "retrieval/recall_at_k"),
         }
     tracking = {
         "wandb": {

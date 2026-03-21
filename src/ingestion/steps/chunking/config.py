@@ -6,22 +6,25 @@ import copy
 
 DEFAULT_SOURCE_CHUNK_CONFIGS = {
     "pdf": {
-        "chunk_size": 650,
-        "chunk_overlap": 80,
-        "strategy": "recursive",
-        "min_chunk_size": 140,
+        "chunk_size": 512,
+        "chunk_overlap": 64,
+        "strategy": "custom_recursive",
+        "min_chunk_size": 100,
+        "embedding_model": "text-embedding-v4",
     },
     "markdown": {
-        "chunk_size": 600,
-        "chunk_overlap": 80,
-        "strategy": "recursive",
+        "chunk_size": 512,
+        "chunk_overlap": 64,
+        "strategy": "custom_recursive",
         "min_chunk_size": 80,
+        "embedding_model": "text-embedding-v4",
     },
     "default": {
-        "chunk_size": 650,
-        "chunk_overlap": 80,
-        "strategy": "recursive",
-        "min_chunk_size": 120,
+        "chunk_size": 512,
+        "chunk_overlap": 64,
+        "strategy": "custom_recursive",
+        "min_chunk_size": 100,
+        "embedding_model": "text-embedding-v4",
     },
 }
 STRUCTURED_CHUNKING_ENABLED = True

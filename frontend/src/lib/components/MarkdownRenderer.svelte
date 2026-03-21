@@ -47,8 +47,10 @@
 </script>
 
 <div class={`markdown-renderer ${className}`.trim()} class:markdown-renderer--scrollable={Boolean(maxHeight)} style:max-height={maxHeight}>
-	{#if content && typeof content === 'string'}
-		<SvelteMarkdown source={displayContent} options={markdownOptions} {renderers} />
+	{#if typeof content === 'string'}
+		{#if displayContent}
+			<SvelteMarkdown source={displayContent} options={markdownOptions} {renderers} />
+		{/if}
 	{:else}
 		<p class="error">Unable to display content</p>
 	{/if}

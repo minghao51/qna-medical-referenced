@@ -25,19 +25,26 @@
 
 	const ragQueryStages: DagStage[] = [
 		{ id: 'query', title: 'Query Input', description: 'User question' },
-		{ id: 'expand', title: 'Query Expansion', description: 'Tokenize, expand acronyms, optional HyDE' },
+		{ id: 'intake', title: 'Medical Intake Check', description: 'Extract health params from history, identify missing values' },
+		{ id: 'expand', title: 'Query Expansion', description: 'Tokenize, expand acronyms, inject user context, optional HyDE' },
 		{ id: 'retrieve', title: 'Hybrid Retrieval', description: 'Semantic + BM25 with RRF fusion' },
 		{ id: 'mmr', title: 'MMR Rerank', description: 'Maximal Marginal Relevance diversification' },
 		{ id: 'format', title: 'Context Format', description: 'Builds source-labeled context blocks' },
-		{ id: 'generate', title: 'Generation', description: 'LLM generates final answer' },
+		{ id: 'generate', title: 'Generation', description: 'LLM generates personalized answer' },
+		{ id: 'elicitation', title: 'Proactive Elicitation', description: 'Ask user for missing health parameters (max 2 per turn)' },
+		{ id: 'profile_update', title: 'Profile Update', description: 'Store extracted params, flag discrepancies' },
 	];
 
 	const ragConnections: DagConnection[] = [
-		{ from: 'query', to: 'expand' },
+		{ from: 'query', to: 'intake' },
+		{ from: 'intake', to: 'expand' },
 		{ from: 'expand', to: 'retrieve' },
 		{ from: 'retrieve', to: 'mmr' },
 		{ from: 'mmr', to: 'format' },
 		{ from: 'format', to: 'generate' },
+		{ from: 'intake', to: 'elicitation', label: 'if missing params' },
+		{ from: 'elicitation', to: 'profile_update', label: 'user provides data' },
+		{ from: 'profile_update', to: 'intake', label: 're-augment query' },
 	];
 
 	const evalStages: DagStage[] = [
@@ -121,24 +128,57 @@
 					<tbody>
 						<tr>
 							<td>PDF</td>
-							<td>650</td>
-							<td>80</td>
-							<td>recursive</td>
-							<td>140</td>
+							<td>512</td>
+							<td>64</td>
+							<td>custom_recursive</td>
+							<td>100</td>
 						</tr>
 						<tr>
 							<td>Markdown</td>
-							<td>600</td>
-							<td>80</td>
-							<td>recursive</td>
+							<td>512</td>
+							<td>64</td>
+							<td>custom_recursive</td>
 							<td>80</td>
 						</tr>
 						<tr>
 							<td>Default</td>
-							<td>650</td>
-							<td>80</td>
-							<td>recursive</td>
-							<td>120</td>
+							<td>512</td>
+							<td>64</td>
+							<td>custom_recursive</td>
+							<td>100</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<h4>Available Chunking Strategies</h4>
+				<table class="config-table">
+					<thead>
+						<tr>
+							<th>Strategy</th>
+							<th>Description</th>
+							<th>Best For</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td>custom_recursive</td>
+							<td>Custom recursive chunker with quality scoring and structured block handling</td>
+							<td>General purpose, structured documents</td>
+						</tr>
+						<tr>
+							<td>chonkie_recursive</td>
+							<td>Chonkie's RecursiveChunker with overlap refinement</td>
+							<td>Fast, hierarchical splitting</td>
+						</tr>
+						<tr>
+							<td>chonkie_semantic</td>
+							<td>Chonkie's SemanticChunker using Qwen embeddings</td>
+							<td>Topic-coherent chunks, ~9% recall improvement</td>
+						</tr>
+						<tr>
+							<td>chonkie_late</td>
+							<td>Chonkie's LateChunker using Qwen embeddings</td>
+							<td>Higher recall via late chunking</td>
 						</tr>
 					</tbody>
 				</table>
@@ -148,8 +188,9 @@
 		<section class="section">
 			<h2>RAG Query Flow</h2>
 			<p class="section-desc">
-				When a user asks a question, the RAG pipeline expands the query, retrieves relevant chunks,
-				diversifies results, and formats context for generation.
+				When a user asks a question, the RAG pipeline extracts health context from conversation history,
+				expands the query with user parameters, retrieves relevant chunks, diversifies results,
+				and formats context for personalized generation.
 			</p>
 
 			<DagFlowDiagram
@@ -157,6 +198,34 @@
 				stages={ragQueryStages}
 				connections={ragConnections}
 			/>
+
+			<div class="medical-intake">
+				<h4>Medical Intake Agent</h4>
+				<p>
+					The Medical Intake Agent continuously monitors conversation for health parameters
+					(age, blood pressure, cholesterol, etc.) and maintains a User Health Profile.
+					When relevant parameters are unknown, it proactively asks the user (max 2 questions per turn)
+					before providing advice.
+				</p>
+				<div class="intake-flow">
+					<div class="intake-step">
+						<strong>Extract</strong>
+						<span>Parse health parameters from conversation</span>
+					</div>
+					<div class="intake-step">
+						<strong>Identify</strong>
+						<span>Find missing params relevant to query</span>
+					</div>
+					<div class="intake-step">
+						<strong>Elicit</strong>
+						<span>Ask user for unknown values</span>
+					</div>
+					<div class="intake-step">
+						<strong>Store</strong>
+						<span>Update profile, track discrepancies</span>
+					</div>
+				</div>
+			</div>
 
 			<div class="search-modes">
 				<h4>Search Modes</h4>
@@ -363,6 +432,52 @@
 		font-size: 0.875rem;
 		color: #374151;
 		margin-bottom: 0.75rem;
+	}
+
+	.medical-intake {
+		margin-top: 1.5rem;
+		padding: 1rem;
+		background: #f0fdf4;
+		border: 1px solid #86efac;
+		border-radius: 8px;
+	}
+
+	.medical-intake h4 {
+		font-size: 0.875rem;
+		color: #166534;
+		margin-bottom: 0.5rem;
+	}
+
+	.medical-intake p {
+		color: #374151;
+		font-size: 0.85rem;
+		margin-bottom: 1rem;
+	}
+
+	.intake-flow {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 0.75rem;
+	}
+
+	.intake-step {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.75rem;
+		background: white;
+		border: 1px solid #d1fae5;
+		border-radius: 6px;
+	}
+
+	.intake-step strong {
+		font-size: 0.8rem;
+		color: #166534;
+	}
+
+	.intake-step span {
+		font-size: 0.7rem;
+		color: #6b7280;
 	}
 
 	.mode-grid {

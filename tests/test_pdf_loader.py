@@ -1,4 +1,19 @@
-from src.ingestion.steps.load_pdfs import PDFLoader, get_documents
+import sys
+
+from src.ingestion.steps.load_pdfs import (
+    PDFLoader,
+    get_documents,
+    set_pdf_extractor_strategy,
+    set_pdf_table_extractor,
+)
+
+
+def _pdf_strategy():
+    return sys.modules["src.ingestion.steps.load_pdfs"].PDF_EXTRACTOR_STRATEGY
+
+
+def _pdf_table_extractor():
+    return sys.modules["src.ingestion.steps.load_pdfs"].PDF_TABLE_EXTRACTOR
 
 
 class TestPDFLoader:
@@ -77,3 +92,47 @@ class TestPDFLoader:
         docs = get_documents()
         assert isinstance(docs, list)
         assert len(docs) > 0
+
+
+class TestPDFExtractorStrategy:
+    def test_set_pdf_extractor_strategy_valid(self):
+        set_pdf_extractor_strategy("pymupdf_pdfplumber")
+        assert _pdf_strategy() == "pymupdf_pdfplumber"
+
+    def test_set_pdf_extractor_strategy_invalid_defaults_to_baseline(self):
+        set_pdf_extractor_strategy("invalid_strategy")
+        assert _pdf_strategy() == "pypdf_pdfplumber"
+
+    def test_set_pdf_table_extractor_valid(self):
+        set_pdf_table_extractor("camelot")
+        assert _pdf_table_extractor() == "camelot"
+
+    def test_set_pdf_table_extractor_invalid_defaults_to_heuristic(self):
+        set_pdf_table_extractor("invalid")
+        assert _pdf_table_extractor() == "heuristic"
+
+    def test_extractor_strategy_persisted_in_metadata(self):
+        loader = PDFLoader("data/raw")
+        set_pdf_extractor_strategy("pymupdf_pdfplumber")
+        set_pdf_table_extractor("camelot")
+        docs = loader.load_all_pdfs()
+        assert len(docs) > 0
+        for doc in docs:
+            meta = doc["metadata"]
+            assert meta.get("pdf_extractor_strategy") == "pymupdf_pdfplumber"
+            assert meta.get("pdf_table_extractor") == "camelot"
+        set_pdf_extractor_strategy("pypdf_pdfplumber")
+        set_pdf_table_extractor("heuristic")
+
+    def test_camelot_pages_tracked_in_metadata(self):
+        loader = PDFLoader("data/raw")
+        set_pdf_table_extractor("camelot")
+        docs = loader.load_all_pdfs()
+        assert len(docs) > 0
+        for doc in docs:
+            meta = doc["metadata"]
+            assert "camelot_table_pages" in meta
+            assert "camelot_total_rows" in meta
+            assert isinstance(meta["camelot_table_pages"], int)
+            assert isinstance(meta["camelot_total_rows"], int)
+        set_pdf_table_extractor("heuristic")

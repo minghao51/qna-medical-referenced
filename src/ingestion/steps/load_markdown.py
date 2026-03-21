@@ -12,6 +12,12 @@ from src.ingestion.steps.download_web import (
     get_manifest_record_by_filename,
     get_manifest_record_by_logical_name,
 )
+from src.source_metadata import (
+    canonical_source_label,
+    infer_domain,
+    infer_domain_type,
+    normalize_source_class,
+)
 
 INDEX_ONLY_CLASSIFIED_PAGES = True
 
@@ -49,6 +55,18 @@ class MarkdownLoader:
             if manifest_record:
                 metadata["logical_name"] = manifest_record.get("logical_name")
                 metadata["source_url"] = manifest_record.get("url")
+            metadata["source_type"] = "html"
+            metadata["source_class"] = normalize_source_class(
+                md_file.name,
+                source_type="html",
+                explicit_class=metadata.get("source_class"),
+                page_type=metadata.get("page_type"),
+            )
+            metadata["canonical_label"] = canonical_source_label(
+                md_file.name, metadata.get("logical_name")
+            )
+            metadata["domain"] = infer_domain(metadata.get("source_url"))
+            metadata["domain_type"] = infer_domain_type(metadata.get("domain"))
 
             documents.append(
                 {
