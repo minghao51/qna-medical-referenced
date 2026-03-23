@@ -32,6 +32,7 @@ from src.rag.runtime import (
 
 
 @pytest.mark.asyncio
+@pytest.mark.live_api
 async def test_generate_hypothetical_answer_basic():
     """Test basic hypothetical answer generation."""
     from src.infra.llm.qwen_client import get_client
@@ -51,6 +52,7 @@ async def test_generate_hypothetical_answer_basic():
 
 
 @pytest.mark.asyncio
+@pytest.mark.live_api
 async def test_generate_hypothetical_answer_empty_query():
     """Test that empty queries are handled gracefully."""
     from src.infra.llm.qwen_client import get_client
@@ -67,6 +69,7 @@ async def test_generate_hypothetical_answer_empty_query():
 
 
 @pytest.mark.asyncio
+@pytest.mark.live_api
 async def test_generate_hypothetical_answer_max_length():
     """Test that max_length parameter is respected."""
     from src.infra.llm.qwen_client import get_client
@@ -126,6 +129,7 @@ def test_expand_query_with_hyde_enabled_sync():
 
 
 @pytest.mark.asyncio
+@pytest.mark.live_api
 async def test_expand_query_with_hyde_async_enabled():
     """Test async HyDE expansion when enabled."""
     from src.infra.llm.qwen_client import get_client
@@ -153,6 +157,7 @@ async def test_expand_query_with_hyde_async_enabled():
 
 
 @pytest.mark.asyncio
+@pytest.mark.live_api
 async def test_expand_query_with_hyde_async_disabled():
     """Test async expansion when HyDE is disabled."""
     from src.infra.llm.qwen_client import get_client
@@ -251,6 +256,7 @@ def test_validate_hyde_config_clamps_max_length():
 
 
 @pytest.mark.asyncio
+@pytest.mark.live_api
 async def test_hyde_integration_with_retrieval():
     """Test that HyDE integrates with retrieval pipeline."""
     from src.infra.llm.qwen_client import get_client
@@ -333,6 +339,7 @@ async def test_runtime_config_defaults_hyde_disabled():
 
 
 @pytest.mark.asyncio
+@pytest.mark.live_api
 async def test_hyde_with_special_characters():
     """Test that special characters in queries are handled."""
     from src.infra.llm.qwen_client import get_client
@@ -352,6 +359,7 @@ async def test_hyde_with_special_characters():
 
 
 @pytest.mark.asyncio
+@pytest.mark.live_api
 async def test_hyde_with_very_long_query():
     """Test that very long queries are handled."""
     from src.infra.llm.qwen_client import get_client
@@ -402,6 +410,7 @@ async def test_hyde_with_duplicate_queries():
 
 
 @pytest.mark.asyncio
+@pytest.mark.live_api
 @pytest.mark.slow
 async def test_hyde_performance_impact():
     """Test that HyDE doesn't significantly impact performance."""

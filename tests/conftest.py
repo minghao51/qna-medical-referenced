@@ -20,8 +20,20 @@ _LIVE_QWEN_PRECHECK: str | None = None
 # Real API E2E tests flag
 REAL_API_TESTS_ENABLED = os.environ.get("ENABLE_REAL_API_TESTS") == "1"
 
+# DeepEval integration tests flag
+DEEPEVAL_TESTS_ENABLED = os.environ.get("RUN_DEEPEVAL_TESTS") == "1"
+
 
 def pytest_collection_modifyitems(config, items):
+    # Skip DeepEval tests unless explicitly enabled
+    if not DEEPEVAL_TESTS_ENABLED:
+        skip_deepeval = pytest.mark.skip(
+            reason="Set RUN_DEEPEVAL_TESTS=1 to run DeepEval integration tests"
+        )
+        for item in items:
+            if "deepeval" in item.keywords:
+                item.add_marker(skip_deepeval)
+
     if LIVE_QWEN_ENABLED:
         return
 

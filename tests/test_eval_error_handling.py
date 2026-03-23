@@ -22,7 +22,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-@pytest.mark.deepeval
+@pytest.mark.live_api
 async def test_dashscope_api_timeout_retry():
     """Test that Dashscope API timeouts trigger retry logic."""
     from src.evals.assessment.answer_eval import evaluate_answer_quality_async
@@ -49,7 +49,7 @@ async def test_dashscope_api_timeout_retry():
 
 
 @pytest.mark.asyncio
-@pytest.mark.deepeval
+@pytest.mark.live_api
 async def test_cache_during_failures():
     """Test that cache still works during API failures."""
     from src.evals.assessment.answer_eval import evaluate_answer_quality_async
@@ -80,7 +80,7 @@ async def test_cache_during_failures():
 
 
 @pytest.mark.asyncio
-@pytest.mark.deepeval
+@pytest.mark.live_api
 async def test_partial_results_on_some_failures():
     """Test that partial results are returned when some metrics fail."""
     from src.evals.assessment.answer_eval import evaluate_answer_quality_async
@@ -235,7 +235,7 @@ def test_artifact_write_failure():
 
 
 @pytest.mark.asyncio
-@pytest.mark.deepeval
+@pytest.mark.live_api
 async def test_concurrent_evaluation_with_failures():
     """Test that concurrent evaluations handle failures gracefully."""
     from src.evals.assessment.answer_eval import evaluate_answer_quality_async
@@ -273,7 +273,7 @@ async def test_concurrent_evaluation_with_failures():
 
 
 @pytest.mark.asyncio
-@pytest.mark.deepeval
+@pytest.mark.live_api
 async def test_metric_calculation_with_invalid_context():
     """Test that metrics handle invalid context gracefully."""
     from src.evals.assessment.answer_eval import evaluate_answer_quality_async
@@ -302,7 +302,7 @@ async def test_metric_calculation_with_invalid_context():
 
 
 @pytest.mark.asyncio
-@pytest.mark.deepeval
+@pytest.mark.live_api
 async def test_metric_timeout_handling():
     """Test that individual metric timeouts don't crash evaluation."""
     from src.evals.assessment.answer_eval import evaluate_answer_quality_async
@@ -349,7 +349,7 @@ async def test_metric_timeout_handling():
 
 
 @pytest.mark.asyncio
-@pytest.mark.deepeval
+@pytest.mark.live_api
 async def test_very_long_response_handling():
     """Test that very long LLM responses are handled."""
     from src.evals.assessment.answer_eval import evaluate_answer_quality_async
@@ -381,7 +381,7 @@ async def test_very_long_response_handling():
 
 
 @pytest.mark.asyncio
-@pytest.mark.deepeval
+@pytest.mark.live_api
 async def test_unicode_in_query_and_response():
     """Test that Unicode characters are handled correctly."""
     from src.evals.assessment.answer_eval import evaluate_answer_quality_async

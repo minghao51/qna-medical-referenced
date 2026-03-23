@@ -1,39 +1,38 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-.claude
-
-# Virtual environments
-.venv/
-
-# Git worktrees
-.worktrees/
-
-# Environment files
-.env
-.env.*
-
-# Data and logs
-data/
+```
+# Logs and temp files
 *.log
-logs/
-.pytest_cache/
-.mypy_cache/
-test-results/
-wandb/
+*.tmp
+*.swp
 
-# IDE
-.idea/
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Testing
+.pytest_cache/
+.hypothesis/
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
 .vscode/
+.idea/
 *.swp
 *.swo
-*~
 
-# OS
+# OS generated files
 .DS_Store
 Thumbs.db
-.deepeval/
+```
