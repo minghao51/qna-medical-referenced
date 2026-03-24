@@ -14,14 +14,14 @@ from src.source_metadata import (
 
 def build_source_payload(result: dict) -> dict:
     """Build normalized source metadata from a retrieved result."""
-    metadata = dict(result.get("metadata", {}) or {})
-    source = str(result.get("source", "unknown"))
+    metadata = result.get("metadata", {})
+    source = result.get("source", "unknown")
     page = result.get("page")
     logical_name = metadata.get("logical_name")
-    canonical_label = str(metadata.get("canonical_label") or "").strip() or canonical_source_label(
+    canonical_label = (metadata.get("canonical_label") or "").strip() or canonical_source_label(
         source, logical_name
     )
-    display_label = str(metadata.get("display_label") or "").strip() or display_source_label(
+    display_label = (metadata.get("display_label") or "").strip() or display_source_label(
         source,
         logical_name=logical_name,
         canonical_label=canonical_label,

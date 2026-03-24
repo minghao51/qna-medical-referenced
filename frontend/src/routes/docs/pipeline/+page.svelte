@@ -1,556 +1,320 @@
 <script lang="ts">
+	import AppShell from '$lib/components/AppShell.svelte';
 	import DagFlowDiagram from '$lib/components/DagFlowDiagram.svelte';
-	import type { DagStage, DagConnection } from '$lib/components/DagFlowDiagram.svelte';
+	import TabNav from '$lib/components/TabNav.svelte';
+	import type { DagConnection, DagStage } from '$lib/components/DagFlowDiagram.svelte';
+
+	type TabId = 'overview' | 'ingestion' | 'query' | 'evaluation';
+
+	const tabs: Array<{ id: TabId; label: string }> = [
+		{ id: 'overview', label: 'Overview' },
+		{ id: 'ingestion', label: 'Ingestion' },
+		{ id: 'query', label: 'Query / RAG' },
+		{ id: 'evaluation', label: 'Evaluation' }
+	];
+
+	let activeTab: TabId = $state('overview');
+
+	const overviewStages: DagStage[] = [
+		{ id: 'ingest', title: 'Ingest', description: 'Download, parse, chunk, index' },
+		{ id: 'retrieve', title: 'Retrieve', description: 'Expand query, hybrid search, rerank' },
+		{ id: 'answer', title: 'Answer', description: 'Build context and generate response' },
+		{ id: 'evaluate', title: 'Evaluate', description: 'Track retrieval and answer quality' }
+	];
+
+	const overviewConnections: DagConnection[] = [
+		{ from: 'ingest', to: 'retrieve' },
+		{ from: 'retrieve', to: 'answer' },
+		{ from: 'answer', to: 'evaluate' }
+	];
 
 	const ingestionStages: DagStage[] = [
-		{ id: 'l0', title: 'L0: Web Download', description: 'Downloads HTML from gov health sites' },
-		{ id: 'l0b', title: 'L0b: PDF Download', description: 'Downloads PDF clinical guidelines' },
-		{ id: 'l1', title: 'L1: HTML→Markdown', description: 'Converts HTML to structured Markdown' },
-		{ id: 'l2', title: 'L2: PDF Extract', description: 'Extracts text from PDFs with pypdf/pdfplumber' },
-		{ id: 'l3', title: 'L3: Chunking', description: 'Splits docs into overlapping chunks' },
-		{ id: 'l4', title: 'L4: Reference Data', description: 'Loads CSV reference ranges' },
-		{ id: 'l5', title: 'L5: Index', description: 'Embeds chunks & stores with hybrid search' },
-		{ id: 'l6', title: 'L6: RAG Init', description: 'Initializes runtime retrieval index' },
+		{ id: 'l0', title: 'Download', description: 'HTML and PDF sources' },
+		{ id: 'l1', title: 'Parse', description: 'HTML to markdown, PDF extraction' },
+		{ id: 'l3', title: 'Chunk', description: 'Structured chunking with quality scoring' },
+		{ id: 'l5', title: 'Index', description: 'Embeddings plus optional HyPE prompts' },
+		{ id: 'l6', title: 'Ready', description: 'Runtime retrieval index' }
 	];
 
 	const ingestionConnections: DagConnection[] = [
 		{ from: 'l0', to: 'l1' },
-		{ from: 'l0b', to: 'l2' },
 		{ from: 'l1', to: 'l3' },
-		{ from: 'l2', to: 'l3' },
 		{ from: 'l3', to: 'l5' },
-		{ from: 'l4', to: 'l5' },
-		{ from: 'l5', to: 'l6' },
+		{ from: 'l5', to: 'l6' }
 	];
 
-	const ragQueryStages: DagStage[] = [
-		{ id: 'query', title: 'Query Input', description: 'User question' },
-		{ id: 'intake', title: 'Medical Intake Check', description: 'Extract health params from history, identify missing values' },
-		{ id: 'expand', title: 'Query Expansion', description: 'Tokenize, expand acronyms, inject user context, optional HyDE' },
-		{ id: 'retrieve', title: 'Hybrid Retrieval', description: 'Semantic + BM25 with RRF fusion' },
-		{ id: 'mmr', title: 'MMR Rerank', description: 'Maximal Marginal Relevance diversification' },
-		{ id: 'format', title: 'Context Format', description: 'Builds source-labeled context blocks' },
-		{ id: 'generate', title: 'Generation', description: 'LLM generates personalized answer' },
-		{ id: 'elicitation', title: 'Proactive Elicitation', description: 'Ask user for missing health parameters (max 2 per turn)' },
-		{ id: 'profile_update', title: 'Profile Update', description: 'Store extracted params, flag discrepancies' },
+	const queryStages: DagStage[] = [
+		{ id: 'query', title: 'User Query', description: 'Question plus session context' },
+		{ id: 'intake', title: 'Intake Check', description: 'Extract and fill health parameters' },
+		{ id: 'expand', title: 'Expansion', description: 'Optional HyDE and query enrichment' },
+		{ id: 'retrieve', title: 'Retrieval', description: 'Hybrid search plus MMR reranking' },
+		{ id: 'generate', title: 'Generation', description: 'Source-grounded answer' }
 	];
 
-	const ragConnections: DagConnection[] = [
+	const queryConnections: DagConnection[] = [
 		{ from: 'query', to: 'intake' },
 		{ from: 'intake', to: 'expand' },
 		{ from: 'expand', to: 'retrieve' },
-		{ from: 'retrieve', to: 'mmr' },
-		{ from: 'mmr', to: 'format' },
-		{ from: 'format', to: 'generate' },
-		{ from: 'intake', to: 'elicitation', label: 'if missing params' },
-		{ from: 'elicitation', to: 'profile_update', label: 'user provides data' },
-		{ from: 'profile_update', to: 'intake', label: 're-augment query' },
+		{ from: 'retrieve', to: 'generate' }
 	];
 
-	const evalStages: DagStage[] = [
-		{ id: 'l0', title: 'L0: Download Audit', description: 'Validates raw HTML files' },
-		{ id: 'l1', title: 'L1: HTML Quality', description: 'Checks markdown conversion quality' },
-		{ id: 'l2', title: 'L2: PDF Extract', description: 'Validates PDF text extraction' },
-		{ id: 'l3', title: 'L3: Chunking', description: 'Assesses text chunking quality' },
-		{ id: 'l4', title: 'L4: Reference Data', description: 'Validates CSV reference ranges' },
-		{ id: 'l5', title: 'L5: Vector Index', description: 'Checks embedding consistency' },
-		{ id: 'dataset', title: 'Dataset Build', description: 'Golden queries + synthetic questions' },
-		{ id: 'retrieval', title: 'Retrieval Eval', description: 'Hit rate, MRR, NDCG metrics' },
-		{ id: 'l6', title: 'L6: Answer Quality', description: 'DeepEval for answer judgment' },
-		{ id: 'thresholds', title: 'Threshold Check', description: 'Compares metrics vs thresholds' },
-		{ id: 'reporting', title: 'Reporting', description: 'Writes summary.md & logs to W&B' },
+	const evaluationStages: DagStage[] = [
+		{ id: 'dataset', title: 'Dataset', description: 'Golden queries and synthetic prompts' },
+		{ id: 'retrieval', title: 'Retrieval Eval', description: 'Hit rate, MRR, nDCG, latency' },
+		{ id: 'quality', title: 'Answer Eval', description: 'DeepEval answer judgment' },
+		{ id: 'thresholds', title: 'Thresholds', description: 'Check pass/fail gates' },
+		{ id: 'reporting', title: 'Reporting', description: 'Summary and tracking outputs' }
 	];
 
-	const evalConnections: DagConnection[] = [
-		{ from: 'l0', to: 'l1' },
-		{ from: 'l1', to: 'l2' },
-		{ from: 'l2', to: 'l3' },
-		{ from: 'l3', to: 'l5' },
-		{ from: 'l4', to: 'l5' },
-		{ from: 'l5', to: 'dataset' },
+	const evaluationConnections: DagConnection[] = [
 		{ from: 'dataset', to: 'retrieval' },
-		{ from: 'retrieval', to: 'l6' },
-		{ from: 'l6', to: 'thresholds' },
-		{ from: 'retrieval', to: 'thresholds' },
-		{ from: 'thresholds', to: 'reporting' },
+		{ from: 'retrieval', to: 'quality' },
+		{ from: 'quality', to: 'thresholds' },
+		{ from: 'thresholds', to: 'reporting' }
+	];
+
+	const keyDefaults = [
+		['Chunk size', '512 tokens'],
+		['Overlap', '64 tokens'],
+		['Search mode', 'RRF hybrid'],
+		['MMR lambda', '0.75'],
+		['Embedding model', 'Qwen-based embeddings']
+	];
+
+	const ingestionHighlights = [
+		'HTML and PDF ingestion converge into one structured chunking stage.',
+		'Chunk quality scoring removes obviously noisy or low-confidence content.',
+		'HyPE moves some query-like reasoning to ingest time by storing hypothetical questions per chunk.'
+	];
+
+	const queryHighlights = [
+		'Medical intake extracts missing health parameters before answer generation.',
+		'HyDE operates at query time; HyPE operates at ingest time.',
+		'MMR limits redundancy so the answer sees a broader evidence set.'
+	];
+
+	const evaluationHighlights = [
+		'Retrieval metrics focus on whether the right evidence is surfaced.',
+		'DeepEval metrics focus on whether the final answer is faithful and useful.',
+		'Threshold checks turn metrics into simple pass/fail signals for regression tracking.'
 	];
 </script>
 
 <svelte:head>
-	<title>Pipeline Documentation</title>
+	<title>Pipeline Docs</title>
 </svelte:head>
 
-<div class="docs-container">
-	<nav class="nav-bar">
-		<a href="/" class="nav-link">Chat</a>
-		<a href="/eval" class="nav-link">Pipeline Eval</a>
-		<a href="/docs/pipeline" class="nav-link active">Pipeline Docs</a>
-		<a href="https://github.com/anomalyco/qna_medical_referenced" target="_blank" rel="noopener noreferrer" class="nav-github-link" aria-label="View on GitHub">
-			<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-				<path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-			</svg>
-		</a>
-	</nav>
-
-	<header class="docs-header">
-		<div class="header-left">
-			<h1>Pipeline Architecture</h1>
-			<p class="subtitle">Ingestion, RAG, and Evaluation flow documentation</p>
-		</div>
-	</header>
-
-	<div class="content">
-		<section class="section">
-			<h2>Data Ingestion Pipeline</h2>
-			<p class="section-desc">
-				The ingestion pipeline transforms raw HTML and PDF documents into indexed, searchable chunks.
-				Each stage produces artifacts that feed into the next stage.
-			</p>
-
-			<DagFlowDiagram
-				title="Ingestion DAG"
-				stages={ingestionStages}
-				connections={ingestionConnections}
-			/>
-
-			<div class="key-metrics">
-				<h4>Chunking Configuration by Source Type</h4>
-				<table class="config-table">
-					<thead>
-						<tr>
-							<th>Source</th>
-							<th>Chunk Size</th>
-							<th>Overlap</th>
-							<th>Strategy</th>
-							<th>Min Chunk</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td>PDF</td>
-							<td>512</td>
-							<td>64</td>
-							<td>custom_recursive</td>
-							<td>100</td>
-						</tr>
-						<tr>
-							<td>Markdown</td>
-							<td>512</td>
-							<td>64</td>
-							<td>custom_recursive</td>
-							<td>80</td>
-						</tr>
-						<tr>
-							<td>Default</td>
-							<td>512</td>
-							<td>64</td>
-							<td>custom_recursive</td>
-							<td>100</td>
-						</tr>
-					</tbody>
-				</table>
-
-				<h4>Available Chunking Strategies</h4>
-				<table class="config-table">
-					<thead>
-						<tr>
-							<th>Strategy</th>
-							<th>Description</th>
-							<th>Best For</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<td>custom_recursive</td>
-							<td>Custom recursive chunker with quality scoring and structured block handling</td>
-							<td>General purpose, structured documents</td>
-						</tr>
-						<tr>
-							<td>chonkie_recursive</td>
-							<td>Chonkie's RecursiveChunker with overlap refinement</td>
-							<td>Fast, hierarchical splitting</td>
-						</tr>
-						<tr>
-							<td>chonkie_semantic</td>
-							<td>Chonkie's SemanticChunker using Qwen embeddings</td>
-							<td>Topic-coherent chunks, ~9% recall improvement</td>
-						</tr>
-						<tr>
-							<td>chonkie_late</td>
-							<td>Chonkie's LateChunker using Qwen embeddings</td>
-							<td>Higher recall via late chunking</td>
-						</tr>
-					</tbody>
-				</table>
-			</div>
-		</section>
-
-		<section class="section">
-			<h2>RAG Query Flow</h2>
-			<p class="section-desc">
-				When a user asks a question, the RAG pipeline extracts health context from conversation history,
-				expands the query with user parameters, retrieves relevant chunks, diversifies results,
-				and formats context for personalized generation.
-			</p>
-
-			<DagFlowDiagram
-				title="RAG Query DAG"
-				stages={ragQueryStages}
-				connections={ragConnections}
-			/>
-
-			<div class="medical-intake">
-				<h4>Medical Intake Agent</h4>
-				<p>
-					The Medical Intake Agent continuously monitors conversation for health parameters
-					(age, blood pressure, cholesterol, etc.) and maintains a User Health Profile.
-					When relevant parameters are unknown, it proactively asks the user (max 2 questions per turn)
-					before providing advice.
-				</p>
-				<div class="intake-flow">
-					<div class="intake-step">
-						<strong>Extract</strong>
-						<span>Parse health parameters from conversation</span>
-					</div>
-					<div class="intake-step">
-						<strong>Identify</strong>
-						<span>Find missing params relevant to query</span>
-					</div>
-					<div class="intake-step">
-						<strong>Elicit</strong>
-						<span>Ask user for unknown values</span>
-					</div>
-					<div class="intake-step">
-						<strong>Store</strong>
-						<span>Update profile, track discrepancies</span>
-					</div>
-				</div>
-			</div>
-
-			<div class="search-modes">
-				<h4>Search Modes</h4>
-				<div class="mode-grid">
-					<div class="mode-card active">
-						<strong>rrf_hybrid</strong>
-						<span>Reciprocal Rank Fusion (default)</span>
-					</div>
-					<div class="mode-card">
-						<strong>semantic_only</strong>
-						<span>Embedding-based only</span>
-					</div>
-					<div class="mode-card">
-						<strong>bm25_only</strong>
-						<span>Keyword-based only</span>
-					</div>
-					<div class="mode-card">
-						<strong>legacy_hybrid</strong>
-						<span>Weighted combination</span>
-					</div>
-				</div>
-			</div>
-		</section>
-
-		<section class="section">
-			<h2>Evaluation Pipeline</h2>
-			<p class="section-desc">
-				The evaluation pipeline assesses each stage of the ingestion pipeline and measures
-				retrieval quality against golden queries.
-			</p>
-
-			<DagFlowDiagram
-				title="Evaluation DAG"
-				stages={evalStages}
-				connections={evalConnections}
-			/>
-
-			<div class="eval-metrics">
-				<h4>Retrieval Metrics (L6)</h4>
-				<div class="metrics-grid">
-					<div class="metric-item">
-						<strong>Hit Rate @k</strong>
-						<span>% of queries with relevant doc in top-k</span>
-					</div>
-					<div class="metric-item">
-						<strong>MRR</strong>
-						<span>Mean Reciprocal Rank of first relevant doc</span>
-					</div>
-					<div class="metric-item">
-						<strong>NDCG @k</strong>
-						<span>Normalized Discounted Cumulative Gain</span>
-					</div>
-					<div class="metric-item">
-						<strong>Precision @k</strong>
-						<span>% of retrieved docs that are relevant</span>
-					</div>
-					<div class="metric-item">
-						<strong>Recall @k</strong>
-						<span>% of relevant docs that are retrieved</span>
-					</div>
-					<div class="metric-item">
-						<strong>Latency</strong>
-						<span>p50 and p95 retrieval times</span>
-					</div>
-				</div>
-			</div>
-		</section>
+<AppShell current="/docs/pipeline">
+	<div class="page-header">
+		<p class="eyebrow">Architecture notes</p>
+		<h1>Pipeline architecture</h1>
+		<p class="subtitle">A concise view of how ingestion, retrieval, and evaluation fit together.</p>
 	</div>
-</div>
+
+	<div class="tabs-wrap">
+		<TabNav tabs={tabs} activeTab={activeTab} onchange={(id) => (activeTab = id as TabId)} label="Pipeline documentation sections" />
+	</div>
+
+	{#if activeTab === 'overview'}
+		<div class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+			<div class="panel-head">
+				<div>
+					<h2>System overview</h2>
+					<p>The app is a document pipeline first, a retrieval system second, and a medical answer UI on top.</p>
+				</div>
+			</div>
+			<DagFlowDiagram title="" stages={overviewStages} connections={overviewConnections} layout="vertical" />
+			<div class="facts-grid">
+				{#each keyDefaults as [label, value]}
+					<div class="fact-card">
+						<span>{label}</span>
+						<strong>{value}</strong>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{:else if activeTab === 'ingestion'}
+		<div class="panel" id="panel-ingestion" role="tabpanel" aria-labelledby="tab-ingestion">
+			<div class="panel-head">
+				<div>
+					<h2>Ingestion</h2>
+					<p>Turn mixed-source medical content into an index that is consistent enough for retrieval and evaluation.</p>
+				</div>
+			</div>
+			<DagFlowDiagram title="" stages={ingestionStages} connections={ingestionConnections} />
+			<ul class="compact-list">
+				{#each ingestionHighlights as item}
+					<li>{item}</li>
+				{/each}
+			</ul>
+			<div class="note-grid">
+				<article>
+					<h3>PDF extraction</h3>
+					<p>Primary extraction is lightweight, with fallback extraction for complex layouts or low-confidence pages.</p>
+				</article>
+				<article>
+					<h3>Chunking</h3>
+					<p>Structured chunking favors clean section boundaries and table integrity over brute-force splitting.</p>
+				</article>
+				<article>
+					<h3>HyPE</h3>
+					<p>Stores hypothetical questions at ingest time so some recall gains happen before a user even asks a query.</p>
+				</article>
+			</div>
+		</div>
+	{:else if activeTab === 'query'}
+		<div class="panel" id="panel-query" role="tabpanel" aria-labelledby="tab-query">
+			<div class="panel-head">
+				<div>
+					<h2>Query / RAG</h2>
+					<p>The answer path prioritizes context gathering before generation.</p>
+				</div>
+			</div>
+			<DagFlowDiagram title="" stages={queryStages} connections={queryConnections} />
+			<ul class="compact-list">
+				{#each queryHighlights as item}
+					<li>{item}</li>
+				{/each}
+			</ul>
+			<div class="note-grid">
+				<article>
+					<h3>HyDE vs HyPE</h3>
+					<p>HyDE creates hypothetical answers at query time. HyPE creates hypothetical questions at ingest time.</p>
+				</article>
+				<article>
+					<h3>Medical intake</h3>
+					<p>The intake layer tracks missing or conflicting patient context before the assistant answers.</p>
+				</article>
+				<article>
+					<h3>Diversification</h3>
+					<p>MMR overfetches candidates, then reduces redundancy to avoid narrow source coverage.</p>
+				</article>
+			</div>
+		</div>
+	{:else}
+		<div class="panel" id="panel-evaluation" role="tabpanel" aria-labelledby="tab-evaluation">
+			<div class="panel-head">
+				<div>
+					<h2>Evaluation</h2>
+					<p>Evaluation is the backstop that turns pipeline quality into visible regressions or passes.</p>
+				</div>
+			</div>
+			<DagFlowDiagram title="" stages={evaluationStages} connections={evaluationConnections} />
+			<ul class="compact-list">
+				{#each evaluationHighlights as item}
+					<li>{item}</li>
+				{/each}
+			</ul>
+			<div class="note-grid">
+				<article>
+					<h3>Retrieval metrics</h3>
+					<p>Hit rate, MRR, and nDCG check whether the system surfaces the right evidence quickly enough.</p>
+				</article>
+				<article>
+					<h3>Answer quality</h3>
+					<p>DeepEval metrics cover faithfulness, clarity, clinical relevance, and completeness.</p>
+				</article>
+				<article>
+					<h3>Thresholds</h3>
+					<p>Threshold checks are the fastest way to spot whether a run is healthy without reading every metric.</p>
+				</article>
+			</div>
+		</div>
+	{/if}
+</AppShell>
 
 <style>
-	.docs-container {
-		max-width: 1200px;
-		width: 100%;
-		margin: 0 auto;
-		padding: 1rem;
-	}
-
-	.nav-bar {
+	.page-header {
 		display: flex;
-		gap: 1rem;
-		margin-bottom: 1rem;
-		padding-bottom: 0.5rem;
-		border-bottom: 1px solid #eee;
+		flex-direction: column;
+		gap: 0.25rem;
 	}
 
-	.nav-link {
-		padding: 0.5rem 1rem;
-		text-decoration: none;
-		color: #666;
-		border-radius: 4px;
-		font-weight: 500;
+	.eyebrow {
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--muted-color);
 	}
 
-	.nav-link:hover {
-		background: #f0f0f0;
-	}
-
-	.nav-link.active {
-		background: #e3f2fd;
-		color: #1976d2;
-	}
-
-	.nav-github-link {
-		margin-left: auto;
-		display: flex;
-		align-items: center;
-		padding: 0.5rem;
-		color: #666;
-		border-radius: 4px;
-	}
-
-	.nav-github-link:hover {
-		background: #f0f0f0;
-		color: #333;
-	}
-
-	.nav-github-link svg {
-		width: 20px;
-		height: 20px;
-	}
-
-	.docs-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		margin-bottom: 2rem;
-		padding-bottom: 1rem;
-		border-bottom: 2px solid #e5e7eb;
-	}
-
-	.header-left h1 {
-		font-size: 1.75rem;
-		margin: 0 0 0.25rem 0;
-		color: #1f2937;
+	h1 {
+		font-size: 2rem;
+		line-height: 1.1;
 	}
 
 	.subtitle {
-		color: #6b7280;
+		max-width: 42rem;
+		color: var(--muted-color);
+	}
+
+	.tabs-wrap,
+	.panel {
+		padding: 1rem;
+		border: 1px solid var(--border-color);
+		border-radius: 18px;
+		background: white;
+	}
+
+	.panel {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.panel-head h2 {
+		margin: 0;
+		font-size: 1.05rem;
+	}
+
+	.panel-head p {
+		margin-top: 0.35rem;
+		color: var(--muted-color);
+	}
+
+	.facts-grid,
+	.note-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: 0.9rem;
+	}
+
+	.fact-card,
+	.note-grid article {
+		padding: 1rem;
+		border: 1px solid var(--border-color);
+		border-radius: 14px;
+		background: var(--surface-subtle);
+	}
+
+	.fact-card span {
+		display: block;
+		font-size: 0.82rem;
+		color: var(--muted-color);
+	}
+
+	.fact-card strong {
+		display: block;
+		margin-top: 0.3rem;
+		font-size: 1rem;
+	}
+
+	.compact-list {
+		padding-left: 1.1rem;
+		color: var(--text-color);
+	}
+
+	.compact-list li + li {
+		margin-top: 0.45rem;
+	}
+
+	.note-grid h3 {
 		margin: 0;
 		font-size: 0.95rem;
 	}
 
-	.content {
-		display: flex;
-		flex-direction: column;
-		gap: 3rem;
-	}
-
-	.section h2 {
-		font-size: 1.5rem;
-		color: #1f2937;
-		margin-bottom: 0.5rem;
-	}
-
-	.section-desc {
-		color: #6b7280;
-		margin-bottom: 1.5rem;
-		max-width: 800px;
-	}
-
-	.key-metrics {
-		margin-top: 1.5rem;
-		padding: 1rem;
-		background: #f9fafb;
-		border-radius: 8px;
-	}
-
-	.key-metrics h4 {
-		font-size: 0.875rem;
-		color: #374151;
-		margin-bottom: 0.75rem;
-	}
-
-	.config-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.8rem;
-	}
-
-	.config-table th, .config-table td {
-		padding: 0.5rem;
-		text-align: left;
-		border-bottom: 1px solid #e5e7eb;
-	}
-
-	.config-table th {
-		font-weight: 600;
-		color: #6b7280;
-		font-size: 0.75rem;
-		text-transform: uppercase;
-	}
-
-	.config-table td {
-		color: #374151;
-		font-family: monospace;
-	}
-
-	.search-modes {
-		margin-top: 1.5rem;
-	}
-
-	.search-modes h4 {
-		font-size: 0.875rem;
-		color: #374151;
-		margin-bottom: 0.75rem;
-	}
-
-	.medical-intake {
-		margin-top: 1.5rem;
-		padding: 1rem;
-		background: #f0fdf4;
-		border: 1px solid #86efac;
-		border-radius: 8px;
-	}
-
-	.medical-intake h4 {
-		font-size: 0.875rem;
-		color: #166534;
-		margin-bottom: 0.5rem;
-	}
-
-	.medical-intake p {
-		color: #374151;
-		font-size: 0.85rem;
-		margin-bottom: 1rem;
-	}
-
-	.intake-flow {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 0.75rem;
-	}
-
-	.intake-step {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-		padding: 0.75rem;
-		background: white;
-		border: 1px solid #d1fae5;
-		border-radius: 6px;
-	}
-
-	.intake-step strong {
-		font-size: 0.8rem;
-		color: #166534;
-	}
-
-	.intake-step span {
-		font-size: 0.7rem;
-		color: #6b7280;
-	}
-
-	.mode-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: 0.75rem;
-	}
-
-	.mode-card {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-		padding: 0.75rem;
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 8px;
-		font-size: 0.8rem;
-	}
-
-	.mode-card.active {
-		border-color: #3b82f6;
-		background: #eff6ff;
-	}
-
-	.mode-card strong {
-		font-family: monospace;
-		color: #1f2937;
-	}
-
-	.mode-card span {
-		color: #6b7280;
-		font-size: 0.75rem;
-	}
-
-	.eval-metrics {
-		margin-top: 1.5rem;
-		padding: 1rem;
-		background: #f9fafb;
-		border-radius: 8px;
-	}
-
-	.eval-metrics h4 {
-		font-size: 0.875rem;
-		color: #374151;
-		margin-bottom: 0.75rem;
-	}
-
-	.metrics-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-		gap: 0.75rem;
-	}
-
-	.metric-item {
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-	}
-
-	.metric-item strong {
-		font-size: 0.8rem;
-		color: #1f2937;
-	}
-
-	.metric-item span {
-		font-size: 0.7rem;
-		color: #6b7280;
-	}
-
-	@media (max-width: 768px) {
-		.docs-header {
-			flex-direction: column;
-			gap: 1rem;
-		}
+	.note-grid p {
+		margin-top: 0.35rem;
+		color: var(--muted-color);
+		font-size: 0.92rem;
 	}
 </style>

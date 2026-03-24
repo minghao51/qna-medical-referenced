@@ -50,7 +50,7 @@ def test_evaluate_retrieval_reports_dedup_and_unique_source_metrics(monkeypatch)
 
     monkeypatch.setattr(runtime, "retrieve_context_with_trace", fake_retrieve_context_with_trace)
 
-    rows, agg = pa._evaluate_retrieval(
+    rows, agg = pa.evaluate_retrieval(
         [
             {
                 "query_id": "q1",
@@ -107,7 +107,7 @@ def test_evaluate_retrieval_reports_hyde_metrics(monkeypatch):
 
     monkeypatch.setattr(runtime, "retrieve_context_with_trace", fake_retrieve_hyde)
 
-    rows, agg = pa._evaluate_retrieval(
+    rows, agg = pa.evaluate_retrieval(
         [
             {
                 "query_id": "q1",
@@ -157,7 +157,7 @@ def test_evaluate_retrieval_reports_no_hyde_when_disabled(monkeypatch):
 
     monkeypatch.setattr(runtime, "retrieve_context_with_trace", fake_retrieve_no_hyde)
 
-    rows, agg = pa._evaluate_retrieval(
+    rows, agg = pa.evaluate_retrieval(
         [
             {
                 "query_id": "q1",

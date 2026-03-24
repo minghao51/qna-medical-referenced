@@ -377,7 +377,9 @@ class ChromaVectorStore:
         self._rebuild_index_if_needed()
 
         mode = (search_mode or ("rrf_hybrid" if hybrid else "semantic_only")).lower()
-        ranked, _, documents_for_ranking, _ = self._search_ranked(query, search_mode=mode, filter=filter)
+        ranked, _, documents_for_ranking, _ = self._search_ranked(
+            query, search_mode=mode, filter=filter
+        )
         top_scores = ranked[:top_k]
 
         results = []
@@ -498,7 +500,9 @@ class ChromaVectorStore:
         documents_for_ranking: dict[str, list[Any]] = {
             "ids": chroma_ids,
             "contents": list(chroma_docs),
-            "embeddings": [emb.tolist() if hasattr(emb, "tolist") else emb for emb in chroma_embeddings],
+            "embeddings": [
+                emb.tolist() if hasattr(emb, "tolist") else emb for emb in chroma_embeddings
+            ],
             "metadatas": list(chroma_metadatas),
         }
 
@@ -580,7 +584,9 @@ class ChromaVectorStore:
         trace_info["keyword_timing_ms"] = int((time.time() - keyword_start) * 1000)
 
         semantic_start = time.time()
-        ranked, search_trace, documents_for_ranking, _ = self._search_ranked(query, search_mode=mode, filter=filter)
+        ranked, search_trace, documents_for_ranking, _ = self._search_ranked(
+            query, search_mode=mode, filter=filter
+        )
         trace_info.update(search_trace)
         if mode == "bm25_only":
             trace_info["semantic_timing_ms"] = 0

@@ -1,366 +1,434 @@
-# Codebase Concerns
+# Codebase Concerns and Technical Debt
 
-## Technical Debt & Bugs
+**Generated:** 2026-03-22
+**Status:** Active Analysis
 
-### Large/Complex Files (Refactoring Targets)
+## Overview
 
-**Critical** (>800 lines):
-- **`src/app/routes/evaluation.py` (862 lines)** - Evaluation endpoints with multiple responsibilities. Should be split into route handlers, business logic, and response formatting.
-- **`src/rag/runtime.py` (816 lines)** - Complex RAG orchestration with retrieval, ranking, and configuration management. Consider extracting retrieval strategies and configuration handlers.
+This document catalogs known concerns, technical debt, and areas requiring attention in the qna-medical-referenced codebase. Items are categorized by severity and type.
 
-**High Priority** (>500 lines):
-- **`src/evals/dataset_builder.py` (622 lines)** - Complex dataset construction logic. Could benefit from builder pattern refactoring.
-- **`src/ingestion/steps/download_web.py` (552 lines)** - Web scraping with retry logic and error handling. Extract scraping strategies and error recovery.
-- **`src/evals/assessment/orchestrator.py` (524 lines)** - Evaluation orchestration. Consider splitting by evaluation type.
-- **`src/ingestion/indexing/vector_store.py` (523 lines)** - Vector store operations. Separate search, indexing, and management.
-- **`src/evals/assessment/answer_eval.py` (492 lines)** - Answer evaluation logic. Extract metric calculators.
+---
 
-**Frontend**:
-- **`frontend/src/routes/eval/+page.svelte` (2439 lines)** - Extremely large component. Needs breaking into smaller, focused components.
+## 1. Large Files Requiring Refactoring
 
-### Known Issues & TODOs
+### Backend (Python)
 
-From codebase search (TODO/FIXME/HACK comments):
+#### `src/rag/runtime.py` (991 lines)
+- **Issue:** Monolithic RAG runtime module
+- **Concerns:**
+  - Multiple responsibilities: query expansion, retrieval orchestration, MMR diversification, HyDE/HyPE integration
+  - Global state management for vector store initialization
+  - Complex retrieval logic with multiple search modes (rrf_hybrid, semantic_only, bm25_only)
+- **Recommendation:** Split into separate modules for query expansion, retrieval orchestration, and diversification
 
-**High Priority**:
-- **`docs/reports/2026-03/20260319-immediate-actions-summary.md`**:
-  - "Better error messages for debugging"
-  - Test assertions need updates
-  - Missing retry logic implementation
+#### `src/app/routes/evaluation.py` (891 lines)
+- **Issue:** Large API route module
+- **Concerns:**
+  - Multiple endpoints in single file (latest, runs, history, steps, debug)
+  - Complex file I/O and data transformation logic
+  - Mixed concerns: routing, data access, serialization
+- **Recommendation:** Extract data access layer to separate service module
 
-**Medium Priority**:
-- **`src/rag/runtime.py`**: Configuration management could be extracted
-- **`src/ingestion/steps/download_web.py`**: Error handling patterns need consistency
-- **`tests/test_ingestion_error_handling.py`**: Actual retry logic needs implementation
+#### `src/ingestion/steps/download_web.py` (745 lines)
+- **Issue:** Complex web download orchestration
+- **Concerns:**
+  - Manifest generation and URL management mixed with download logic
+  - Multiple retry strategies and error handling patterns
+  - Hardcoded URL lists (recently extracted to config but legacy code remains)
+- **Recommendation:** Separate manifest management from download execution
 
-## Security Concerns
+#### `src/evals/dataset_builder.py` (658 lines)
+- **Issue:** Heavy dataset construction logic
+- **Concerns:**
+  - Complex synthetic data generation orchestration
+  - Multiple transformation strategies in single module
+- **Recommendation:** Consider strategy pattern for different dataset types
+
+### Frontend (Svelte/TypeScript)
+
+#### `frontend/src/routes/+page.svelte` (894 lines)
+- **Issue:** Massive monolithic chat interface component
+- **Concerns:**
+  - Chat UI, pipeline visualization, source display all in one file
+  - Complex state management for messages, sources, pipeline steps
+  - Multiple concerns: UI, API calls, data transformation, event handling
+- **Recommendation:** Extract to separate components (ChatInterface, SourcePanel, PipelineVisualization)
+
+#### `frontend/src/lib/components/PipelinePanel.svelte` (772 lines)
+- **Issue:** Large pipeline visualization component
+- **Concerns:**
+  - Complex flow diagram rendering mixed with data fetching
+  - Multiple visualization modes (flow, timing, metrics)
+- **Recommendation:** Split into visualization-specific components
+
+#### `frontend/src/lib/components/IngestionTab.svelte` (454 lines)
+- **Issue:** Large tab component with complex state
+- **Concerns:**
+  - Multiple data sources and aggregation logic
+  - Complex filtering and sorting logic
+- **Recommendation:** Extract data fetching and transformation to separate modules
+
+---
+
+## 2. Global State Management
+
+### Backend Global Variables
+
+Multiple modules use module-level global state, which complicates testing and creates implicit dependencies:
+
+1. **`src/rag/runtime.py`**
+   - `_vector_store_initialized`
+   - `_vector_store_initialized_signature`
+   - Concern: Initialization state tracked globally, complicates testing
+
+2. **`src/ingestion/indexing/vector_store.py`**
+   - `_vector_store`
+   - `_vector_store_runtime_config`
+   - `_vector_store_runtime_signature`
+   - Concern: Singleton pattern prevents concurrent testing
+
+3. **`src/ingestion/steps/load_pdfs.py`**
+   - `PDF_EXTRACTOR_STRATEGY`
+   - `PDF_TABLE_EXTRACTOR`
+   - Concern: Runtime configuration via globals
+
+4. **`src/ingestion/steps/convert_html.py`**
+   - `HTML_EXTRACTOR_STRATEGY`
+   - `PAGE_CLASSIFICATION_ENABLED`
+   - `HTML_EXTRACTOR_MODE`
+   - Concern: Multiple global config flags
+
+5. **`src/ingestion/steps/chunking/config.py`**
+   - `STRUCTURED_CHUNKING_ENABLED`
+   - `SOURCE_CHUNK_CONFIGS_OVERRIDE`
+   - Concern: Override mechanism creates hidden state
+
+6. **`src/ingestion/steps/load_markdown.py`**
+   - `INDEX_ONLY_CLASSIFIED_PAGES`
+   - Concern: Feature flag as global variable
+
+**Recommendation:** Implement dependency injection or configuration objects passed to functions rather than module-level globals.
+
+---
+
+## 3. Error Handling Concerns
+
+### Broad Exception Catching
+
+Multiple instances of bare `except Exception:` or overly broad exception handling:
+
+- **`src/usecases/chat.py`**: Lines 129, 220, 226, 239
+- **`src/rag/runtime.py`**: Line 181
+- **`src/rag/hyde.py`**: Lines 95, 302
+- **`src/experiments/wandb_tracking.py`**: Lines 25, 260, 339, 352
+- **`src/ingestion/steps/convert_html.py`**: Lines 130, 153 (for optional dependency handling)
+
+**Concerns:**
+- Swallows unexpected errors
+- Makes debugging difficult
+- May hide critical failures
+
+**Recommendation:** Catch specific exceptions, use domain-specific exceptions (see `AGENTS.md`), ensure all exceptions are logged before being caught.
+
+---
+
+## 4. Type Safety Issues
+
+### Type Ignore Comments
+
+Multiple `# type: ignore` comments indicating type checking issues:
+
+- **`src/rag/runtime.py:208`**: `# type: ignore[no-any-return]`
+- **`src/app/routes/evaluation.py:170`**: `# type: ignore[no-any-return]`
+- **`src/ingestion/steps/chunking/core.py`**: Lines 361-364 (multiple `# type: ignore[call-overload]`)
+- **`src/evals/deepeval_models.py:33`**: `# type: ignore[assignment]`
+- **`src/evals/synthetic/generator.py`**: Lines 39, 42 (call-arg issues)
+
+**Concerns:**
+- Type safety is being bypassed
+- May indicate incorrect type annotations
+- Increases runtime error risk
+
+**Recommendation:** Fix underlying type issues rather than suppressing them.
+
+### Any Types in Frontend
+
+Frontend code uses `any` and `unknown` types extensively:
+- `frontend/src/lib/types.ts:35`: `details: Record<string, unknown>`
+- Multiple uses of `any` in component props
+
+**Recommendation:** Define proper interfaces for data structures.
+
+---
+
+## 5. Configuration and Hardcoded Values
+
+### Hardcoded Localhost URLs
+
+Multiple hardcoded localhost references:
+- **`src/config/settings.py:42`**: CORS origins hardcoded
+- **`frontend/src/routes/+page.svelte:14`**: `API_URL` defaults to localhost
+- **`frontend/src/routes/eval/+page.svelte`**: Same API_URL pattern
+
+**Concerns:**
+- Deployment requires code changes
+- Environment-specific values in source code
+- Frontend rebuild needed for different environments
+
+**Recommendation:** Use environment variables consistently (partially done with `VITE_API_URL`, but needs improvement).
+
+### Magic Numbers
+
+- **`src/rag/runtime.py`**:
+  - `_RETRIEVAL_OVERFETCH_MULTIPLIER = 4`
+  - `_MAX_CHUNKS_PER_SOURCE_PAGE = 2`
+  - `_MAX_CHUNKS_PER_SOURCE = 3`
+  - `_MMR_LAMBDA = 0.75`
+
+**Concerns:** Tuning parameters not in configuration files
+
+**Recommendation:** Move to YAML configuration for easier experimentation.
+
+---
+
+## 6. Deprecated Code
+
+### Deprecated Endpoints
+
+- **`src/app/routes/history.py`**: Lines 38, 49
+  - Legacy `session_id` paths marked as deprecated
+  - Anonymous session support being phased out
+
+**Concerns:** Deprecated code increases maintenance burden
+
+**Recommendation:** Set timeline for removal of deprecated features.
+
+---
+
+## 7. Performance Concerns
+
+### Sleep Calls in Async Code
+
+Multiple `sleep()` calls that may indicate blocking operations:
+- **`src/evals/assessment/answer_eval.py`**: Retry delays with `asyncio.sleep()`
+- **`src/infra/llm/qwen_client.py`**: Rate limiting with `time.sleep()` and `asyncio.sleep()`
+
+**Concerns:**
+- May block event loops if not properly async
+- Could indicate missing rate limiting middleware
+
+**Recommendation:** Implement proper rate limiting libraries, ensure all I/O is non-blocking.
+
+### Large File Processing
+
+- PDF and HTML processing loads entire documents into memory
+- No streaming or chunked processing for large files
+
+**Concerns:** Memory-intensive operations may fail on large documents
+
+**Recommendation:** Implement streaming processing for large files.
+
+---
+
+## 8. Security Concerns
 
 ### API Key Management
 
-**Issues**:
-- Empty default string for `dashscope_api_key` in settings could lead to runtime errors
-- Test fixtures use hardcoded "secret-key" (acceptable for tests but not production)
+- **`src/config/settings.py`**: API keys stored in settings with empty defaults
+  - `dashscope_api_key: str = ""`
+  - `wandb_api_key: str = ""`
 
-**Recommendations**:
-- Validate required API keys on startup
-- Add clear error messages for missing configuration
-- Consider API key rotation strategy
+**Concerns:**
+- Empty defaults may cause runtime errors
+- No validation that required keys are present
 
-### Authentication & Authorization
-
-**Current State**:
-- API key-based authentication implemented
-- SHA256 hashing for stored keys
-- Role-based access (owner, role fields defined)
-
-**Concerns**:
-- No rate limiting per API key (only global or anonymous)
-- No key expiration or rotation mechanism
-- Test keys might be committed to repository
-
-### Rate Limiting
-
-**Issues**:
-- `docker-compose.yml` sets `RATE_LIMIT_PER_MINUTE=0` (disabled)
-- No rate limiting in Docker configuration
-- Anonymous and authenticated users share same rate limit database
-
-**Recommendations**:
-- Enable rate limiting in production
-- Separate rate limits for anonymous vs authenticated users
-- Consider Redis for distributed rate limiting in production
+**Recommendation:** Implement startup validation for required credentials, fail fast if missing.
 
 ### CORS Configuration
 
-**Current State**:
-- Long list of allowed origins in settings
-- Development origins included in production config
+- Hardcoded CORS origins in settings
+- No wildcard for development
 
-**Recommendations**:
-- Use environment-specific CORS settings
-- Remove development origins from production
-- Consider origin whitelisting approach
+**Concerns:** Deployment requires configuration changes
 
-## Performance Concerns
+**Recommendation:** Environment-based CORS configuration with sensible defaults.
 
-### Memory Usage
+---
 
-**Issues**:
-- Large Svelte component (2439 lines) may impact frontend performance
-- Complex ingestion pipeline with potential memory overhead
-- No streaming for large document processing
+## 9. Code Smells and Anti-Patterns
 
-**Recommendations**:
-- Implement streaming for document ingestion
-- Add memory profiling to ingestion pipeline
-- Consider pagination for large evaluation results
+### Optional Dependency Handling
 
-### Database Performance
+**`src/ingestion/steps/convert_html.py`**:
+```python
+try:
+    import trafilatura  # type: ignore[assignment]
+except Exception:  # pragma: no cover - optional dependency
+    trafilatura = None
+```
 
-**Issues**:
-- SQLite for rate limiting may not scale
-- File-based chat history store (no concurrent access optimization)
-- No connection pooling for SQLite
+**Concerns:**
+- Silent failures for optional dependencies
+- Multiple optional deps with same pattern
+- Difficult to debug when optional deps are missing
 
-**Recommendations**:
-- Consider PostgreSQL for production
-- Implement proper connection pooling
-- Add database indexes for common queries
+**Recommendation:** Use explicit feature flags or dependency injection.
 
-### Caching
+### Inconsistent Return Types
 
-**Current State**:
-- Limited caching implementation
-- Vector store initialization is global (potential race condition)
-- No LLM response caching
+Multiple functions return different types based on runtime conditions:
+- JSON parsing may return dict, list, or None
+- Union types not always properly annotated
 
-**Recommendations**:
-- Implement response caching for common queries
-- Add cache invalidation strategy
-- Consider Redis for distributed caching
+**Recommendation:** Use proper type annotations and consider Result types for fallible operations.
 
-## Architecture Concerns
+---
 
-### Potential Circular Dependencies
-
-**Risk Areas**:
-- `src/rag/runtime.py` imports from multiple modules (ingestion, indexing, rag)
-- Complex interdependencies between evaluation components
-
-**Mitigation**:
-- Define clear layer boundaries
-- Use dependency injection
-- Consider hexagonal architecture patterns
-
-### Code Complexity
-
-**Issues**:
-- Mixed responsibilities in runtime layer
-- Global state usage (`_vector_store_initialized`)
-- Module-level variables could cause issues in testing
-
-**Recommendations**:
-- Extract configuration management
-- Use dependency injection instead of globals
-- Implement proper lifecycle management
-
-### Error Handling
-
-**Issues**:
-- Inconsistent error handling patterns across modules
-- Some endpoints lack proper error handling
-- Generic error messages in some cases
-
-**Recommendations**:
-- Standardize error handling approach
-- Add specific error codes for different failure modes
-- Implement error aggregation for better debugging
-
-## Testing & Reliability
+## 10. Testing Gaps
 
 ### Test Coverage
 
-**Current State**:
-- Good test coverage for core functionality
-- Separate test files for different components
-- Integration and E2E tests present
+Based on file analysis:
+- Large files like `runtime.py` (991 lines) need comprehensive test coverage
+- Frontend components have limited test coverage
+- E2E tests exist but may not cover all edge cases
 
-**Gaps**:
-- Limited coverage for error scenarios
-- Few tests for concurrent operations
-- Missing performance regression tests
+**Recommendation:**
+- Increase unit test coverage for complex modules
+- Add integration tests for RAG pipeline
+- Expand frontend component testing
 
-**Recommendations**:
-- Add property-based testing for complex logic
-- Implement chaos engineering tests
-- Add performance benchmarking
+### Test Artifacts
 
-### Error Handling Tests
+- `.pytest_cache/` and `__pycache__` present in source tree
+- `.mypy_cache/` contains cache files
 
-**Issues**:
-- `tests/test_ingestion_error_handling.py` mentions "actual retry logic needs implementation"
-- Limited tests for partial failure scenarios
-- Missing tests for timeout handling
+**Concerns:** Build artifacts not properly excluded
 
-**Recommendations**:
-- Implement comprehensive retry logic tests
-- Add tests for timeout and cancellation
-- Test partial failure scenarios
+**Recommendation:** Ensure `.gitignore` is comprehensive (currently looks good, but verify).
 
-### Test Data Management
+---
 
-**Issues**:
-- Test fixtures scattered across files
-- No centralized test data management
-- Some tests may depend on execution order
+## 11. Documentation Issues
 
-**Recommendations**:
-- Centralize test data in `tests/fixtures/`
-- Ensure test independence
-- Add test data validation
+### Missing Docstrings
 
-## Configuration Management
+- Some complex functions lack comprehensive docstrings
+- Type hints present but parameter descriptions missing
 
-### Environment Configuration
+**Recommendation:** Complete docstring coverage for public APIs.
 
-**Issues**:
-- Complex configuration with many settings
-- No configuration validation on startup
-- Missing required field validation
+### Outdated Documentation
 
-**Recommendations**:
-- Implement configuration validation schema
-- Add startup checks for required settings
-- Provide clear error messages for misconfiguration
+- Some plans and reports reference old patterns
+- Code review remediation docs indicate completed tasks
 
-### Feature Flags
+**Recommendation:** Archive completed plans, update architecture docs to reflect current state.
 
-**Issues**:
-- Various enable/disable flags throughout codebase
-- No centralized feature flag management
-- Feature flags scattered in code
+---
 
-**Recommendations**:
-- Implement centralized feature flag system
-- Add feature flag audit logging
-- Consider remote configuration service
+## 12. Dependency Management
 
-## Documentation Concerns
+### Version Pinning
 
-### Missing Documentation
+**`pyproject.toml`**:
+- `pypdf` uses `>=4.0,<6.0` (wide range)
+- Some dependencies use `>=` without upper bounds
 
-**Gaps**:
-- Several documents mention "detailed design to be created after Phase 1/2/3"
-- Limited operational documentation
-- Missing debugging guides
+**Concerns:** Future versions may introduce breaking changes
 
-**Recommendations**:
-- Complete outstanding design documents
-- Add operational runbooks
-- Create troubleshooting guides
+**Recommendation:** Consider more conservative version ranges for critical dependencies.
 
-### Code Documentation
+### Optional Dependencies
 
-**Issues**:
-- Inconsistent docstring coverage
-- Some complex functions lack examples
-- Missing architecture decision records (ADRs)
+Multiple optional dependency groups:
+- `dev`, `evaluation`, `chunkers`, `extraction`, `test`
 
-**Recommendations**:
-- Enforce docstring coverage requirements
-- Add usage examples for complex APIs
-- Document key architectural decisions
+**Concerns:** Complex dependency matrix may cause confusion
 
-## Deployment Concerns
+**Recommendation:** Document which features require which optional deps.
 
-### Container Configuration
+---
 
-**Issues**:
-- Resource limits may not be optimal for production
-- Health check interval may be too long (30s)
-- No graceful shutdown handling
+## 13. Frontend-Specific Concerns
 
-**Recommendations**:
-- Tune resource limits based on actual usage
-- Reduce health check interval
-- Implement proper shutdown handlers
+### Component Complexity
 
-### Logging & Monitoring
+- **DrillDownModal.svelte** (306 lines): Complex modal with drill-down logic
+- **ThresholdEditor.svelte** (338 lines): Complex form with validation
+- **DocumentInspector.svelte** (419 lines): Large inspector component
 
-**Issues**:
-- Limited structured logging
-- No distributed tracing
-- Missing metrics collection
+**Recommendation:** Extract sub-components to reduce complexity.
 
-**Recommendations**:
-- Add structured logging throughout
-- Implement distributed tracing (e.g., OpenTelemetry)
-- Add Prometheus metrics export
+### Type Safety
 
-### Backup & Recovery
+- Extensive use of `unknown` and `any` types
+- Some components use `Record<string, unknown>` for props
 
-**Issues**:
-- No backup strategy for chat history
-- No disaster recovery procedures
-- Missing data migration scripts
-
-**Recommendations**:
-- Implement regular backup strategy
-- Create disaster recovery runbooks
-- Add data migration tools
-
-## Frontend Concerns
-
-### Component Size
-
-**Critical**:
-- **`frontend/src/routes/eval/+page.svelte` (2439 lines)** - Needs immediate refactoring
-
-**Recommendations**:
-- Split into multiple components
-- Extract business logic to separate files
-- Consider lazy loading for large components
+**Recommendation:** Define proper TypeScript interfaces.
 
 ### State Management
 
-**Issues**:
-- No centralized state management
-- Props drilling in some components
-- Limited state persistence
+- Multiple components use local `$state` without state management library
+- Complex parent-child state passing
 
-**Recommendations**:
-- Consider Svelte stores for global state
-- Implement proper state persistence
-- Add state management documentation
+**Recommendation:** Consider state management library for complex flows (Svelte stores or similar).
 
-## Dependency Management
+---
 
-### Python Dependencies
+## 14. Infrastructure Concerns
 
-**Issues**:
-- Some dependencies may be outdated
-- No vulnerability scanning in CI
-- Limited dependency update strategy
+### Vector Store Management
 
-**Recommendations**:
-- Implement Dependabot or Renovate
-- Add security scanning to CI
-- Schedule regular dependency updates
+- Global singleton pattern for vector store
+- No connection pooling management
+- Runtime config changes may cause inconsistencies
 
-### Frontend Dependencies
+**Recommendation:** Implement proper lifecycle management, connection pooling.
 
-**Issues**:
-- Mixed use of bun and npm
-- No lock file commit strategy
-- Potential dependency conflicts
+### Chat History Storage
 
-**Recommendations**:
-- Standardize on one package manager
-- Commit lock files
-- Add dependency audit to CI
+- File-based storage (`file_chat_history_store.py`)
+- No migration path for production
 
-## Accessibility & UX
+**Recommendation:** Implement database-backed storage for production use.
 
-### Frontend Accessibility
+---
 
-**Issues**:
-- Limited ARIA labels
-- Missing keyboard navigation
-- No screen reader testing
+## Summary by Priority
 
-**Recommendations**:
-- Add comprehensive ARIA labels
-- Implement keyboard navigation
-- Conduct accessibility audit
+### High Priority (Address Soon)
+1. Global state management - affects testability and concurrency
+2. Large file refactoring - impacts maintainability
+3. Error handling improvements - affects reliability
+4. Type safety fixes - prevents runtime errors
 
-### User Experience
+### Medium Priority (Plan for Next Sprint)
+1. Configuration management - improves deployment flexibility
+2. Performance optimizations - better resource utilization
+3. Testing coverage expansion - prevents regressions
+4. Security hardening - production readiness
 
-**Issues**:
-- Limited loading states
-- No optimistic updates
-- Missing error recovery UI
+### Low Priority (Technical Debt)
+1. Documentation updates
+2. Deprecated code removal
+3. Code style consistency
+4. Dependency version management
 
-**Recommendations**:
-- Add comprehensive loading states
-- Implement optimistic updates
-- Design error recovery flows
+---
+
+## Maintenance Recommendations
+
+1. **Establish refactoring cadence** - Tackle one large file per sprint
+2. **Implement dependency injection** - Reduce global state usage
+3. **Strengthen type checking** - Fix type ignore comments
+4. **Improve error handling** - Use domain-specific exceptions
+5. **Expand test coverage** - Focus on complex modules
+6. **Configuration as code** - Move magic numbers to config
+7. **Security audit** - Review API key management and CORS setup
+8. **Performance monitoring** - Add metrics for slow operations
+
+---
+
+**Last Updated:** 2026-03-22
+**Next Review:** 2026-04-22

@@ -76,7 +76,10 @@ def migrate(
             f"[ERROR] ChromaDB collection '{collection_name}' already has {existing_count} documents.",
             file=sys.stderr,
         )
-        print("Aborting to prevent double-migration. Drop the collection first if you want to re-migrate.", file=sys.stderr)
+        print(
+            "Aborting to prevent double-migration. Drop the collection first if you want to re-migrate.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     collection = client.get_or_create_collection(
@@ -84,7 +87,9 @@ def migrate(
         embedding_function=None,
     )
 
-    existing_ids_set = set(existing_ids) if (existing_ids := collection.get(include=[]).get("ids")) else set()
+    existing_ids_set = (
+        set(existing_ids) if (existing_ids := collection.get(include=[]).get("ids")) else set()
+    )
 
     to_insert_ids = []
     to_insert_embeddings = []
@@ -137,8 +142,10 @@ def migrate(
     print("[OK] Migration complete.")
     print(f"    Attempted:  {report['attempted']}")
     print(f"    Inserted:   {report['inserted']}")
-    print(f"    Skipped:    {report['skipped_duplicate_id']} duplicate IDs, "
-          f"{report['skipped_duplicate_content']} duplicate content")
+    print(
+        f"    Skipped:    {report['skipped_duplicate_id']} duplicate IDs, "
+        f"{report['skipped_duplicate_content']} duplicate content"
+    )
     print(f"    ChromaDB count after migration: {final_count}")
     print()
     print(f"    JSON file still at: {json_file}")

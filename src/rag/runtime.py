@@ -37,29 +37,51 @@ from src.ingestion.steps.load_pdfs import (
 )
 from src.ingestion.steps.load_reference_data import ReferenceDataLoader
 from src.rag.formatting import build_context_and_sources
-from src.rag.trace_models import ChatSource
+from src.rag.trace_models import ChatSource, RetrievedDocument
 
 logger = logging.getLogger(__name__)
 
 
 _vector_store_initialized = False
 _vector_store_initialized_signature: str | None = None
-_RETRIEVAL_OVERFETCH_MULTIPLIER = 4
-_MAX_CHUNKS_PER_SOURCE_PAGE = 2
-_MAX_CHUNKS_PER_SOURCE = 3
-_MMR_LAMBDA = 0.75
-_RRF_SEARCH_MODE = "rrf_hybrid"
 _VALID_SEARCH_MODES = {"rrf_hybrid", "semantic_only", "bm25_only"}
 
 
 @dataclass
-class RetrievalDiversityConfig:
-    overfetch_multiplier: int = _RETRIEVAL_OVERFETCH_MULTIPLIER
-    max_chunks_per_source_page: int = _MAX_CHUNKS_PER_SOURCE_PAGE
-    max_chunks_per_source: int = _MAX_CHUNKS_PER_SOURCE
-    mmr_lambda: float = _MMR_LAMBDA
+class RuntimeRetrievalConfig:
+    """Runtime retrieval configuration with defaults from settings."""
+
+    overfetch_multiplier: int = 4
+    max_chunks_per_source_page: int = 2
+    max_chunks_per_source: int = 3
+    mmr_lambda: float = 0.75
     enable_diversification: bool = True
-    search_mode: str = _RRF_SEARCH_MODE
+    search_mode: str = "rrf_hybrid"
+    enable_hyde: bool = False
+    hyde_max_length: int = 200
+    enable_hype: bool = False
+
+    @classmethod
+    def from_settings(cls) -> "RuntimeRetrievalConfig":
+        """Create configuration from settings."""
+        return cls(
+            overfetch_multiplier=settings.retrieval_overfetch_multiplier,
+            max_chunks_per_source_page=settings.max_chunks_per_source_page,
+            max_chunks_per_source=settings.max_chunks_per_source,
+            mmr_lambda=settings.mmr_lambda,
+            search_mode=settings.rrf_search_mode,
+            enable_hype=settings.hype_enabled,
+        )
+
+
+@dataclass
+class RetrievalDiversityConfig:
+    overfetch_multiplier: int = 4
+    max_chunks_per_source_page: int = 2
+    max_chunks_per_source: int = 3
+    mmr_lambda: float = 0.75
+    enable_diversification: bool = True
+    search_mode: str = "rrf_hybrid"
     enable_hyde: bool = False
     hyde_max_length: int = 200  # Maximum length for HyDE hypothetical answers
     enable_hype: bool = False  # Use pre-stored HyPE questions at retrieval time
@@ -70,25 +92,47 @@ def get_runtime_retrieval_config() -> dict[str, Any]:
 
 
 def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> RetrievalDiversityConfig:
-    cfg = RetrievalDiversityConfig()
-    if not overrides:
-        return cfg
-    for key, value in overrides.items():
-        if value is None or not hasattr(cfg, key):
-            continue
-        setattr(cfg, key, value)
-    cfg.overfetch_multiplier = max(1, int(cfg.overfetch_multiplier))
-    cfg.max_chunks_per_source_page = max(1, int(cfg.max_chunks_per_source_page))
-    cfg.max_chunks_per_source = max(1, int(cfg.max_chunks_per_source))
-    cfg.mmr_lambda = max(0.0, min(1.0, float(cfg.mmr_lambda)))
-    cfg.search_mode = str(cfg.search_mode or _RRF_SEARCH_MODE).lower()
+    cfg = RetrievalDiversityConfig(
+        overfetch_multiplier=settings.retrieval_overfetch_multiplier,
+        max_chunks_per_source_page=settings.max_chunks_per_source_page,
+        max_chunks_per_source=settings.max_chunks_per_source,
+        mmr_lambda=settings.mmr_lambda,
+        search_mode=settings.rrf_search_mode,
+    )
+    if overrides:
+        for key, value in overrides.items():
+            if value is None or not hasattr(cfg, key):
+                continue
+            setattr(cfg, key, value)
+    cfg.overfetch_multiplier = max(
+        1, int(cfg.overfetch_multiplier or settings.retrieval_overfetch_multiplier)
+    )
+    cfg.max_chunks_per_source_page = max(
+        1, int(cfg.max_chunks_per_source_page or settings.max_chunks_per_source_page)
+    )
+    cfg.max_chunks_per_source = max(
+        1, int(cfg.max_chunks_per_source or settings.max_chunks_per_source)
+    )
+    cfg.mmr_lambda = max(0.0, min(1.0, float(cfg.mmr_lambda or settings.mmr_lambda)))
+    cfg.search_mode = str(cfg.search_mode or settings.rrf_search_mode).lower()
     if cfg.search_mode not in _VALID_SEARCH_MODES:
-        cfg.search_mode = _RRF_SEARCH_MODE
+        cfg.search_mode = settings.rrf_search_mode
     # Validate HyDE configuration
     cfg.enable_hyde = bool(cfg.enable_hyde)
     cfg.hyde_max_length = max(50, min(500, int(cfg.hyde_max_length)))
     cfg.enable_hype = bool(cfg.enable_hype) or bool(getattr(settings, "hype_enabled", False))
     return cfg
+
+
+def _dedupe_queries(queries: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in queries:
+        normalized = " ".join(item.split())
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            deduped.append(normalized)
+    return deduped
 
 
 def _expand_queries(query: str, hyde_client: Any = None, enable_hyde: bool = False) -> list[str]:
@@ -120,14 +164,7 @@ def _expand_queries(query: str, hyde_client: Any = None, enable_hyde: bool = Fal
     keyword_focus = " ".join(dict.fromkeys(tokenize_text(lowered)))
     if keyword_focus:
         outputs.append(keyword_focus)
-    deduped: list[str] = []
-    seen: set[str] = set()
-    for item in outputs:
-        normalized = " ".join(item.split())
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            deduped.append(normalized)
-    return deduped
+    return _dedupe_queries(outputs)
 
 
 async def _expand_queries_async(
@@ -166,17 +203,10 @@ async def _expand_queries_async(
         )
 
         # Combine base queries with HyDE queries, removing duplicates
-        all_queries = base_queries + hyde_queries
-        seen: set[str] = set()
-        deduped: list[str] = []
-        for q in all_queries:
-            normalized = " ".join(q.split())
-            if normalized and normalized not in seen:
-                seen.add(normalized)
-                deduped.append(normalized)
+        all_queries = _dedupe_queries(base_queries + hyde_queries)
 
-        logger.debug(f"HyDE expanded query '{query[:50]}...' to {len(deduped)} variants")
-        return deduped
+        logger.debug(f"HyDE expanded query '{query[:50]}...' to {len(all_queries)} variants")
+        return all_queries
 
     except Exception as e:
         logger.error(
@@ -205,7 +235,7 @@ def _build_index_from_sources(vector_store) -> dict[str, Any]:
         f"(attempted={stats['attempted']}, inserted={stats['inserted']}, "
         f"duplicate_id={stats['skipped_duplicate_id']}, duplicate_content={stats['skipped_duplicate_content']})"
     )
-    return stats  # type: ignore[no-any-return]
+    return stats
 
 
 def _vector_store_runtime_signature() -> str:
@@ -238,24 +268,16 @@ def initialize_vector_store(
     if materialize_html:
         convert_html_main(force=force_html_reconvert)
 
-    if _vector_store_initialized and vector_store.documents.get("contents"):
-        _vector_store_initialized_signature = runtime_signature
-        return {
-            "status": "ready",
-            "reused_existing_index": True,
-            "vector_store_config": get_vector_store_runtime_config(),
-            "index_metadata": vector_store.documents.get("index_metadata", {}),
-            "vector_document_count": len(vector_store.documents.get("contents", [])),
-            "indexing_stats": vector_store.last_indexing_stats,
-        }
-
     if vector_store.documents.get("contents"):
-        _vector_store_initialized = True
-        _vector_store_initialized_signature = runtime_signature
-        logger.info(
-            "Loaded existing vector store with %d documents",
-            len(vector_store.documents["contents"]),
-        )
+        if not _vector_store_initialized:
+            _vector_store_initialized = True
+            _vector_store_initialized_signature = runtime_signature
+            logger.info(
+                "Loaded existing vector store with %d documents",
+                len(vector_store.documents["contents"]),
+            )
+        else:
+            _vector_store_initialized_signature = runtime_signature
         return {
             "status": "ready",
             "reused_existing_index": True,
@@ -368,7 +390,7 @@ def _score_field(item: dict) -> float:
     return 0.0
 
 
-def _mmr_rerank(results: list[dict], top_k: int, lambda_mult: float = _MMR_LAMBDA) -> list[dict]:
+def _mmr_rerank(results: list[dict], top_k: int, lambda_mult: float = 0.75) -> list[dict]:
     if len(results) <= 1:
         return results[:top_k]
 
@@ -399,10 +421,10 @@ def _diversify_results(
     results: list[dict],
     top_k: int,
     *,
-    mmr_lambda: float = _MMR_LAMBDA,
+    mmr_lambda: float = 0.75,
     overfetch_multiplier: int = 2,
-    max_chunks_per_source_page: int = _MAX_CHUNKS_PER_SOURCE_PAGE,
-    max_chunks_per_source: int = _MAX_CHUNKS_PER_SOURCE,
+    max_chunks_per_source_page: int = 2,
+    max_chunks_per_source: int = 3,
     enable_diversification: bool = True,
 ) -> list[dict]:
     """
@@ -464,6 +486,42 @@ def _diversify_results(
     return selected
 
 
+def _build_retrieved_documents(results: list[dict]) -> list[RetrievedDocument]:
+    retrieved_docs = []
+    for r in results:
+        metadata = r.get("metadata", {})
+        retrieved_docs.append(
+            RetrievedDocument(
+                id=r["id"],
+                content=r["content"],
+                source=r["source"],
+                page=r.get("page"),
+                semantic_score=r["semantic_score"],
+                keyword_score=r["keyword_score"],
+                source_prior=r.get("source_prior", 0.0),
+                source_boost=r.get("source_prior", 0.0),
+                combined_score=r["combined_score"],
+                rank=r["rank"],
+                semantic_rank=r.get("semantic_rank"),
+                bm25_rank=r.get("bm25_rank"),
+                fused_rank=r.get("fused_rank"),
+                fused_score=r.get("fused_score"),
+                chunk_quality_score=r.get("quality_score"),
+                content_type=r.get("content_type"),
+                section_path=r.get("section_path", []),
+                canonical_label=metadata.get("canonical_label"),
+                display_label=metadata.get("display_label"),
+                logical_name=metadata.get("logical_name"),
+                source_url=metadata.get("source_url"),
+                source_type=metadata.get("source_type"),
+                source_class=metadata.get("source_class"),
+                domain=metadata.get("domain"),
+                domain_type=metadata.get("domain_type"),
+            )
+        )
+    return retrieved_docs
+
+
 def retrieve_context(
     query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None
 ) -> tuple[str, list[ChatSource]]:
@@ -517,7 +575,6 @@ def retrieve_context_with_trace(
         GenerationStage,
         PipelineTrace,
         RetrievalStage,
-        RetrievedDocument,
     )
 
     total_start = time.time()
@@ -551,38 +608,7 @@ def retrieve_context_with_trace(
         enable_diversification=cfg.enable_diversification,
     )
 
-    retrieved_docs = []
-    for r in results:
-        metadata = r.get("metadata", {})
-        retrieved_docs.append(
-            RetrievedDocument(
-                id=r["id"],
-                content=r["content"],
-                source=r["source"],
-                page=r.get("page"),
-                semantic_score=r["semantic_score"],
-                keyword_score=r["keyword_score"],
-                source_prior=r.get("source_prior", 0.0),
-                source_boost=r.get("source_prior", 0.0),
-                combined_score=r["combined_score"],
-                rank=r["rank"],
-                semantic_rank=r.get("semantic_rank"),
-                bm25_rank=r.get("bm25_rank"),
-                fused_rank=r.get("fused_rank"),
-                fused_score=r.get("fused_score"),
-                chunk_quality_score=r.get("quality_score"),
-                content_type=r.get("content_type"),
-                section_path=r.get("section_path", []),
-                canonical_label=metadata.get("canonical_label"),
-                display_label=metadata.get("display_label"),
-                logical_name=metadata.get("logical_name"),
-                source_url=metadata.get("source_url"),
-                source_type=metadata.get("source_type"),
-                source_class=metadata.get("source_class"),
-                domain=metadata.get("domain"),
-                domain_type=metadata.get("domain_type"),
-            )
-        )
+    retrieved_docs = _build_retrieved_documents(results)
 
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
     retrieval_stage = RetrievalStage(
@@ -655,7 +681,6 @@ async def retrieve_context_with_trace_async(
         PipelineTrace,
         RetrievalStage,
         RetrievalStep,
-        RetrievedDocument,
     )
 
     total_start = time.time()
@@ -771,38 +796,7 @@ async def retrieve_context_with_trace_async(
         )
     )
 
-    retrieved_docs = []
-    for r in results:
-        metadata = r.get("metadata", {})
-        retrieved_docs.append(
-            RetrievedDocument(
-                id=r["id"],
-                content=r["content"],
-                source=r["source"],
-                page=r.get("page"),
-                semantic_score=r["semantic_score"],
-                keyword_score=r["keyword_score"],
-                source_prior=r.get("source_prior", 0.0),
-                source_boost=r.get("source_prior", 0.0),
-                combined_score=r["combined_score"],
-                rank=r["rank"],
-                semantic_rank=r.get("semantic_rank"),
-                bm25_rank=r.get("bm25_rank"),
-                fused_rank=r.get("fused_rank"),
-                fused_score=r.get("fused_score"),
-                chunk_quality_score=r.get("quality_score"),
-                content_type=r.get("content_type"),
-                section_path=r.get("section_path", []),
-                canonical_label=metadata.get("canonical_label"),
-                display_label=metadata.get("display_label"),
-                logical_name=metadata.get("logical_name"),
-                source_url=metadata.get("source_url"),
-                source_type=metadata.get("source_type"),
-                source_class=metadata.get("source_class"),
-                domain=metadata.get("domain"),
-                domain_type=metadata.get("domain_type"),
-            )
-        )
+    retrieved_docs = _build_retrieved_documents(results)
 
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
     retrieval_stage = RetrievalStage(

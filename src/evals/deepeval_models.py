@@ -5,8 +5,6 @@ enabling use of Alibaba's Qwen LLMs as judges in DeepEval's LLM-as-a-judge
 framework. Supports model tiering for cost optimization.
 """
 
-from typing import Any, cast
-
 from deepeval.models import DeepEvalBaseLLM
 from openai import AsyncOpenAI, OpenAI
 
@@ -24,13 +22,15 @@ class QwenModel(DeepEvalBaseLLM):
         client: OpenAI-compatible client pointing to Dashscope API
     """
 
+    model: str
+
     def __init__(self, model: str):
         """Initialize the Qwen model wrapper.
 
         Args:
             model: Model identifier string
         """
-        self.model = cast(Any, model)  # type: ignore[assignment]
+        self.model = model
         self.model_name = model
         self.client = OpenAI(
             api_key=settings.dashscope_api_key,

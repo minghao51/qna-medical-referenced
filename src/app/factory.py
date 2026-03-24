@@ -37,7 +37,7 @@ from src.app.middleware import APIKeyMiddleware, RateLimitMiddleware, RequestIDM
 from src.app.routes import chat_router, evaluation_router, health_router, history_router
 from src.app.security import validate_security_configuration
 from src.config import settings
-from src.infra.llm import get_client
+from src.infra.di import get_container, reset_container
 from src.infra.storage import FileChatHistoryStore
 from src.rag import initialize_runtime_index
 
@@ -62,16 +62,32 @@ async def lifespan(app: FastAPI):
         None: Control is transferred to the application during its lifetime
 
     Startup tasks:
-        - Initialize LLM client and store in app.state.llm_client
+        - Initialize dependency injection container
+        - Initialize LLM client
         - Load vector index into memory for fast retrieval
 
     Shutdown tasks:
-        - Currently none (FastAPI handles cleanup automatically)
+        - Reset container for clean shutdown
     """
-    app.state.llm_client = get_client()
+    # Startup
+    container = get_container()
+    app.state.container = container
+
+    # Initialize LLM client
+    app.state.llm_client = container.get_llm_client()
+
+    # Initialize chat history store
     app.state.chat_history_store = FileChatHistoryStore()
+
+    # Initialize vector store
     initialize_runtime_index()
+    logger.info("Application startup complete")
+
     yield
+
+    # Shutdown
+    logger.info("Application shutting down")
+    reset_container()
 
 
 def create_app() -> FastAPI:

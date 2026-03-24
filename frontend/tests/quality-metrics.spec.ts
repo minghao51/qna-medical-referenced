@@ -114,8 +114,8 @@ test.describe('Quality Metrics Dashboard', () => {
 		await proxyBrowserApiRequests(page);
 		await mockEvaluationApi(page);
 		await page.goto('/eval');
-		await page.waitForSelector('.eval-container', { timeout: 15000 });
-		await page.waitForSelector('.step-card, .retrieval-section', { timeout: 15000 });
+		await page.waitForSelector('h1', { timeout: 15000 });
+		await page.waitForSelector('.step-card, .retrieval-tab', { timeout: 15000 });
 	});
 
 	test('displays chunk quality distribution in L3 card', async ({ page }) => {
@@ -190,33 +190,33 @@ test.describe('Quality Metrics Dashboard', () => {
 	});
 
 	test('displays deduplication & diversity subsection in L6', async ({ page }) => {
-		const retrievalSection = page.locator('.retrieval-section');
-		await expect(retrievalSection).toBeVisible();
+		// Click on Retrieval tab to see retrieval metrics
+		await page.getByRole('tab', { name: 'Retrieval' }).click();
 
-		// Check for Deduplication & Diversity subsection
-		const dedupSection = retrievalSection.locator('.retrieval-subsection').filter({ hasText: 'Deduplication & Diversity' });
+		// Check for Deduplication & Diversity section
+		const dedupSection = page.locator('.section h3').filter({ hasText: 'Deduplication & Diversity' });
 		await expect(dedupSection).toBeVisible();
 
 		// Verify deduplication metrics are displayed
-		await expect(dedupSection).toContainText('Dedup Hit Rate');
-		await expect(dedupSection).toContainText('Dedup MRR');
-		await expect(dedupSection).toContainText('Unique Source Hit');
-		await expect(dedupSection).toContainText('Duplicate Source Ratio');
+		await expect(page.locator('.section').filter({ hasText: 'Dedup Hit Rate' })).toBeVisible();
+		await expect(page.locator('.section').filter({ hasText: 'Dedup MRR' })).toBeVisible();
+		await expect(page.locator('.section').filter({ hasText: 'Unique Source Hit' })).toBeVisible();
+		await expect(page.locator('.section').filter({ hasText: 'Duplicate Source Ratio' })).toBeVisible();
 	});
 
 	test('displays high-confidence subset subsection in L6', async ({ page }) => {
-		const retrievalSection = page.locator('.retrieval-section');
-		await expect(retrievalSection).toBeVisible();
+		// Click on Retrieval tab to see retrieval metrics
+		await page.getByRole('tab', { name: 'Retrieval' }).click();
 
-		// Check for High-Confidence Subset subsection
-		const highConfSection = retrievalSection.locator('.retrieval-subsection').filter({ hasText: 'High-Confidence Subset' });
+		// Check for High-Confidence Subset section
+		const highConfSection = page.locator('.section h3').filter({ hasText: 'High-Confidence Subset' });
 		await expect(highConfSection).toBeVisible();
 
 		// Verify high-confidence metrics are displayed
-		await expect(highConfSection).toContainText('Hit Rate (High Conf)');
-		await expect(highConfSection).toContainText('MRR (High Conf)');
-		await expect(highConfSection).toContainText('Exact Chunk (High Conf)');
-		await expect(highConfSection).toContainText('Topic False Positive');
+		await expect(page.locator('.section').filter({ hasText: 'Hit Rate (High Conf)' })).toBeVisible();
+		await expect(page.locator('.section').filter({ hasText: 'MRR (High Conf)' })).toBeVisible();
+		await expect(page.locator('.section').filter({ hasText: 'Exact Chunk (High Conf)' })).toBeVisible();
+		await expect(page.locator('.section').filter({ hasText: 'Topic False Positive' })).toBeVisible();
 	});
 
 	test('displays warning styles for metrics exceeding thresholds', async ({ page }) => {
@@ -237,17 +237,13 @@ test.describe('Quality Metrics Dashboard', () => {
 	});
 
 	test('all quality metric cards are responsive and layout correctly', async ({ page }) => {
-		// Check main sections are visible (history section may not exist if no data)
-		const stepsSection = page.locator('.steps-section');
-		await expect(stepsSection).toBeVisible();
-		await expect(page.locator('.retrieval-section')).toBeVisible();
-
-		// Verify cards are using grid layout
+		// On Ingestion tab, check the step cards grid is visible
 		const stepsGrid = page.locator('.steps-grid');
 		await expect(stepsGrid).toBeVisible();
 
-		// Check that at least one metrics grid exists
-		const metricsGrid = page.locator('.metrics-grid').first();
+		// Click on Retrieval tab and check metrics grid
+		await page.getByRole('tab', { name: 'Retrieval' }).click();
+		const metricsGrid = page.locator('.retrieval-tab .metrics-grid').first();
 		await expect(metricsGrid).toBeVisible();
 	});
 });

@@ -32,7 +32,7 @@ export interface RetrievalStep {
 	name: string;
 	timing_ms: number;
 	skipped: boolean;
-	details: Record<string, any>;
+	details: Record<string, unknown>;
 }
 
 export interface RetrievalStage {
@@ -108,7 +108,7 @@ export interface EvaluationSummary {
 	l6_answer_quality_status?: string;
 	failed_thresholds_count: number;
 	status: 'ok' | 'failed';
-	tracking?: Record<string, any>;
+	tracking?: Record<string, unknown>;
 }
 
 export interface RetrievalMetrics {
@@ -170,7 +170,7 @@ export interface L6AnswerQualityMetrics {
 }
 
 export interface StepMetrics {
-	aggregate: Record<string, any>;
+	aggregate: Record<string, unknown>;
 	// L0: html_file_count, html_parse_success_rate, duplicate_file_rate, small_file_rate
 	// L1: pairs_evaluated, markdown_empty_rate, retention_ratio_mean, content_density_mean,
 	//      boilerplate_ratio_mean, heading_preservation_rate_mean, table_preservation_rate_mean,
@@ -183,12 +183,18 @@ export interface StepMetrics {
 	// L4: csv_exists, row_count, row_completeness_rate, duplicate_test_name_rate,
 	//      normal_range_parseable_rate
 	// L5: ids_count, embedding_dim, embedding_dim_consistent, short_content_rate
-	records: any[];
+	records: Array<Record<string, unknown>>;
 	findings: Array<{
 		severity: 'warning' | 'error';
 		stage: string;
 		message: string;
 	}>;
+}
+
+export interface StepFinding {
+	severity: 'warning' | 'error';
+	stage: string;
+	message: string;
 }
 
 export interface ChunkQualityHistogram {
@@ -205,24 +211,68 @@ export interface PageClassificationDistribution {
 	unknown?: number;
 }
 
+export interface SourceChunkConfig {
+	chunk_size: number;
+	chunk_overlap: number;
+	min_chunk_size: number;
+}
+
+export interface IngestionStrategyConfig {
+	page_classification_enabled?: boolean;
+	index_only_classified_pages?: boolean;
+	html_extractor_mode?: string;
+	html_extractor_strategy?: string;
+	pdf_extractor_strategy?: string;
+	pdf_table_extractor?: string;
+	structured_chunking_enabled?: boolean;
+	source_chunk_configs?: Record<string, SourceChunkConfig>;
+	enable_hype?: boolean;
+	hype_sample_rate?: number;
+}
+
+export interface RetrievalStrategyConfig {
+	top_k?: number;
+	search_mode?: string;
+	enable_diversification?: boolean;
+	mmr_lambda?: number;
+	overfetch_multiplier?: number;
+	max_chunks_per_source_page?: number;
+	max_chunks_per_source?: number;
+	enable_hyde?: boolean;
+	hyde_max_length?: number;
+}
+
+export interface ExperimentConfig {
+	ingestion?: IngestionStrategyConfig;
+	retrieval?: RetrievalStrategyConfig;
+	metadata?: {
+		name?: string;
+		description?: string;
+		tags?: string[];
+	};
+}
+
 export interface EvaluationResponse {
 	run_dir: string;
 	summary?: EvaluationSummary;
 	step_metrics?: Record<string, StepMetrics>;
 	retrieval_metrics?: RetrievalMetrics;
-	failed_thresholds?: Array<{
-		metric?: string;
-		value?: number | string | boolean | null;
-		threshold_op?: 'min' | 'max' | string;
-		threshold_value?: number;
-		message?: string;
-		severity?: 'warning' | 'error' | string;
-	}>;
-	manifest?: Record<string, any>;
+	failed_thresholds?: FailedThreshold[];
+	manifest?: Record<string, unknown>;
 	source?: string;
-	tracking?: Record<string, any>;
+	tracking?: Record<string, unknown>;
 	wandb_run_id?: string;
 	wandb_url?: string;
+	experiment_config?: ExperimentConfig;
+}
+
+export interface FailedThreshold {
+	metric?: string;
+	value?: number | string | boolean | null;
+	threshold_op?: 'min' | 'max' | string;
+	threshold_value?: number;
+	message?: string;
+	severity?: 'warning' | 'error' | string;
 }
 
 export interface EvaluationHistoryRun {
@@ -239,7 +289,7 @@ export interface EvaluationHistoryRun {
 	index_config_hash?: string;
 	wandb_url?: string;
 	wandb_run_id?: string;
-	tracking?: Record<string, any>;
+	tracking?: Record<string, unknown>;
 }
 
 export interface EvaluationHistoryResponse {
@@ -262,3 +312,28 @@ export interface EvaluationHistoryResponse {
 	};
 	warnings?: string[];
 }
+
+export interface AblationRun {
+	strategy: string;
+	hit_rate_at_k: number;
+	mrr: number;
+	ndcg_at_k: number;
+	latency_p50_ms?: number;
+	is_baseline: boolean;
+}
+
+export interface AblationResponse {
+	ablation_runs: AblationRun[];
+	message?: string;
+}
+
+export interface DrillDownPoint {
+	timestamp: string;
+	value: number;
+}
+
+export type DrillDownRecord = Record<string, unknown>;
+
+export type EvalTrendMetric = 'hit_rate' | 'mrr' | 'latency';
+
+export type EvalTabId = 'ingestion' | 'retrieval' | 'quality' | 'trending';

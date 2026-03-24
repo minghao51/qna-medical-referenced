@@ -513,18 +513,6 @@ def _extract_evidence_phrase(content: str, keywords: list[str], window: int = 12
     return ""
 
 
-def _dedupe_queries(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen: set[str] = set()
-    deduped: list[dict[str, Any]] = []
-    for item in records:
-        key = re.sub(r"\s+", " ", item.get("query", "").strip().lower())
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        deduped.append(item)
-    return deduped
-
-
 def _filter_records(
     records: list[dict[str, Any]],
     *,
@@ -616,8 +604,14 @@ def build_retrieval_dataset(
     else:
         attempts = [{"status": "skipped", "reason": "llm_generation_disabled"}]
 
-    merged = _dedupe_queries(base_records + synthetic_records)
-    merged = _bootstrap_precise_labels(merged)
+    merged_seen: set[str] = set()
+    merged_deduped: list[dict[str, Any]] = []
+    for item in base_records + synthetic_records:
+        key = re.sub(r"\s+", " ", item.get("query", "").strip().lower())
+        if key and key not in merged_seen:
+            merged_seen.add(key)
+            merged_deduped.append(item)
+    merged = _bootstrap_precise_labels(merged_deduped)
     filtered = _filter_records(
         merged, dataset_split=dataset_split, min_label_confidence=min_label_confidence
     )

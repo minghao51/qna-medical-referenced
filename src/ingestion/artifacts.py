@@ -73,4 +73,4 @@ def load_source_artifact(source_type: str, source_id: str) -> dict[str, Any] | N
     target = artifact_dir_for(source_type, source_id) / "artifact.json"
     if not target.exists():
         return None
-    return json.loads(target.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+    return json.loads(target.read_text(encoding="utf-8"))

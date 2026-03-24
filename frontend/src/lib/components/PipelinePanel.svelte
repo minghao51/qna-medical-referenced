@@ -27,6 +27,15 @@
 	function handleFlowNodeClick(stage: 'retrieval' | 'context' | 'generation') {
 		activeFlowStage = activeFlowStage === stage ? null : stage;
 	}
+
+	function detailList(step: { details: Record<string, unknown> }, key: string): string[] {
+		const value = step.details[key];
+		return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+	}
+
+	function detailValue(step: { details: Record<string, unknown> }, key: string): unknown {
+		return step.details[key];
+	}
 </script>
 
 {#if isOpen}
@@ -109,11 +118,11 @@
 									</button>
 									{#if expandedStep === step.name && step.details}
 										<div class="step-details">
-											{#if step.details.expanded_queries && step.details.expanded_queries.length > 0}
+											{#if detailList(step, 'expanded_queries').length > 0}
 												<div class="detail-group">
 													<span class="detail-label">Expanded Queries:</span>
 													<ul class="query-list">
-														{#each step.details.expanded_queries as q, i}
+														{#each detailList(step, 'expanded_queries') as q, i}
 															<li class="query-item" class:original={i === 0}>
 																{q}
 																{#if i === 0}<span class="query-tag">original</span>{/if}
@@ -122,28 +131,28 @@
 													</ul>
 												</div>
 											{/if}
-											{#if step.details.hyde_enabled !== undefined}
+											{#if detailValue(step, 'hyde_enabled') !== undefined}
 												<div class="detail-row">
 													<span class="detail-label">HyDE:</span>
-													<span class="detail-value">{step.details.hyde_enabled ? 'enabled' : 'disabled'}</span>
+													<span class="detail-value">{detailValue(step, 'hyde_enabled') ? 'enabled' : 'disabled'}</span>
 												</div>
 											{/if}
-											{#if step.details.queries_count !== undefined}
+											{#if detailValue(step, 'queries_count') !== undefined}
 												<div class="detail-row">
 													<span class="detail-label">Query variants:</span>
-													<span class="detail-value">{step.details.queries_count}</span>
+													<span class="detail-value">{String(detailValue(step, 'queries_count'))}</span>
 												</div>
 											{/if}
-											{#if step.details.search_mode}
+											{#if typeof step.details.search_mode === 'string'}
 												<div class="detail-row">
 													<span class="detail-label">Search mode:</span>
 													<span class="detail-value">{step.details.search_mode}</span>
 												</div>
 											{/if}
-											{#if step.details.mmr_lambda !== undefined}
+											{#if detailValue(step, 'mmr_lambda') !== undefined}
 												<div class="detail-row">
 													<span class="detail-label">MMR lambda:</span>
-													<span class="detail-value">{step.details.mmr_lambda}</span>
+													<span class="detail-value">{String(detailValue(step, 'mmr_lambda'))}</span>
 												</div>
 											{/if}
 										</div>

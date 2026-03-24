@@ -72,7 +72,7 @@ def test_run_assessment_writes_experiment_provenance(monkeypatch, tmp_path: Path
     )
     monkeypatch.setattr(
         pa,
-        "_evaluate_retrieval",
+        "evaluate_retrieval",
         lambda dataset, top_k, retrieval_options=None: (
             [],
             {
@@ -93,7 +93,9 @@ def test_run_assessment_writes_experiment_provenance(monkeypatch, tmp_path: Path
             },
         ),
     )
-    monkeypatch.setattr(pa, "_git_head", lambda: "deadbeef")
+    import src.evals.assessment.reporting as reporting
+
+    monkeypatch.setattr(reporting, "git_head", lambda: "deadbeef")
     monkeypatch.setattr(
         pa,
         "configure_runtime_for_experiment",

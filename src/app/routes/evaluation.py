@@ -167,7 +167,7 @@ def _read_json_if_exists(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text())  # type: ignore[no-any-return]
+        return json.loads(path.read_text())
     except Exception:
         return {}
 
@@ -197,6 +197,24 @@ def _read_failed_thresholds(run_dir: Path) -> list[dict[str, Any]]:
             }
         )
     return threshold_findings
+
+
+def _extract_experiment_config(manifest: dict[str, Any] | None) -> dict[str, Any]:
+    """Extract experiment_config from manifest with safe defaults.
+
+    Args:
+        manifest: The manifest dictionary containing config data
+
+    Returns:
+        The experiment_config dictionary, or empty dict if not found
+    """
+    if not manifest:
+        return {}
+    config = manifest.get("config")
+    if not isinstance(config, dict):
+        return {}
+    experiment_config = config.get("experiment_config")
+    return experiment_config if isinstance(experiment_config, dict) else {}
 
 
 def _normalize_ablation_payload(payload: Any) -> dict[str, Any]:
@@ -238,7 +256,7 @@ def _local_history_runs(limit: int) -> list[dict[str, Any]]:
         summary = _read_summary(run_dir)
         retrieval = _read_retrieval_metrics(run_dir)
         manifest = _read_json_if_exists(run_dir / "manifest.json")
-        experiment_cfg = dict(((manifest.get("config") or {}).get("experiment_config")) or {})
+        experiment_cfg = _extract_experiment_config(manifest)
         l6_metrics = summary.get(SUMMARY_L6_METRICS_KEY, {})
         result_runs.append(
             {
@@ -524,7 +542,15 @@ def get_evaluation_run(run_dir: str) -> dict[str, Any]:
     if retrieval_metrics_path.exists():
         result["retrieval_metrics"] = json.loads(retrieval_metrics_path.read_text())
     if manifest_path.exists():
-        result["manifest"] = json.loads(manifest_path.read_text())
+        manifest_data = json.loads(manifest_path.read_text())
+        result["manifest"] = manifest_data
+        experiment_cfg = _extract_experiment_config(manifest_data)
+        if experiment_cfg:
+            result["experiment_config"] = {
+                "ingestion": experiment_cfg.get("ingestion"),
+                "retrieval": experiment_cfg.get("retrieval"),
+                "metadata": experiment_cfg.get("metadata"),
+            }
     result["failed_thresholds"] = _read_failed_thresholds(target_dir)
 
     return result

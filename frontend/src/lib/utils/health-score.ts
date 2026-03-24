@@ -1,5 +1,14 @@
 import type { EvaluationResponse, RetrievalMetrics } from '$lib/types';
 
+function getAggregateNumber(aggregate: Record<string, unknown>, key: string): number {
+	const value = aggregate[key];
+	return typeof value === 'number' ? value : 0;
+}
+
+function getAggregateBoolean(aggregate: Record<string, unknown>, key: string): boolean {
+	return aggregate[key] === true;
+}
+
 export function calculateHealthScore(metrics: EvaluationResponse): number {
 	if (!metrics.retrieval_metrics) return 0;
 
@@ -39,8 +48,8 @@ function calculateDataQualityScore(metrics: EvaluationResponse): number {
 	// L1: Content quality
 	if (metrics.step_metrics.l1) {
 		const l1 = metrics.step_metrics.l1.aggregate;
-		const contentDensity = l1.content_density_mean || 0;
-		const boilerplateRatio = l1.boilerplate_ratio_mean || 0;
+		const contentDensity = getAggregateNumber(l1, 'content_density_mean');
+		const boilerplateRatio = getAggregateNumber(l1, 'boilerplate_ratio_mean');
 		const l1Score = contentDensity * 100 * 0.6 + (1 - boilerplateRatio) * 100 * 0.4;
 		totalScore += l1Score * 0.3;
 		weight += 0.3;
@@ -49,8 +58,8 @@ function calculateDataQualityScore(metrics: EvaluationResponse): number {
 	// L3: Chunking quality
 	if (metrics.step_metrics.l3) {
 		const l3 = metrics.step_metrics.l3.aggregate;
-		const sectionIntegrity = l3.section_integrity_rate || 0;
-		const duplicateRate = l3.duplicate_chunk_rate || 0;
+		const sectionIntegrity = getAggregateNumber(l3, 'section_integrity_rate');
+		const duplicateRate = getAggregateNumber(l3, 'duplicate_chunk_rate');
 		const l3Score = sectionIntegrity * 100 * 0.7 + (1 - duplicateRate) * 100 * 0.3;
 		totalScore += l3Score * 0.4;
 		weight += 0.4;
@@ -59,8 +68,8 @@ function calculateDataQualityScore(metrics: EvaluationResponse): number {
 	// L2: PDF quality
 	if (metrics.step_metrics.l2) {
 		const l2 = metrics.step_metrics.l2.aggregate;
-		const coverage = l2.page_extraction_coverage || 0;
-		const emptyRate = l2.empty_page_rate || 0;
+		const coverage = getAggregateNumber(l2, 'page_extraction_coverage');
+		const emptyRate = getAggregateNumber(l2, 'empty_page_rate');
 		const l2Score = coverage * 100 * 0.7 + (1 - emptyRate) * 100 * 0.3;
 		totalScore += l2Score * 0.15;
 		weight += 0.15;
@@ -69,8 +78,8 @@ function calculateDataQualityScore(metrics: EvaluationResponse): number {
 	// L5: Index quality
 	if (metrics.step_metrics.l5) {
 		const l5 = metrics.step_metrics.l5.aggregate;
-		const dimConsistent = l5.embedding_dim_consistent ? 1 : 0;
-		const shortRate = l5.short_content_rate || 0;
+		const dimConsistent = getAggregateBoolean(l5, 'embedding_dim_consistent') ? 1 : 0;
+		const shortRate = getAggregateNumber(l5, 'short_content_rate');
 		const l5Score = dimConsistent * 100 * 0.7 + (1 - shortRate) * 100 * 0.3;
 		totalScore += l5Score * 0.15;
 		weight += 0.15;

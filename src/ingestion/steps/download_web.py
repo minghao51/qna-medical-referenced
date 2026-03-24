@@ -12,7 +12,7 @@ import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlparse, urlunparse
 
 import httpx
@@ -45,10 +45,10 @@ def normalize_url(url: str) -> str:
     return urlunparse((scheme, netloc, path, "", parsed.query, ""))
 
 
-def _load_manifest() -> dict:
+def _load_manifest() -> dict[str, Any]:
     if MANIFEST_PATH.exists():
         try:
-            return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+            return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
         except Exception:
             return {"records": []}
     return {"records": []}
@@ -226,21 +226,21 @@ def _find_existing_file_by_content_hash(content_hash_value: str) -> Path | None:
     return None
 
 
-def get_manifest_record_by_filename(filename: str) -> dict | None:
+def get_manifest_record_by_filename(filename: str) -> dict[str, Any] | None:
     """Look up manifest record by filename."""
     manifest = _load_manifest()
     for record in manifest.get("records", []):
         if record.get("filename") == filename:
-            return record  # type: ignore[no-any-return]
+            return record
     return None
 
 
-def get_manifest_record_by_logical_name(logical_name: str) -> dict | None:
+def get_manifest_record_by_logical_name(logical_name: str) -> dict[str, Any] | None:
     """Look up manifest record by logical_name."""
     manifest = _load_manifest()
     for record in manifest.get("records", []):
         if record.get("logical_name") == logical_name:
-            return record  # type: ignore[no-any-return]
+            return record
     return None
 
 

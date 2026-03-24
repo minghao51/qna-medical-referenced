@@ -42,7 +42,7 @@ def test_run_assessment_smoke(monkeypatch, tmp_path: Path):
     )
     monkeypatch.setattr(
         pa,
-        "_evaluate_retrieval",
+        "evaluate_retrieval",
         lambda dataset, top_k: (
             [{"query_id": "q1", "metrics": {"hit_rate_at_k": 1.0}}],
             {
@@ -60,7 +60,9 @@ def test_run_assessment_smoke(monkeypatch, tmp_path: Path):
             },
         ),
     )
-    monkeypatch.setattr(pa, "_git_head", lambda: "deadbeef")
+    import src.evals.assessment.reporting as reporting
+
+    monkeypatch.setattr(reporting, "git_head", lambda: "deadbeef")
 
     result = pa.run_assessment(
         artifact_dir=tmp_path / "evals",
@@ -114,13 +116,15 @@ def test_run_assessment_reuses_matching_completed_run(monkeypatch, tmp_path: Pat
     )
     monkeypatch.setattr(
         pa,
-        "_evaluate_retrieval",
+        "evaluate_retrieval",
         lambda dataset, top_k, retrieval_options=None: (
             [],
             {"query_count": 0, "hit_rate_at_k": 0.0, "mrr": 0.0, "ndcg_at_k": 0.0},
         ),
     )
-    monkeypatch.setattr(pa, "_git_head", lambda: "deadbeef")
+    import src.evals.assessment.reporting as reporting
+
+    monkeypatch.setattr(reporting, "git_head", lambda: "deadbeef")
 
     first = pa.run_assessment(
         artifact_dir=tmp_path / "evals",
@@ -140,7 +144,7 @@ def test_run_assessment_reuses_matching_completed_run(monkeypatch, tmp_path: Pat
     monkeypatch.setattr(pa, "assess_l4_reference_quality", should_not_run)
     monkeypatch.setattr(pa, "assess_l5_index_quality", should_not_run)
     monkeypatch.setattr(pa, "build_retrieval_dataset", should_not_run)
-    monkeypatch.setattr(pa, "_evaluate_retrieval", should_not_run)
+    monkeypatch.setattr(pa, "evaluate_retrieval", should_not_run)
 
     second = pa.run_assessment(
         artifact_dir=tmp_path / "evals",
@@ -204,13 +208,15 @@ def test_run_assessment_ignores_incomplete_matching_run(monkeypatch, tmp_path: P
     )
     monkeypatch.setattr(
         pa,
-        "_evaluate_retrieval",
+        "evaluate_retrieval",
         lambda dataset, top_k, retrieval_options=None: (
             [],
             {"query_count": 0, "hit_rate_at_k": 0.0, "mrr": 0.0, "ndcg_at_k": 0.0},
         ),
     )
-    monkeypatch.setattr(pa, "_git_head", lambda: "deadbeef")
+    import src.evals.assessment.reporting as reporting
+
+    monkeypatch.setattr(reporting, "git_head", lambda: "deadbeef")
 
     result = pa.run_assessment(
         artifact_dir=tmp_path / "evals",
@@ -246,13 +252,15 @@ def test_run_assessment_dedup_invalidates_when_dataset_file_changes(monkeypatch,
     )
     monkeypatch.setattr(
         pa,
-        "_evaluate_retrieval",
+        "evaluate_retrieval",
         lambda dataset, top_k, retrieval_options=None: (
             [],
             {"query_count": 1, "hit_rate_at_k": 0.0, "mrr": 0.0, "ndcg_at_k": 0.0},
         ),
     )
-    monkeypatch.setattr(pa, "_git_head", lambda: "deadbeef")
+    import src.evals.assessment.reporting as reporting
+
+    monkeypatch.setattr(reporting, "git_head", lambda: "deadbeef")
 
     first = pa.run_assessment(
         artifact_dir=tmp_path / "evals",

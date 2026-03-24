@@ -109,6 +109,49 @@ def test_evaluation_history_returns_local_runs_only(monkeypatch, tmp_path):
     assert history["runs"][0]["l6_answer_quality_metrics"]["answer_relevancy"]["mean"] == 0.81
 
 
+def test_evaluation_history_handles_null_experiment_config(monkeypatch, tmp_path):
+    evals_dir = tmp_path / "evals"
+    evals_dir.mkdir()
+
+    run_dir = evals_dir / "20260308T101010.123456Z_baseline"
+    run_dir.mkdir()
+    (run_dir / "summary.json").write_text(
+        json.dumps({"status": "ok", "duration_s": 1, "failed_thresholds_count": 0}),
+        encoding="utf-8",
+    )
+    (run_dir / "retrieval_metrics.json").write_text(
+        json.dumps(
+            {
+                "query_count": 1,
+                "hit_rate_at_k": 0.5,
+                "mrr": 0.4,
+                "ndcg_at_k": 0.3,
+                "latency_p50_ms": 10,
+                "latency_p95_ms": 20,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "experiment": {"index_config_hash": "idx-null"},
+                "config": {"experiment_config": None},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(evaluation, "EVALS_DIR", evals_dir)
+    monkeypatch.setattr(evaluation, "LATEST_POINTER", evals_dir / "latest_run.txt")
+
+    history = evaluation.get_evaluation_history(limit=10)
+
+    assert history["runs"][0]["experiment_name"] is None
+    assert history["runs"][0]["variant_name"] is None
+    assert history["runs"][0]["index_config_hash"] == "idx-null"
+
+
 def test_evaluation_history_excludes_incomplete_and_zero_query_runs(monkeypatch, tmp_path):
     evals_dir = tmp_path / "evals"
     evals_dir.mkdir()

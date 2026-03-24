@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import type { ChatSource, Message, SourceDomainType } from '$lib/types';
+	import AppShell from '$lib/components/AppShell.svelte';
 	import PipelinePanel from '$lib/components/PipelinePanel.svelte';
 	import ConfidenceBadge from '$lib/components/ConfidenceBadge.svelte';
 	import SourceQualityIndicator from '$lib/components/SourceQualityIndicator.svelte';
@@ -301,17 +302,8 @@
 	}
 </script>
 
+<AppShell current="/" wide={true}>
 <div class="chat-container">
-	<nav class="nav-bar">
-		<a href="/" class="nav-link active">Chat</a>
-		<a href="/eval" class="nav-link">Pipeline Eval</a>
-		<a href="/docs/pipeline" class="nav-link">Pipeline Docs</a>
-		<a href="https://github.com/anomalyco/qna_medical_referenced" target="_blank" rel="noopener noreferrer" class="nav-github-link" aria-label="View on GitHub">
-			<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-				<path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-			</svg>
-		</a>
-	</nav>
 	<header>
 		<div class="header-left">
 			<h1>Health Screening Q&A</h1>
@@ -484,61 +476,15 @@
 		{/if}
 	{/if}
 </div>
+</AppShell>
 
 <style>
 	.chat-container {
-		max-width: 1400px;
 		width: 100%;
-		margin: 0 auto;
-		height: 100vh;
+		min-height: calc(100vh - 8rem);
 		display: flex;
 		flex-direction: column;
-		padding: 1rem;
-		box-sizing: border-box;
-	}
-
-	.nav-bar {
-		display: flex;
 		gap: 1rem;
-		margin-bottom: 1rem;
-		padding-bottom: 0.5rem;
-		border-bottom: 1px solid #eee;
-	}
-
-	.nav-link {
-		padding: 0.5rem 1rem;
-		text-decoration: none;
-		color: #666;
-		border-radius: 4px;
-		font-weight: 500;
-	}
-
-	.nav-link:hover {
-		background: #f0f0f0;
-	}
-
-	.nav-link.active {
-		background: #e3f2fd;
-		color: #1976d2;
-	}
-
-	.nav-github-link {
-		margin-left: auto;
-		display: flex;
-		align-items: center;
-		padding: 0.5rem;
-		color: #666;
-		border-radius: 4px;
-	}
-
-	.nav-github-link:hover {
-		background: #f0f0f0;
-		color: #333;
-	}
-
-	.nav-github-link svg {
-		width: 20px;
-		height: 20px;
 	}
 
 	header {
@@ -557,7 +503,7 @@
 	}
 
 	header h1 {
-		font-size: 1.5rem;
+		font-size: 1.85rem;
 		margin: 0;
 	}
 
@@ -577,21 +523,24 @@
 	}
 
 	header button {
-		padding: 0.5rem 1rem;
-		background: #f0f0f0;
-		border: none;
-		border-radius: 4px;
+		padding: 0.65rem 0.95rem;
+		background: white;
+		border: 1px solid var(--border-color);
+		border-radius: 999px;
 		cursor: pointer;
 	}
 
 	header button:hover {
-		background: #e0e0e0;
+		background: var(--surface-subtle);
 	}
 
 	.messages {
 		flex: 1;
 		overflow-y: auto;
-		padding: 1rem 0;
+		padding: 1rem;
+		border: 1px solid var(--border-color);
+		border-radius: 18px;
+		background: white;
 	}
 
 	.welcome {
@@ -895,18 +844,21 @@
 	.input-area {
 		display: flex;
 		gap: 0.5rem;
-		padding-top: 1rem;
-		border-top: 1px solid #eee;
+		padding: 1rem;
+		border: 1px solid var(--border-color);
+		border-radius: 18px;
+		background: white;
 	}
 
 	.input-area textarea {
 		flex: 1;
 		padding: 0.75rem;
-		border: 1px solid #ddd;
-		border-radius: 8px;
+		border: 1px solid var(--border-color);
+		border-radius: 14px;
 		resize: none;
 		font-family: inherit;
 		font-size: 1rem;
+		background: var(--surface-subtle);
 	}
 
 	.input-area textarea:focus {
@@ -916,10 +868,10 @@
 
 	.input-area button {
 		padding: 0.75rem 1.5rem;
-		background: #2196f3;
+		background: #1f4f82;
 		color: white;
 		border: none;
-		border-radius: 8px;
+		border-radius: 999px;
 		cursor: pointer;
 		font-weight: 500;
 	}

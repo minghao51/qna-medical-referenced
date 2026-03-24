@@ -33,6 +33,36 @@ def _provided_flags(argv: list[str]) -> set[str]:
     return flags
 
 
+def _print_assessment_result(result: Any, baseline_result: Any = None) -> None:
+    print(f"Evaluation complete: {result.run_dir}")
+    print(f"Status: {result.status}")
+    dedup = dict(result.summary.get("dedup") or {})
+    if dedup.get("reused_existing_run"):
+        print(f"Reused existing run: {dedup.get('matched_run_dir') or result.run_dir}")
+    elif dedup.get("force_rerun"):
+        print("Dedup bypassed: force rerun")
+    if result.failed_thresholds:
+        print(f"Threshold failures: {len(result.failed_thresholds)}")
+    if baseline_result is not None:
+        baseline_metrics = baseline_result.summary.get("retrieval_metrics", {})
+        delta = compute_retrieval_delta(
+            baseline_metrics, result.summary.get("retrieval_metrics", {})
+        )
+        comparison_path = result.run_dir / "comparison_to_baseline.json"
+        comparison_path.write_text(
+            json.dumps(
+                {
+                    "baseline_run_dir": str(baseline_result.run_dir),
+                    "baseline_name": None,
+                    "delta": delta,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        print(f"Baseline delta: {comparison_path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate ingestion + retrieval pipeline quality")
     parser.add_argument("--config", default=None, help="Versioned experiment YAML path")
@@ -96,12 +126,17 @@ def main() -> None:
     provided_flags = _provided_flags(sys.argv[1:])
 
     diversity_sweep = {
-        "mmr_lambda_values": _parse_csv_floats(args.sweep_mmr_lambdas),
-        "overfetch_multipliers": _parse_csv_ints(args.sweep_overfetch_multipliers),
-        "max_chunks_per_source_page_values": _parse_csv_ints(args.sweep_max_chunks_per_source_page),
-        "max_chunks_per_source_values": _parse_csv_ints(args.sweep_max_chunks_per_source),
+        k: v
+        for k, v in {
+            "mmr_lambda_values": _parse_csv_floats(args.sweep_mmr_lambdas),
+            "overfetch_multipliers": _parse_csv_ints(args.sweep_overfetch_multipliers),
+            "max_chunks_per_source_page_values": _parse_csv_ints(
+                args.sweep_max_chunks_per_source_page
+            ),
+            "max_chunks_per_source_values": _parse_csv_ints(args.sweep_max_chunks_per_source),
+        }.items()
+        if v is not None
     }
-    diversity_sweep = {k: v for k, v in diversity_sweep.items() if v is not None}
     retrieval_options: dict[str, Any] = {"search_mode": args.search_mode}
     if args.no_diversification:
         retrieval_options["enable_diversification"] = False
@@ -205,41 +240,14 @@ def main() -> None:
         if args.variant and not args.all_variants:
             specs = specs[-1:]
         baseline_result = None
-        baseline_metrics = None
         exit_code = 0
         for idx, spec in enumerate(specs):
             kwargs = _apply_cli_overrides(build_run_assessment_kwargs(spec))
             result = run_assessment(**kwargs)
-            print(f"Evaluation complete: {result.run_dir}")
-            print(f"Status: {result.status}")
-            dedup = dict(result.summary.get("dedup") or {})
-            if dedup.get("reused_existing_run"):
-                print(f"Reused existing run: {dedup.get('matched_run_dir') or result.run_dir}")
-            elif dedup.get("force_rerun"):
-                print("Dedup bypassed: force rerun")
-            if result.failed_thresholds:
-                print(f"Threshold failures: {len(result.failed_thresholds)}")
+            baseline = baseline_result if idx > 0 else None
+            _print_assessment_result(result, baseline)
             if idx == 0:
                 baseline_result = result
-                baseline_metrics = result.summary.get("retrieval_metrics", {})
-            elif baseline_result and baseline_metrics:
-                delta = compute_retrieval_delta(
-                    baseline_metrics,
-                    result.summary.get("retrieval_metrics", {}),
-                )
-                comparison_path = result.run_dir / "comparison_to_baseline.json"
-                comparison_path.write_text(
-                    json.dumps(
-                        {
-                            "baseline_run_dir": str(baseline_result.run_dir),
-                            "baseline_name": specs[0]["metadata"]["name"],
-                            "delta": delta,
-                        },
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-                print(f"Baseline delta: {comparison_path}")
             if result.status == "failed":
                 exit_code = 1
         raise SystemExit(exit_code)
@@ -273,15 +281,7 @@ def main() -> None:
         run_diversity_sweep=args.run_diversity_sweep,
         diversity_sweep=diversity_sweep,
     )
-    print(f"Evaluation complete: {result.run_dir}")
-    print(f"Status: {result.status}")
-    dedup = dict(result.summary.get("dedup") or {})
-    if dedup.get("reused_existing_run"):
-        print(f"Reused existing run: {dedup.get('matched_run_dir') or result.run_dir}")
-    elif dedup.get("force_rerun"):
-        print("Dedup bypassed: force rerun")
-    if result.failed_thresholds:
-        print(f"Threshold failures: {len(result.failed_thresholds)}")
+    _print_assessment_result(result)
     raise SystemExit(1 if result.status == "failed" else 0)
 
 

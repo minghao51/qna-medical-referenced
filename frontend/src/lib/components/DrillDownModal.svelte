@@ -1,5 +1,6 @@
 <script lang="ts">
 	import MetricChart from '$lib/components/MetricChart.svelte';
+	import type { DrillDownPoint, DrillDownRecord } from '$lib/types';
 
 	type Props = {
 		open: boolean;
@@ -7,8 +8,8 @@
 		metric: string;
 		stage: string;
 		currentValue: number;
-		records: Array<any>;
-		historicalData?: Array<{ timestamp: string; value: number }>;
+		records: DrillDownRecord[];
+		historicalData?: DrillDownPoint[];
 	};
 
 	let { open, onclose, metric, stage, currentValue, records, historicalData }: Props = $props();

@@ -157,13 +157,13 @@ class Settings(BaseSettings):
     Environment variable: DATA_DIR
     """
 
-    vector_dir: str = "data/vectors"
-    """Directory for persistent ChromaDB vector storage.
+    chroma_persist_directory: str = "data/chroma"
+    """Directory for persistent ChromaDB storage.
 
-    Default: "data/vectors"
-    Contains the vector index and metadata. Must be preserved between runs.
+    Default: "data/chroma"
+    Contains the ChromaDB persistent database files. Must be preserved between runs.
 
-    Environment variable: VECTOR_DIR
+    Environment variable: CHROMA_PERSIST_DIRECTORY
     """
 
     chroma_persist_directory: str = "data/chroma"
@@ -350,6 +350,53 @@ class Settings(BaseSettings):
     Environment variable: HYPE_QUESTIONS_PER_CHUNK
     """
 
+    # Retrieval Configuration
+    retrieval_overfetch_multiplier: int = 4
+    """Multiplier for overfetching candidates before diversification.
+
+    Default: 4 (fetch 4x top_k candidates)
+    Higher values improve diversity but increase latency.
+
+    Environment variable: RETRIEVAL_OVERFETCH_MULTIPLIER
+    """
+
+    max_chunks_per_source_page: int = 2
+    """Maximum chunks to return from the same source page.
+
+    Default: 2
+    Prevents dominance by a single page.
+
+    Environment variable: MAX_CHUNKS_PER_SOURCE_PAGE
+    """
+
+    max_chunks_per_source: int = 3
+    """Maximum chunks to return from the same source.
+
+    Default: 3
+    Prevents dominance by a single source document.
+
+    Environment variable: MAX_CHUNKS_PER_SOURCE
+    """
+
+    mmr_lambda: float = 0.75
+    """MMR (Maximal Marginal Relevance) lambda parameter.
+
+    Default: 0.75
+    Range: 0.0-1.0
+    Higher values prioritize relevance, lower values prioritize diversity.
+
+    Environment variable: MMR_LAMBDA
+    """
+
+    rrf_search_mode: str = "rrf_hybrid"
+    """Default search mode for retrieval.
+
+    Options: rrf_hybrid, semantic_only, bm25_only
+    Default: rrf_hybrid (combines semantic and keyword search)
+
+    Environment variable: RRF_SEARCH_MODE
+    """
+
     @property
     def is_development(self) -> bool:
         return self.environment.strip().lower() in {"development", "dev", "local", "test"}
@@ -357,6 +404,11 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def vector_dir(self) -> str:
+        """Backward-compatible alias for the persisted vector storage path."""
+        return self.chroma_persist_directory
 
 
 settings = Settings()

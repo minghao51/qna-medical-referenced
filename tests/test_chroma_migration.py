@@ -95,7 +95,12 @@ class TestMigrationScript:
             settings=ChromaSettings(allow_reset=True),
         )
         col = client.get_or_create_collection("existing_collection", embedding_function=None)
-        col.add(ids=["already_exists"], embeddings=[[0.1] * 768], documents=["existing"], metadatas=[{"source": "x"}])
+        col.add(
+            ids=["already_exists"],
+            embeddings=[[0.1] * 768],
+            documents=["existing"],
+            metadatas=[{"source": "x"}],
+        )
 
         json_data = {
             "ids": ["new_doc"],

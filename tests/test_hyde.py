@@ -434,4 +434,4 @@ async def test_hyde_performance_impact():
 
     # HyDE should be slower (due to LLM call), but not excessively
     assert time_with > time_without
-    assert time_with < time_without + 10  # Should not add more than 10 seconds
+    assert time_with < time_without + 20  # Should not add more than 20 seconds

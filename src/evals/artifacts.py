@@ -100,10 +100,9 @@ def _candidate_run_dirs(base_dir: Path) -> list[Path]:
             resolved = path.resolve()
         except Exception:
             resolved = path
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        unique.append(path)
+        if resolved not in seen:
+            seen.add(resolved)
+            unique.append(path)
     return unique
 
 

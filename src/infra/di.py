@@ -118,6 +118,7 @@ class ServiceContainer:
         self.vector_store_config = {}
         # Also reset the VectorStoreFactory
         from src.ingestion.indexing.vector_store import VectorStoreFactory
+
         VectorStoreFactory.reset()
 
 
