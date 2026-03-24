@@ -166,6 +166,33 @@ class Settings(BaseSettings):
     Environment variable: VECTOR_DIR
     """
 
+    chroma_persist_directory: str = "data/chroma"
+    """Directory for persistent ChromaDB storage.
+
+    Default: "data/chroma"
+    Contains the ChromaDB persistent database files. Must be preserved between runs.
+
+    Environment variable: CHROMA_PERSIST_DIRECTORY
+    """
+
+    retrieval_overfetch_multiplier: int = 4
+    """Multiplier used to overfetch retrieval candidates before reranking."""
+
+    max_chunks_per_source_page: int = 2
+    """Maximum retrieved chunks allowed from the same source page."""
+
+    max_chunks_per_source: int = 3
+    """Maximum retrieved chunks allowed from the same source document."""
+
+    mmr_lambda: float = 0.75
+    """MMR relevance/diversity tradeoff used during retrieval diversification."""
+
+    rrf_search_mode: str = "rrf_hybrid"
+    """Default retrieval search mode.
+
+    Supported values: rrf_hybrid, semantic_only, bm25_only.
+    """
+
     # Chat Configuration
     max_message_length: int = 2000
     """Maximum message length in characters.

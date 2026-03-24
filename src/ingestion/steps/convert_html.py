@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlsplit, urlunsplit
@@ -44,21 +45,66 @@ except Exception:  # pragma: no cover - optional dependency
     readability = None
 
 
-HTML_EXTRACTOR_STRATEGY = "trafilatura_bs"
-EXTRACTOR_CHAIN_DEPTH: int | None = None
+@dataclass
+class HTMLProcessorConfig:
+    """HTML processing configuration."""
+
+    extractor_strategy: str = "trafilatura_bs"
+    chain_depth: int | None = None
+    page_classification_enabled: bool = True
+    extractor_mode: str = "auto"
+
+    def set_extractor_strategy(self, strategy: str) -> None:
+        """Set the HTML extractor strategy."""
+        valid = {
+            "trafilatura_bs",
+            "html2md_trafilatura_bs",
+            "readability_bs",
+            "full_cascade",
+        }
+        self.extractor_strategy = strategy if strategy in valid else "trafilatura_bs"
+
+
+# Global configuration instance
+_html_config = HTMLProcessorConfig()
 
 
 def set_html_extractor_strategy(strategy: str) -> None:
+    """Set the HTML extractor strategy."""
+    _html_config.set_extractor_strategy(strategy)
+    # Update global for backwards compatibility
     global HTML_EXTRACTOR_STRATEGY
-    valid = {
-        "trafilatura_bs",
-        "html2md_trafilatura_bs",
-        "readability_bs",
-        "full_cascade",
-    }
-    HTML_EXTRACTOR_STRATEGY = strategy if strategy in valid else "trafilatura_bs"
+    HTML_EXTRACTOR_STRATEGY = _html_config.extractor_strategy
 
 
+def set_html_extractor_mode(mode: str) -> None:
+    """Set the HTML extractor mode."""
+    normalized = str(mode or "auto").strip().lower()
+    if normalized not in {"auto", "primary_only", "fallback_only"}:
+        normalized = "auto"
+    _html_config.extractor_mode = normalized
+    # Update global for backwards compatibility
+    global HTML_EXTRACTOR_MODE
+    HTML_EXTRACTOR_MODE = normalized
+
+
+def set_page_classification_enabled(enabled: bool) -> None:
+    """Enable or disable page classification."""
+    normalized = bool(enabled)
+    _html_config.page_classification_enabled = normalized
+    # Update global for backwards compatibility
+    global PAGE_CLASSIFICATION_ENABLED
+    PAGE_CLASSIFICATION_ENABLED = normalized
+
+
+def get_html_processor_config() -> HTMLProcessorConfig:
+    """Get the current HTML processor configuration."""
+    return _html_config
+
+
+# Backwards compatibility
+HTML_EXTRACTOR_STRATEGY = "trafilatura_bs"
+EXTRACTOR_CHAIN_DEPTH: int | None = None
 DATA_DIR = DATA_RAW_DIR
 PAGE_CLASSIFICATION_ENABLED = True
 HTML_EXTRACTOR_MODE = "auto"
@@ -420,19 +466,6 @@ def convert_html_to_md(
     persist_source_artifact(artifact)
     md_path.write_text(markdown_content, encoding="utf-8")
     return md_path
-
-
-def set_page_classification_enabled(enabled: bool) -> None:
-    global PAGE_CLASSIFICATION_ENABLED
-    PAGE_CLASSIFICATION_ENABLED = bool(enabled)
-
-
-def set_html_extractor_mode(mode: str) -> None:
-    global HTML_EXTRACTOR_MODE
-    normalized = str(mode or "auto").strip().lower()
-    if normalized not in {"auto", "primary_only", "fallback_only"}:
-        normalized = "auto"
-    HTML_EXTRACTOR_MODE = normalized
 
 
 def _bs_fallback_extract(html_content: str) -> dict[str, Any]:
