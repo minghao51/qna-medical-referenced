@@ -2,15 +2,70 @@
 
 import argparse
 import json
+import logging
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any
 
 from src.evals import run_assessment
+from src.evals.schemas import AssessmentResult
 from src.experiments import (
     build_run_assessment_kwargs,
     compute_retrieval_delta,
     resolve_experiment_runs,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _run_single_variant(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Run one variant assessment. Top-level function for ProcessPoolExecutor."""
+    result = run_assessment(**kwargs)
+    return {
+        "run_dir": str(result.run_dir),
+        "status": result.status,
+        "failed_thresholds": result.failed_thresholds,
+        "summary": result.summary,
+    }
+
+
+def _run_variants_parallel(
+    specs: list[dict[str, Any]],
+    cli_overrides_fn,
+    max_workers: int,
+) -> list[tuple[int, dict[str, Any]]]:
+    """Run multiple variants in parallel using ProcessPoolExecutor.
+
+    Returns list of (index, result_dict) tuples ordered by completion.
+    """
+    results: list[tuple[int, dict[str, Any]]] = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_idx = {}
+        for idx, spec in enumerate(specs):
+            kwargs = cli_overrides_fn(build_run_assessment_kwargs(spec))
+            future = executor.submit(_run_single_variant, kwargs)
+            future_to_idx[future] = idx
+
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                result = future.result()
+                results.append((idx, result))
+            except Exception as e:
+                logger.error(f"Variant {idx} failed: {e}")
+                results.append(
+                    (
+                        idx,
+                        {
+                            "run_dir": None,
+                            "status": "failed",
+                            "failed_thresholds": [],
+                            "summary": {"error": str(e)},
+                        },
+                    )
+                )
+
+    return results
 
 
 def _parse_csv_floats(value: str | None) -> list[float] | None:
@@ -108,11 +163,22 @@ def main() -> None:
     )
     parser.add_argument("--no-diversification", action="store_true")
     parser.add_argument("--enable-hyde", action="store_true", help="Enable HyDE query expansion")
+    parser.add_argument(
+        "--enable-reranking", action="store_true", help="Enable cross-encoder reranking"
+    )
+    parser.add_argument(
+        "--reranking-mode",
+        default="cross_encoder",
+        choices=["cross_encoder", "mmr", "both"],
+        help="Reranking strategy",
+    )
     parser.add_argument("--mmr-lambda", type=float, default=None)
     parser.add_argument("--overfetch-multiplier", type=int, default=None)
     parser.add_argument("--max-chunks-per-source-page", type=int, default=None)
     parser.add_argument("--max-chunks-per-source", type=int, default=None)
     parser.add_argument("--run-retrieval-ablations", action="store_true")
+    parser.add_argument("--run-hype-ablations", action="store_true")
+    parser.add_argument("--run-reranking-ablations", action="store_true")
     parser.add_argument("--run-diversity-sweep", action="store_true")
     parser.add_argument(
         "--sweep-mmr-lambdas", default=None, help="Comma-separated, e.g. 0.5,0.75,0.9"
@@ -122,6 +188,17 @@ def main() -> None:
         "--sweep-max-chunks-per-source-page", default=None, help="Comma-separated ints"
     )
     parser.add_argument("--sweep-max-chunks-per-source", default=None, help="Comma-separated ints")
+    parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help="Run variants in parallel using ProcessPoolExecutor",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=None,
+        help="Max parallel workers (default: number of variants)",
+    )
     args = parser.parse_args()
     provided_flags = _provided_flags(sys.argv[1:])
 
@@ -150,6 +227,10 @@ def main() -> None:
         retrieval_options["max_chunks_per_source_page"] = args.max_chunks_per_source_page
     if args.max_chunks_per_source is not None:
         retrieval_options["max_chunks_per_source"] = args.max_chunks_per_source
+    if "--enable-reranking" in provided_flags:
+        retrieval_options["enable_reranking"] = True
+    if "--reranking-mode" in provided_flags:
+        retrieval_options["reranking_mode"] = args.reranking_mode
 
     def _apply_cli_overrides(kwargs: dict[str, Any]) -> dict[str, Any]:
         merged = dict(kwargs)
@@ -198,6 +279,14 @@ def main() -> None:
                 "run_retrieval_ablations",
                 args.run_retrieval_ablations,
             ),
+            "--run-hype-ablations": (
+                "run_hype_ablations",
+                args.run_hype_ablations,
+            ),
+            "--run-reranking-ablations": (
+                "run_reranking_ablations",
+                args.run_reranking_ablations,
+            ),
             "--run-diversity-sweep": ("run_diversity_sweep", args.run_diversity_sweep),
         }
         for flag, (key, value) in bool_overrides.items():
@@ -239,17 +328,48 @@ def main() -> None:
         )
         if args.variant and not args.all_variants:
             specs = specs[-1:]
-        baseline_result = None
         exit_code = 0
-        for idx, spec in enumerate(specs):
-            kwargs = _apply_cli_overrides(build_run_assessment_kwargs(spec))
-            result = run_assessment(**kwargs)
-            baseline = baseline_result if idx > 0 else None
-            _print_assessment_result(result, baseline)
-            if idx == 0:
-                baseline_result = result
-            if result.status == "failed":
-                exit_code = 1
+
+        if args.parallel and len(specs) > 1:
+            max_workers = args.max_workers or min(len(specs), 4)
+            print(f"Running {len(specs)} variants in parallel with {max_workers} workers...")
+
+            completed = _run_variants_parallel(
+                specs,
+                _apply_cli_overrides,
+                max_workers=max_workers,
+            )
+
+            # Sort by original order and print results
+            completed.sort(key=lambda x: x[0])
+            baseline_result = None
+            for idx, result_dict in completed:
+                spec = specs[idx]
+                variant_name = spec.get("variant_name") or spec.get("metadata", {}).get(
+                    "name", "base"
+                )
+                print(f"\n--- Variant {idx}: {variant_name} ---")
+                print(f"Status: {result_dict['status']}")
+                if result_dict.get("run_dir"):
+                    print(f"Run dir: {result_dict['run_dir']}")
+                failures = result_dict.get("failed_thresholds", [])
+                if failures:
+                    print(f"Threshold failures: {len(failures)}")
+                if result_dict["status"] == "failed":
+                    exit_code = 1
+                if baseline_result is None:
+                    baseline_result = result_dict
+        else:
+            baseline_result = None
+            for idx, spec in enumerate(specs):
+                kwargs = _apply_cli_overrides(build_run_assessment_kwargs(spec))
+                result = run_assessment(**kwargs)
+                baseline: AssessmentResult | None = baseline_result if idx > 0 else None
+                _print_assessment_result(result, baseline)
+                if idx == 0:
+                    baseline_result = result
+                if result.status == "failed":
+                    exit_code = 1
         raise SystemExit(exit_code)
 
     result = run_assessment(

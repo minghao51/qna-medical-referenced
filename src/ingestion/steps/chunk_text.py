@@ -5,6 +5,7 @@ from src.ingestion.steps.chunking import (
     TextChunker,
     chunk_documents,
     get_source_chunk_configs,
+    set_auto_select_strategy,
     set_source_chunk_configs,
     set_structured_chunking_enabled,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "TextChunker",
     "chunk_documents",
     "get_source_chunk_configs",
+    "set_auto_select_strategy",
     "set_source_chunk_configs",
     "set_structured_chunking_enabled",
 ]

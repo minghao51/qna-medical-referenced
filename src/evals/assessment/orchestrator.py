@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -31,7 +32,14 @@ from .l6_contract import (
     SUMMARY_L6_STATUS_KEY,
 )
 from .reporting import git_head, render_summary, sha256_file
-from .retrieval_eval import evaluate_retrieval, run_diversity_sweep, run_retrieval_ablations
+from .retrieval_eval import (
+    evaluate_retrieval,
+    run_diversity_sweep,
+    run_hype_ablations,
+    run_hype_ablations_with_reingest,
+    run_reranking_ablations,
+    run_retrieval_ablations,
+)
 from .thresholds import DEFAULT_THRESHOLDS, evaluate_thresholds
 
 __all__ = ["evaluate_answer_quality", "run_assessment"]
@@ -124,6 +132,8 @@ def run_assessment(
     force_rerun: bool = False,
     retrieval_options: dict[str, Any] | None = None,
     run_retrieval_ablations: bool = False,
+    run_hype_ablations: bool = False,
+    run_reranking_ablations: bool = False,
     run_diversity_sweep: bool = False,
     diversity_sweep: dict[str, Any] | None = None,
     experiment_config: dict[str, Any] | None = None,
@@ -148,6 +158,11 @@ def run_assessment(
     initialize_runtime_index_fn: Callable[..., dict[str, Any]] = initialize_runtime_index,
     log_assessment_to_wandb_fn: Callable[..., dict[str, Any]] = log_assessment_to_wandb,
     run_retrieval_ablations_fn: Callable[..., dict[str, Any]] = run_retrieval_ablations,
+    run_hype_ablations_fn: Callable[..., dict[str, Any]] = run_hype_ablations,
+    run_hype_ablations_with_reingest_fn: Callable[
+        ..., dict[str, Any]
+    ] = run_hype_ablations_with_reingest,
+    run_reranking_ablations_fn: Callable[..., dict[str, Any]] = run_reranking_ablations,
     run_diversity_sweep_fn: Callable[..., list[dict[str, Any]]] = run_diversity_sweep,
     render_summary_fn: Callable[..., str] = render_summary,
     sha256_file_fn: Callable[[str | Path | None], str | None] = sha256_file,
@@ -204,6 +219,8 @@ def run_assessment(
         disable_bm25=disable_bm25,
         export_failed_generations=export_failed_generations,
         run_retrieval_ablations=run_retrieval_ablations,
+        run_hype_ablations=run_hype_ablations,
+        run_reranking_ablations=run_reranking_ablations,
         run_diversity_sweep=run_diversity_sweep,
         diversity_sweep=dict(diversity_sweep or {}),
         experiment_config=experiment_config,
@@ -363,6 +380,43 @@ def run_assessment(
         retrieval_ablations = run_retrieval_ablations_fn(
             dataset, config.top_k, base_options=config.retrieval_options
         )
+    hype_ablations: dict[str, Any] = {}
+    if config.run_hype_ablations:
+        if config.experiment_config:
+
+            def _rebuild_hype_index(hype_config, collection_name):
+                os.environ["HYPE_ENABLED"] = str(hype_config["enable_hype"]).lower()
+                os.environ["HYPE_SAMPLE_RATE"] = str(hype_config["hype_sample_rate"])
+                os.environ["HYPE_QUESTIONS_PER_CHUNK"] = str(
+                    hype_config["hype_questions_per_chunk"]
+                )
+                os.environ["COLLECTION_NAME"] = collection_name
+
+                exp = dict(config.experiment_config or {})
+                embedding_index = dict(exp.get("embedding_index", {}))
+                embedding_index["collection_name"] = collection_name
+                exp["embedding_index"] = embedding_index
+                configure_runtime_for_experiment_fn(exp)
+                initialize_runtime_index_fn(
+                    rebuild=True, materialize_html=True, force_html_reconvert=True
+                )
+
+            hype_ablations = run_hype_ablations_with_reingest_fn(
+                dataset,
+                config.top_k,
+                base_options=config.retrieval_options,
+                base_collection_name=l5_collection_name,
+                reconfigure_and_rebuild_fn=_rebuild_hype_index,
+            )
+        else:
+            hype_ablations = run_hype_ablations_fn(
+                dataset, config.top_k, base_options=config.retrieval_options
+            )
+    reranking_ablations: dict[str, Any] = {}
+    if config.run_reranking_ablations:
+        reranking_ablations = run_reranking_ablations_fn(
+            dataset, config.top_k, base_options=config.retrieval_options
+        )
     diversity_sweep_rows: list[dict[str, Any]] = []
     if config.run_diversity_sweep:
         diversity_sweep_rows = run_diversity_sweep_fn(
@@ -455,7 +509,11 @@ def run_assessment(
         "index_only_classified_pages": index_metadata.get("index_only_classified_pages"),
         "html_extractor_mode": index_metadata.get("html_extractor_mode"),
         "structured_chunking_enabled": index_metadata.get("structured_chunking_enabled"),
-        "source_chunk_configs": index_metadata.get("source_chunk_configs"),
+        "source_chunk_configs": (
+            (lambda v: json.loads(v) if isinstance(v, str) else v)(
+                index_metadata.get("source_chunk_configs")
+            )
+        ),
         "observed_embedding_dim": l5_agg.get("embedding_dim"),
         "indexing_stats": index_preparation.get("indexing_stats", {}),
     }
@@ -483,6 +541,8 @@ def run_assessment(
     store.write_jsonl("retrieval_results.jsonl", retrieval_rows)
     store.write_json("retrieval_metrics.json", retrieval_metrics)
     store.write_json("retrieval_ablations.json", retrieval_ablations)
+    store.write_json("hype_ablations.json", hype_ablations)
+    store.write_json("reranking_ablations.json", reranking_ablations)
     store.write_json("retrieval_diversity_sweep.json", diversity_sweep_rows)
     store.write_jsonl(L6_ANSWER_QUALITY_ROWS, l6_answer_quality_rows)
     store.write_json(L6_ANSWER_QUALITY_METRICS, l6_answer_quality_metrics)
@@ -492,6 +552,8 @@ def run_assessment(
         "duration_s": round(time.time() - start, 3),
         "retrieval_metrics": retrieval_metrics,
         "retrieval_ablations": retrieval_ablations,
+        "hype_ablations": hype_ablations,
+        "reranking_ablations": reranking_ablations,
         "retrieval_diversity_sweep_top": diversity_sweep_rows[:5],
         SUMMARY_L6_METRICS_KEY: l6_answer_quality_metrics,
         SUMMARY_L6_ENABLED_KEY: bool(config.include_answer_eval),

@@ -17,6 +17,7 @@ from src.ingestion.indexing.vector_store import (
 from src.ingestion.steps.chunk_text import (
     chunk_documents,
     get_source_chunk_configs,
+    set_auto_select_strategy,
     set_source_chunk_configs,
     set_structured_chunking_enabled,
 )
@@ -85,6 +86,9 @@ class RetrievalDiversityConfig:
     enable_hyde: bool = False
     hyde_max_length: int = 200  # Maximum length for HyDE hypothetical answers
     enable_hype: bool = False  # Use pre-stored HyPE questions at retrieval time
+    enable_reranking: bool = False  # Enable cross-encoder reranking
+    rerank_top_k: int | None = None  # Candidates to fetch before reranking (None = auto)
+    reranking_mode: str = "cross_encoder"  # cross_encoder, mmr, or both
 
 
 def get_runtime_retrieval_config() -> dict[str, Any]:
@@ -121,7 +125,20 @@ def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> Retrie
     cfg.enable_hyde = bool(cfg.enable_hyde)
     cfg.hyde_max_length = max(50, min(500, int(cfg.hyde_max_length)))
     cfg.enable_hype = bool(cfg.enable_hype) or bool(getattr(settings, "hype_enabled", False))
+    cfg.enable_reranking = bool(cfg.enable_reranking) or bool(
+        getattr(settings, "enable_reranking", False)
+    )
+    cfg.reranking_mode = str(
+        cfg.reranking_mode or getattr(settings, "reranking_mode", "cross_encoder")
+    ).lower()
+    if cfg.reranking_mode not in {"cross_encoder", "mmr", "both"}:
+        cfg.reranking_mode = "cross_encoder"
     return cfg
+
+
+def _should_apply_diversification(cfg: RetrievalDiversityConfig) -> bool:
+    """Apply MMR/diversity only when enabled and requested by the reranking mode."""
+    return cfg.enable_diversification and cfg.reranking_mode in {"mmr", "both"}
 
 
 def _dedupe_queries(queries: list[str]) -> list[str]:
@@ -327,6 +344,7 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
     set_pdf_table_extractor(ingestion.get("pdf_table_extractor", "heuristic"))
     set_structured_chunking_enabled(ingestion.get("structured_chunking_enabled", True))
     set_source_chunk_configs(ingestion.get("source_chunk_configs"))
+    set_auto_select_strategy(ingestion.get("auto_select_chunk_strategy", False))
     vector_config = {
         "collection_name": embedding_index.get("collection_name", settings.collection_name),
         "semantic_weight": embedding_index.get("semantic_weight", 0.6),
@@ -356,7 +374,7 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
             "pdf_extractor_strategy": ingestion.get("pdf_extractor_strategy", "pypdf_pdfplumber"),
             "pdf_table_extractor": ingestion.get("pdf_table_extractor", "heuristic"),
             "structured_chunking_enabled": ingestion.get("structured_chunking_enabled", True),
-            "source_chunk_configs": get_source_chunk_configs(),
+            "source_chunk_configs": json.dumps(get_source_chunk_configs()),
         },
     }
     set_vector_store_runtime_config(vector_config)
@@ -544,6 +562,18 @@ def retrieve_context(
         cfg.search_mode,
         pre_expanded_queries=expanded_queries,
     )
+    if cfg.enable_reranking and cfg.reranking_mode in {"cross_encoder", "both"}:
+        from src.rag.reranker import get_reranker
+
+        reranker = get_reranker()
+        rerank_candidates_count = cfg.rerank_top_k or fetch_k
+        candidates = (
+            results[:rerank_candidates_count] if rerank_candidates_count < len(results) else results
+        )
+        rerank_result = reranker.rerank(query=query, results=candidates, top_k=fetch_k)
+        results = rerank_result.reranked_results
+
+    apply_diversification = _should_apply_diversification(cfg)
     results = _diversify_results(
         results,
         top_k=top_k,
@@ -551,7 +581,7 @@ def retrieve_context(
         overfetch_multiplier=cfg.overfetch_multiplier,
         max_chunks_per_source_page=cfg.max_chunks_per_source_page,
         max_chunks_per_source=cfg.max_chunks_per_source,
-        enable_diversification=cfg.enable_diversification,
+        enable_diversification=apply_diversification,
     )
 
     context, _, chat_sources = build_context_and_sources(results)
@@ -598,6 +628,20 @@ def retrieve_context_with_trace(
         cfg.search_mode,
         pre_expanded_queries=expanded_queries,
     )
+
+    rerank_result = None
+    if cfg.enable_reranking and cfg.reranking_mode in {"cross_encoder", "both"}:
+        from src.rag.reranker import get_reranker
+
+        reranker = get_reranker()
+        rerank_candidates_count = cfg.rerank_top_k or fetch_k
+        candidates = (
+            results[:rerank_candidates_count] if rerank_candidates_count < len(results) else results
+        )
+        rerank_result = reranker.rerank(query=query, results=candidates, top_k=fetch_k)
+        results = rerank_result.reranked_results
+
+    apply_diversification = _should_apply_diversification(cfg)
     results = _diversify_results(
         results,
         top_k=top_k,
@@ -605,12 +649,20 @@ def retrieve_context_with_trace(
         overfetch_multiplier=cfg.overfetch_multiplier,
         max_chunks_per_source_page=cfg.max_chunks_per_source_page,
         max_chunks_per_source=cfg.max_chunks_per_source,
-        enable_diversification=cfg.enable_diversification,
+        enable_diversification=apply_diversification,
     )
 
     retrieved_docs = _build_retrieved_documents(results)
 
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
+    rerank_info = {}
+    if rerank_result is not None:
+        rerank_info = {
+            "reranker_model": rerank_result.model_name,
+            "rerank_timing_ms": rerank_result.timing_ms,
+            "rerank_candidates": rerank_result.candidates_count,
+            "rerank_output": rerank_result.output_count,
+        }
     retrieval_stage = RetrievalStage(
         query=query,
         top_k=top_k,
@@ -621,11 +673,14 @@ def retrieve_context_with_trace(
             "query_embedding_timing_ms": retrieval_trace.get("query_embedding_timing_ms", 0),
             "search_mode": cfg.search_mode,
             "expanded_queries": retrieval_trace.get("expanded_queries", []),
-            "enable_diversification": cfg.enable_diversification,
+            "enable_diversification": apply_diversification,
             "mmr_lambda": cfg.mmr_lambda,
             "overfetch_multiplier": cfg.overfetch_multiplier,
             "max_chunks_per_source_page": cfg.max_chunks_per_source_page,
             "max_chunks_per_source": cfg.max_chunks_per_source,
+            "enable_reranking": cfg.enable_reranking,
+            "reranking_mode": cfg.reranking_mode,
+            **rerank_info,
         },
         timing_ms=retrieval_timing_ms,
     )
@@ -773,6 +828,19 @@ async def retrieve_context_with_trace_async(
 
     # Step 3: Reranking/Diversification
     reranking_start = time.time()
+    rerank_result = None
+    if cfg.enable_reranking and cfg.reranking_mode in {"cross_encoder", "both"}:
+        from src.rag.reranker import get_reranker
+
+        reranker = get_reranker()
+        rerank_candidates_count = cfg.rerank_top_k or fetch_k
+        candidates = (
+            results[:rerank_candidates_count] if rerank_candidates_count < len(results) else results
+        )
+        rerank_result = reranker.rerank(query=query, results=candidates, top_k=fetch_k)
+        results = rerank_result.reranked_results
+
+    apply_diversification = _should_apply_diversification(cfg)
     results = _diversify_results(
         results,
         top_k=top_k,
@@ -780,7 +848,7 @@ async def retrieve_context_with_trace_async(
         overfetch_multiplier=cfg.overfetch_multiplier,
         max_chunks_per_source_page=cfg.max_chunks_per_source_page,
         max_chunks_per_source=cfg.max_chunks_per_source,
-        enable_diversification=cfg.enable_diversification,
+        enable_diversification=apply_diversification,
     )
     reranking_timing_ms = int((time.time() - reranking_start) * 1000)
 
@@ -788,10 +856,15 @@ async def retrieve_context_with_trace_async(
         RetrievalStep(
             name="reranking",
             timing_ms=reranking_timing_ms,
-            skipped=not cfg.enable_diversification,
+            skipped=not apply_diversification and not cfg.enable_reranking,
             details={
                 "mmr_lambda": cfg.mmr_lambda,
                 "overfetch_multiplier": cfg.overfetch_multiplier,
+                "enable_diversification": apply_diversification,
+                "enable_reranking": cfg.enable_reranking,
+                "reranking_mode": cfg.reranking_mode,
+                "reranker_model": rerank_result.model_name if rerank_result else None,
+                "rerank_timing_ms": rerank_result.timing_ms if rerank_result else 0,
             },
         )
     )
@@ -799,6 +872,14 @@ async def retrieve_context_with_trace_async(
     retrieved_docs = _build_retrieved_documents(results)
 
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
+    rerank_info = {}
+    if rerank_result is not None:
+        rerank_info = {
+            "reranker_model": rerank_result.model_name,
+            "rerank_timing_ms": rerank_result.timing_ms,
+            "rerank_candidates": rerank_result.candidates_count,
+            "rerank_output": rerank_result.output_count,
+        }
     retrieval_stage = RetrievalStage(
         query=query,
         top_k=top_k,
@@ -809,17 +890,16 @@ async def retrieve_context_with_trace_async(
             "query_embedding_timing_ms": retrieval_trace.get("query_embedding_timing_ms", 0),
             "search_mode": cfg.search_mode,
             "expanded_queries": retrieval_trace.get("expanded_queries", []),
-            "hyde_enabled": retrieval_trace.get("hyde_enabled", False),
-            "hype_enabled": cfg.enable_hype,
-            "selected_hype_questions": selected_hype_questions,
-            "enable_diversification": cfg.enable_diversification,
+            "enable_diversification": apply_diversification,
             "mmr_lambda": cfg.mmr_lambda,
             "overfetch_multiplier": cfg.overfetch_multiplier,
             "max_chunks_per_source_page": cfg.max_chunks_per_source_page,
             "max_chunks_per_source": cfg.max_chunks_per_source,
+            "enable_reranking": cfg.enable_reranking,
+            "reranking_mode": cfg.reranking_mode,
+            **rerank_info,
         },
         timing_ms=retrieval_timing_ms,
-        steps=steps,
     )
 
     context, source_labels, chat_sources = build_context_and_sources(results)

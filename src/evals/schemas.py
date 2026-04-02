@@ -33,6 +33,8 @@ class AssessmentConfig:
     disable_bm25: bool = False
     export_failed_generations: bool = False
     run_retrieval_ablations: bool = False
+    run_hype_ablations: bool = False
+    run_reranking_ablations: bool = False
     run_diversity_sweep: bool = False
     diversity_sweep: dict[str, Any] = field(default_factory=dict)
     experiment_config: dict[str, Any] | None = None

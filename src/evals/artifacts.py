@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import re
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 RUN_INDEX_FILENAME = "run_index.json"
+LOCK_TIMEOUT_SECONDS = 30
 
 
 def _slugify(name: str) -> str:
@@ -55,6 +57,17 @@ def _load_json_file(path: Path) -> dict[str, Any] | None:
 
 def _run_index_path(base_dir: Path) -> Path:
     return Path(base_dir) / RUN_INDEX_FILENAME
+
+
+def _lock_path(base_dir: Path) -> Path:
+    return Path(base_dir) / ".run_index.lock"
+
+
+def _with_file_lock(base_dir: Path):
+    """Context manager for file-based locking on the run index."""
+    lock_file = _lock_path(base_dir)
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    return open(lock_file, "w")
 
 
 def _load_run_index(base_dir: Path) -> dict[str, Any]:
@@ -109,7 +122,14 @@ def _candidate_run_dirs(base_dir: Path) -> list[Path]:
 def write_latest_pointer(base_dir: Path, run_dir: Path) -> Path:
     pointer = Path(base_dir) / "latest_run.txt"
     pointer.parent.mkdir(parents=True, exist_ok=True)
-    pointer.write_text(str(run_dir), encoding="utf-8")
+
+    # Use file locking to prevent races in parallel execution
+    with _with_file_lock(base_dir) as lock_f:
+        try:
+            fcntl.flock(lock_f, fcntl.LOCK_EX)
+            pointer.write_text(str(run_dir), encoding="utf-8")
+        finally:
+            fcntl.flock(lock_f, fcntl.LOCK_UN)
     return pointer
 
 
@@ -120,12 +140,18 @@ def update_run_index(
     run_dir: Path,
     status: str = "completed",
 ) -> Path:
-    payload = _load_run_index(base_dir)
-    payload["entries"][run_identity] = {
-        "run_dir": str(run_dir),
-        "status": status,
-    }
-    return _write_run_index(base_dir, payload)
+    # Use file locking to prevent races in parallel execution
+    with _with_file_lock(base_dir) as lock_f:
+        fcntl.flock(lock_f, fcntl.LOCK_EX)
+        try:
+            payload = _load_run_index(base_dir)
+            payload["entries"][run_identity] = {
+                "run_dir": str(run_dir),
+                "status": status,
+            }
+            return _write_run_index(base_dir, payload)
+        finally:
+            fcntl.flock(lock_f, fcntl.LOCK_UN)
 
 
 def find_reusable_run(base_dir: Path, run_identity: str) -> Path | None:

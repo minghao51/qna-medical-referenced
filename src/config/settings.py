@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     """Alibaba Dashscope API key for Qwen models.
 
     Required for all LLM operations. Obtain from:
-    https://dashscope-intl.aliyuncs.com/
+    https://dashscope-us.aliyuncs.com/
 
     Environment variable: DASHSCOPE_API_KEY
     """
@@ -77,10 +77,10 @@ class Settings(BaseSettings):
     Environment variable: EMBEDDING_BATCH_SIZE
     """
 
-    qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    qwen_base_url: str = "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
     """Qwen API base URL (OpenAI compatible).
 
-    Default: Singapore region (https://dashscope-intl.aliyuncs.com/compatible-mode/v1)
+    Default: US (Virginia) region (https://dashscope-us.aliyuncs.com/compatible-mode/v1)
 
     Environment variable: QWEN_BASE_URL
     """
@@ -155,15 +155,6 @@ class Settings(BaseSettings):
     Contains downloaded HTML/PDF files before processing.
 
     Environment variable: DATA_DIR
-    """
-
-    chroma_persist_directory: str = "data/chroma"
-    """Directory for persistent ChromaDB storage.
-
-    Default: "data/chroma"
-    Contains the ChromaDB persistent database files. Must be preserved between runs.
-
-    Environment variable: CHROMA_PERSIST_DIRECTORY
     """
 
     chroma_persist_directory: str = "data/chroma"
@@ -351,50 +342,63 @@ class Settings(BaseSettings):
     """
 
     # Retrieval Configuration
-    retrieval_overfetch_multiplier: int = 4
-    """Multiplier for overfetching candidates before diversification.
+    # Reranking Configuration
+    reranker_model: str = "BAAI/bge-reranker-base"
+    """Cross-encoder model for reranking retrieval results.
 
-    Default: 4 (fetch 4x top_k candidates)
-    Higher values improve diversity but increase latency.
+    Default: "BAAI/bge-reranker-base"
+    Alternatives: "BAAI/bge-reranker-large", "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-    Environment variable: RETRIEVAL_OVERFETCH_MULTIPLIER
+    Environment variable: RERANKER_MODEL
     """
 
-    max_chunks_per_source_page: int = 2
-    """Maximum chunks to return from the same source page.
+    reranker_batch_size: int = 16
+    """Batch size for cross-encoder inference.
 
-    Default: 2
-    Prevents dominance by a single page.
+    Default: 16
+    Range: 8-32. Larger batches are faster but use more memory.
 
-    Environment variable: MAX_CHUNKS_PER_SOURCE_PAGE
+    Environment variable: RERANKER_BATCH_SIZE
     """
 
-    max_chunks_per_source: int = 3
-    """Maximum chunks to return from the same source.
+    reranker_device: str = "cpu"
+    """Device for cross-encoder model inference.
 
-    Default: 3
-    Prevents dominance by a single source document.
+    Default: "cpu"
+    Options: "cpu", "cuda"
 
-    Environment variable: MAX_CHUNKS_PER_SOURCE
+    Environment variable: RERANKER_DEVICE
     """
 
-    mmr_lambda: float = 0.75
-    """MMR (Maximal Marginal Relevance) lambda parameter.
+    enable_reranking: bool = False
+    """Enable cross-encoder reranking during retrieval.
 
-    Default: 0.75
-    Range: 0.0-1.0
-    Higher values prioritize relevance, lower values prioritize diversity.
+    Default: False
+    When enabled, reranks top-k candidates from the hybrid retriever.
 
-    Environment variable: MMR_LAMBDA
+    Environment variable: ENABLE_RERANKING
     """
 
-    rrf_search_mode: str = "rrf_hybrid"
-    """Default search mode for retrieval.
+    rerank_top_k: int | None = None
+    """Number of candidates to fetch before reranking (None = auto).
 
-    Options: rrf_hybrid, semantic_only, bm25_only
-    Default: rrf_hybrid (combines semantic and keyword search)
+    Default: None (automatically set to top_k * overfetch_multiplier)
+    Set explicitly to override the automatic calculation.
 
-    Environment variable: RRF_SEARCH_MODE
+    Environment variable: RERANK_TOP_K
+    """
+
+    reranking_mode: str = "cross_encoder"
+    """Reranking strategy to use.
+
+    Options: cross_encoder, mmr, both
+    - cross_encoder: Use cross-encoder reranking only
+    - mmr: Use MMR diversification only (current default behavior)
+    - both: Apply cross-encoder first, then MMR diversification
+
+    Default: cross_encoder
+
+    Environment variable: RERANKING_MODE
     """
 
     @property

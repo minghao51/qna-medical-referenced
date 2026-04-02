@@ -143,8 +143,11 @@ def _normalize_text(text: str) -> str:
 
 
 def _strip_tracking(url: str) -> str:
-    parsed = urlsplit(url)
-    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+    try:
+        parsed = urlsplit(url)
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+    except (ValueError, TypeError):
+        return url
 
 
 def _hash_text(text: str) -> str:
