@@ -80,6 +80,11 @@ async def lifespan(app: FastAPI):
     app.state.chat_history_store = FileChatHistoryStore()
 
     # Initialize vector store
+    from src.rag.production_profile import apply_production_profile
+    profile_name = getattr(settings, "production_profile", None)
+    if profile_name:
+        if apply_production_profile(profile_name):
+            logger.info(f"Production profile applied: {profile_name}")
     initialize_runtime_index()
     logger.info("Application startup complete")
 
