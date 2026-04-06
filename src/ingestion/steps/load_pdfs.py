@@ -8,12 +8,16 @@ Supports Camelot for structured table extraction.
 from __future__ import annotations
 
 import importlib
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from pypdf import PdfReader
 
 from src.config import DATA_RAW_DIR
+from src.config.context import get_runtime_state
 from src.ingestion.artifacts import SourceArtifact, persist_source_artifact
 from src.ingestion.steps.download_web import get_manifest_record_by_filename
 from src.source_metadata import canonical_source_label, infer_domain, infer_domain_type
@@ -21,21 +25,25 @@ from src.source_metadata import canonical_source_label, infer_domain, infer_doma
 try:  # pragma: no cover - optional dependency
     pdfplumber: Any = importlib.import_module("pdfplumber")
 except Exception:
+    logger.debug("pdfplumber not available")
     pdfplumber = None
 
 try:  # pragma: no cover - optional dependency
     pymupdf: Any = importlib.import_module("pymupdf")
 except Exception:
+    logger.debug("pymupdf not available")
     pymupdf = None
 
 try:  # pragma: no cover - optional dependency
     camelot: Any = importlib.import_module("camelot")
 except Exception:
+    logger.debug("camelot not available")
     camelot = None
 
 try:  # pragma: no cover - optional dependency
     TableList: Any = importlib.import_module("camelot.core").TableList
 except Exception:
+    logger.debug("camelot.core.TableList not available")
     TableList = Any
 
 
@@ -44,15 +52,20 @@ PDF_TABLE_EXTRACTOR = "heuristic"
 
 
 def set_pdf_extractor_strategy(strategy: str) -> None:
-    global PDF_EXTRACTOR_STRATEGY
     valid = {"pypdf_pdfplumber", "pymupdf_pdfplumber"}
-    PDF_EXTRACTOR_STRATEGY = strategy if strategy in valid else "pypdf_pdfplumber"
+    resolved = strategy if strategy in valid else "pypdf_pdfplumber"
+    get_runtime_state().pdf_extractor_strategy = resolved
+    # Keep module-level global in sync for backward compat
+    global PDF_EXTRACTOR_STRATEGY
+    PDF_EXTRACTOR_STRATEGY = resolved
 
 
 def set_pdf_table_extractor(extractor: str) -> None:
-    global PDF_TABLE_EXTRACTOR
     valid = {"heuristic", "camelot"}
-    PDF_TABLE_EXTRACTOR = extractor if extractor in valid else "heuristic"
+    resolved = extractor if extractor in valid else "heuristic"
+    get_runtime_state().pdf_table_extractor = resolved
+    global PDF_TABLE_EXTRACTOR
+    PDF_TABLE_EXTRACTOR = resolved
 
 
 def _normalize_lines(text: str) -> list[str]:
@@ -211,7 +224,8 @@ class PDFLoader:
         try:
             tables = camelot.read_pdf(str(pdf_path), pages=str(page_num), flavor="lattice")
             return tables if tables and len(tables) > 0 else None
-        except Exception:
+        except Exception as e:
+            logger.debug("Camelot table extraction failed for %s page %s: %s", pdf_path, page_num, e)
             return None
 
     def load_pdf(self, pdf_path: str) -> str:

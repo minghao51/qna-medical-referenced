@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, cast
+
+logger = logging.getLogger(__name__)
 
 from src.config import settings
 from src.config.paths import DATA_RAW_DIR
@@ -50,7 +53,8 @@ def _load_json_if_exists(path: Path) -> Any:
         return None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to load JSON from %s: %s", path, e)
         return None
     return payload
 
@@ -278,7 +282,8 @@ def run_assessment(
                 existing_index_hash = (payload.get("index_metadata", {}) or {}).get(
                     "index_config_hash"
                 )
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to load vector index hash from %s: %s", vector_path, e)
                 existing_index_hash = None
         rebuild_policy = str(embedding_index.get("rebuild_policy", "if_missing_or_stale")).lower()
         should_rebuild = rebuild_policy == "always"
@@ -489,7 +494,8 @@ def run_assessment(
         try:
             index_payload = json.loads(Path(vector_path).read_text(encoding="utf-8"))
             index_metadata = index_payload.get("index_metadata", {}) or {}
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to load index metadata from %s: %s", vector_path, e)
             index_metadata = {}
     manifest["index_provenance"] = {
         "collection_name": index_metadata.get("collection_name", settings.collection_name),

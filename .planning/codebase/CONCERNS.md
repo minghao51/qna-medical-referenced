@@ -1,434 +1,302 @@
-# Codebase Concerns and Technical Debt
+# Codebase Concerns
 
-**Generated:** 2026-03-22
-**Status:** Active Analysis
+**Analysis Date:** 2026-04-06
 
-## Overview
+## Tech Debt
 
-This document catalogs known concerns, technical debt, and areas requiring attention in the qna-medical-referenced codebase. Items are categorized by severity and type.
+**Duplicated `_VALID_SEARCH_MODES` constant:**
+- Issue: The set `{"rrf_hybrid", "semantic_only", "bm25_only"}` is defined in both `src/rag/runtime.py:48` and `src/ingestion/indexing/chroma_store.py:39`. If a new search mode is added, both must be updated.
+- Files: `src/rag/runtime.py`, `src/ingestion/indexing/chroma_store.py`
+- Impact: Risk of inconsistency between runtime and storage layer search mode validation
+- Fix approach: Extract to a shared constants module (e.g., `src/config/constants.py`) and import from there
+
+**Module-level global state for configuration:**
+- Issue: Multiple modules use `global` variables for runtime configuration (`_html_config`, `SOURCE_CHUNK_CONFIGS_OVERRIDE`, `PDF_EXTRACTOR_STRATEGY`, `INDEX_ONLY_CLASSIFIED_PAGES`, `_reranker_instance`, `_vector_store_initialized`). This makes the code non-thread-safe and hard to test in isolation.
+- Files: `src/ingestion/steps/convert_html.py`, `src/ingestion/steps/chunking/config.py`, `src/ingestion/steps/load_pdfs.py`, `src/ingestion/steps/load_markdown.py`, `src/rag/reranker.py`, `src/rag/runtime.py`, `src/infra/di.py`
+- Impact: Race conditions in concurrent requests, test pollution between runs, difficult to reason about state
+- Fix approach: Use a proper configuration context object or dependency injection for all runtime settings
+
+**Heavy use of `except Exception:` (bare exception catching):**
+- Issue: 37+ instances of `except Exception:` across the codebase swallow all errors silently, making debugging difficult and potentially hiding real bugs.
+- Files: `src/app/routes/evaluation.py`, `src/evals/assessment/orchestrator.py`, `src/ingestion/steps/convert_html.py`, `src/ingestion/steps/download_web.py`, `src/evals/dataset_builder.py`, `src/app/routes/chat.py`, `src/usecases/chat.py`, `src/evals/assessment/answer_eval.py`, `src/ingestion/steps/load_pdfs.py`, `src/source_metadata.py`, and more
+- Impact: Silent failures, hidden bugs, difficult production debugging
+- Fix approach: Catch specific exception types; log all caught exceptions at minimum
+
+**`print()` statements in production code:**
+- Issue: 245+ `print()` calls scattered across source files instead of using the `logging` module. This includes pipeline steps (`download_web.py`, `convert_html.py`), runtime code (`runtime.py`), and CLI modules.
+- Files: `src/ingestion/steps/download_web.py`, `src/ingestion/steps/convert_html.py`, `src/usecases/pipeline.py`, `src/rag/runtime.py`, `src/cli/eval_pipeline.py`, `src/ingestion/indexing/migrate.py`, `scripts/run_variant_clean.py`
+- Impact: No log level control, no structured logging, output goes to stdout unconditionally
+- Fix approach: Replace all `print()` with `logging.info()`, `logging.debug()`, etc.
+
+**Custom YAML-like parser in `experiments/config.py`:**
+- Issue: The file implements a custom scalar parser (`_parse_scalar`, `_strip_comment`) instead of using a proper YAML/JSON library. This is fragile and doesn't handle edge cases.
+- Files: `src/experiments/config.py`
+- Impact: Parsing bugs with complex values, maintenance burden
+- Fix approach: Use PyYAML or keep experiment config as JSON
+
+**`os.environ` mutation at runtime:**
+- Issue: The orchestrator mutates `os.environ` directly to pass configuration between pipeline stages (`HYPE_ENABLED`, `HYPE_SAMPLE_RATE`, `COLLECTION_NAME`). This is a side-effect-heavy pattern.
+- Files: `src/evals/assessment/orchestrator.py:388-393`, `src/config/settings.py:432-433`
+- Impact: Non-deterministic behavior, test interference, thread-unsafe
+- Fix approach: Pass configuration explicitly through function parameters or a config context
+
+**Duplicate config dataclasses in `runtime.py`:**
+- Issue: `RuntimeRetrievalConfig` (line 52) and `RetrievalDiversityConfig` (line 79) have nearly identical fields (overfetch_multiplier, max_chunks_per_source_page, max_chunks_per_source, mmr_lambda, search_mode, enable_hyde, hyde_max_length, enable_hype). They should be one dataclass or use inheritance.
+- Files: `src/rag/runtime.py:52-92`
+- Impact: Keeping them in sync is error-prone; confusion about which to use
+- Fix approach: Merge into a single dataclass or use inheritance
+
+**63 instances of `except Exception` (higher than previously counted):**
+- Issue: Updated count shows 63 bare exception catches across the codebase, not 37. Many lack logging or re-raising, making debugging nearly impossible.
+- Files: All modules under `src/`, notably `src/app/routes/evaluation.py:161,171,616,685,956,1024`, `src/usecases/chat.py:129,220,226,239`, `src/evals/assessment/orchestrator.py:53,281,492`
+- Impact: Silent failures across the entire application; failures in LLM calls, file I/O, and evaluation steps are invisible
+- Fix approach: Catch specific exception types; log all caught exceptions at minimum; use structured error handling
+
+**Duplicate config dataclasses in `runtime.py`:**
+- Issue: `RuntimeRetrievalConfig` (line 52) and `RetrievalDiversityConfig` (line 79) have nearly identical fields (overfetch_multiplier, max_chunks_per_source_page, max_chunks_per_source, mmr_lambda, search_mode, enable_hyde, hyde_max_length, enable_hype). They should be one dataclass or use inheritance.
+- Files: `src/rag/runtime.py:52-92`
+- Impact: Keeping them in sync is error-prone; confusion about which to use
+- Fix approach: Merge into a single dataclass or use inheritance
+
+**63 instances of `except Exception` (higher than previously counted):**
+- Issue: Updated count shows 63 bare exception catches across the codebase, not 37. Many lack logging or re-raising, making debugging nearly impossible.
+- Files: All modules under `src/`, notably `src/app/routes/evaluation.py:161,171,616,685,956,1024`, `src/usecases/chat.py:129,220,226,239`, `src/evals/assessment/orchestrator.py:53,281,492`
+- Impact: Silent failures across the entire application; failures in LLM calls, file I/O, and evaluation steps are invisible
+- Fix approach: Catch specific exception types; log all caught exceptions at minimum; use structured error handling
+
+## Known Bugs
+
+**`_read_json_if_exists` returns empty dict on any parse error:**
+- Symptoms: Corrupted or partially written JSON files are silently treated as empty data, causing downstream code to operate on missing data without warning.
+- Files: `src/app/routes/evaluation.py:166-172`
+- Trigger: Disk full during write, concurrent write, or manual file edit
+- Workaround: None — no alerting on corrupted files
+
+**HyDE sync version is a no-op but doesn't warn:**
+- Symptoms: `_expand_queries()` documents that it "does not perform LLM-based HyDE expansion" but callers may not realize they're getting baseline-only results.
+- Files: `src/rag/runtime.py:155-184`
+- Trigger: Calling `retrieve_context()` with HyDE enabled
+- Workaround: Use the async version `retrieve_context_with_trace()` instead
+
+**`pass` statements in error handlers:**
+- Symptoms: Several `except` blocks contain only `pass`, completely swallowing errors. Found in `convert_html.py:35,40`, `dataset_builder.py:345`, `chat.py:227`.
+- Files: `src/ingestion/steps/convert_html.py:35,40`, `src/evals/dataset_builder.py:345`, `src/usecases/chat.py:227`
+- Trigger: Any import failure or runtime error in the protected block
+- Workaround: None — errors are completely invisible
+
+## Security Considerations
+
+**Hardcoded test API key in test fixtures:**
+- Risk: Test files contain `"test-api-key"` and `"test-key"` strings. While not production secrets, they normalize the pattern of embedding keys in code.
+- Files: `tests/conftest.py`, `tests/test_settings.py`, `tests/test_settings_deepeval.py`
+- Current mitigation: Keys are clearly test values, not real credentials
+- Recommendations: Use a fixture factory or mock objects instead of string literals
+
+**`.env` file in gitignore but `.env.example` in repo:**
+- Risk: The `.env.example` file contains placeholder values showing the exact structure of secrets. If a developer accidentally commits `.env`, the pattern is well-known.
+- Files: `.env.example`
+- Current mitigation: `.env` is in `.gitignore`
+- Recommendations: Consider using a secrets manager or pre-commit hook to prevent `.env` commits
+
+**API key authentication uses simple string comparison:**
+- Risk: `authenticate_api_key()` in `src/app/middleware/auth.py` does a simple membership check against a comma-separated list of API keys. No rate limiting per key, no key rotation, no audit logging of key usage. Not timing-safe.
+- Files: `src/app/middleware/auth.py:48-69`
+- Current mitigation: Rate limiting middleware exists separately
+- Recommendations: Add per-key rate limiting, key expiration, usage audit logging, and `hmac.compare_digest` for timing-safe comparison
+
+**No input length validation enforced at HTTP middleware level:**
+- Risk: While `MAX_MESSAGE_LENGTH` exists in settings, it's not clear that all endpoints enforce it before reading the full request body. Large payloads could cause memory issues or expensive LLM calls.
+- Files: `src/app/routes/chat.py`, `src/app/schemas/chat.py`
+- Current mitigation: `sanitize_message` validator in chat schemas
+- Recommendations: Enforce max length at the HTTP middleware level before request body is fully read
+
+**`src/infra/llm/qwen_client.py` contains a `requests.get` to `api.example.com`:**
+- Risk: Line 60 contains `return requests.get("https://api.example.com")` which appears to be placeholder/mock code that could be accidentally executed.
+- Files: `src/infra/llm/qwen_client.py:60`
+- Current mitigation: Likely in an unreachable code path
+- Recommendations: Remove or clearly mark as dead code
+
+**CORS configuration defaults to localhost:**
+- Risk: If deployed without updating `CORS_ALLOWED_ORIGINS`, the API may be accessible from any origin.
+- Files: `src/app/factory.py`, `.env.example`
+- Current mitigation: Default includes localhost dev servers only
+- Recommendations: Document this clearly; add startup warning if CORS includes `*`
+
+## Performance Bottlenecks
+
+**Large files (>500 lines) that need refactoring:**
+- `src/rag/runtime.py` (1065 lines) — Core retrieval logic, handles indexing, search, HyDE, reranking all in one file
+- `src/app/routes/evaluation.py` (1028 lines) — API routes mixed with file I/O, metrics aggregation, and JSON serialization
+- `frontend/src/routes/+page.svelte` (894 lines) — Main page component with chat, history, pipeline visualization, and source display
+- `src/ingestion/indexing/chroma_store.py` (786 lines) — Vector store with search, embedding, MMR, HyDE question storage
+- `frontend/src/lib/components/PipelinePanel.svelte` (772 lines) — Complex UI component with multiple sub-views
+- `src/ingestion/steps/download_web.py` (745 lines) — Download logic for 6 different content sources
+- `src/evals/dataset_builder.py` (652 lines) — Dataset construction with fixture loading, LLM synthesis, normalization
+- `src/evals/assessment/retrieval_eval.py` (605 lines) — Retrieval evaluation with multiple ablation sweeps
+- `src/evals/assessment/orchestrator.py` (599 lines) — Orchestration of full evaluation pipeline
+- `src/ingestion/steps/convert_html.py` (586 lines) — HTML-to-Markdown conversion with multiple extractor strategies
+- `src/experiments/config.py` (519 lines) — Experiment config loading with custom parser
+
+**MMR reranking is O(n²) in the number of candidates:**
+- Problem: `_mmr_rerank()` in `src/rag/runtime.py:411-435` compares every remaining candidate against every selected item. With large `top_k` and high `overfetch_multiplier`, this becomes expensive.
+- Files: `src/rag/runtime.py:411-435`
+- Cause: Greedy MMR algorithm with no early termination or approximation
+- Improvement path: Use approximate MMR or cap the candidate pool before reranking
+
+**`_content_similarity` tokenizes both strings on every comparison:**
+- Problem: Called inside the inner loop of `_mmr_rerank()`, tokenizing the same content strings repeatedly.
+- Files: `src/rag/runtime.py:392-400`
+- Cause: No caching of tokenized content
+- Improvement path: Pre-tokenize all candidate content before entering the MMR loop
+
+**ChromaDB `_get_all_documents()` loads entire collection into memory on every search:**
+- Problem: `_build_keyword_index()`, `_build_term_frequencies()`, and `_keyword_score()` all call `_get_all_documents()` which fetches every document from ChromaDB. This is called on every search when the index is dirty.
+- Files: `src/ingestion/indexing/chroma_store.py:221-233`
+- Cause: BM25 keyword index is rebuilt from scratch on every dirty state
+- Improvement path: Maintain incremental keyword index updates instead of full rebuilds
+
+**Evaluation retrieval runs are fully sequential:**
+- Problem: `evaluate_retrieval()` in `src/evals/assessment/retrieval_eval.py` processes each dataset item one at a time, each making a full RAG pipeline call. For datasets with 100+ queries, this is very slow.
+- Files: `src/evals/assessment/retrieval_eval.py:136+`
+- Cause: No batching or parallelism in the evaluation loop
+- Improvement path: Use `asyncio.gather` with controlled concurrency (similar to answer_eval.py pattern)
+
+**Large JSON files read synchronously on every evaluation request:**
+- Problem: Evaluation endpoints read `summary.json`, `step_metrics.json`, `manifest.json` from disk on every request with no caching.
+- Files: `src/app/routes/evaluation.py` (multiple endpoints)
+- Cause: No in-memory cache for evaluation results
+- Improvement path: Add LRU cache with TTL for evaluation data; invalidate on new runs
+
+**No database indexes — file-based storage:**
+- Problem: All evaluation runs, chat history, and artifacts are stored as JSON files on disk. No indexing means O(n) scans for lookups.
+- Files: `src/infra/storage/file_chat_history_store.py`, `src/evals/artifacts.py`, `src/app/routes/evaluation.py`
+- Cause: Designed for simplicity, not scale
+- Improvement path: Add an index file or migrate to SQLite for runs/history if scale grows
+
+**Batched embedding without async:**
+- Problem: `embed_texts` processes texts in batches synchronously (`for i in range(0, len(texts), batch_size)`).
+- Files: `src/ingestion/indexing/embedding.py:49`
+- Cause: LLM API calls are I/O-bound but processed sequentially
+- Improvement path: Use async HTTP client for embedding batches
+
+**`_diversify_results` has a fallback loop that can defeat diversity constraints:**
+- Problem: When diversity constraints are too strict and fewer than `top_k` results remain, the fill loop (line 492-502) adds back duplicates by ID only, ignoring source/page limits.
+- Files: `src/rag/runtime.py:492-502`
+- Cause: Designed to always return `top_k` results, but this undermines the diversity guarantees
+- Improvement path: Either accept fewer results or relax constraints more gracefully
+
+**`_diversify_results` has a fallback loop that can defeat diversity constraints:**
+- Problem: When diversity constraints are too strict and fewer than `top_k` results remain, the fill loop (line 492-502) adds back duplicates by ID only, ignoring source/page limits.
+- Files: `src/rag/runtime.py:492-502`
+- Cause: Designed to always return `top_k` results, but this undermines the diversity guarantees
+- Improvement path: Either accept fewer results or relax constraints more gracefully
+
+## Fragile Areas
+
+**Runtime index initialization with global state:**
+- Files: `src/rag/runtime.py`
+- Why fragile: Uses `_vector_store_initialized` and `_vector_store_initialized_signature` globals to prevent re-indexing. If signature computation changes or state gets out of sync, the index may be rebuilt unnecessarily or skipped when it shouldn't be.
+- Safe modification: Always reset both globals together; test with `scripts/run_variant_clean.py`
+- Test coverage: `tests/test_runtime_index_initialization.py` covers basic cases but not concurrent access
+
+**Optional dependency handling with bare `except Exception: pass`:**
+- Files: `src/ingestion/steps/convert_html.py:32-45`, `src/ingestion/steps/load_pdfs.py:23-38`
+- Why fragile: If an optional dependency partially installs or has import-time side effects, failures are silently swallowed.
+- Safe modification: Log warnings when optional deps fail to import
+- Test coverage: No tests for missing optional dependency scenarios
+
+**Custom experiment config parser:**
+- Files: `src/experiments/config.py`
+- Why fragile: Hand-rolled parser for YAML-like syntax with comment stripping and scalar parsing. Edge cases (nested structures, special characters) may break silently.
+- Safe modification: Add comprehensive parser unit tests; consider migrating to JSON
+- Test coverage: `tests/test_experiment_config.py` exists but may not cover all edge cases
+
+**ChromaDB factory singleton pattern:**
+- Files: `src/ingestion/indexing/chroma_store.py` (ChromaVectorStoreFactory)
+- Why fragile: Singleton with `reset()` method for testing. If reset is called during active use, subsequent calls get a fresh instance with lost state.
+- Safe modification: Document reset semantics; consider using a factory with explicit lifecycle
+- Test coverage: `tests/test_chroma_store.py`, `tests/test_chroma_migration.py`
+
+## Scaling Limits
+
+**File-based chat history:**
+- Current capacity: Single JSON file per session
+- Limit: File size grows unbounded; no pagination or archival
+- Scaling path: Migrate to database-backed storage with TTL-based cleanup
+
+**Evaluation run directory scanning:**
+- Current capacity: Scans `data/evals/` directory on every request
+- Limit: O(n) filesystem operations per API call; slows with many runs
+- Scaling path: Cache run list; use an index file
+
+**In-memory vector store operations:**
+- Current capacity: ChromaDB persistent store with in-memory operations for search
+- Limit: All documents loaded into memory; large collections will exceed RAM
+- Scaling path: Use ChromaDB server mode or migrate to a dedicated vector database
+
+## Dependencies at Risk
+
+**`pypdf>=4.0,<6.0` has an upper bound that may become stale:**
+- Risk: Pinning to `<6.0` will eventually block updates. Major PDF library updates often include important security fixes.
+- Impact: Unable to receive security patches when pypdf 6.0 is released
+- Migration plan: Test against pypdf 6.0 when available and update the constraint
+
+**`deepeval>=2.0.0` is a heavy optional dependency:**
+- Risk: DeepEval brings in many transitive dependencies including multiple LLM frameworks. Version conflicts are likely as the ecosystem evolves.
+- Impact: `uv sync` may fail or pull incompatible versions
+- Migration plan: Pin to a specific minor version and update deliberately
+
+**Frontend dependencies may lack a lockfile:**
+- Risk: No `package-lock.json` or `pnpm-lock.yaml` confirmed in the frontend directory. Dependencies may drift between developer machines and CI.
+- Impact: Inconsistent builds, "works on my machine" issues
+- Migration plan: Commit a lockfile and enforce it in CI
+
+## Missing Critical Features
+
+**No structured logging:**
+- Problem: All logging uses `print()` or basic `logging` without structured format (JSON). Makes log aggregation and analysis difficult.
+- Blocks: Production observability, alerting, debugging
+
+**No health check for vector store:**
+- Problem: No endpoint or mechanism to verify the vector store is operational and populated.
+- Blocks: Automated deployment verification, monitoring
+
+**No API versioning:**
+- Problem: API routes have no version prefix. Breaking changes will break all clients.
+- Blocks: Safe API evolution
+
+## Test Coverage Gaps
+
+**Optional dependency failure scenarios:**
+- What's not tested: Behavior when `trafilatura`, `html_to_markdown`, `readability_lxml` are not installed
+- Files: `src/ingestion/steps/convert_html.py`, `src/ingestion/steps/load_pdfs.py`
+- Risk: Silent degradation in production if optional deps fail to install
+- Priority: Medium
+
+**Concurrent access to global state:**
+- What's not tested: Multiple simultaneous requests modifying `_html_config`, `_vector_store_initialized`, etc.
+- Files: `src/rag/runtime.py`, `src/ingestion/steps/convert_html.py`, `src/ingestion/steps/chunking/config.py`
+- Risk: Race conditions in production under load
+- Priority: High
+
+**Error paths in evaluation API:**
+- What's not tested: Malformed evaluation run directories, corrupted JSON files, missing metrics
+- Files: `src/app/routes/evaluation.py`
+- Risk: 500 errors on edge cases
+- Priority: Medium
+
+**Large-scale retrieval performance:**
+- What's not tested: Retrieval with thousands of documents, large query batches
+- Files: `src/rag/runtime.py`, `src/ingestion/indexing/chroma_store.py`
+- Risk: Performance degradation goes unnoticed
+- Priority: Medium
+
+**Frontend error states:**
+- What's not tested: API unavailable, malformed responses, network timeouts in Svelte components
+- Files: `frontend/src/routes/+page.svelte`, `frontend/src/lib/components/PipelinePanel.svelte`
+- Risk: Poor UX on failure
+- Priority: Low
 
 ---
 
-## 1. Large Files Requiring Refactoring
-
-### Backend (Python)
-
-#### `src/rag/runtime.py` (991 lines)
-- **Issue:** Monolithic RAG runtime module
-- **Concerns:**
-  - Multiple responsibilities: query expansion, retrieval orchestration, MMR diversification, HyDE/HyPE integration
-  - Global state management for vector store initialization
-  - Complex retrieval logic with multiple search modes (rrf_hybrid, semantic_only, bm25_only)
-- **Recommendation:** Split into separate modules for query expansion, retrieval orchestration, and diversification
-
-#### `src/app/routes/evaluation.py` (891 lines)
-- **Issue:** Large API route module
-- **Concerns:**
-  - Multiple endpoints in single file (latest, runs, history, steps, debug)
-  - Complex file I/O and data transformation logic
-  - Mixed concerns: routing, data access, serialization
-- **Recommendation:** Extract data access layer to separate service module
-
-#### `src/ingestion/steps/download_web.py` (745 lines)
-- **Issue:** Complex web download orchestration
-- **Concerns:**
-  - Manifest generation and URL management mixed with download logic
-  - Multiple retry strategies and error handling patterns
-  - Hardcoded URL lists (recently extracted to config but legacy code remains)
-- **Recommendation:** Separate manifest management from download execution
-
-#### `src/evals/dataset_builder.py` (658 lines)
-- **Issue:** Heavy dataset construction logic
-- **Concerns:**
-  - Complex synthetic data generation orchestration
-  - Multiple transformation strategies in single module
-- **Recommendation:** Consider strategy pattern for different dataset types
-
-### Frontend (Svelte/TypeScript)
-
-#### `frontend/src/routes/+page.svelte` (894 lines)
-- **Issue:** Massive monolithic chat interface component
-- **Concerns:**
-  - Chat UI, pipeline visualization, source display all in one file
-  - Complex state management for messages, sources, pipeline steps
-  - Multiple concerns: UI, API calls, data transformation, event handling
-- **Recommendation:** Extract to separate components (ChatInterface, SourcePanel, PipelineVisualization)
-
-#### `frontend/src/lib/components/PipelinePanel.svelte` (772 lines)
-- **Issue:** Large pipeline visualization component
-- **Concerns:**
-  - Complex flow diagram rendering mixed with data fetching
-  - Multiple visualization modes (flow, timing, metrics)
-- **Recommendation:** Split into visualization-specific components
-
-#### `frontend/src/lib/components/IngestionTab.svelte` (454 lines)
-- **Issue:** Large tab component with complex state
-- **Concerns:**
-  - Multiple data sources and aggregation logic
-  - Complex filtering and sorting logic
-- **Recommendation:** Extract data fetching and transformation to separate modules
-
----
-
-## 2. Global State Management
-
-### Backend Global Variables
-
-Multiple modules use module-level global state, which complicates testing and creates implicit dependencies:
-
-1. **`src/rag/runtime.py`**
-   - `_vector_store_initialized`
-   - `_vector_store_initialized_signature`
-   - Concern: Initialization state tracked globally, complicates testing
-
-2. **`src/ingestion/indexing/vector_store.py`**
-   - `_vector_store`
-   - `_vector_store_runtime_config`
-   - `_vector_store_runtime_signature`
-   - Concern: Singleton pattern prevents concurrent testing
-
-3. **`src/ingestion/steps/load_pdfs.py`**
-   - `PDF_EXTRACTOR_STRATEGY`
-   - `PDF_TABLE_EXTRACTOR`
-   - Concern: Runtime configuration via globals
-
-4. **`src/ingestion/steps/convert_html.py`**
-   - `HTML_EXTRACTOR_STRATEGY`
-   - `PAGE_CLASSIFICATION_ENABLED`
-   - `HTML_EXTRACTOR_MODE`
-   - Concern: Multiple global config flags
-
-5. **`src/ingestion/steps/chunking/config.py`**
-   - `STRUCTURED_CHUNKING_ENABLED`
-   - `SOURCE_CHUNK_CONFIGS_OVERRIDE`
-   - Concern: Override mechanism creates hidden state
-
-6. **`src/ingestion/steps/load_markdown.py`**
-   - `INDEX_ONLY_CLASSIFIED_PAGES`
-   - Concern: Feature flag as global variable
-
-**Recommendation:** Implement dependency injection or configuration objects passed to functions rather than module-level globals.
-
----
-
-## 3. Error Handling Concerns
-
-### Broad Exception Catching
-
-Multiple instances of bare `except Exception:` or overly broad exception handling:
-
-- **`src/usecases/chat.py`**: Lines 129, 220, 226, 239
-- **`src/rag/runtime.py`**: Line 181
-- **`src/rag/hyde.py`**: Lines 95, 302
-- **`src/experiments/wandb_tracking.py`**: Lines 25, 260, 339, 352
-- **`src/ingestion/steps/convert_html.py`**: Lines 130, 153 (for optional dependency handling)
-
-**Concerns:**
-- Swallows unexpected errors
-- Makes debugging difficult
-- May hide critical failures
-
-**Recommendation:** Catch specific exceptions, use domain-specific exceptions (see `AGENTS.md`), ensure all exceptions are logged before being caught.
-
----
-
-## 4. Type Safety Issues
-
-### Type Ignore Comments
-
-Multiple `# type: ignore` comments indicating type checking issues:
-
-- **`src/rag/runtime.py:208`**: `# type: ignore[no-any-return]`
-- **`src/app/routes/evaluation.py:170`**: `# type: ignore[no-any-return]`
-- **`src/ingestion/steps/chunking/core.py`**: Lines 361-364 (multiple `# type: ignore[call-overload]`)
-- **`src/evals/deepeval_models.py:33`**: `# type: ignore[assignment]`
-- **`src/evals/synthetic/generator.py`**: Lines 39, 42 (call-arg issues)
-
-**Concerns:**
-- Type safety is being bypassed
-- May indicate incorrect type annotations
-- Increases runtime error risk
-
-**Recommendation:** Fix underlying type issues rather than suppressing them.
-
-### Any Types in Frontend
-
-Frontend code uses `any` and `unknown` types extensively:
-- `frontend/src/lib/types.ts:35`: `details: Record<string, unknown>`
-- Multiple uses of `any` in component props
-
-**Recommendation:** Define proper interfaces for data structures.
-
----
-
-## 5. Configuration and Hardcoded Values
-
-### Hardcoded Localhost URLs
-
-Multiple hardcoded localhost references:
-- **`src/config/settings.py:42`**: CORS origins hardcoded
-- **`frontend/src/routes/+page.svelte:14`**: `API_URL` defaults to localhost
-- **`frontend/src/routes/eval/+page.svelte`**: Same API_URL pattern
-
-**Concerns:**
-- Deployment requires code changes
-- Environment-specific values in source code
-- Frontend rebuild needed for different environments
-
-**Recommendation:** Use environment variables consistently (partially done with `VITE_API_URL`, but needs improvement).
-
-### Magic Numbers
-
-- **`src/rag/runtime.py`**:
-  - `_RETRIEVAL_OVERFETCH_MULTIPLIER = 4`
-  - `_MAX_CHUNKS_PER_SOURCE_PAGE = 2`
-  - `_MAX_CHUNKS_PER_SOURCE = 3`
-  - `_MMR_LAMBDA = 0.75`
-
-**Concerns:** Tuning parameters not in configuration files
-
-**Recommendation:** Move to YAML configuration for easier experimentation.
-
----
-
-## 6. Deprecated Code
-
-### Deprecated Endpoints
-
-- **`src/app/routes/history.py`**: Lines 38, 49
-  - Legacy `session_id` paths marked as deprecated
-  - Anonymous session support being phased out
-
-**Concerns:** Deprecated code increases maintenance burden
-
-**Recommendation:** Set timeline for removal of deprecated features.
-
----
-
-## 7. Performance Concerns
-
-### Sleep Calls in Async Code
-
-Multiple `sleep()` calls that may indicate blocking operations:
-- **`src/evals/assessment/answer_eval.py`**: Retry delays with `asyncio.sleep()`
-- **`src/infra/llm/qwen_client.py`**: Rate limiting with `time.sleep()` and `asyncio.sleep()`
-
-**Concerns:**
-- May block event loops if not properly async
-- Could indicate missing rate limiting middleware
-
-**Recommendation:** Implement proper rate limiting libraries, ensure all I/O is non-blocking.
-
-### Large File Processing
-
-- PDF and HTML processing loads entire documents into memory
-- No streaming or chunked processing for large files
-
-**Concerns:** Memory-intensive operations may fail on large documents
-
-**Recommendation:** Implement streaming processing for large files.
-
----
-
-## 8. Security Concerns
-
-### API Key Management
-
-- **`src/config/settings.py`**: API keys stored in settings with empty defaults
-  - `dashscope_api_key: str = ""`
-  - `wandb_api_key: str = ""`
-
-**Concerns:**
-- Empty defaults may cause runtime errors
-- No validation that required keys are present
-
-**Recommendation:** Implement startup validation for required credentials, fail fast if missing.
-
-### CORS Configuration
-
-- Hardcoded CORS origins in settings
-- No wildcard for development
-
-**Concerns:** Deployment requires configuration changes
-
-**Recommendation:** Environment-based CORS configuration with sensible defaults.
-
----
-
-## 9. Code Smells and Anti-Patterns
-
-### Optional Dependency Handling
-
-**`src/ingestion/steps/convert_html.py`**:
-```python
-try:
-    import trafilatura  # type: ignore[assignment]
-except Exception:  # pragma: no cover - optional dependency
-    trafilatura = None
-```
-
-**Concerns:**
-- Silent failures for optional dependencies
-- Multiple optional deps with same pattern
-- Difficult to debug when optional deps are missing
-
-**Recommendation:** Use explicit feature flags or dependency injection.
-
-### Inconsistent Return Types
-
-Multiple functions return different types based on runtime conditions:
-- JSON parsing may return dict, list, or None
-- Union types not always properly annotated
-
-**Recommendation:** Use proper type annotations and consider Result types for fallible operations.
-
----
-
-## 10. Testing Gaps
-
-### Test Coverage
-
-Based on file analysis:
-- Large files like `runtime.py` (991 lines) need comprehensive test coverage
-- Frontend components have limited test coverage
-- E2E tests exist but may not cover all edge cases
-
-**Recommendation:**
-- Increase unit test coverage for complex modules
-- Add integration tests for RAG pipeline
-- Expand frontend component testing
-
-### Test Artifacts
-
-- `.pytest_cache/` and `__pycache__` present in source tree
-- `.mypy_cache/` contains cache files
-
-**Concerns:** Build artifacts not properly excluded
-
-**Recommendation:** Ensure `.gitignore` is comprehensive (currently looks good, but verify).
-
----
-
-## 11. Documentation Issues
-
-### Missing Docstrings
-
-- Some complex functions lack comprehensive docstrings
-- Type hints present but parameter descriptions missing
-
-**Recommendation:** Complete docstring coverage for public APIs.
-
-### Outdated Documentation
-
-- Some plans and reports reference old patterns
-- Code review remediation docs indicate completed tasks
-
-**Recommendation:** Archive completed plans, update architecture docs to reflect current state.
-
----
-
-## 12. Dependency Management
-
-### Version Pinning
-
-**`pyproject.toml`**:
-- `pypdf` uses `>=4.0,<6.0` (wide range)
-- Some dependencies use `>=` without upper bounds
-
-**Concerns:** Future versions may introduce breaking changes
-
-**Recommendation:** Consider more conservative version ranges for critical dependencies.
-
-### Optional Dependencies
-
-Multiple optional dependency groups:
-- `dev`, `evaluation`, `chunkers`, `extraction`, `test`
-
-**Concerns:** Complex dependency matrix may cause confusion
-
-**Recommendation:** Document which features require which optional deps.
-
----
-
-## 13. Frontend-Specific Concerns
-
-### Component Complexity
-
-- **DrillDownModal.svelte** (306 lines): Complex modal with drill-down logic
-- **ThresholdEditor.svelte** (338 lines): Complex form with validation
-- **DocumentInspector.svelte** (419 lines): Large inspector component
-
-**Recommendation:** Extract sub-components to reduce complexity.
-
-### Type Safety
-
-- Extensive use of `unknown` and `any` types
-- Some components use `Record<string, unknown>` for props
-
-**Recommendation:** Define proper TypeScript interfaces.
-
-### State Management
-
-- Multiple components use local `$state` without state management library
-- Complex parent-child state passing
-
-**Recommendation:** Consider state management library for complex flows (Svelte stores or similar).
-
----
-
-## 14. Infrastructure Concerns
-
-### Vector Store Management
-
-- Global singleton pattern for vector store
-- No connection pooling management
-- Runtime config changes may cause inconsistencies
-
-**Recommendation:** Implement proper lifecycle management, connection pooling.
-
-### Chat History Storage
-
-- File-based storage (`file_chat_history_store.py`)
-- No migration path for production
-
-**Recommendation:** Implement database-backed storage for production use.
-
----
-
-## Summary by Priority
-
-### High Priority (Address Soon)
-1. Global state management - affects testability and concurrency
-2. Large file refactoring - impacts maintainability
-3. Error handling improvements - affects reliability
-4. Type safety fixes - prevents runtime errors
-
-### Medium Priority (Plan for Next Sprint)
-1. Configuration management - improves deployment flexibility
-2. Performance optimizations - better resource utilization
-3. Testing coverage expansion - prevents regressions
-4. Security hardening - production readiness
-
-### Low Priority (Technical Debt)
-1. Documentation updates
-2. Deprecated code removal
-3. Code style consistency
-4. Dependency version management
-
----
-
-## Maintenance Recommendations
-
-1. **Establish refactoring cadence** - Tackle one large file per sprint
-2. **Implement dependency injection** - Reduce global state usage
-3. **Strengthen type checking** - Fix type ignore comments
-4. **Improve error handling** - Use domain-specific exceptions
-5. **Expand test coverage** - Focus on complex modules
-6. **Configuration as code** - Move magic numbers to config
-7. **Security audit** - Review API key management and CORS setup
-8. **Performance monitoring** - Add metrics for slow operations
-
----
-
-**Last Updated:** 2026-03-22
-**Next Review:** 2026-04-22
+*Concerns audit: 2026-04-06*

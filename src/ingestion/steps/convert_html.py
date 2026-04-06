@@ -13,6 +13,7 @@ Supports pluggable extractor strategies:
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -23,6 +24,9 @@ from urllib.parse import urlsplit, urlunsplit
 from bs4 import BeautifulSoup
 
 from src.config import DATA_RAW_DIR
+from src.config.context import get_runtime_state
+
+logger = logging.getLogger(__name__)
 from src.ingestion.artifacts import SourceArtifact, persist_source_artifact
 from src.ingestion.steps.download_web import get_manifest_alias_filenames
 
@@ -32,17 +36,18 @@ html_to_markdown: Any = None
 try:  # pragma: no cover - optional dependency
     import trafilatura  # type: ignore[assignment]
 except Exception:  # pragma: no cover - optional dependency
-    pass
+    logger.debug("trafilatura not available")
 
 try:  # pragma: no cover - optional dependency
     import html_to_markdown  # type: ignore[assignment]
 except Exception:  # pragma: no cover - optional dependency
-    pass
+    logger.debug("html_to_markdown not available")
 
 try:  # pragma: no cover - optional dependency
     from readability_lxml import readability
 except Exception:  # pragma: no cover - optional dependency
     readability = None
+    logger.debug("readability-lxml not available")
 
 
 @dataclass
@@ -75,6 +80,7 @@ def set_html_extractor_strategy(strategy: str) -> None:
     # Update global for backwards compatibility
     global HTML_EXTRACTOR_STRATEGY
     HTML_EXTRACTOR_STRATEGY = _html_config.extractor_strategy
+    get_runtime_state().html_extractor_strategy = _html_config.extractor_strategy
 
 
 def set_html_extractor_mode(mode: str) -> None:
@@ -86,6 +92,7 @@ def set_html_extractor_mode(mode: str) -> None:
     # Update global for backwards compatibility
     global HTML_EXTRACTOR_MODE
     HTML_EXTRACTOR_MODE = normalized
+    get_runtime_state().html_extractor_mode = normalized
 
 
 def set_page_classification_enabled(enabled: bool) -> None:
@@ -95,6 +102,7 @@ def set_page_classification_enabled(enabled: bool) -> None:
     # Update global for backwards compatibility
     global PAGE_CLASSIFICATION_ENABLED
     PAGE_CLASSIFICATION_ENABLED = normalized
+    get_runtime_state().page_classification_enabled = normalized
 
 
 def get_html_processor_config() -> HTMLProcessorConfig:
@@ -176,7 +184,8 @@ def _html2md_extract(html_content: str) -> tuple[str, dict[str, Any]]:
     try:
         markdown = html_to_markdown.convert(html_content).strip()
         return markdown, {"extractor": "html-to-markdown", "available": True}
-    except Exception:
+    except Exception as e:
+        logger.warning("html-to-markdown extraction failed: %s", e)
         return "", {"extractor": "html-to-markdown", "available": False, "error": True}
 
 
@@ -199,7 +208,8 @@ def _readability_extract(html_content: str) -> tuple[str, dict[str, Any]]:
         title = result.title() or ""
         markdown = f"# {title}\n\n{text}" if title else text
         return markdown.strip(), {"extractor": "readability-lxml", "available": True}
-    except Exception:
+    except Exception as e:
+        logger.warning("readability-lxml extraction failed: %s", e)
         return "", {"extractor": "readability-lxml", "available": False, "error": True}
 
 

@@ -1,392 +1,114 @@
-# Code Conventions
+# Coding Conventions
 
-This document outlines the coding standards and conventions used throughout the qna-medical-referenced codebase.
+**Analysis Date:** 2026-04-06
 
-## Python Code Style
+## Naming Patterns
 
-### Linting and Formatting
+**Files:**
+- Python: `snake_case.py` (e.g., `test_chunker.py`, `chunk_text.py`, `production_profile.py`)
+- TypeScript: `kebab-case.ts` (e.g., `playwright.config.ts`)
+- Test files: `test_*.py` (backend), `*.spec.ts` (frontend)
 
-The project uses **Ruff** for linting and code formatting:
+**Functions:**
+- Python: `snake_case` (e.g., `chunk_documents`, `configure_logging`, `evaluate_answer_quality_async`)
+- TypeScript: `camelCase` (e.g., `pressSequentially`, `toHaveTitle`)
 
-```bash
-# Run linter
-uv run ruff check .
+**Variables:**
+- Python: `snake_case` (e.g., `chunk_size`, `base_url`, `request_id`)
+- TypeScript: `camelCase` (e.g., `sendButton`, `mockGen`)
 
-# Format code
-uv run ruff format .
+**Types:**
+- Python classes: `PascalCase` (e.g., `Settings`, `TextChunker`, `AppError`, `VectorStore`)
+- TypeScript types: `PascalCase` (inferred from Svelte conventions)
 
-# Check formatting without making changes
-uv run ruff format --check .
-```
+## Code Style
 
-**Configuration** (`pyproject.toml`):
-- Line length: 100 characters
-- Target Python version: 3.13
-- Enabled rule sets: E (errors), F (pyflakes), I (import sorting), N (naming), W (warnings)
-- Ignored: E501 (line length handled by formatter)
+**Formatting:**
+- Ruff with `line-length = 100`, `target-version = "py313"`
+- TypeScript uses tabs for indentation (2-space equivalent via SvelteKit defaults)
 
-### Type Checking
+**Linting:**
+- Ruff: `select = ["E", "F", "I", "N", "W"]`, `ignore = ["E501"]`
+  - E: pycodestyle errors
+  - F: Pyflakes
+  - I: isort (import sorting)
+  - N: pep8-naming
+  - W: pycodestyle warnings
+- mypy: strict mode with `warn_return_any`, `warn_unused_ignores`, `warn_redundant_casts`, `strict_optional`
+- Frontend: `svelte-check` for type checking (no ESLint/Prettier configured)
 
-**MyPy** is used for static type checking:
+## Import Organization
 
-```bash
-uv run mypy src/planweaver
-```
+**Order:**
+1. Standard library imports (e.g., `import os`, `from pathlib import Path`)
+2. Third-party imports (e.g., `import pytest`, `from fastapi import HTTPException`)
+3. Local imports (e.g., `from src.config import settings`)
 
-**Configuration**:
-- Python version: 3.13
-- Warn on return_any and unused_configs
-- Ignore missing imports for third-party libraries (nltk, google, deepeval)
-- Disabled error codes: `import-untyped`, `annotation-unchecked`
+**Path Aliases:**
+- Python: No path aliases; uses `src.` prefix (e.g., `from src.config.settings import Settings`)
+- TypeScript: SvelteKit `$lib` alias (handled by framework)
 
-### Naming Conventions
+## Error Handling
 
-**Functions and Variables**: `snake_case`
-```python
-def process_chat_message(*, llm_client, message: str) -> dict[str, Any]:
-    chat_start = time.time()
-    resolved_session_id = session_id or "default"
-```
+**Patterns:**
+- Custom exception hierarchy with `AppError` as base class (`src/app/exceptions.py:13`)
+  - `InvalidInputError` (400)
+  - `UpstreamServiceError` (502)
+  - `ArtifactNotFoundError` (404)
+  - `StorageError` (500)
+- `ValueError` for validation errors (e.g., `src/config/settings.py`, `src/experiments/config.py`)
+- FastAPI exception handlers for `HTTPException`, `AppError`, and generic `Exception`
+- Error responses include `code`, `status_code`, `request_id`, and optional `extra` dict
+- `pytest.raises` for testing expected exceptions (e.g., `test_chunker.py:128`)
+- Broad `except Exception` with logging used in ingestion/evaluation pipelines
+- Optional dependencies handled with `except Exception:  # pragma: no cover`
 
-**Classes**: `PascalCase`
-```python
-class AppError(Exception):
-    """Base application exception with HTTP semantics."""
-```
+## Logging
 
-**Constants**: `UPPER_SNAKE_CASE`
-```python
-MAX_MESSAGE_LENGTH = 2000
-DEFAULT_TOP_K = 5
-```
+**Framework:** Standard Python `logging` module with `dictConfig`
 
-**Private/Internal**: Single leading underscore
-```python
-def _build_history_context(history: list[dict[str, str]]) -> str:
-    """Internal helper function."""
-```
-
-### Type Hints
-
-**Mandatory for all function signatures**:
-```python
-from typing import Any, AsyncGenerator, Optional
-
-def process_chat_message(
-    *,
-    llm_client: Any,
-    history_store: ChatHistoryStore,
-    message: str,
-    session_id: Optional[str],
-    include_pipeline: bool = False,
-    top_k: int = 5,
-) -> dict[str, Any]:
-```
-
-**Type preferences**:
-- Use `dict[str, Any]` over `Dict` from typing (Python 3.9+ style)
-- Use `list[str]` over `List[str]`
-- Use `str | None` over `Optional[str]` (but Optional is still used in some places)
-- Use `*` to force keyword-only arguments when appropriate
-
-### Error Handling
-
-**Custom exception hierarchy** with domain-specific errors:
-
-```python
-@dataclass
-class AppError(Exception):
-    """Base application exception with HTTP semantics."""
-    message: str
-    status_code: int = 500
-    code: str = "application_error"
-    extra: dict[str, Any] | None = None
-
-class InvalidInputError(AppError):
-    def __init__(self, message: str, *, extra: dict[str, Any] | None = None):
-        super().__init__(message=message, status_code=400, code="invalid_input", extra=extra)
-
-class UpstreamServiceError(AppError):
-    def __init__(self, message: str = "Upstream service failure"):
-        super().__init__(message=message, status_code=502, code="upstream_service_error")
-```
-
-**Error handling patterns**:
-- Wrap external API calls with domain exceptions
-- Always chain exceptions: `raise UpstreamServiceError(...) from exc`
-- Use try-except blocks for cleanup in async generators
-- Log errors before re-raising with context
-
-```python
-try:
-    response = client.generate(prompt=message, context=full_context)
-except Exception as exc:
-    raise UpstreamServiceError("An error occurred processing your request") from exc
-```
-
-### Logging
-
-**Structured logging with JSON payloads**:
-
-```python
-import logging
-import json
-
-logger = logging.getLogger(__name__)
-
-def log_event(logger: logging.Logger, level: int, event: str, **fields: Any) -> None:
-    payload = {"event": event, **{k: v for k, v in fields.items() if v is not None}}
-    logger.log(level, json.dumps(payload, sort_keys=True, default=str))
-```
-
-**Usage patterns**:
+**Patterns:**
 - Module-level loggers: `logger = logging.getLogger(__name__)`
-- Structured events with context: `log_event(logger, logging.INFO, "chat_started", session_id=session_id)`
-- Error logging with stack traces when needed: `logger.error("Error during stream: %s", exc)`
+- Centralized configuration via `configure_logging()` in `src/app/logging.py`
+- Format: `%(asctime)s %(levelname)s %(name)s %(message)s`
+- Structured logging helper: `log_event(logger, level, event, **fields)` outputs JSON
+- Levels used: `INFO` (startup, operations), `WARNING` (fallbacks, degraded mode), `ERROR` (failures), `DEBUG` (detailed operations)
 
-### Documentation
+## Comments
 
-**Module-level docstrings** (Google style):
-```python
-"""Chat orchestration logic for RAG-based conversations.
+**When to Comment:**
+- Docstrings on modules, classes, and public functions
+- Configuration fields have detailed docstrings with environment variable names and defaults
+- Section dividers used in test files (e.g., `# Network Failure Tests`)
 
-This module contains the core chat processing logic that coordinates retrieval,
-generation, and history persistence. It serves as the use case layer that
-orchestrates the RAG pipeline and LLM client to produce chat responses.
+**JSDoc/TSDoc:**
+- Python: Google-style docstrings with `Args:`, `Returns:`, `Raises:` sections
+- Heavy inline documentation on `Settings` class attributes
 
-Flow:
-    1. Retrieve conversation history for the session
-    2. Perform RAG retrieval (with or without pipeline trace)
-    3. Combine history context and retrieved context
-    4. Generate response using LLM
-    5. Save user message and assistant response to history
-    6. Return response with sources and optional pipeline trace
+## Function Design
 
-Example:
-    Process a chat message:
-        from src.usecases.chat import process_chat_message
-        from src.infra.llm import get_client
+**Size:**
+- Small, focused functions (typically <50 lines)
+- Pipeline steps as separate modules (e.g., `chunk_text.py`, `convert_html.py`)
 
-        result = process_chat_message(
-            llm_client=get_client(),
-            message="What is a normal CBC count?",
-            session_id="user-123",
-            include_pipeline=True
-        )
-        print(result["response"])
-"""
-```
+**Parameters:**
+- Configuration objects passed as dataclasses or Pydantic models
+- Keyword arguments for optional parameters
 
-**Function docstrings** (Args/Returns/Side effects):
-```python
-def process_chat_message(
-    *,
-    llm_client: Any,
-    history_store: ChatHistoryStore,
-    message: str,
-    session_id: Optional[str],
-    include_pipeline: bool = False,
-    top_k: int = 5,
-) -> dict[str, Any]:
-    """Run retrieval + generation, persist history, and optionally include a trace.
+**Return Values:**
+- Typed returns where practical (e.g., `list[dict]`, `tuple[list, dict]`)
+- `None` for side-effect-only functions
 
-    This is the main chat processing function that orchestrates the entire
-    RAG pipeline. It retrieves relevant context, generates a response, and
-    tracks timing information for monitoring and debugging.
+## Module Design
 
-    Args:
-        llm_client: LLM client instance (QwenClient or compatible)
-        message: User's question or message
-        session_id: Session identifier for history persistence.
-                   If None, uses "default" session
-        include_pipeline: If True, includes detailed pipeline trace with timing
-        top_k: Number of documents to retrieve from vector store (default: 5)
+**Exports:**
+- `__init__.py` files used for package structure (often empty)
+- Singleton pattern for `settings` object (`src/config/settings.py:430`)
 
-    Returns:
-        Dictionary containing:
-            - "response": Generated assistant response text
-            - "sources": List of retrieved document sources
-            - "pipeline": PipelineTrace object if include_pipeline=True, else None
+**Barrel Files:**
+- Minimal barrel files; direct imports preferred
+- `src/config/__init__.py` re-exports `settings`
 
-    Side effects:
-        - Saves user message and assistant response to chat history store
-        - Updates pipeline trace with timing information if tracing enabled
-    """
-```
+---
 
-**Inline comments**: Use sparingly, prefer self-documenting code
-```python
-# Bad: obvious comment
-x = x + 1  # increment x
-
-# Good: explain why, not what
-resolved_session_id = session_id or "default"  # Use default session if none provided
-```
-
-### Code Organization
-
-**Directory structure**:
-```
-src/
-├── app/                 # FastAPI application layer (routes, middleware, schemas)
-├── config/              # Configuration and settings
-├── evals/               # Evaluation logic and metrics
-├── experiments/         # Experiment tracking (W&B integration)
-├── ingestion/           # Document processing pipeline (L0-L5)
-├── infra/               # Infrastructure services (LLM client, storage)
-├── rag/                 # RAG runtime logic
-├── source_metadata.py   # Source metadata management
-└── usecases/            # Business logic orchestration (chat, pipeline)
-```
-
-**Import ordering**:
-1. Standard library imports
-2. Third-party imports
-3. Local application imports (from src.*)
-
-```python
-import logging
-import time
-from pathlib import Path
-from typing import Any, Optional
-
-from fastapi import HTTPException, Request
-from pydantic_settings import BaseSettings
-
-from src.app.exceptions import AppError
-from src.config import settings
-from src.infra.llm import get_client
-```
-
-### Configuration
-
-**Pydantic Settings** with environment variable support:
-
-```python
-class Settings(BaseSettings):
-    """Application configuration with environment variable support."""
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=False,
-        extra="ignore"
-    )
-
-    dashscope_api_key: str = ""
-    """Alibaba Dashscope API key for Qwen models."""
-
-    model_name: str = "qwen3.5-flash"
-    """Qwen model to use for text generation."""
-
-    @property
-    def is_development(self) -> bool:
-        return self.environment.strip().lower() in {"development", "dev", "local", "test"}
-
-settings = Settings()
-```
-
-**Patterns**:
-- Use docstrings for field descriptions
-- Provide sensible defaults for development
-- Use properties for computed values
-- Load once at module import time
-
-### Async/Await Patterns
-
-**Async generators for streaming**:
-```python
-async def stream_chat_message(
-    *,
-    llm_client: Any,
-    message: str,
-    session_id: Optional[str],
-) -> AsyncGenerator[tuple[str, dict[str, Any]], None]:
-    """Stream response tokens while performing RAG.
-
-    Yields:
-        Tuple of (content, metadata) where:
-        - content: Token string (may be empty for metadata-only events)
-        - metadata: Dict with keys: done (bool), sources (list), pipeline (dict), error (str)
-    """
-    try:
-        async for token in client.a_generate_stream(prompt=message, context=full_context):
-            accumulated_response += token
-            yield (token, {"done": False})
-
-        yield ("", {"done": True, "sources": sources})
-    except Exception as exc:
-        logger.error("Error during stream: %s", exc)
-        yield ("", {"done": True, "error": "An error occurred"})
-        raise
-```
-
-## TypeScript/Svelte Code Style
-
-### Type Definitions
-
-**Interface-based types** for all data structures:
-
-```typescript
-export interface RetrievedDocument {
-	id: string;
-	content: string;
-	source: string;
-	page?: number;
-	semantic_score: number;
-	keyword_score: number;
-	combined_score: number;
-	rank: number;
-	chunk_quality_score?: number;
-	source_type?: string;
-	domain?: string;
-}
-
-export interface PipelineTrace {
-	query: string;
-	timing_ms: number;
-	retrieval: RetrievalStage;
-	context: ContextStage;
-	generation: GenerationStage;
-}
-```
-
-**Naming conventions**:
-- Interfaces: `PascalCase`
-- Functions/variables: `camelCase`
-- Constants: `UPPER_SNAKE_CASE` or `camelCase` for module-level
-- Types: `PascalCase`
-
-### Component Patterns
-
-**Svelte components** use TypeScript with strict typing:
-```typescript
-export let metricValue: number;
-export let threshold: number;
-export let label: string;
-
-$: isWarning = metricValue > threshold;
-```
-
-### Utility Functions
-
-**Pure functions** for formatting and calculations:
-
-```typescript
-export function formatScore(score: number): string {
-	return (score * 100).toFixed(1);
-}
-
-export function formatPercent(value: number, digits = 1): string {
-	return `${(value * 100).toFixed(digits)}%`;
-}
-```
-
-## General Principles
-
-1. **Simplicity over cleverness**: Choose clear, straightforward code
-2. **Explicit over implicit**: Make dependencies and expectations clear
-3. **Type safety**: Use type hints to catch errors early
-4. **Domain-driven design**: Use business terminology in code
-5. **Error visibility**: Always log errors with context
-6. **Testability**: Write code that's easy to test in isolation
-7. **Documentation**: Document the "why", not the "what"
+*Convention analysis: 2026-04-06*

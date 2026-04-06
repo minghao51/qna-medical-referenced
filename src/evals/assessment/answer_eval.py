@@ -5,10 +5,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
+
+logger = logging.getLogger(__name__)
 
 from deepeval.metrics.indicator import safe_a_measure
 from deepeval.test_case import LLMTestCase
@@ -70,7 +73,8 @@ def _load_cache_entries(cache_path: Path | None) -> dict[str, Any]:
         return {}
     try:
         payload = json.loads(cache_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to load cache entries from %s: %s", cache_path, e)
         return {}
     if not isinstance(payload, dict):
         return {}

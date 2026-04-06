@@ -91,11 +91,19 @@ class ChromaVectorStore:
 
         self._embeddings_file: Path | None = None
 
-        persist_dir = str(settings.chroma_persist_directory)
-        self._client = chromadb.PersistentClient(
-            path=persist_dir,
-            settings=ChromaSettings(allow_reset=True),
-        )
+        chroma_host = settings.chroma_server_host.strip()
+        if chroma_host:
+            logger.info("Connecting to ChromaDB server at %s:%d", chroma_host, settings.chroma_server_port)
+            self._client = chromadb.HttpClient(
+                host=chroma_host,
+                port=settings.chroma_server_port,
+            )
+        else:
+            persist_dir = str(settings.chroma_persist_directory)
+            self._client = chromadb.PersistentClient(
+                path=persist_dir,
+                settings=ChromaSettings(allow_reset=True),
+            )
         self._collection = self._client.get_or_create_collection(
             name=self.collection_name,
             embedding_function=None,
@@ -103,6 +111,7 @@ class ChromaVectorStore:
         self._index_metadata: dict[str, Any] = dict(index_metadata or {})
         self.content_hashes: set[str] = set()
         self._id_set: set[str] = set()
+        self._doc_contents: list[str] = []
         self.keyword_index: dict[str, list[int]] = {}
         self._doc_term_freqs: dict[int, dict[str, int]] = {}
         self._index_dirty = False
@@ -185,6 +194,7 @@ class ChromaVectorStore:
             self._collection.upsert(**upsert_payload)
 
         self._id_set = set(ids)
+        self._doc_contents = []
         self.content_hashes = set(payload.get("content_hashes", []))
         self._index_dirty = True
         self._rebuild_index_if_needed()
@@ -196,8 +206,6 @@ class ChromaVectorStore:
             self._id_set.add(doc_id)
             if meta and "content_hash" in meta:
                 self.content_hashes.add(meta["content_hash"])
-        if self._collection.metadata:
-            self._index_metadata = dict(self._collection.metadata)
 
     def _apply_index_metadata(self) -> None:
         if self._index_metadata:
@@ -208,17 +216,10 @@ class ChromaVectorStore:
 
     def _rebuild_index_if_needed(self) -> None:
         if self._index_dirty:
-            self.keyword_index = self._build_keyword_index()
-            self._doc_term_freqs = self._build_term_frequencies()
+            self._doc_contents = self._get_all_documents()
+            self.keyword_index = build_keyword_index(self._doc_contents, self._tokenize)
+            self._doc_term_freqs = build_term_frequencies(self._doc_contents, self._tokenize)
             self._index_dirty = False
-
-    def _build_term_frequencies(self) -> dict[int, dict[str, int]]:
-        contents = self._get_all_documents()
-        return build_term_frequencies(contents, self._tokenize)
-
-    def _build_keyword_index(self) -> dict:
-        contents = self._get_all_documents()
-        return build_keyword_index(contents, self._tokenize)
 
     def _get_all_documents(self) -> list[str]:
         all_data = self._collection.get(include=["documents"])
@@ -228,7 +229,7 @@ class ChromaVectorStore:
         self._rebuild_index_if_needed()
         return keyword_score(
             query,
-            contents=self._get_all_documents(),
+            contents=self._doc_contents,
             keyword_index=self.keyword_index,
             doc_term_freqs=self._doc_term_freqs,
             tokenize=self._tokenize,
@@ -358,7 +359,19 @@ class ChromaVectorStore:
                 metadatas=to_upsert_metadatas,
             )
 
-        self._index_dirty = True
+            # Incrementally update keyword index for new documents
+            for text in to_upsert_documents:
+                doc_idx = len(self._doc_contents)
+                self._doc_contents.append(text)
+                tokens = self._tokenize(text)
+                for token in set(tokens):
+                    self.keyword_index.setdefault(token, []).append(doc_idx)
+                tf: dict[str, int] = {}
+                for token in tokens:
+                    tf[token] = tf.get(token, 0) + 1
+                self._doc_term_freqs[doc_idx] = tf
+        else:
+            self._index_dirty = True
         self.last_indexing_stats = stats
         self._persist_legacy_snapshot()
         return stats
@@ -386,41 +399,41 @@ class ChromaVectorStore:
         for score_info in top_scores:
             idx = score_info["idx"]
             meta = documents_for_ranking["metadatas"][idx]
+            source = meta.get("source", "unknown")
+            logical_name = meta.get("logical_name")
+            canonical_label = meta.get("canonical_label")
+            page = meta.get("page")
+            display_label = display_source_label(
+                source,
+                logical_name=logical_name,
+                canonical_label=canonical_label,
+                page=page,
+            )
             results.append(
                 {
                     "id": documents_for_ranking["ids"][idx],
                     "content": documents_for_ranking["contents"][idx],
-                    "source": meta.get("source", "unknown"),
-                    "page": meta.get("page"),
+                    "source": source,
+                    "page": page,
                     "score": score_info.get("combined_score", 0.0),
                     "semantic_rank": score_info.get("semantic_rank"),
                     "bm25_rank": score_info.get("bm25_rank"),
                     "fused_rank": score_info.get("fused_rank"),
                     "source_prior": score_info.get("source_prior", 0.0),
                     "quality_score": meta.get("quality_score", 1.0),
-                    "logical_name": meta.get("logical_name"),
-                    "canonical_label": meta.get("canonical_label"),
-                    "display_label": display_source_label(
-                        meta.get("source", "unknown"),
-                        logical_name=meta.get("logical_name"),
-                        canonical_label=meta.get("canonical_label"),
-                        page=meta.get("page"),
-                    ),
+                    "logical_name": logical_name,
+                    "canonical_label": canonical_label,
+                    "display_label": display_label,
                     "source_url": meta.get("source_url"),
                     "source_type": meta.get("source_type"),
                     "source_class": meta.get("source_class"),
                     "domain": meta.get("domain"),
                     "domain_type": meta.get("domain_type"),
                     "metadata": {
-                        "logical_name": meta.get("logical_name"),
-                        "display_label": display_source_label(
-                            meta.get("source", "unknown"),
-                            logical_name=meta.get("logical_name"),
-                            canonical_label=meta.get("canonical_label"),
-                            page=meta.get("page"),
-                        ),
+                        "logical_name": logical_name,
+                        "display_label": display_label,
                         "source_url": meta.get("source_url"),
-                        "canonical_label": meta.get("canonical_label"),
+                        "canonical_label": canonical_label,
                         "source_type": meta.get("source_type"),
                         "source_class": meta.get("source_class"),
                         "page_type": meta.get("page_type"),
@@ -598,12 +611,22 @@ class ChromaVectorStore:
         for rank, score_info in enumerate(top_scores, start=1):
             idx = score_info["idx"]
             meta = documents_for_ranking["metadatas"][idx]
+            source = meta.get("source", "unknown")
+            logical_name = meta.get("logical_name")
+            canonical_label = meta.get("canonical_label")
+            page = meta.get("page")
+            display_label = display_source_label(
+                source,
+                logical_name=logical_name,
+                canonical_label=canonical_label,
+                page=page,
+            )
             results.append(
                 {
                     "id": documents_for_ranking["ids"][idx],
                     "content": documents_for_ranking["contents"][idx],
-                    "source": meta.get("source", "unknown"),
-                    "page": meta.get("page"),
+                    "source": source,
+                    "page": page,
                     "semantic_score": round(score_info.get("semantic_score", 0.0), 4),
                     "keyword_score": round(score_info.get("keyword_score", 0.0), 4),
                     "source_prior": round(score_info.get("source_prior", 0.0), 4),
@@ -618,29 +641,19 @@ class ChromaVectorStore:
                     "quality_score": round(float(meta.get("quality_score", 1.0)), 4),
                     "content_type": meta.get("content_type", "paragraph"),
                     "section_path": meta.get("section_path", []),
-                    "logical_name": meta.get("logical_name"),
-                    "canonical_label": meta.get("canonical_label"),
-                    "display_label": display_source_label(
-                        meta.get("source", "unknown"),
-                        logical_name=meta.get("logical_name"),
-                        canonical_label=meta.get("canonical_label"),
-                        page=meta.get("page"),
-                    ),
+                    "logical_name": logical_name,
+                    "canonical_label": canonical_label,
+                    "display_label": display_label,
                     "source_url": meta.get("source_url"),
                     "source_type": meta.get("source_type"),
                     "source_class": meta.get("source_class"),
                     "domain": meta.get("domain"),
                     "domain_type": meta.get("domain_type"),
                     "metadata": {
-                        "logical_name": meta.get("logical_name"),
-                        "display_label": display_source_label(
-                            meta.get("source", "unknown"),
-                            logical_name=meta.get("logical_name"),
-                            canonical_label=meta.get("canonical_label"),
-                            page=meta.get("page"),
-                        ),
+                        "logical_name": logical_name,
+                        "display_label": display_label,
                         "source_url": meta.get("source_url"),
-                        "canonical_label": meta.get("canonical_label"),
+                        "canonical_label": canonical_label,
                         "source_type": meta.get("source_type"),
                         "source_class": meta.get("source_class"),
                         "page_type": meta.get("page_type"),
@@ -702,6 +715,7 @@ class ChromaVectorStore:
             self._collection.delete(ids=all_ids)
         self.content_hashes = set()
         self._id_set = set()
+        self._doc_contents = []
         self.keyword_index = {}
         self._doc_term_freqs = {}
         self._index_metadata = {}

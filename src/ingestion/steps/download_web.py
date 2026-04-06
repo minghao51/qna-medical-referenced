@@ -8,12 +8,15 @@ Skips download if target file already exists.
 import asyncio
 import hashlib
 import json
+import logging
 import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse, urlunparse
+
+logger = logging.getLogger(__name__)
 
 import httpx
 from bs4 import BeautifulSoup
@@ -49,7 +52,8 @@ def _load_manifest() -> dict[str, Any]:
     if MANIFEST_PATH.exists():
         try:
             return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to load manifest: %s", e)
             return {"records": []}
     return {"records": []}
 
@@ -221,7 +225,8 @@ def _find_existing_file_by_content_hash(content_hash_value: str) -> Path | None:
             digest = hashlib.sha256(html_file.read_bytes()).hexdigest()[:16]
             if digest == content_hash_value:
                 return html_file
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to hash file %s: %s", html_file.name, e)
             continue
     return None
 

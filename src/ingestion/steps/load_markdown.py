@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List
 
 from src.config import DATA_RAW_DIR
+from src.config.context import get_runtime_state
 from src.ingestion.artifacts import load_source_artifact
 from src.ingestion.steps.download_web import (
     get_manifest_record_by_filename,
@@ -19,7 +20,11 @@ from src.source_metadata import (
     normalize_source_class,
 )
 
-INDEX_ONLY_CLASSIFIED_PAGES = True
+INDEX_ONLY_CLASSIFIED_PAGES = True  # backward-compat module global
+
+
+def _is_index_only_classified_pages() -> bool:
+    return get_runtime_state().index_only_classified_pages
 
 
 class MarkdownLoader:
@@ -91,3 +96,4 @@ def get_markdown_documents() -> List[dict]:
 def set_index_only_classified_pages(enabled: bool) -> None:
     global INDEX_ONLY_CLASSIFIED_PAGES
     INDEX_ONLY_CLASSIFIED_PAGES = bool(enabled)
+    get_runtime_state().index_only_classified_pages = bool(enabled)

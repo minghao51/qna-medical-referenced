@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { proxyBrowserApiRequests } from './helpers';
 
-const API_URL = process.env.API_URL || 'http://localhost:8000';
 const evaluationFixture = {
 	run_dir: '20260320T101010.123456Z_baseline',
 	step_metrics: {
@@ -82,28 +82,18 @@ const evaluationFixture = {
 };
 
 async function mockEvaluationApi(page: Page) {
-	await page.route(`${API_URL}/evaluation/latest`, async (route) => {
+	await page.route(/\/evaluation\/latest$/, async (route) => {
 		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(evaluationFixture) });
 	});
-	await page.route(`${API_URL}/evaluation/history?*`, async (route) => {
+	await page.route(/\/evaluation\/history(\?.*)?$/, async (route) => {
 		await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) });
 	});
-	await page.route(`${API_URL}/evaluation/ablation`, async (route) => {
+	await page.route(/\/evaluation\/ablation$/, async (route) => {
 		await route.fulfill({
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify({ ablation_runs: [], message: 'No ablation runs yet' })
 		});
-	});
-}
-
-async function proxyBrowserApiRequests(page: Page) {
-	if (API_URL === 'http://localhost:8000') return;
-
-	await page.route('http://localhost:8000/**', async (route) => {
-		const proxiedUrl = route.request().url().replace('http://localhost:8000', API_URL);
-		const response = await route.fetch({ url: proxiedUrl });
-		await route.fulfill({ response });
 	});
 }
 

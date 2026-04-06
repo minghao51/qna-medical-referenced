@@ -43,7 +43,7 @@ The application uses [Pydantic BaseSettings](https://docs.pydantic.dev/latest/co
 Alibaba Dashscope API key for Qwen text generation and embeddings.
 
 **How to get it:**
-1. Visit [Dashscope Console](https://dashscope-intl.aliyuncs.com/)
+1. Visit [Dashscope Console](https://dashscope-us.aliyuncs.com/)
 2. Sign in with your Alibaba account
 3. Navigate to API Keys section
 4. Create a new API key
@@ -445,7 +445,7 @@ RETRY_DELAY=0.1
 
 **Solution:**
 1. Verify `DASHSCOPE_API_KEY` is set in `.env`
-2. Check the key is valid at [Dashscope Console](https://dashscope-intl.aliyuncs.com/)
+2. Check the key is valid at [Dashscope Console](https://dashscope-us.aliyuncs.com/)
 3. Ensure the key has not been rotated or revoked
 
 ### Rate limit errors during testing

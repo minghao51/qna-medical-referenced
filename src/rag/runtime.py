@@ -3,6 +3,7 @@
 
 import json
 import logging
+import threading
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 _vector_store_initialized = False
 _vector_store_initialized_signature: str | None = None
+_init_lock = threading.Lock()
 _VALID_SEARCH_MODES = {"rrf_hybrid", "semantic_only", "bm25_only"}
 
 
@@ -271,50 +273,51 @@ def initialize_vector_store(
 ):
     global _vector_store_initialized, _vector_store_initialized_signature
 
-    runtime_signature = _vector_store_runtime_signature()
-    if _vector_store_initialized_signature != runtime_signature:
-        _vector_store_initialized = False
+    with _init_lock:
+        runtime_signature = _vector_store_runtime_signature()
+        if _vector_store_initialized_signature != runtime_signature:
+            _vector_store_initialized = False
 
-    vector_store = get_vector_store()
+        vector_store = get_vector_store()
 
-    if rebuild:
-        vector_store.clear()
-        _vector_store_initialized = False
-        _vector_store_initialized_signature = None
+        if rebuild:
+            vector_store.clear()
+            _vector_store_initialized = False
+            _vector_store_initialized_signature = None
 
-    if materialize_html:
-        convert_html_main(force=force_html_reconvert)
+        if materialize_html:
+            convert_html_main(force=force_html_reconvert)
 
-    if vector_store.documents.get("contents"):
-        if not _vector_store_initialized:
-            _vector_store_initialized = True
-            _vector_store_initialized_signature = runtime_signature
-            logger.info(
-                "Loaded existing vector store with %d documents",
-                len(vector_store.documents["contents"]),
-            )
-        else:
-            _vector_store_initialized_signature = runtime_signature
+        if vector_store.documents.get("contents"):
+            if not _vector_store_initialized:
+                _vector_store_initialized = True
+                _vector_store_initialized_signature = runtime_signature
+                logger.info(
+                    "Loaded existing vector store with %d documents",
+                    len(vector_store.documents["contents"]),
+                )
+            else:
+                _vector_store_initialized_signature = runtime_signature
+            return {
+                "status": "ready",
+                "reused_existing_index": True,
+                "vector_store_config": get_vector_store_runtime_config(),
+                "index_metadata": vector_store.documents.get("index_metadata", {}),
+                "vector_document_count": len(vector_store.documents.get("contents", [])),
+                "indexing_stats": vector_store.last_indexing_stats,
+            }
+
+        build_stats = _build_index_from_sources(vector_store)
+        _vector_store_initialized = True
+        _vector_store_initialized_signature = runtime_signature
         return {
-            "status": "ready",
-            "reused_existing_index": True,
+            "status": "built",
+            "reused_existing_index": False,
             "vector_store_config": get_vector_store_runtime_config(),
             "index_metadata": vector_store.documents.get("index_metadata", {}),
             "vector_document_count": len(vector_store.documents.get("contents", [])),
-            "indexing_stats": vector_store.last_indexing_stats,
+            "indexing_stats": build_stats,
         }
-
-    build_stats = _build_index_from_sources(vector_store)
-    _vector_store_initialized = True
-    _vector_store_initialized_signature = runtime_signature
-    return {
-        "status": "built",
-        "reused_existing_index": False,
-        "vector_store_config": get_vector_store_runtime_config(),
-        "index_metadata": vector_store.documents.get("index_metadata", {}),
-        "vector_document_count": len(vector_store.documents.get("contents", [])),
-        "indexing_stats": build_stats,
-    }
 
 
 def initialize_runtime_index(
@@ -495,11 +498,19 @@ def _diversify_results(
             item_id = str(item.get("id", ""))
             if item_id and item_id in selected_ids:
                 continue
+            sp_key = _source_page_key(item)
+            if source_page_counts.get(sp_key, 0) >= max_chunks_per_source_page + 1:
+                continue
             selected.append(item)
             if item_id:
                 selected_ids.add(item_id)
+            source_page_counts[sp_key] = source_page_counts.get(sp_key, 0) + 1
             if len(selected) >= top_k:
                 break
+        if len(selected) < top_k:
+            logger.warning(
+                "Only %d/%d results after diversity constraints", len(selected), top_k
+            )
 
     return selected
 

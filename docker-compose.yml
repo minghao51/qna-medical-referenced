@@ -6,7 +6,9 @@ services:
       target: runtime
     volumes:
       - ./src:/app/src:ro
+      - ./data/chroma:/app/data/chroma
       - ./data/evals:/app/data/evals
+      - ./data/evals_comprehensive_ablation:/app/data/evals_comprehensive_ablation
     ports:
       - "8000:8000"
     environment:

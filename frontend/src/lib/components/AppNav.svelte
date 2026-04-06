@@ -12,6 +12,7 @@
 	const navItems: NavItem[] = [
 		{ href: '/', label: 'Chat' },
 		{ href: '/eval', label: 'Pipeline Eval' },
+		{ href: '/eval/ablation', label: 'Ablation Study' },
 		{ href: '/docs/pipeline', label: 'Pipeline Docs' }
 	];
 

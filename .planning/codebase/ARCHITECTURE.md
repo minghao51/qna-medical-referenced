@@ -1,547 +1,196 @@
-# Architecture Documentation
+# Architecture
 
-## System Overview
+**Analysis Date:** 2026-04-06
 
-This is a medical Q&A chatbot built with a RAG (Retrieval-Augmented Generation) pipeline, designed to help users understand health screening results. The system processes medical reference documents (PDFs, HTML), indexes them for retrieval, and uses LLMs to generate contextually relevant answers.
+## Pattern Overview
 
-### Core Technology Stack
+**Overall:** Layered Architecture with Clean Architecture influences (onion architecture)
 
-- **Backend**: Python 3.13+ with FastAPI
-- **LLM**: Alibaba Qwen models via Dashscope API
-- **Vector Storage**: Custom ChromaDB-based implementation with hybrid search
-- **Frontend**: SvelteKit with TypeScript
-- **Evaluation**: DeepEval framework with LLM-as-a-judge
-- **Experiment Tracking**: Weights & Biases (W&B)
+**Key Characteristics:**
+- FastAPI application factory pattern for testability
+- Dependency Injection container (`ServiceContainer`) managing infra services
+- Clear separation between offline ingestion pipeline and online RAG runtime
+- Use case layer orchestrates infrastructure services
+- Modular route handlers with middleware stack
+- Configuration driven via Pydantic BaseSettings from environment variables
 
-## Architecture Layers
+## Layers
 
-### 1. Application Layer (`src/app/`)
+**CLI Layer (`src/cli/`):**
+- Purpose: Entry points for running the application
+- Location: `src/cli/`
+- Contains: Server startup (`serve.py`, `serve_production.py`), pipeline runner (`ingest.py`), evaluation pipeline (`eval_pipeline.py`)
+- Depends on: `src.app.factory`, `src.usecases.pipeline`
+- Used by: External invocation (uvicorn, python -m)
 
-**Purpose**: HTTP API, routing, middleware, and request handling
+**API/Route Layer (`src/app/routes/`):**
+- Purpose: HTTP request handling and response formatting
+- Location: `src/app/routes/`
+- Contains: Chat, health, history, evaluation routers
+- Depends on: `src.usecases`, `src.app.schemas`, `src.app.middleware`
+- Used by: HTTP clients (frontend SvelteKit app, API consumers)
 
-**Components**:
-- `factory.py`: FastAPI app factory with middleware stack and lifecycle management
-- `routes/`: API endpoints
-  - `chat.py`: Chat endpoints (streaming and non-streaming)
-  - `evaluation.py`: Evaluation and assessment endpoints
-  - `history.py`: Chat history management
-  - `health.py`: Health check endpoint
-- `middleware/`: Request processing middleware
-  - `auth.py`: API key authentication
-  - `rate_limit.py`: Rate limiting per client
-  - `request_id.py`: Request ID tracking for tracing
-- `schemas/`: Pydantic models for request/response validation
-- `session.py`: Session management for multi-turn conversations
+**Use Case Layer (`src/usecases/`):**
+- Purpose: Business logic orchestration
+- Location: `src/usecases/`
+- Contains: Chat orchestration (`chat.py`), offline pipeline runner (`pipeline.py`)
+- Depends on: `src.infra` (LLM client, storage), `src.rag` (retrieval)
+- Used by: Route handlers, CLI commands
 
-**Middleware Order** (critical for correct operation):
-1. CORS (must be first)
-2. RateLimit
-3. APIKey
-4. RequestID (outermost for error tracking)
+**RAG Runtime Layer (`src/rag/`):**
+- Purpose: Retrieval-augmented generation at query time
+- Location: `src/rag/`
+- Contains: Runtime index init, retrieval with trace, HyDE expansion, reranking, formatting
+- Depends on: `src.ingestion.indexing` (vector store), `src.config.settings`
+- Used by: Use case layer (chat)
 
-### 2. Use Case Layer (`src/usecases/`)
+**Infrastructure Layer (`src/infra/`):**
+- Purpose: External service adapters and DI container
+- Location: `src/infra/`
+- Contains: LLM client (Qwen/Dashscope), storage (file-based chat history), DI container
+- Depends on: `src.config.settings`, external APIs (OpenAI-compatible, ChromaDB)
+- Used by: Use case layer, DI container
 
-**Purpose**: Business logic orchestration - coordinates between infrastructure and RAG components
+**Ingestion Layer (`src/ingestion/`):**
+- Purpose: Offline data pipeline for building the knowledge base
+- Location: `src/ingestion/`
+- Contains: Steps (download, convert, chunk, load), indexing (vector store, embedding, keyword index, search)
+- Depends on: PDF parsers, HTML extractors, ChromaDB
+- Used by: Pipeline use case, RAG runtime (at startup)
 
-**Components**:
-- `chat.py`: Chat message processing
-  - `process_chat_message()`: Non-streaming chat with RAG
-  - `stream_chat_message()`: Streaming chat with async generator
-  - Manages conversation history and context building
-- `pipeline.py`: Offline data pipeline orchestration
-  - Coordinates L0-L6 pipeline steps
-  - Supports selective re-execution (skip-download, force-rebuild)
+**Evaluation Layer (`src/evals/`):**
+- Purpose: RAG quality assessment and metrics
+- Location: `src/evals/`
+- Contains: DeepEval integration, metrics, dataset builder, synthetic data generation, pipeline assessment
+- Depends on: `src.rag`, `src.infra.llm`, DeepEval library
+- Used by: Evaluation routes, CLI eval pipeline
 
-**Flow**:
-```
-User Request → API Route → Use Case → RAG Retrieval → LLM Generation → Response
-```
-
-### 3. RAG Layer (`src/rag/`)
-
-**Purpose**: Retrieval-augmented generation core logic
-
-**Components**:
-- `runtime.py`: Runtime retrieval system
-  - `initialize_runtime_index()`: Lazy vector store initialization
-  - `retrieve_context()`: Synchronous retrieval
-  - `retrieve_context_with_trace()`: Detailed pipeline trace for debugging
-  - `retrieve_context_with_trace_async()`: Async retrieval with HyDE support
-  - `configure_runtime_for_experiment()`: Runtime configuration from experiments
-  - Query expansion, MMR reranking, result diversification
-- `hyde.py`: HyDE (Hypothetical Document Embeddings) query expansion
-- `formatting.py`: Context and source formatting for LLM prompts
-- `trace_models.py`: Pydantic models for pipeline traces
-
-**Retrieval Pipeline**:
-```
-Query → Query Expansion (tokenization, acronyms, HyDE, HyPE)
-  → Semantic Search (vector similarity)
-  → Keyword Search (BM25)
-  → Score Fusion (RRF hybrid)
-  → MMR Reranking (diversity)
-  → Source Diversification
-  → Context Building
-```
-
-**Search Modes**:
-- `rrf_hybrid`: Combined semantic + keyword with Reciprocal Rank Fusion
-- `semantic_only`: Vector-only search
-- `bm25_only`: Keyword-only search
-
-### 4. Ingestion Layer (`src/ingestion/`)
-
-**Purpose**: Document processing pipeline from raw sources to indexed chunks
-
-**Sub-layers**:
-
-#### Steps (`src/ingestion/steps/`)
-**L0 - Data Acquisition**:
-- `download_web.py`: Download web content from manifest
-- `download_pdfs.py`: Download PDF files from URLs
-
-**L1 - HTML Processing**:
-- `convert_html.py`: HTML to Markdown conversion
-  - Supports multiple extractors (trafilatura, beautifulsoup, readability-lxml)
-  - Page classification (clinical vs non-clinical)
-
-**L2 - PDF Processing**:
-- `load_pdfs.py`: PDF text extraction
-  - Multiple strategies: pypdf, pdfplumber, pymupdf
-  - Table extraction (camelot, heuristic)
-
-**L3 - Chunking**:
-- `chunk_text.py`: Document chunking orchestration
-- `chunking/`: Chunking strategies and configuration
-  - `strategies.py`: Recursive, semantic, fixed-size strategies
-  - `core.py`: Chunking quality scoring and validation
-  - `helpers.py`: Text splitting utilities
-  - `qwen_embedding_wrapper.py`: Semantic chunking with embeddings
-  - `chonkie_adapter.py`: Third-party chunker integration
-
-**L3b - HyPE Generation** (optional):
-- `hype.py`: Hypothetical Prompt Embedding generation
-  - Generates hypothetical questions for chunks at ingestion time
-  - Stored in metadata for zero-cost query expansion at retrieval
-
-**L4 - Reference Data**:
-- `load_reference_data.py`: Load medical reference ranges
-  - Converts reference data to document chunks
-  - Adds structured metadata
-
-**L5 - Indexing**:
-- See Indexing Layer below
-
-**L6 - Runtime**:
-- Handled by `src/rag/runtime.py`
-
-#### Indexing (`src/ingestion/indexing/`)
-- `embedding.py`: Text embedding using Qwen models
-- `keyword_index.py`: BM25 keyword search index
-- `vector_store.py`: Hybrid vector store with persistence
-  - Semantic search (cosine similarity)
-  - Keyword search (BM25)
-  - Score fusion (RRF)
-  - Document deduplication
-- `search.py`: Search algorithms (cosine similarity, RRF)
-- `persistence.py`: JSON-based persistence for vectors
-- `text_utils.py`: Text processing utilities
-
-### 5. Evaluation Layer (`src/evals/`)
-
-**Purpose**: Comprehensive pipeline quality assessment and LLM-as-a-judge evaluation
-
-**Components**:
-
-#### Assessment (`src/evals/assessment/`)
-- `orchestrator.py`: End-to-end assessment orchestration
-  - Coordinates all evaluation stages
-  - Manages caching and artifact storage
-  - W&B logging integration
-- `answer_eval.py`: L6 answer quality evaluation
-  - Uses DeepEval metrics (faithfulness, relevance, medical safety)
-  - LLM-as-a-judge with Qwen models
-- `retrieval_eval.py`: L5 retrieval quality evaluation
-  - NDCG, MRR, precision metrics
-  - Ablation studies (semantic vs keyword vs hybrid)
-  - Diversity sweep (MMR lambda, overfetch multiplier)
-- `l6_contract.py`: L6 evaluation contract and metrics
-- `thresholds.py`: Quality threshold evaluation
-- `reporting.py`: Summary generation and git provenance
-
-#### Checks (`src/evals/checks/`)
-Pipeline quality checks for each stage:
-- `l0_download.py`: Download completeness and validation
-- `l1_html.py`: HTML-to-Markdown quality assessment
-- `l2_pdf.py`: PDF extraction quality checks
-- `l3_chunking.py`: Chunk quality and distribution analysis
-- `l4_reference.py`: Reference data validation
-- `l5_index.py`: Index quality and coverage checks
-- `shared.py`: Shared check utilities
-
-#### Metrics (`src/evals/metrics/`)
-- `medical.py`: Medical domain-specific metrics
-  - Medical accuracy (strict medical error detection)
-  - Hallucination detection
-  - Reference citation quality
-
-#### Synthetic (`src/evals/synthetic/`)
-- `generator.py`: Synthetic test case generation
-  - Generates realistic medical questions from reference data
-
-#### Other
-- `dataset_builder.py`: Build retrieval evaluation datasets
-- `pipeline_assessment.py`: Compatibility facade for assessments
-- `artifacts.py`: Artifact storage and run management
-- `schemas.py`: Pydantic models for evaluation config/results
-- `step_checks.py`: Pipeline step quality checks
-- `deepeval_models.py`: DeepEval model wrappers
-
-### 6. Infrastructure Layer (`src/infra/`)
-
-**Purpose**: External service integration and storage
-
-**Components**:
-
-#### LLM (`src/infra/llm/`)
-- `qwen_client.py`: Qwen API client
-  - Synchronous and asynchronous generation
-  - Streaming support
-  - Retry logic with exponential backoff
-  - OpenAI-compatible API interface
-
-#### Storage (`src/infra/storage/`)
-- `interfaces.py`: Storage abstractions (ChatHistoryStore)
-- `file_chat_history_store.py`: File-based chat history persistence
-  - Session-based history
-  - TTL-based cleanup
-  - Thread-safe operations
-
-### 7. Configuration Layer (`src/config/`)
-
-**Components**:
-- `settings.py`: Pydantic-based configuration management
-  - Environment variable loading
-  - Type-safe defaults
-  - Validation
-- `paths.py`: Centralized path management
-
-**Key Configuration Areas**:
-- LLM models (generation, embedding, judge models)
-- API keys and endpoints
-- Storage paths
-- Retrieval parameters (HyDE, HyPE, diversity)
-- Rate limiting and security
-- Evaluation settings (DeepEval, W&B)
-
-### 8. CLI Layer (`src/cli/`)
-
-**Purpose**: Command-line interfaces for development and operations
-
-**Components**:
-- `serve.py`: Development server (auto-reload)
-- `serve_production.py`: Production server
-- `ingest.py`: Ingestion pipeline CLI
-- `eval_pipeline.py`: Evaluation pipeline CLI
-
-### 9. Experiments Layer (`src/experiments/`)
-
-**Purpose**: Experiment configuration and tracking
-
-**Components**:
-- `config.py`: Experiment configuration schemas
-- `wandb_tracking.py`: W&B logging integration
-- `wandb_history.py`: W&B run history queries
+**Configuration Layer (`src/config/`):**
+- Purpose: Centralized settings management
+- Location: `src/config/`
+- Contains: Pydantic Settings class, path utilities
+- Depends on: Environment variables, `.env` file
+- Used by: All layers
 
 ## Data Flow
 
-### Chat Request Flow
+**Chat Request Flow:**
+1. HTTP POST `/chat` arrives at `src/app/routes/chat.py`
+2. Route handler calls `src/usecases/chat.py:process_chat_message()` or `stream_chat_message()`
+3. Use case retrieves conversation history from `ChatHistoryStore`
+4. Use case calls `src/rag/runtime.py:retrieve_context()` or `retrieve_context_with_trace()`
+5. RAG runtime expands query (tokenization, acronyms, optional HyDE/HyPE)
+6. Vector store performs similarity search (semantic, BM25, or hybrid RRF)
+7. Optional reranking via cross-encoder and/or MMR diversification
+8. Retrieved context formatted and returned to use case
+9. Use case calls LLM client (`src/infra/llm/qwen_client.py`) to generate response
+10. Response + sources saved to history store
+11. Response returned to route handler, then to client
 
-```
-1. HTTP Request
-   ↓ (API Route: /chat)
-2. Request Validation (Pydantic schemas)
-   ↓ (Middleware: Auth → RateLimit → RequestID)
-3. Use Case (process_chat_message)
-   ├→ Load conversation history
-   ├→ RAG Retrieval (retrieve_context)
-   │  ├→ Initialize vector store (lazy)
-   │  ├→ Query expansion (tokenization, acronyms, HyDE, HyPE)
-   │  ├→ Semantic search (vector similarity)
-   │  ├→ Keyword search (BM25)
-   │  ├→ Score fusion (RRF)
-   │  ├→ MMR reranking
-   │  └→ Context building
-   ├→ LLM Generation (QwenClient.generate)
-   └→ Save to history
-4. Response Formatting
-   ↓
-5. HTTP Response (with sources and optional pipeline trace)
-```
+**Ingestion Pipeline Flow:**
+1. CLI invokes `src/cli/ingest.py` or `python -m src.usecases.pipeline`
+2. Pipeline orchestrator runs steps sequentially:
+   - L0: Download web content + PDFs
+   - L1: Convert HTML to Markdown
+   - L2: Load PDF documents
+   - L3: Chunk documents (with optional HyPE question generation)
+   - L4: Load reference data
+   - L5: Embed and store vectors in ChromaDB
+   - L6: Initialize RAG runtime index
+3. Each step reads from `data/` directory and writes intermediate artifacts
 
-### Ingestion Pipeline Flow (L0-L6)
+**Application Startup Flow:**
+1. `src/app/factory.py:create_app()` called
+2. Security configuration validated
+3. FastAPI app created with lifespan manager
+4. Middleware stack configured (CORS → RateLimit → APIKey → RequestID)
+5. Routes registered (health, chat, history, evaluation)
+6. On startup (lifespan): DI container initialized, LLM client created, vector index loaded, production profile applied if configured
 
-```
-L0: Download
-  ├→ download_web.py: Fetch HTML from manifest
-  └→ download_pdfs.py: Fetch PDFs from URLs
+**State Management:**
+- Configuration: Singleton `Settings` instance from `src/config/settings.py`
+- Services: `ServiceContainer` in `src/infra/di.py` with lazy initialization
+- Vector store: Persisted to `data/chroma/` via ChromaDB
+- Chat history: File-based storage (`FileChatHistoryStore`)
+- Production profiles: Applied at startup via `src/rag/production_profile.py`
 
-L1: HTML → Markdown
-  └→ convert_html.py: Extract text, classify pages
+## Key Abstractions
 
-L2: PDF Processing
-  └→ load_pdfs.py: Extract text and tables
+**ServiceContainer:**
+- Purpose: Dependency injection container for infra services
+- Examples: `src/infra/di.py`
+- Pattern: Lazy-initialized singleton with reset capability for testing
 
-L3: Chunking
-  ├→ chunk_text.py: Split documents into chunks
-  ├→ Quality scoring (length, structure, entropy)
-  └→ Metadata enrichment
+**ChatHistoryStore (Interface):**
+- Purpose: Abstract chat history persistence
+- Examples: `src/infra/storage/interfaces.py`, `src/infra/storage/file_chat_history_store.py`
+- Pattern: Interface + implementation for testability
 
-L3b: HyPE Generation (optional)
-  └→ hype.py: Generate hypothetical questions
+**VectorStoreFactory:**
+- Purpose: Factory for creating vector store instances
+- Examples: `src/ingestion/indexing/vector_store.py`
+- Pattern: Factory pattern with configuration-driven instantiation
 
-L4: Reference Data
-  └→ load_reference_data.py: Load medical ranges
+**Pipeline Steps:**
+- Purpose: Modular ingestion pipeline stages
+- Examples: `src/ingestion/steps/` (download_web, convert_html, chunk_text, etc.)
+- Pattern: Step functions composed by pipeline orchestrator
 
-L5: Indexing
-  ├→ embedding.py: Generate embeddings
-  ├→ keyword_index.py: Build BM25 index
-  └→ vector_store.py: Store vectors with metadata
-
-L6: Runtime Initialization
-  └→ runtime.py: Load index into memory
-```
-
-### Evaluation Flow
-
-```
-1. Load Experiment Config
-   ↓
-2. Configure Runtime (experiment-specific settings)
-   ↓
-3. Pipeline Quality Checks (L0-L5)
-   ├→ Download audit
-   ├→ HTML quality assessment
-   ├→ PDF extraction quality
-   ├→ Chunking quality
-   ├→ Reference data validation
-   └→ Index quality
-   ↓
-4. Build Retrieval Dataset
-   ↓
-5. Retrieval Evaluation (L5)
-   ├→ NDCG, MRR, precision
-   ├→ Ablation studies
-   └→ Diversity sweep
-   ↓
-6. Answer Quality Evaluation (L6)
-   ├→ DeepEval metrics
-   │  ├→ Faithfulness
-   │  ├→ Relevance
-   │  └→ Medical safety
-   └→ LLM-as-a-judge reasoning
-   ↓
-7. Threshold Evaluation
-   ↓
-8. Generate Summary Report
-   ↓
-9. Log to W&B (optional)
-```
-
-## Key Abstractions and Interfaces
-
-### Vector Store Interface
-```python
-class VectorStore:
-    - add_documents(docs) → stats
-    - similarity_search(query, top_k, search_mode) → results
-    - similarity_search_with_trace(query, top_k, search_mode) → (results, trace)
-    - search_hypothetical_questions(query, limit) → questions
-    - clear() → None
-```
-
-### LLM Client Interface
-```python
-class QwenClient:
-    - generate(prompt, context) → response
-    - a_generate_stream(prompt, context) → AsyncGenerator[str, None]
-    - embed(texts) → embeddings
-```
-
-### Chat History Store Interface
-```python
-class ChatHistoryStore:
-    - get_history(session_id) → messages[]
-    - save_message(session_id, role, content) → None
-    - delete_session(session_id) → None
-```
-
-### Retrieval Configuration
-```python
-@dataclass
-class RetrievalDiversityConfig:
-    overfetch_multiplier: int
-    max_chunks_per_source_page: int
-    max_chunks_per_source: int
-    mmr_lambda: float
-    enable_diversification: bool
-    search_mode: str  # "rrf_hybrid", "semantic_only", "bm25_only"
-    enable_hyde: bool
-    hyde_max_length: int
-    enable_hype: bool
-```
-
-## Component Relationships
-
-### Dependencies
-- **Use Cases** depend on: RAG, Infrastructure (LLM, Storage)
-- **RAG** depends on: Ingestion (Indexing), Configuration
-- **API Routes** depend on: Use Cases, Infrastructure
-- **Evaluation** depends on: RAG, Ingestion, Configuration
-
-### Key Design Patterns
-
-1. **Factory Pattern**: `src/app/factory.py` - FastAPI app creation
-2. **Repository Pattern**: Vector store and history storage abstractions
-3. **Strategy Pattern**: Chunking strategies, search modes
-4. **Middleware Chain**: Request processing pipeline
-5. **Facade Pattern**: `src/evals/pipeline_assessment.py` - Simplified assessment API
-6. **Lazy Initialization**: Vector store loaded on first request
-7. **Dependency Injection**: LLM client and history store passed to use cases
+**PipelineTrace:**
+- Purpose: Structured tracing of RAG pipeline execution
+- Examples: `src/rag/trace_models.py`
+- Pattern: Dataclass-based trace with timing information per stage
 
 ## Entry Points
 
-### CLI Entry Points
-- `uv run python -m src.cli.serve` - Development server
-- `uv run python -m src.cli.ingest` - Run ingestion pipeline
-- `uv run python -m src.cli.eval_pipeline` - Run evaluation
+**Web API Server:**
+- Location: `src/cli/serve.py`
+- Triggers: `python -m src.cli.serve` or `uvicorn src.app.factory:app`
+- Responsibilities: Starts FastAPI dev server on port 8000 with hot reload
 
-### API Entry Points
-- `GET /health` - Health check
-- `POST /chat` - Chat endpoint (non-streaming)
-- `POST /chat/stream` - Chat endpoint (streaming)
-- `GET /history/{session_id}` - Get chat history
-- `DELETE /history/{session_id}` - Clear session
-- `POST /evaluation/run` - Run evaluation
-- `GET /evaluation/status/{run_id}` - Get evaluation status
+**Production Server:**
+- Location: `src/cli/serve_production.py`
+- Triggers: `python -m src.cli.serve_production`
+- Responsibilities: Starts production uvicorn server
 
-### Module Entry Points
-- `src.usecases.pipeline:main()` - Pipeline orchestration
-- `src.rag.runtime:initialize_runtime_index()` - Runtime initialization
-- `src.evals.pipeline_assessment:run_assessment()` - Evaluation orchestration
+**Ingestion Pipeline:**
+- Location: `src/cli/ingest.py`
+- Triggers: `python -m src.cli.ingest` or `python -m src.usecases.pipeline`
+- Responsibilities: Runs full offline data pipeline
 
-## Frontend Architecture
+**Evaluation Pipeline:**
+- Location: `src/cli/eval_pipeline.py`
+- Triggers: `python -m src.cli.eval_pipeline`
+- Responsibilities: Runs RAG evaluation with DeepEval metrics
 
-### Technology Stack
-- **Framework**: SvelteKit (Vite-based)
-- **Language**: TypeScript
-- **Styling**: CSS (component-scoped)
-- **Charts**: Chart.js
-- **Markdown**: Svelte Markdown with custom renderers
+**Application Factory:**
+- Location: `src/app/factory.py:create_app()`
+- Triggers: Imported by CLI serve commands, Docker entrypoint
+- Responsibilities: Creates and configures FastAPI app with all middleware, routes, and exception handlers
 
-### Key Frontend Components
+## Error Handling
 
-#### Routes (`frontend/src/routes/`)
-- `+page.svelte`: Main dashboard with pipeline visualization
-- `+layout.svelte`: App shell with navigation
-- `docs/pipeline/+page.svelte`: Pipeline documentation
-- `eval/+page.svelte`: Evaluation dashboard
+**Strategy:** Centralized exception handlers registered in factory
 
-#### Components (`frontend/src/lib/components/`)
-- **AppShell**: Main application layout
-- **PipelineFlowDiagram**: Visual pipeline representation
-- **MetricBar/MetricChart**: Metric visualization
-- **QualityTab/RetrievalTab/IngestionTab/TrendingTab**: Evaluation tabs
-- **DocumentInspector**: Document detail view
-- **DrillDownModal**: Detailed metric drill-down
-- **MarkdownRenderer**: Custom markdown rendering with syntax highlighting
+**Patterns:**
+- Custom `AppError` base class with `app_error_handler` in `src/app/exceptions.py`
+- `UpstreamServiceError` raised for LLM API failures in use case layer
+- HTTP exception handler for FastAPI `HTTPException`
+- Unhandled exception handler catches all remaining exceptions
+- Stream errors yield error event before raising `UpstreamServiceError`
 
-#### Utilities (`frontend/src/lib/utils/`)
-- `types.ts`: TypeScript type definitions
-- `health-score.ts`: Health score calculation
-- `eval.ts`: Evaluation data processing
-- `format.ts`: Formatting utilities
-- `export.ts`: Data export utilities
+## Cross-Cutting Concerns
 
-### Frontend-Backend Communication
-- REST API for chat and evaluation
-- Server-Sent Events (SSE) for streaming responses
-- CORS-enabled for development
+**Logging:** Python standard logging, configured via `src/app/logging.py`, level from settings
 
-## Testing Strategy
+**Validation:** Pydantic models for settings (`src/config/settings.py`) and request/response schemas (`src/app/schemas/`)
 
-### Test Categories
+**Authentication:** API key middleware (`src/app/middleware/auth.py`) with optional API keys from settings; anonymous session tracking via cookies
 
-1. **Unit Tests**: Individual component testing
-2. **Integration Tests**: Multi-component interaction
-3. **E2E Tests**: Full pipeline with real APIs (marked with `e2e_real_apis`)
-4. **DeepEval Tests**: LLM-as-a-judge evaluation (marked with `deepeval`)
+**Rate Limiting:** Per-client rate limiting middleware (`src/app/middleware/rate_limit.py`), configurable per-minute limits with separate quota for anonymous chat
 
-### Test Organization
-- `tests/`: All backend tests
-- `frontend/tests/`: Frontend Playwright tests
+**Request Tracing:** RequestID middleware (`src/app/middleware/request_id.py`) adds X-Request-ID header for distributed tracing
 
-### Key Test Files
-- `test_chat_multi_turn.py`: Multi-turn conversation testing
-- `test_chat_sources.py`: Source attribution testing
-- `test_retrieval.py`: Retrieval quality testing
-- `test_hyde.py`: HyDE query expansion testing
-- `test_eval_*.py`: Evaluation framework testing
-- `test_pipeline_assessment_smoke.py`: End-to-end pipeline testing
+---
 
-## Security Considerations
-
-### Authentication
-- API key validation via `X-API-Key` header
-- Anonymous session tracking for unauthenticated users
-
-### Rate Limiting
-- Per-IP rate limiting (configurable)
-- Stricter limits for anonymous chat requests
-
-### Input Validation
-- Pydantic schema validation for all inputs
-- Message length limits
-- SQL injection prevention (no SQL used)
-
-### CORS
-- Configurable allowed origins
-- Credentials support for authenticated requests
-
-## Performance Optimizations
-
-### Vector Store
-- Lazy initialization (loads on first request)
-- Persistent JSON storage (no re-embedding on restart)
-- Batch embedding with configurable batch size
-
-### Retrieval
-- Query expansion with caching
-- Overfetch + diversification (retrieves more, returns diverse subset)
-- MMR reranking for result diversity
-
-### LLM
-- Streaming responses for better UX
-- Retry logic with exponential backoff
-- Connection pooling
-
-### Evaluation
-- DeepEval result caching (retrieval + generation)
-- Metric result caching
-- Concurrent query evaluation (configurable)
-
-## Deployment Considerations
-
-### Environment Variables
-See `src/config/settings.py` for complete list
-
-### Docker Support
-- Docker Compose for local development
-- Backend and frontend services
-- Volume mounting for data persistence
-
-### Production Readiness
-- Health check endpoint
-- Request logging
-- Error handling with proper status codes
-- Graceful degradation (e.g., if W&B logging fails)
+*Architecture analysis: 2026-04-06*

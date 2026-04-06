@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import random
 import re
 from pathlib import Path
 from typing import Any
 
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 from src.ingestion.steps.chunk_text import chunk_documents
 from src.ingestion.steps.load_markdown import get_markdown_documents
 from src.ingestion.steps.load_pdfs import get_documents
@@ -123,6 +126,7 @@ def _resolve_path_for_contract(path: Path | None) -> str | None:
     try:
         return str(path.resolve())
     except Exception:
+        logger.debug("Path resolution failed for %s", path)
         return str(path)
 
 
@@ -173,6 +177,7 @@ def _load_cached_dataset_manifest(run_dir: Path) -> dict[str, Any]:
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception:
+        logger.debug("Failed to read manifest at %s", manifest_path)
         return {}
     return payload if isinstance(payload, dict) else {}
 
@@ -206,6 +211,7 @@ def _resolve_cached_dataset_path(
         try:
             resolved = run_dir.resolve()
         except Exception:
+            logger.debug("Path resolution failed for %s", run_dir)
             resolved = run_dir
         if resolved in seen:
             continue

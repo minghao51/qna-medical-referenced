@@ -1,0 +1,399 @@
+schema_version: 1
+metadata:
+  name: comprehensive_ablation
+  description: Full ablation study across PDF extraction, HTML extraction, chunking strategy, chunk size, and retrieval dimensions
+  owner: local
+  hypothesis: Systematic ablation of each ingestion component reveals optimal configuration for medical RAG retrieval quality
+  tags: [ablation, comprehensive, extraction, chunking, retrieval, rag]
+
+ingestion:
+  page_classification_enabled: true
+  index_only_classified_pages: true
+  html_extractor_mode: auto
+  html_extractor_strategy: trafilatura_bs
+  pdf_extractor_strategy: pypdf_pdfplumber
+  pdf_table_extractor: heuristic
+  structured_chunking_enabled: true
+  source_chunk_configs:
+    pdf:
+      chunk_size: 650
+      chunk_overlap: 80
+      strategy: recursive
+      min_chunk_size: 140
+    markdown:
+      chunk_size: 600
+      chunk_overlap: 80
+      strategy: recursive
+      min_chunk_size: 80
+
+embedding_index:
+  collection_name: medical_docs
+  collection_name_suffix: comprehensive_ablation
+  embedding_model: text-embedding-v4
+  embedding_batch_size: 10
+  semantic_weight: 0.6
+  keyword_weight: 0.2
+  boost_weight: 0.2
+  rebuild_policy: always
+  materialize_html: true
+
+retrieval:
+  top_k: 5
+  search_mode: rrf_hybrid
+  enable_diversification: true
+  mmr_lambda: 0.75
+  overfetch_multiplier: 4
+  max_chunks_per_source_page: 2
+  max_chunks_per_source: 3
+
+dataset:
+  path: tests/fixtures/golden_queries.json
+  split: regression
+  min_label_confidence: medium
+  max_synthetic_questions: 40
+  sample_docs_per_source_type: 10
+  seed: 42
+  enable_llm_generation: false
+  available_datasets:
+    original: tests/fixtures/golden_queries.json
+    expanded: tests/fixtures/golden_queries_expanded.json
+    comprehensive: tests/fixtures/golden_queries_comprehensive.json
+    diverse: tests/fixtures/golden_queries_diverse.json
+  available_datasets:
+    original: tests/fixtures/golden_queries.json
+    expanded: tests/fixtures/golden_queries_expanded.json
+    comprehensive: tests/fixtures/golden_queries_comprehensive.json
+    diverse: tests/fixtures/golden_queries_diverse.json
+
+evaluation:
+  artifact_dir: data/evals_comprehensive_ablation
+  include_answer_eval: true
+  disable_llm_judging: false
+  fail_on_thresholds: false
+  export_failed_generations: true
+  run_retrieval_ablations: true
+  run_diversity_sweep: false
+  diversity_sweep: {}
+
+tracking:
+  wandb:
+    enabled: false
+    project: qna-medical-referenced
+    entity: null
+    group: comprehensive-ablation
+    job_type: ablation_study
+    tags: [ablation, comprehensive, rag]
+    notes: Full ablation study across all ingestion dimensions
+    mode: online
+    log_artifacts: true
+    metrics_verbosity: standard
+
+variants:
+  # =====================================================================
+  # BASELINE
+  # =====================================================================
+  - name: baseline
+    description: Original baseline (pypdf, trafilatura, recursive 650 tokens, rrf_hybrid)
+    overrides: {}
+
+  # =====================================================================
+  # PDF EXTRACTION ABLATION (isolate PDF text extraction quality)
+  # All other settings at baseline defaults
+  # =====================================================================
+  - name: pdf_pymupdf
+    description: PyMuPDF extractor vs baseline pypdf (same table heuristic)
+    overrides:
+      ingestion:
+        pdf_extractor_strategy: pymupdf_pdfplumber
+        pdf_table_extractor: heuristic
+
+  - name: pdf_pymupdf_camelot
+    description: PyMuPDF + Camelot table extraction (best structured data)
+    overrides:
+      ingestion:
+        pdf_extractor_strategy: pymupdf_pdfplumber
+        pdf_table_extractor: camelot
+
+  # =====================================================================
+  # HTML EXTRACTION ABLATION (isolate HTML→markdown conversion quality)
+  # All other settings at baseline defaults
+  # =====================================================================
+  - name: html_html2md
+    description: html-to-markdown cascade (html2md + trafilatura + beautifulsoup)
+    overrides:
+      ingestion:
+        html_extractor_strategy: html2md_trafilatura_bs
+
+  - name: html_readability
+    description: Readability-based extraction (readability + beautifulsoup)
+    overrides:
+      ingestion:
+        html_extractor_strategy: readability_bs
+
+  - name: html_fullcascade
+    description: Full extraction cascade (all extractors, fallback chain)
+    overrides:
+      ingestion:
+        html_extractor_strategy: full_cascade
+
+  # =====================================================================
+  # CHUNKING STRATEGY ABLATION (isolate chunking algorithm)
+  # Fixed at 512 tokens for fair comparison across strategies
+  # =====================================================================
+  - name: chunk_custom_recursive_512
+    description: Custom recursive chunker with quality scoring (512 tokens)
+    overrides:
+      ingestion:
+        source_chunk_configs:
+          pdf:
+            chunk_size: 512
+            chunk_overlap: 64
+            strategy: custom_recursive
+            min_chunk_size: 100
+          markdown:
+            chunk_size: 512
+            chunk_overlap: 64
+            strategy: custom_recursive
+            min_chunk_size: 80
+
+  - name: chunk_chonkie_recursive_512
+    description: Chonkie RecursiveChunker with overlap refinement (512 tokens)
+    overrides:
+      ingestion:
+        source_chunk_configs:
+          pdf:
+            chunk_size: 512
+            chunk_overlap: 64
+            strategy: chonkie_recursive
+            min_chunk_size: 100
+          markdown:
+            chunk_size: 512
+            chunk_overlap: 64
+            strategy: chonkie_recursive
+            min_chunk_size: 80
+
+  - name: chunk_chonkie_semantic_512
+    description: Chonkie SemanticChunker with embedding-based boundaries (512 tokens)
+    overrides:
+      ingestion:
+        source_chunk_configs:
+          pdf:
+            chunk_size: 512
+            strategy: chonkie_semantic
+            min_chunk_size: 100
+          markdown:
+            chunk_size: 512
+            strategy: chonkie_semantic
+            min_chunk_size: 80
+
+  - name: chunk_chonkie_late_512
+    description: Chonkie LateChunker with post-hoc boundary detection (512 tokens)
+    overrides:
+      ingestion:
+        source_chunk_configs:
+          pdf:
+            chunk_size: 512
+            strategy: chonkie_late
+            min_chunk_size: 100
+          markdown:
+            chunk_size: 512
+            strategy: chonkie_late
+            min_chunk_size: 80
+
+  # =====================================================================
+  # CHUNK SIZE SWEEP (isolate chunk granularity)
+  # Using custom_recursive strategy across sizes for clean comparison
+  # =====================================================================
+  - name: chunksize_384
+    description: Small chunks (384 tokens, 48 overlap) - more granular, less context
+    overrides:
+      ingestion:
+        source_chunk_configs:
+          pdf:
+            chunk_size: 384
+            chunk_overlap: 48
+            strategy: custom_recursive
+            min_chunk_size: 80
+          markdown:
+            chunk_size: 384
+            chunk_overlap: 48
+            strategy: custom_recursive
+            min_chunk_size: 60
+
+  - name: chunksize_650
+    description: Baseline chunks (650 tokens, 80 overlap) - original baseline size
+    overrides:
+      ingestion:
+        source_chunk_configs:
+          pdf:
+            chunk_size: 650
+            chunk_overlap: 80
+            strategy: custom_recursive
+            min_chunk_size: 140
+          markdown:
+            chunk_size: 650
+            chunk_overlap: 80
+            strategy: custom_recursive
+            min_chunk_size: 80
+
+  - name: chunksize_1024
+    description: Large chunks (1024 tokens, 128 overlap) - more context, less precision
+    overrides:
+      ingestion:
+        source_chunk_configs:
+          pdf:
+            chunk_size: 1024
+            chunk_overlap: 128
+            strategy: custom_recursive
+            min_chunk_size: 200
+          markdown:
+            chunk_size: 1024
+            chunk_overlap: 128
+            strategy: custom_recursive
+            min_chunk_size: 120
+
+  # =====================================================================
+  # RETRIEVAL ABLATION (isolate retrieval configuration)
+  # All ingestion at baseline defaults
+  # =====================================================================
+  - name: retrieval_semantic_only
+    description: Semantic-only search (no BM25, no boost weights)
+    overrides:
+      retrieval:
+        search_mode: semantic_only
+        enable_diversification: true
+        mmr_lambda: 0.75
+
+  - name: retrieval_bm25_only
+    description: BM25-only search (no semantic embeddings)
+    overrides:
+      retrieval:
+        search_mode: bm25_only
+        enable_diversification: true
+
+  - name: retrieval_mmr_tuned
+    description: Higher MMR lambda (0.9) for more diverse results
+    overrides:
+      retrieval:
+        enable_diversification: true
+        mmr_lambda: 0.9
+        overfetch_multiplier: 6
+
+  - name: retrieval_no_diversification
+    description: No MMR diversification (pure top-k by score)
+    overrides:
+      retrieval:
+        enable_diversification: false
+
+  - name: retrieval_pure_hybrid
+    description: Hybrid RRF with pure baseline ingestion (same as extraction/chunking variants)
+    overrides:
+      embedding_index:
+        collection_name_suffix: retrieval_pure_hybrid
+      retrieval:
+        search_mode: rrf_hybrid
+        enable_diversification: true
+        mmr_lambda: 0.75
+
+  - name: retrieval_pure_bm25
+    description: BM25-only with pure baseline ingestion
+    overrides:
+      embedding_index:
+        collection_name_suffix: retrieval_pure_bm25
+      retrieval:
+        search_mode: bm25_only
+        enable_diversification: true
+
+  - name: retrieval_pure_semantic
+    description: Semantic-only with pure baseline ingestion
+    overrides:
+      embedding_index:
+        collection_name_suffix: retrieval_pure_semantic
+      retrieval:
+        search_mode: semantic_only
+        enable_diversification: true
+        mmr_lambda: 0.75
+
+  # =====================================================================
+  # COMBINED BEST VARIANTS (stack optimal findings)
+  # =====================================================================
+  - name: combined_best_extraction
+    description: Best PDF (pymupdf+camelot) + Best HTML (html2md cascade)
+    overrides:
+      ingestion:
+        pdf_extractor_strategy: pymupdf_pdfplumber
+        pdf_table_extractor: camelot
+        html_extractor_strategy: html2md_trafilatura_bs
+
+  - name: combined_best_extraction_chunking
+    description: Best extraction + Best chunking (chonkie_semantic 512)
+    overrides:
+      ingestion:
+        pdf_extractor_strategy: pymupdf_pdfplumber
+        pdf_table_extractor: camelot
+        html_extractor_strategy: html2md_trafilatura_bs
+        source_chunk_configs:
+          pdf:
+            chunk_size: 512
+            strategy: chonkie_semantic
+            min_chunk_size: 100
+          markdown:
+            chunk_size: 512
+            strategy: chonkie_semantic
+            min_chunk_size: 80
+
+  - name: combined_all_best
+    description: Best extraction + Best chunking + Tuned retrieval (MMR 0.9)
+    overrides:
+      ingestion:
+        pdf_extractor_strategy: pymupdf_pdfplumber
+        pdf_table_extractor: camelot
+        html_extractor_strategy: html2md_trafilatura_bs
+        source_chunk_configs:
+          pdf:
+            chunk_size: 512
+            strategy: chonkie_semantic
+            min_chunk_size: 100
+          markdown:
+            chunk_size: 512
+            strategy: chonkie_semantic
+            min_chunk_size: 80
+      retrieval:
+        enable_diversification: true
+        mmr_lambda: 0.9
+        overfetch_multiplier: 6
+
+  - name: combined_small_chunks_best_extraction
+    description: Small chunks (384) + Best extraction (tests granularity + quality)
+    overrides:
+      ingestion:
+        pdf_extractor_strategy: pymupdf_pdfplumber
+        pdf_table_extractor: camelot
+        html_extractor_strategy: html2md_trafilatura_bs
+        source_chunk_configs:
+          pdf:
+            chunk_size: 384
+            chunk_overlap: 48
+            strategy: custom_recursive
+            min_chunk_size: 80
+          markdown:
+            chunk_size: 384
+            chunk_overlap: 48
+            strategy: custom_recursive
+            min_chunk_size: 60
+
+  - name: pymupdf_semantic_hybrid
+    description: PyMuPDF + Chonkie Semantic 512 + Hybrid RRF (user-specified optimal)
+    overrides:
+      ingestion:
+        pdf_extractor_strategy: pymupdf_pdfplumber
+        pdf_table_extractor: heuristic
+        source_chunk_configs:
+          pdf:
+            chunk_size: 512
+            strategy: chonkie_semantic
+            min_chunk_size: 100
+          markdown:
+            chunk_size: 512
+            strategy: chonkie_semantic
+            min_chunk_size: 80

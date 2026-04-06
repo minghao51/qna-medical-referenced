@@ -158,7 +158,8 @@ def _get_all_runs() -> list[dict[str, Any]]:
                     "tracking": summary.get("tracking", {}),
                 }
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to read summary for run %s: %s", run_dir.name, e)
             result.append({"run_dir": str(run_dir.name), "status": "error", "source": "local"})
     return result
 
@@ -168,7 +169,8 @@ def _read_json_if_exists(path: Path) -> dict[str, Any]:
         return {}
     try:
         return json.loads(path.read_text())
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to read JSON from %s: %s", path, e)
         return {}
 
 
@@ -957,7 +959,8 @@ def get_answer_quality_details(run_dir: str) -> dict[str, Any]:
         if line:
             try:
                 results.append(json.loads(line))
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to parse L6 result line: %s", e)
                 continue
 
     return {"run_dir": run_dir, "results": results}

@@ -224,7 +224,7 @@ async def stream_chat_message(
             if accumulated_response:
                 history_store.save_message(resolved_session_id, "assistant", accumulated_response)
         except Exception:
-            pass
+            logger.warning("Failed to save error message to history: %s", exc)
 
         try:
             yield (

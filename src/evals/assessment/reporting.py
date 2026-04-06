@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import subprocess
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def git_head() -> str | None:
@@ -18,7 +21,8 @@ def git_head() -> str | None:
             text=True,
         )
         return result.stdout.strip()
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to get git HEAD: %s", e)
         return None
 
 

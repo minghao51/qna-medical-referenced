@@ -122,22 +122,27 @@ def get_reranker(
 ) -> CrossEncoderReranker:
     global _reranker_instance
     from src.config import settings
+    from src.config.context import get_runtime_state
 
     resolved_model = model_name or settings.reranker_model
     resolved_batch = batch_size or settings.reranker_batch_size
     resolved_device = device or settings.reranker_device
 
+    state = get_runtime_state()
+    cached = state.reranker_instance
     if (
-        _reranker_instance is not None
-        and _reranker_instance.model_name == resolved_model
-        and _reranker_instance.batch_size == resolved_batch
-        and _reranker_instance.device == resolved_device
+        cached is not None
+        and cached.model_name == resolved_model
+        and cached.batch_size == resolved_batch
+        and cached.device == resolved_device
     ):
-        return _reranker_instance
+        _reranker_instance = cached
+        return cached
 
     _reranker_instance = CrossEncoderReranker(
         model_name=resolved_model,
         batch_size=resolved_batch,
         device=resolved_device,
     )
+    state.reranker_instance = _reranker_instance
     return _reranker_instance

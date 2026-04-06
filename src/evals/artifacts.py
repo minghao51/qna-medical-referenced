@@ -5,11 +5,14 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import logging
 import re
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 RUN_INDEX_FILENAME = "run_index.json"
 LOCK_TIMEOUT_SECONDS = 30
@@ -50,7 +53,8 @@ def _load_json_file(path: Path) -> dict[str, Any] | None:
         return None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to load JSON file %s: %s", path, e)
         return None
     return payload if isinstance(payload, dict) else None
 
@@ -111,7 +115,8 @@ def _candidate_run_dirs(base_dir: Path) -> list[Path]:
     for path in candidates:
         try:
             resolved = path.resolve()
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to resolve path %s: %s", path, e)
             resolved = path
         if resolved not in seen:
             seen.add(resolved)

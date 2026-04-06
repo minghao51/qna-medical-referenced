@@ -327,6 +327,37 @@ export interface AblationResponse {
 	message?: string;
 }
 
+export interface FullAblationRun {
+	variant: string;
+	run_dir: string;
+	chunks_attempted?: number;
+	chunks_inserted?: number;
+	chunks_duplicate?: number;
+	ndcg_at_k?: number;
+	mrr?: number;
+	hit_rate_at_k?: number;
+	precision_at_k?: number;
+	recall_at_k?: number;
+	latency_p50_ms?: number;
+	delta_ndcg?: number;
+}
+
+export interface AblationFinding {
+	title: string;
+	detail: string;
+	impact: 'high' | 'medium' | 'low';
+}
+
+export interface FullAblationResponse {
+	runs: FullAblationRun[];
+	dimensions: Record<string, FullAblationRun[]>;
+	findings: AblationFinding[];
+	optimal_variant: string;
+	baseline_variant: string;
+	total_variants: number;
+	message?: string;
+}
+
 export interface DrillDownPoint {
 	timestamp: string;
 	value: number;

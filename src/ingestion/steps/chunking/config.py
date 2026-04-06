@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 
+from src.config.context import get_runtime_state
+
 DEFAULT_SOURCE_CHUNK_CONFIGS = {
     "pdf": {
         "chunk_size": 512,
@@ -44,39 +46,36 @@ RECOMMENDED_STRATEGIES = {
     "guideline": "chonkie_semantic",
 }
 
-STRUCTURED_CHUNKING_ENABLED = True
-SOURCE_CHUNK_CONFIGS_OVERRIDE: dict | None = None
-AUTO_SELECT_STRATEGY = False
-
 
 def is_structured_chunking_enabled() -> bool:
-    return STRUCTURED_CHUNKING_ENABLED
+    return get_runtime_state().structured_chunking_enabled
 
 
 def set_structured_chunking_enabled(enabled: bool) -> None:
-    global STRUCTURED_CHUNKING_ENABLED
-    STRUCTURED_CHUNKING_ENABLED = bool(enabled)
+    get_runtime_state().structured_chunking_enabled = bool(enabled)
 
 
 def set_auto_select_strategy(enabled: bool) -> None:
-    global AUTO_SELECT_STRATEGY
-    AUTO_SELECT_STRATEGY = bool(enabled)
+    get_runtime_state().auto_select_strategy = bool(enabled)
 
 
 def set_source_chunk_configs(configs: dict | None) -> None:
-    global SOURCE_CHUNK_CONFIGS_OVERRIDE
-    SOURCE_CHUNK_CONFIGS_OVERRIDE = copy.deepcopy(configs) if configs is not None else None
+    get_runtime_state().source_chunk_configs_override = (
+        copy.deepcopy(configs) if configs is not None else None
+    )
 
 
 def get_source_chunk_configs() -> dict:
+    state = get_runtime_state()
     cfg = copy.deepcopy(DEFAULT_SOURCE_CHUNK_CONFIGS)
-    if SOURCE_CHUNK_CONFIGS_OVERRIDE:
-        for key, value in SOURCE_CHUNK_CONFIGS_OVERRIDE.items():
+    override = state.source_chunk_configs_override
+    if override:
+        for key, value in override.items():
             if key in cfg and isinstance(value, dict):
                 cfg[key].update(value)
             else:
                 cfg[key] = copy.deepcopy(value)
-    if AUTO_SELECT_STRATEGY:
+    if state.auto_select_strategy:
         for source_type, base_cfg in cfg.items():
             if isinstance(base_cfg, dict) and "strategy" in base_cfg:
                 recommended = RECOMMENDED_STRATEGIES.get(source_type)

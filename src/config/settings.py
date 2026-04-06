@@ -148,6 +148,18 @@ class Settings(BaseSettings):
     Environment variable: COLLECTION_NAME
     """
 
+    production_profile: str | None = None
+    """Production profile to apply at startup.
+
+    When set, loads the optimal configuration from the ablation study
+    and applies it before building the vector index.
+
+    Supported values: pymupdf_semantic_hybrid, baseline
+    Default: None (use hardcoded defaults)
+
+    Environment variable: PRODUCTION_PROFILE
+    """
+
     data_dir: str = "data/raw"
     """Directory for raw downloaded documents.
 
@@ -164,6 +176,25 @@ class Settings(BaseSettings):
     Contains the ChromaDB persistent database files. Must be preserved between runs.
 
     Environment variable: CHROMA_PERSIST_DIRECTORY
+    """
+
+    chroma_server_host: str = ""
+    """ChromaDB server host for HTTP client mode.
+
+    Default: "" (use embedded PersistentClient)
+    When set (e.g. "localhost"), connects to a ChromaDB server via HttpClient
+    instead of using the embedded PersistentClient.
+
+    Environment variable: CHROMA_SERVER_HOST
+    """
+
+    chroma_server_port: int = 8000
+    """ChromaDB server port for HTTP client mode.
+
+    Default: 8000
+    Only used when chroma_server_host is set.
+
+    Environment variable: CHROMA_SERVER_PORT
     """
 
     retrieval_overfetch_multiplier: int = 4

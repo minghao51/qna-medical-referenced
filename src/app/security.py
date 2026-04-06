@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from dataclasses import dataclass
 
@@ -18,7 +19,7 @@ class APIKeyRecord:
     status: str = "active"
 
     def matches(self, presented_key: str) -> bool:
-        return _hash_secret(presented_key) == self.secret_hash
+        return hmac.compare_digest(_hash_secret(presented_key), self.secret_hash)
 
 
 @dataclass(frozen=True)

@@ -455,6 +455,8 @@ class TextChunker:
 def chunk_documents(documents: List[dict], source_chunk_configs: dict | None = None) -> List[dict]:
     chunker = TextChunker()
     effective_configs = source_chunk_configs
-    if effective_configs is None and config.SOURCE_CHUNK_CONFIGS_OVERRIDE is not None:
-        effective_configs = copy.deepcopy(config.SOURCE_CHUNK_CONFIGS_OVERRIDE)
+    if effective_configs is None:
+        runtime_configs = config.get_source_chunk_configs()
+        if runtime_configs != config.DEFAULT_SOURCE_CHUNK_CONFIGS:
+            effective_configs = copy.deepcopy(runtime_configs)
     return chunker.chunk_documents_with_configs(documents, source_chunk_configs=effective_configs)

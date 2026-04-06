@@ -193,6 +193,32 @@ def _derive_collection_name(base_name: str, suffix: str | None) -> str:
     return f"{base_name}_{suffix_value}" if suffix_value else base_name
 
 
+def _normalize_embedding_index(raw: dict[str, Any]) -> dict[str, Any]:
+    """Normalize embedding_index config, deriving collection_name exactly once.
+
+    The base config may already have a derived collection_name from a previous
+    normalization pass (e.g. when merging variant overrides). To avoid double-
+    suffixing (medical_docs_comprehensive_ablation_comprehensive_ablation), we
+    recover the original base name by stripping any known suffix, then re-derive.
+    """
+    embedding_index = dict(raw)
+    suffix = embedding_index.get("collection_name_suffix")
+    raw_collection = str(embedding_index.get("collection_name", settings.collection_name))
+
+    # Recover the original base name: if the collection_name already ends with
+    # "_<suffix>", strip it off so we can re-derive cleanly.
+    base_name = raw_collection
+    suffix_value = str(suffix or "").strip()
+    if suffix_value and base_name.endswith(f"_{suffix_value}"):
+        base_name = base_name[: -(len(suffix_value) + 1)]
+
+    embedding_index["collection_name"] = _derive_collection_name(base_name, suffix)
+    embedding_index["embedding_batch_size"] = int(
+        embedding_index.get("embedding_batch_size", getattr(settings, "embedding_batch_size", 10))
+    )
+    return embedding_index
+
+
 def _base_defaults() -> dict[str, Any]:
     retrieval_defaults = get_runtime_retrieval_config()
     return {
@@ -299,14 +325,7 @@ def _normalize_experiment_dict(data: dict[str, Any], *, file_path: Path) -> dict
         ingestion.get("source_chunk_configs")
     )
 
-    embedding_index = dict(merged.get("embedding_index", {}))
-    embedding_index["collection_name"] = _derive_collection_name(
-        str(embedding_index.get("collection_name", settings.collection_name)),
-        embedding_index.get("collection_name_suffix"),
-    )
-    embedding_index["embedding_batch_size"] = int(
-        embedding_index.get("embedding_batch_size", getattr(settings, "embedding_batch_size", 10))
-    )
+    embedding_index = _normalize_embedding_index(merged.get("embedding_index", {}))
 
     retrieval = dict(merged.get("retrieval", {}))
     retrieval["top_k"] = int(retrieval.get("top_k", 5))

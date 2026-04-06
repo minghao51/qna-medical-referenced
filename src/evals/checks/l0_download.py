@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections import Counter
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from bs4 import BeautifulSoup
 
@@ -29,7 +32,8 @@ def audit_l0_download(data_raw_dir: Path | None = None) -> dict[str, Any]:
         try:
             soup = BeautifulSoup(raw, "html.parser")
             text_chars = len(soup.get_text(" ", strip=True))
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to parse HTML file %s: %s", html_path, e)
             parse_ok = False
             parse_failures += 1
         content_hash = hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 
 def sanitize_external_url(url: str | None) -> str | None:
@@ -16,7 +19,8 @@ def sanitize_external_url(url: str | None) -> str | None:
         return None
     try:
         parsed = urlparse(candidate)
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to parse URL %r: %s", candidate, e)
         return None
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
@@ -30,7 +34,8 @@ def infer_domain(url: str | None) -> str | None:
         return None
     try:
         return urlparse(safe_url).netloc.lower() or None
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to infer domain from %r: %s", safe_url, e)
         return None
 
 

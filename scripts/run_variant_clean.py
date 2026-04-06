@@ -73,15 +73,10 @@ def reset_global_state() -> None:
     _html_config.__dict__ = HTMLProcessorConfig().__dict__
 
     # Reset chunking config
-    from src.ingestion.steps.chunking.config import (
-        SOURCE_CHUNK_CONFIGS_OVERRIDE,
-        STRUCTURED_CHUNKING_ENABLED,
-        AUTO_SELECT_STRATEGY,
-    )
     import src.ingestion.steps.chunking.config as chunking_config
-    chunking_config.SOURCE_CHUNK_CONFIGS_OVERRIDE = None
-    chunking_config.STRUCTURED_CHUNKING_ENABLED = True
-    chunking_config.AUTO_SELECT_STRATEGY = False
+    chunking_config.set_source_chunk_configs(None)
+    chunking_config.set_structured_chunking_enabled(True)
+    chunking_config.set_auto_select_strategy(False)
 
     # Reset runtime globals
     import src.rag.runtime as runtime

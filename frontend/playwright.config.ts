@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const PLAYWRIGHT_PORT = process.env.PLAYWRIGHT_PORT || '4173';
+const PLAYWRIGHT_BASE_URL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${PLAYWRIGHT_PORT}`;
+
 export default defineConfig({
 	testDir: './tests',
 	retries: 0,
@@ -12,7 +15,7 @@ export default defineConfig({
 	workers: 1,
 	reporter: 'list',
 	use: {
-		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5174',
+		baseURL: PLAYWRIGHT_BASE_URL,
 		trace: 'on-first-retry',
 	},
 	projects: [
@@ -24,8 +27,8 @@ export default defineConfig({
 	webServer: process.env.PLAYWRIGHT_BASE_URL
 		? undefined
 		: {
-			command: 'npm run dev -- --host 127.0.0.1 --port 5174',
-			url: 'http://127.0.0.1:5174',
-			reuseExistingServer: !process.env.CI,
+			command: `npm run dev -- --host 127.0.0.1 --port ${PLAYWRIGHT_PORT}`,
+			url: PLAYWRIGHT_BASE_URL,
+			reuseExistingServer: false,
 		},
 });

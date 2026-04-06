@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
     "l1.markdown_empty_rate": {"op": "max", "value": 0.10},
@@ -49,7 +52,8 @@ def is_threshold_pass(metric_value: Any, threshold_spec: Any) -> tuple[bool, str
         if op == "max":
             return metric_num <= threshold_value, op, threshold_value
         return metric_num >= threshold_value, op, threshold_value
-    except Exception:
+    except Exception as e:
+        logger.debug("Threshold comparison failed for value %r: %s", metric_value, e)
         return False, op, threshold_value
 
 

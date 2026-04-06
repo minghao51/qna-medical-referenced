@@ -3,214 +3,235 @@
     {
       "query": "What is the LDL-C target for secondary prevention?",
       "expected_keywords": ["LDL-C", "secondary", "prevention", "1.8", "mmol"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "high",
       "dataset_split": "regression",
       "difficulty": "medium",
       "query_category": "anchor",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "targets"
     },
     {
       "query": "What are the dietary recommendations for pre-diabetes?",
       "expected_keywords": ["diet", "vegetables", "plate", "grains", "pre-diabetes"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "high",
       "dataset_split": "regression",
       "difficulty": "easy",
       "query_category": "anchor",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "dietary_advice"
     },
     {
       "query": "What is FH and when should genetic testing be considered?",
       "expected_keywords": ["FH", "genetic", "testing", "LDL-C", "4.9"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "high",
       "dataset_split": "test",
       "difficulty": "hard",
       "query_category": "adversarial",
       "negative_query": "When should HbA1c be used for diabetes screening?",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "diagnosis"
     },
     {
       "query": "What BMI threshold indicates need for medication in pre-diabetes?",
       "expected_keywords": ["BMI", "23", "medication", "pre-diabetes"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "high",
       "dataset_split": "test",
       "difficulty": "medium",
       "query_category": "anchor",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "medications"
     },
     {
       "query": "What are risk enhancers in cardiovascular risk assessment?",
       "expected_keywords": ["risk", "enhancers", "cardiovascular", "statin"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "medium",
       "dataset_split": "dev",
       "difficulty": "hard",
       "query_category": "anchor",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "risk_assessment"
     },
     {
       "query": "How should vegetables and fruits be consumed for pre-diabetes?",
       "expected_keywords": ["vegetables", "fruits", "plate", "half"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "medium",
       "dataset_split": "dev",
       "difficulty": "easy",
       "query_category": "anchor",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "dietary_advice"
     },
     {
       "query": "What is the goal of lipid management?",
       "expected_keywords": ["lipid", "ASCVD", "LDL", "cholesterol", "reduce"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "medium",
       "dataset_split": "dev",
       "difficulty": "easy",
       "query_category": "anchor",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "goals"
     },
     {
       "query": "When should metformin be considered for pre-diabetes?",
       "expected_keywords": ["metformin", "pre-diabetes", "lifestyle", "BMI"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "high",
       "dataset_split": "regression",
       "difficulty": "medium",
       "query_category": "anchor",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "medications"
     },
     {
       "query": "What LDL-C level suggests possible familial hypercholesterolemia?",
       "expected_keywords": ["LDL-C", "4.9", "familial", "hypercholesterolemia"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "high",
       "dataset_split": "test",
       "difficulty": "hard",
       "query_category": "adversarial",
       "negative_query": "What triglyceride level defines severe hypertriglyceridemia?",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "diagnosis"
     },
     {
       "query": "What is the LDL-C target in mg/dL for secondary prevention?",
       "expected_keywords": ["LDL-C", "70", "mg/dL", "secondary", "prevention"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "high",
       "dataset_split": "regression",
       "difficulty": "medium",
       "query_category": "adversarial",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "targets"
     },
     {
       "query": "What should fill half the plate for pre-diabetes meal planning?",
       "expected_keywords": ["plate", "half", "vegetables", "fruits"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "high",
       "dataset_split": "regression",
       "difficulty": "easy",
       "query_category": "anchor",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "dietary_advice"
     },
     {
       "query": "When is statin therapy favored because of cardiovascular risk enhancers?",
       "expected_keywords": ["statin", "risk", "enhancers", "cardiovascular"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "medium",
       "dataset_split": "dev",
       "difficulty": "hard",
       "query_category": "anchor",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "medications"
     },
     {
       "query": "Which grains are recommended as part of pre-diabetes dietary advice?",
       "expected_keywords": ["grains", "whole", "pre-diabetes", "diet"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "medium",
       "dataset_split": "dev",
       "difficulty": "medium",
       "query_category": "anchor",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "dietary_advice"
     },
     {
       "query": "What is the main treatment goal in ASCVD-focused lipid management?",
       "expected_keywords": ["ASCVD", "LDL", "cholesterol", "reduce", "risk"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "medium",
       "dataset_split": "test",
       "difficulty": "medium",
       "query_category": "paraphrase",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "goals"
     },
     {
       "query": "When should medication be considered if lifestyle measures are insufficient in pre-diabetes?",
       "expected_keywords": ["medication", "lifestyle", "BMI", "23", "pre-diabetes"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "high",
       "dataset_split": "test",
       "difficulty": "medium",
       "query_category": "paraphrase",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "medications"
     },
     {
       "query": "What acronym is used for familial hypercholesterolemia in the lipid guideline?",
       "expected_keywords": ["FH", "familial", "hypercholesterolemia"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "high",
       "dataset_split": "dev",
       "difficulty": "easy",
       "query_category": "adversarial",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "diagnosis"
     },
     {
       "query": "What food pattern is emphasized before starting metformin for pre-diabetes?",
       "expected_keywords": ["diet", "lifestyle", "vegetables", "pre-diabetes"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "medium",
       "dataset_split": "dev",
       "difficulty": "medium",
       "query_category": "anchor",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "dietary_advice"
     },
     {
       "query": "What LDL-C threshold is paired with genetic testing consideration for FH?",
       "expected_keywords": ["LDL-C", "4.9", "genetic", "testing", "FH"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "high",
       "dataset_split": "regression",
       "difficulty": "hard",
       "query_category": "adversarial",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "diagnosis"
     },
     {
       "query": "How should fruit intake be balanced in the pre-diabetes plate method?",
       "expected_keywords": ["fruits", "vegetables", "plate", "half", "pre-diabetes"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "medium",
       "dataset_split": "test",
       "difficulty": "medium",
       "query_category": "paraphrase",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "dietary_advice"
     },
     {
       "query": "What clinical factors go beyond traditional calculators in lipid risk assessment?",
       "expected_keywords": ["risk", "enhancers", "traditional", "calculators", "statin"],
-      "expected_sources": ["Lipid"],
+      "expected_sources": ["lipid_management_guideline"],
       "label_confidence": "medium",
       "dataset_split": "dev",
       "difficulty": "hard",
       "query_category": "paraphrase",
-      "source_family": "lipid"
+      "source_family": "lipid",
+      "topic": "risk_assessment"
     },
     {
       "query": "At what BMI should metformin be considered for people with pre-diabetes?",
       "expected_keywords": ["BMI", "23", "metformin", "pre-diabetes"],
-      "expected_sources": ["pre-diabetes"],
+      "expected_sources": ["diabetes"],
       "label_confidence": "high",
       "dataset_split": "regression",
       "difficulty": "easy",
       "query_category": "paraphrase",
-      "source_family": "pre diabetes"
+      "source_family": "diabetes_general",
+      "topic": "medications"
     }
   ],
   "stop_words": ["the", "and", "a", "an", "of", "to", "in", "is", "it", "for", "on", "with", "as", "at", "by"],
@@ -227,7 +248,7 @@
       "source": "test.pdf"
     },
     {
-      "id": "test_doc_2", 
+      "id": "test_doc_2",
       "content": "Pre-diabetes management includes lifestyle modification. Metformin may be considered if BMI is 23 or higher and lifestyle changes are insufficient.",
       "source": "test.pdf"
     },
