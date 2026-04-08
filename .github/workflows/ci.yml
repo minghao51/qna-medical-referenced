@@ -29,7 +29,19 @@ jobs:
         run: uv run ruff check
 
       - name: Run backend tests
-        run: uv run pytest
+        run: uv run pytest -m "not slow and not deepeval"
+
+      - name: Run integration tests (optional)
+        if: env.RUN_LIVE_QWEN_TESTS == '1' || env.RUN_DEEPEVAL_TESTS == '1'
+        run: |
+          if [ "${{ env.RUN_LIVE_QWEN_TESTS }}" == "1" ]; then
+            echo "Running live API tests..."
+            uv run pytest -m "live_api"
+          fi
+          if [ "${{ env.RUN_DEEPEVAL_TESTS }}" == "1" ]; then
+            echo "Running DeepEval tests..."
+            uv run pytest -m "deepeval"
+          fi
 
   frontend:
     runs-on: ubuntu-latest
