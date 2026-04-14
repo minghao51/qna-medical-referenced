@@ -6,21 +6,23 @@ services:
       target: runtime
     volumes:
       - ./src:/app/src:ro
-      - ./data/chroma:/app/data/chroma
-      - ./data/evals:/app/data/evals
-      - ./data/evals_comprehensive_ablation:/app/data/evals_comprehensive_ablation
+      - ./data:/app/data
     ports:
       - "8000:8000"
     environment:
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
       - MODEL_NAME=${MODEL_NAME:-qwen3.5-flash}
-      - RATE_LIMIT_PER_MINUTE=0
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
+      - ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE=${ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE:-12}
+      - RATE_LIMIT_BYPASS_KEY_IDS=${RATE_LIMIT_BYPASS_KEY_IDS:-}
+      - RATE_LIMIT_BYPASS_ROLES=${RATE_LIMIT_BYPASS_ROLES:-}
       - RETRIEVAL_OVERFETCH_MULTIPLIER=${RETRIEVAL_OVERFETCH_MULTIPLIER:-4}
       - MAX_CHUNKS_PER_SOURCE_PAGE=${MAX_CHUNKS_PER_SOURCE_PAGE:-2}
       - MAX_CHUNKS_PER_SOURCE=${MAX_CHUNKS_PER_SOURCE:-3}
       - MMR_LAMBDA=${MMR_LAMBDA:-0.75}
       - RRF_SEARCH_MODE=${RRF_SEARCH_MODE:-rrf_hybrid}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:3000}
+      - TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-false}
     cpus: 1.0
     mem_limit: 1g
     mem_reservation: 512m

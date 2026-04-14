@@ -63,6 +63,99 @@ def quality_score_for_block(block: dict, min_chunk_size: int) -> float:
     return max(0.0, min(1.0, score))
 
 
+def split_list_items(text: str) -> list[str]:
+    """Split a list block into whole bullet items, preserving continuation lines."""
+    items: list[str] = []
+    current: list[str] = []
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            if current:
+                current.append("")
+            continue
+
+        is_new_item = bool(re.match(r"^\s*(?:[-*•]|\d+[.)])\s+", line))
+        if is_new_item and current:
+            items.append("\n".join(current).strip())
+            current = [line]
+            continue
+        if is_new_item:
+            current = [line]
+            continue
+        if current:
+            current.append(line)
+        else:
+            current = [line]
+
+    if current:
+        items.append("\n".join(current).strip())
+
+    return [item for item in items if item]
+
+
+def group_list_items(items: list[str], max_chars: int) -> list[str]:
+    """Group whole list items without splitting individual bullets."""
+    if not items:
+        return []
+
+    groups: list[str] = []
+    current: list[str] = []
+    limit = max(1, max_chars)
+
+    for item in items:
+        candidate = "\n".join(current + [item]).strip()
+        if current and len(candidate) > limit:
+            groups.append("\n".join(current).strip())
+            current = [item]
+            continue
+        current.append(item)
+
+    if current:
+        groups.append("\n".join(current).strip())
+    return groups
+
+
+def split_table_rows(
+    text: str,
+    *,
+    max_chars: int,
+    repeat_header: bool = True,
+) -> list[dict[str, object]]:
+    """Split a table block by rows, optionally repeating the header row."""
+    rows = [row.strip() for row in text.splitlines() if row.strip()]
+    if not rows:
+        return []
+    if len(rows) == 1 or len(text.strip()) <= max_chars:
+        return [{"text": "\n".join(rows), "header_repeated": False}]
+
+    header = rows[0]
+    data_rows = rows[1:]
+    groups: list[dict[str, object]] = []
+    current_rows: list[str] = []
+
+    def build_group(rows_for_group: list[str], header_repeated: bool) -> dict[str, object]:
+        lines = [header] + rows_for_group if header_repeated else rows_for_group
+        return {"text": "\n".join(lines).strip(), "header_repeated": header_repeated}
+
+    for row in data_rows:
+        candidate_rows = current_rows + [row]
+        candidate_group = build_group(candidate_rows, repeat_header)
+        if current_rows and len(str(candidate_group["text"])) > max_chars:
+            groups.append(build_group(current_rows, repeat_header))
+            current_rows = [row]
+            continue
+        current_rows = candidate_rows
+
+    if current_rows:
+        groups.append(build_group(current_rows, repeat_header))
+
+    if not groups:
+        return [{"text": "\n".join(rows), "header_repeated": False}]
+
+    return groups
+
+
 def build_block_chunk(
     *,
     text: str,

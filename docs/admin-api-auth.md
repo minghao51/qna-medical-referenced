@@ -35,4 +35,5 @@ curl -X POST http://localhost:8000/chat \
 
 - Keep public chat anonymous if that is your product choice.
 - If you later add internal tooling, protect those callers with API keys first.
+- If you want a trusted “master” demo/admin key, use `API_KEYS_JSON` plus `RATE_LIMIT_BYPASS_KEY_IDS` or `RATE_LIMIT_BYPASS_ROLES` rather than disabling rate limiting globally.
 - If you add real end-user accounts later, do not treat API keys as a substitute for user auth.

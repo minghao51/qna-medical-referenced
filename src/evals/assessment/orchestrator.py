@@ -40,6 +40,7 @@ from .retrieval_eval import (
     run_diversity_sweep,
     run_hype_ablations,
     run_hype_ablations_with_reingest,
+    run_keyword_ablations,
     run_reranking_ablations,
     run_retrieval_ablations,
 )
@@ -137,6 +138,7 @@ def run_assessment(
     retrieval_options: dict[str, Any] | None = None,
     run_retrieval_ablations: bool = False,
     run_hype_ablations: bool = False,
+    run_keyword_ablations: bool = False,
     run_reranking_ablations: bool = False,
     run_diversity_sweep: bool = False,
     diversity_sweep: dict[str, Any] | None = None,
@@ -163,6 +165,7 @@ def run_assessment(
     log_assessment_to_wandb_fn: Callable[..., dict[str, Any]] = log_assessment_to_wandb,
     run_retrieval_ablations_fn: Callable[..., dict[str, Any]] = run_retrieval_ablations,
     run_hype_ablations_fn: Callable[..., dict[str, Any]] = run_hype_ablations,
+    run_keyword_ablations_fn: Callable[..., dict[str, Any]] = run_keyword_ablations,
     run_hype_ablations_with_reingest_fn: Callable[
         ..., dict[str, Any]
     ] = run_hype_ablations_with_reingest,
@@ -224,6 +227,7 @@ def run_assessment(
         export_failed_generations=export_failed_generations,
         run_retrieval_ablations=run_retrieval_ablations,
         run_hype_ablations=run_hype_ablations,
+        run_keyword_ablations=run_keyword_ablations,
         run_reranking_ablations=run_reranking_ablations,
         run_diversity_sweep=run_diversity_sweep,
         diversity_sweep=dict(diversity_sweep or {}),
@@ -422,6 +426,11 @@ def run_assessment(
         reranking_ablations = run_reranking_ablations_fn(
             dataset, config.top_k, base_options=config.retrieval_options
         )
+    keyword_ablations: dict[str, Any] = {}
+    if config.run_keyword_ablations:
+        keyword_ablations = run_keyword_ablations_fn(
+            dataset, config.top_k, base_options=config.retrieval_options
+        )
     diversity_sweep_rows: list[dict[str, Any]] = []
     if config.run_diversity_sweep:
         diversity_sweep_rows = run_diversity_sweep_fn(
@@ -548,6 +557,7 @@ def run_assessment(
     store.write_json("retrieval_metrics.json", retrieval_metrics)
     store.write_json("retrieval_ablations.json", retrieval_ablations)
     store.write_json("hype_ablations.json", hype_ablations)
+    store.write_json("keyword_ablations.json", keyword_ablations)
     store.write_json("reranking_ablations.json", reranking_ablations)
     store.write_json("retrieval_diversity_sweep.json", diversity_sweep_rows)
     store.write_jsonl(L6_ANSWER_QUALITY_ROWS, l6_answer_quality_rows)
@@ -559,6 +569,7 @@ def run_assessment(
         "retrieval_metrics": retrieval_metrics,
         "retrieval_ablations": retrieval_ablations,
         "hype_ablations": hype_ablations,
+        "keyword_ablations": keyword_ablations,
         "reranking_ablations": reranking_ablations,
         "retrieval_diversity_sweep_top": diversity_sweep_rows[:5],
         SUMMARY_L6_METRICS_KEY: l6_answer_quality_metrics,

@@ -47,25 +47,32 @@ except Exception:
     TableList = Any
 
 
-PDF_EXTRACTOR_STRATEGY = "pypdf_pdfplumber"
-PDF_TABLE_EXTRACTOR = "heuristic"
+def _pdf_extractor_strategy() -> str:
+    return get_runtime_state().pdf_extractor_strategy
+
+
+def _pdf_table_extractor() -> str:
+    return get_runtime_state().pdf_table_extractor
+
+
+def get_pdf_extractor_strategy() -> str:
+    return _pdf_extractor_strategy()
+
+
+def get_pdf_table_extractor() -> str:
+    return _pdf_table_extractor()
 
 
 def set_pdf_extractor_strategy(strategy: str) -> None:
     valid = {"pypdf_pdfplumber", "pymupdf_pdfplumber"}
     resolved = strategy if strategy in valid else "pypdf_pdfplumber"
     get_runtime_state().pdf_extractor_strategy = resolved
-    # Keep module-level global in sync for backward compat
-    global PDF_EXTRACTOR_STRATEGY
-    PDF_EXTRACTOR_STRATEGY = resolved
 
 
 def set_pdf_table_extractor(extractor: str) -> None:
     valid = {"heuristic", "camelot"}
     resolved = extractor if extractor in valid else "heuristic"
     get_runtime_state().pdf_table_extractor = resolved
-    global PDF_TABLE_EXTRACTOR
-    PDF_TABLE_EXTRACTOR = resolved
 
 
 def _normalize_lines(text: str) -> list[str]:
@@ -214,12 +221,12 @@ class PDFLoader:
         return outputs
 
     def _extract_primary(self, pdf_path: Path) -> tuple[Any, list[str]]:
-        if PDF_EXTRACTOR_STRATEGY == "pymupdf_pdfplumber" and pymupdf is not None:
+        if _pdf_extractor_strategy() == "pymupdf_pdfplumber" and pymupdf is not None:
             return self._extract_with_pymupdf(pdf_path)
         return self._extract_with_pypdf(pdf_path)
 
     def _extract_tables_camelot(self, pdf_path: Path, page_num: int) -> TableList | None:
-        if PDF_TABLE_EXTRACTOR != "camelot" or camelot is None:
+        if _pdf_table_extractor() != "camelot" or camelot is None:
             return None
         try:
             tables = camelot.read_pdf(str(pdf_path), pages=str(page_num), flavor="lattice")
@@ -263,7 +270,7 @@ class PDFLoader:
                 extractor = (
                     "pdfplumber"
                     if use_fallback
-                    else ("pymupdf" if PDF_EXTRACTOR_STRATEGY == "pymupdf_pdfplumber" else "pypdf")
+                    else ("pymupdf" if _pdf_extractor_strategy() == "pymupdf_pdfplumber" else "pypdf")
                 )
                 if use_fallback:
                     fallback_used += 1
@@ -277,7 +284,7 @@ class PDFLoader:
                 section_path: list[str] = []
                 structured_blocks = _build_structured_blocks(page_num, selected_text)
 
-                if PDF_TABLE_EXTRACTOR == "camelot" and camelot is not None:
+                if _pdf_table_extractor() == "camelot" and camelot is not None:
                     suspected_tables = _suspected_table_count(selected_text)
                     if suspected_tables > 0:
                         camelot_tables = self._extract_tables_camelot(pdf_file, page_num)
@@ -314,7 +321,7 @@ class PDFLoader:
                             "camelot_table_pages": (
                                 1
                                 if camelot is not None
-                                and PDF_TABLE_EXTRACTOR == "camelot"
+                                and _pdf_table_extractor() == "camelot"
                                 and _suspected_table_count(selected_text) > 0
                                 else 0
                             ),
@@ -335,17 +342,17 @@ class PDFLoader:
                         else len(primary_texts)
                     ),
                     "size_bytes": pdf_file.stat().st_size,
-                    "pdf_extractor_strategy": PDF_EXTRACTOR_STRATEGY,
-                    "pdf_table_extractor": PDF_TABLE_EXTRACTOR,
+                    "pdf_extractor_strategy": _pdf_extractor_strategy(),
+                    "pdf_table_extractor": _pdf_table_extractor(),
                 },
                 extracted_text="\n\n".join(full_text_parts).strip(),
                 structured_blocks=all_blocks,
                 best_output={
                     "extractor": (
                         "mixed_pymupdf"
-                        if PDF_EXTRACTOR_STRATEGY == "pymupdf_pdfplumber" and not fallback_used
+                        if _pdf_extractor_strategy() == "pymupdf_pdfplumber" and not fallback_used
                         else "pymupdf"
-                        if PDF_EXTRACTOR_STRATEGY == "pymupdf_pdfplumber"
+                        if _pdf_extractor_strategy() == "pymupdf_pdfplumber"
                         else "mixed"
                         if fallback_used
                         else "pypdf"
@@ -369,8 +376,8 @@ class PDFLoader:
                     "ocr_required_pages": ocr_required_pages,
                     "camelot_table_pages": camelot_table_pages,
                     "camelot_total_rows": camelot_total_rows,
-                    "pdf_extractor_strategy": PDF_EXTRACTOR_STRATEGY,
-                    "pdf_table_extractor": PDF_TABLE_EXTRACTOR,
+                    "pdf_extractor_strategy": _pdf_extractor_strategy(),
+                    "pdf_table_extractor": _pdf_table_extractor(),
                 },
             )
             persist_source_artifact(artifact)

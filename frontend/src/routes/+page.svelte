@@ -8,10 +8,12 @@
 	import SourceDistributionChart from '$lib/components/SourceDistributionChart.svelte';
 	import MarkdownRenderer from '$lib/components/MarkdownRenderer.svelte';
 	import { calculateConfidence, getDomainType } from '$lib/confidenceCalculator';
+	import { fetchHealthStatus, getApiBaseUrl, parseApiError } from '$lib/utils/api';
 	import { getSafeExternalUrl } from '$lib/utils/url';
+	import type { HealthResponse } from '$lib/types';
 	import '../lib/styles/markdown.css';
 
-	const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+	const API_URL = getApiBaseUrl();
 
 	let messages: Message[] = $state([]);
 	let input = $state('');
@@ -22,6 +24,8 @@
 	let messagesContainer: HTMLDivElement | undefined = $state();
 	let copiedIndex: number | null = $state(null);
 	let sourcePanelTabs: Record<number, 'citations' | 'distribution'> = $state({});
+	let healthStatus: HealthResponse | null = $state(null);
+	let operationalNotice = $state('');
 
 	type RenderableSource = {
 		canonicalLabel: string;
@@ -50,6 +54,19 @@
 			}
 		} catch (e) {
 			console.error('Failed to load history:', e);
+		}
+	}
+
+	async function loadHealth() {
+		try {
+			healthStatus = await fetchHealthStatus(API_URL);
+			if (healthStatus.vector_store && healthStatus.vector_store.initialized === false) {
+				operationalNotice = 'Backend is reachable, but the runtime index is not ready yet.';
+			} else {
+				operationalNotice = '';
+			}
+		} catch (e) {
+			operationalNotice = e instanceof Error ? e.message : 'Backend status unavailable.';
 		}
 	}
 
@@ -97,7 +114,7 @@
 			});
 
 			if (!res.ok) {
-				throw new Error('Failed to get response');
+				throw new Error(await parseApiError(res));
 			}
 
 			const reader = res.body?.getReader();
@@ -135,7 +152,7 @@
 								showPipeline = true;
 							}
 							if (data.error) {
-								error = data.error;
+								error = data.request_id ? `${data.error} (request ${data.request_id})` : data.error;
 							}
 						}
 						// Update messages after processing each event
@@ -148,7 +165,7 @@
 				}
 			}
 		} catch (e) {
-			error = 'Failed to send message. Make sure the API is running.';
+			error = e instanceof Error ? e.message : 'Failed to send message.';
 			console.error(e);
 		} finally {
 			loading = false;
@@ -181,6 +198,7 @@
 
 	onMount(() => {
 		loadHistory();
+		loadHealth();
 	});
 
 	function hasPipeline(message: Message): boolean {
@@ -314,6 +332,10 @@
 		</div>
 		<button onclick={clearChat}>New Chat</button>
 	</header>
+
+	{#if operationalNotice}
+		<div class="status-banner">{operationalNotice}</div>
+	{/if}
 
 	<div class="messages" bind:this={messagesContainer}>
 		{#if messages.length === 0}
@@ -839,6 +861,15 @@
 		padding: 0.5rem;
 		background: #ffebee;
 		border-radius: 4px;
+	}
+
+	.status-banner {
+		border: 1px solid #f0c36d;
+		background: #fff7e6;
+		color: #7a4b00;
+		border-radius: 12px;
+		padding: 0.85rem 1rem;
+		font-size: 0.95rem;
 	}
 
 	.input-area {

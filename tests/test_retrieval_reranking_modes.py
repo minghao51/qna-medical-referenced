@@ -1,5 +1,6 @@
 from src.evals.assessment.retrieval_eval import reranking_ablation_configs
 from src.rag import runtime
+from src.rag.medical_expansion import MedicalExpansion
 from src.rag.runtime import RetrievalDiversityConfig, _should_apply_diversification
 
 
@@ -78,11 +79,22 @@ def test_retrieve_context_applies_cross_encoder_without_mmr(monkeypatch):
     seen: dict[str, object] = {}
 
     class StubReranker:
-        def rerank(self, *, query, results, top_k):
+        def rerank(self, *, query, results, top_k, min_score=None):
             seen["query"] = query
             seen["results"] = results
             seen["top_k"] = top_k
-            return type("StubResult", (), {"reranked_results": results})()
+            return type(
+                "StubResult",
+                (),
+                {
+                    "model_name": "stub-reranker",
+                    "timing_ms": 0,
+                    "candidates_count": len(results),
+                    "output_count": len(results),
+                    "filtered_out_count": 0,
+                    "reranked_results": results,
+                },
+            )()
 
     monkeypatch.setattr("src.rag.reranker.get_reranker", lambda: StubReranker())
 
@@ -108,3 +120,90 @@ def test_retrieve_context_applies_cross_encoder_without_mmr(monkeypatch):
     assert seen["query"] == "query"
     assert seen["top_k"] == 4
     assert seen["enable_diversification"] is False
+
+
+def test_retrieve_context_with_trace_reports_medical_expansion_and_rerank_controls(monkeypatch):
+    monkeypatch.setattr(runtime, "initialize_runtime_index", lambda: None)
+    monkeypatch.setattr(runtime, "get_vector_store", lambda: object())
+    monkeypatch.setattr(
+        runtime,
+        "_extend_with_hype_questions",
+        lambda vector_store, query, expanded_queries, enable_hype: (expanded_queries, []),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_retrieve_candidates_with_trace",
+        lambda vector_store, query, fetch_k, search_mode, pre_expanded_queries: (
+            [
+                {
+                    "id": "a",
+                    "content": "doc",
+                    "source": "s1.pdf",
+                    "page": 1,
+                    "semantic_score": 1.0,
+                    "keyword_score": 0.0,
+                    "combined_score": 1.0,
+                    "rank": 1,
+                    "metadata": {},
+                }
+            ],
+            {
+                "timing_ms": 10,
+                "expanded_queries": pre_expanded_queries,
+                "result_count": 1,
+                "score_weights": {},
+            },
+        ),
+    )
+
+    class StubProvider:
+        provider_name = "stub"
+
+        def expand(self, query, *, base_queries=None):
+            return [MedicalExpansion(term="hypertension guideline", source="stub", relation="synonym")]
+
+    class StubReranker:
+        def rerank(self, *, query, results, top_k, min_score=None):
+            assert min_score == 0.5
+            return type(
+                "StubResult",
+                (),
+                {
+                    "model_name": "stub-reranker",
+                    "timing_ms": 12,
+                    "candidates_count": len(results),
+                    "output_count": len(results),
+                    "filtered_out_count": 0,
+                    "reranked_results": results,
+                },
+            )()
+
+    monkeypatch.setattr(runtime, "get_medical_expansion_provider", lambda provider_name: StubProvider())
+    monkeypatch.setattr("src.rag.reranker.get_reranker", lambda: StubReranker())
+    monkeypatch.setattr(
+        runtime,
+        "build_context_and_sources",
+        lambda results: ("context", ["s1.pdf"], [{"label": "s1.pdf"}]),
+    )
+
+    context, sources, trace = runtime.retrieve_context_with_trace(
+        "htn",
+        top_k=1,
+        retrieval_options={
+            "enable_medical_expansion": True,
+            "medical_expansion_provider": "stub",
+            "enable_reranking": True,
+            "rerank_score_threshold": 0.5,
+            "reranking_mode": "cross_encoder",
+        },
+    )
+
+    assert context
+    assert sources
+    assert trace.retrieval.score_weights["enable_medical_expansion"] is True
+    assert trace.retrieval.score_weights["medical_expansion_provider"] == "stub"
+    assert trace.retrieval.score_weights["medical_expansion_term_count"] == 1
+    assert trace.retrieval.score_weights["medical_expansion_terms"][0]["term"] == "hypertension guideline"
+    assert trace.retrieval.score_weights["rerank_score_threshold"] == 0.5
+    assert trace.retrieval.score_weights["rerank_candidates_reranked"] == 1
+    assert trace.retrieval.score_weights["rerank_timing_ms"] == 12

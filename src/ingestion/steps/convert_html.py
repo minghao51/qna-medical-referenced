@@ -74,12 +74,33 @@ class HTMLProcessorConfig:
 _html_config = HTMLProcessorConfig()
 
 
+def _current_html_extractor_strategy() -> str:
+    return get_runtime_state().html_extractor_strategy
+
+
+def _current_html_extractor_mode() -> str:
+    return get_runtime_state().html_extractor_mode
+
+
+def _page_classification_enabled() -> bool:
+    return get_runtime_state().page_classification_enabled
+
+
+def get_html_extractor_strategy() -> str:
+    return _current_html_extractor_strategy()
+
+
+def get_html_extractor_mode() -> str:
+    return _current_html_extractor_mode()
+
+
+def is_page_classification_enabled() -> bool:
+    return _page_classification_enabled()
+
+
 def set_html_extractor_strategy(strategy: str) -> None:
     """Set the HTML extractor strategy."""
     _html_config.set_extractor_strategy(strategy)
-    # Update global for backwards compatibility
-    global HTML_EXTRACTOR_STRATEGY
-    HTML_EXTRACTOR_STRATEGY = _html_config.extractor_strategy
     get_runtime_state().html_extractor_strategy = _html_config.extractor_strategy
 
 
@@ -89,9 +110,6 @@ def set_html_extractor_mode(mode: str) -> None:
     if normalized not in {"auto", "primary_only", "fallback_only"}:
         normalized = "auto"
     _html_config.extractor_mode = normalized
-    # Update global for backwards compatibility
-    global HTML_EXTRACTOR_MODE
-    HTML_EXTRACTOR_MODE = normalized
     get_runtime_state().html_extractor_mode = normalized
 
 
@@ -99,23 +117,20 @@ def set_page_classification_enabled(enabled: bool) -> None:
     """Enable or disable page classification."""
     normalized = bool(enabled)
     _html_config.page_classification_enabled = normalized
-    # Update global for backwards compatibility
-    global PAGE_CLASSIFICATION_ENABLED
-    PAGE_CLASSIFICATION_ENABLED = normalized
     get_runtime_state().page_classification_enabled = normalized
 
 
 def get_html_processor_config() -> HTMLProcessorConfig:
     """Get the current HTML processor configuration."""
+    state = get_runtime_state()
+    _html_config.extractor_strategy = state.html_extractor_strategy
+    _html_config.extractor_mode = state.html_extractor_mode
+    _html_config.page_classification_enabled = state.page_classification_enabled
     return _html_config
 
 
-# Backwards compatibility
-HTML_EXTRACTOR_STRATEGY = "trafilatura_bs"
 EXTRACTOR_CHAIN_DEPTH: int | None = None
 DATA_DIR = DATA_RAW_DIR
-PAGE_CLASSIFICATION_ENABLED = True
-HTML_EXTRACTOR_MODE = "auto"
 
 _REMOVAL_SELECTORS = [
     "nav",
@@ -220,7 +235,7 @@ def _remove_noise(soup: BeautifulSoup) -> None:
 
 
 def _classify_page(soup: BeautifulSoup, visible_text: str) -> str:
-    if not PAGE_CLASSIFICATION_ENABLED:
+    if not _page_classification_enabled():
         return "article"
     nav_links = len(soup.select("nav a, header a"))
     headings = len(soup.find_all(re.compile(r"^h[1-6]$")))
@@ -420,9 +435,9 @@ def convert_html_to_md(
 
     selected_extractor = cascade_meta.get("extractor_used", "beautifulsoup")
 
-    if HTML_EXTRACTOR_MODE == "primary_only":
+    if _current_html_extractor_mode() == "primary_only":
         markdown_content = cascade_markdown
-    elif HTML_EXTRACTOR_MODE == "fallback_only":
+    elif _current_html_extractor_mode() == "fallback_only":
         markdown_content = fallback["markdown"]
     else:
         markdown_content = (
@@ -466,9 +481,9 @@ def convert_html_to_md(
         metadata={
             "page_type": page_type,
             "selected_extractor": selected_extractor,
-            "html_extractor_strategy": HTML_EXTRACTOR_STRATEGY,
+            "html_extractor_strategy": _current_html_extractor_strategy(),
             "cascade_depth": cascade_depth,
-            "html_extractor_mode": HTML_EXTRACTOR_MODE,
+            "html_extractor_mode": _current_html_extractor_mode(),
             "text_density": _density(markdown_content, html_content),
             "boilerplate_ratio": _boilerplate_ratio(markdown_content),
             "indexable": page_type in {"article", "faq"},
@@ -497,23 +512,24 @@ def _bs_fallback_extract(html_content: str) -> dict[str, Any]:
 
 
 def _build_extractor_chain() -> list[tuple[str, Callable]]:
-    if HTML_EXTRACTOR_STRATEGY == "trafilatura_bs":
+    strategy = _current_html_extractor_strategy()
+    if strategy == "trafilatura_bs":
         return [
             ("trafilatura", _trafilatura_extract),
             ("beautifulsoup", _bs_fallback_extract),
         ]
-    elif HTML_EXTRACTOR_STRATEGY == "html2md_trafilatura_bs":
+    elif strategy == "html2md_trafilatura_bs":
         return [
             ("html-to-markdown", _html2md_extract),
             ("trafilatura", _trafilatura_extract),
             ("beautifulsoup", _bs_fallback_extract),
         ]
-    elif HTML_EXTRACTOR_STRATEGY == "readability_bs":
+    elif strategy == "readability_bs":
         return [
             ("readability-lxml", _readability_extract),
             ("beautifulsoup", _bs_fallback_extract),
         ]
-    elif HTML_EXTRACTOR_STRATEGY == "full_cascade":
+    elif strategy == "full_cascade":
         return [
             ("html-to-markdown", _html2md_extract),
             ("trafilatura", _trafilatura_extract),

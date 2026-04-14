@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.config import settings
+from src.config.context import RuntimeState, get_runtime_state, reset_runtime_state
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class ServiceContainer:
     html_processor_config: dict[str, Any] = field(default_factory=dict)
     retrieval_config: dict[str, Any] = field(default_factory=dict)
     vector_store_config: dict[str, Any] = field(default_factory=dict)
+    runtime_state: RuntimeState = field(default_factory=get_runtime_state)
 
     def get_vector_store(self, config: dict[str, Any] | None = None) -> Any:
         """Get or create vector store instance.
@@ -120,6 +122,8 @@ class ServiceContainer:
         from src.ingestion.indexing.vector_store import VectorStoreFactory
 
         VectorStoreFactory.reset()
+        reset_runtime_state()
+        self.runtime_state = get_runtime_state()
 
 
 # Global container instance

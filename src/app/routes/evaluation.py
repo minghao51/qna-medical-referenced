@@ -170,7 +170,7 @@ def _read_json_if_exists(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text())
     except Exception as e:
-        logger.debug("Failed to read JSON from %s: %s", path, e)
+        logger.warning("Failed to read JSON from %s: %s", path, e)
         return {}
 
 
@@ -885,11 +885,11 @@ def get_step_metrics(stage: str) -> dict[str, Any]:
             "quality_score": 0.92
         }
     """
+    stage_name = _validate_stage(stage)
+
     run_dir = _get_latest_run_dir()
     if not run_dir:
         raise HTTPException(status_code=404, detail="No evaluation runs found")
-
-    stage_name = _validate_stage(stage)
 
     step_metrics_path = run_dir / "step_metrics.json"
     if not step_metrics_path.exists():

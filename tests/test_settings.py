@@ -10,6 +10,8 @@ def test_settings_defaults():
     assert Settings.model_fields["max_message_length"].default == 2000
     assert Settings.model_fields["rate_limit_per_minute"].default == 60
     assert Settings.model_fields["anonymous_chat_rate_limit_per_minute"].default == 12
+    assert Settings.model_fields["rate_limit_bypass_key_ids"].default == ""
+    assert Settings.model_fields["rate_limit_bypass_roles"].default == ""
     assert Settings.model_fields["anonymous_browser_cookie_name"].default == "anon_browser_id"
     assert Settings.model_fields["chat_session_cookie_name"].default == "chat_session_id"
     assert Settings.model_fields["chat_session_cookie_max_age_seconds"].default == 60 * 60 * 24 * 30

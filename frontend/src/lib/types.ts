@@ -99,6 +99,30 @@ export interface Message {
 	timestamp?: number;
 }
 
+export interface ApiErrorPayload {
+	detail?: string;
+	error?: {
+		code?: string;
+		status_code?: number;
+		request_id?: string | null;
+		extra?: Record<string, unknown>;
+	};
+}
+
+export interface HealthResponse {
+	status: string;
+	runtime?: Record<string, unknown>;
+	vector_store?: {
+		initialized?: boolean;
+		signature?: string | null;
+		config?: Record<string, unknown>;
+	};
+	rate_limit?: {
+		backend?: string;
+		window_seconds?: number | null;
+	};
+}
+
 export interface EvaluationSummary {
 	run_dir: string;
 	duration_s: number;

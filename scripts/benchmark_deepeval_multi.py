@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import statistics
 import time
 from datetime import datetime
@@ -27,6 +28,8 @@ from typing import Any
 from src.config import settings
 from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
+logger = logging.getLogger(__name__)
+
 
 def _count_entries(path: Path) -> int:
     """Count entries in a cache file."""
@@ -34,7 +37,8 @@ def _count_entries(path: Path) -> int:
         return 0
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to parse cache file %s: %s", path, exc)
         return 0
     entries = payload.get("entries", {})
     return len(entries) if isinstance(entries, dict) else 0

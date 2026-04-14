@@ -22,6 +22,7 @@ from src.ingestion.indexing.keyword_index import (
     build_keyword_index,
     build_term_frequencies,
     keyword_score,
+    keyword_score_with_extracted_keywords,
 )
 from src.ingestion.indexing.search import cosine_similarity, rank_documents, reciprocal_rank_fusion
 from src.ingestion.indexing.text_utils import content_hash, sanitize_text, tokenize_text
@@ -111,9 +112,14 @@ class ChromaVectorStore:
         self._index_metadata: dict[str, Any] = dict(index_metadata or {})
         self.content_hashes: set[str] = set()
         self._id_set: set[str] = set()
+        self._doc_ids: list[str] = []
         self._doc_contents: list[str] = []
+        self._doc_metadatas: list[dict[str, Any]] = []
+        self._doc_embeddings: list[list[float]] = []
+        self._doc_id_to_index: dict[str, int] = {}
         self.keyword_index: dict[str, list[int]] = {}
         self._doc_term_freqs: dict[int, dict[str, int]] = {}
+        self._extracted_keywords_list: list[list[str] | None] = []
         self._index_dirty = False
         self.last_indexing_stats: dict[str, Any] = {}
 
@@ -194,7 +200,11 @@ class ChromaVectorStore:
             self._collection.upsert(**upsert_payload)
 
         self._id_set = set(ids)
+        self._doc_ids = []
         self._doc_contents = []
+        self._doc_metadatas = []
+        self._doc_embeddings = []
+        self._doc_id_to_index = {}
         self.content_hashes = set(payload.get("content_hashes", []))
         self._index_dirty = True
         self._rebuild_index_if_needed()
@@ -214,25 +224,77 @@ class ChromaVectorStore:
     def _tokenize(self, text: str) -> list[str]:
         return tokenize_text(text)
 
-    def _rebuild_index_if_needed(self) -> None:
+    def _rebuild_index_if_needed(self, include_embeddings: bool = False) -> None:
         if self._index_dirty:
-            self._doc_contents = self._get_all_documents()
+            include_fields = ["documents", "metadatas"]
+            if include_embeddings:
+                include_fields.append("embeddings")
+
+            all_data = self._collection.get(include=include_fields)
+            self._doc_ids = list(all_data.get("ids", []))
+            self._doc_contents = list(all_data.get("documents", []))
+            metadatas = [dict(meta or {}) for meta in all_data.get("metadatas", [])]
+            self._doc_metadatas = metadatas
+
+            if include_embeddings:
+                self._doc_embeddings = [
+                    emb.tolist() if hasattr(emb, "tolist") else emb
+                    for emb in all_data.get("embeddings", [])
+                ]
+            else:
+                self._doc_embeddings = []
+
+            self._doc_id_to_index = {doc_id: idx for idx, doc_id in enumerate(self._doc_ids)}
             self.keyword_index = build_keyword_index(self._doc_contents, self._tokenize)
             self._doc_term_freqs = build_term_frequencies(self._doc_contents, self._tokenize)
+            # Extract keywords from metadata for each document
+            self._extracted_keywords_list = []
+            for meta in metadatas:
+                if meta and "extracted_keywords" in meta:
+                    kws = meta["extracted_keywords"]
+                    if isinstance(kws, list):
+                        self._extracted_keywords_list.append([str(k).lower() for k in kws])
+                    else:
+                        self._extracted_keywords_list.append(None)
+                else:
+                    self._extracted_keywords_list.append(None)
             self._index_dirty = False
 
+    def _ensure_embeddings_loaded(self) -> None:
+        """Lazy-load embeddings only when needed for semantic search."""
+        if not self._doc_embeddings and self._collection.count() > 0:
+            logger.debug("Lazy-loading embeddings for semantic search")
+            all_data = self._collection.get(include=["embeddings"])
+            self._doc_embeddings = [
+                emb.tolist() if hasattr(emb, "tolist") else emb
+                for emb in all_data.get("embeddings", [])
+            ]
+
+    def _rebuild_in_memory_indexes(self) -> None:
+        self._doc_id_to_index = {doc_id: idx for idx, doc_id in enumerate(self._doc_ids)}
+        self.keyword_index = build_keyword_index(self._doc_contents, self._tokenize)
+        self._doc_term_freqs = build_term_frequencies(self._doc_contents, self._tokenize)
+        self._extracted_keywords_list = []
+        for meta in self._doc_metadatas:
+            kws = meta.get("extracted_keywords") if meta else None
+            if isinstance(kws, list):
+                self._extracted_keywords_list.append([str(k).lower() for k in kws])
+            else:
+                self._extracted_keywords_list.append(None)
+
     def _get_all_documents(self) -> list[str]:
-        all_data = self._collection.get(include=["documents"])
-        return list(all_data.get("documents", []))
+        self._rebuild_index_if_needed()
+        return list(self._doc_contents)
 
     def _keyword_score(self, query: str) -> dict[int, float]:
         self._rebuild_index_if_needed()
-        return keyword_score(
+        return keyword_score_with_extracted_keywords(
             query,
             contents=self._doc_contents,
             keyword_index=self.keyword_index,
             doc_term_freqs=self._doc_term_freqs,
             tokenize=self._tokenize,
+            extracted_keywords_list=self._extracted_keywords_list,
         )
 
     def _embed(self, texts: list[str], batch_size: int = 10) -> list[list[float]]:
@@ -312,6 +374,10 @@ class ChromaVectorStore:
                 meta["section_sibling_rank"] = doc["section_sibling_rank"]
             if "hypothetical_questions" in doc_metadata:
                 meta["hypothetical_questions"] = doc_metadata["hypothetical_questions"]
+            if "extracted_keywords" in doc_metadata:
+                meta["extracted_keywords"] = doc_metadata["extracted_keywords"]
+            if "chunk_summary" in doc_metadata:
+                meta["chunk_summary"] = doc_metadata["chunk_summary"]
             metadatas.append(meta)
 
         embeddings, embedding_stats = self._embed_with_stats(texts, effective_batch_size)
@@ -360,16 +426,14 @@ class ChromaVectorStore:
             )
 
             # Incrementally update keyword index for new documents
-            for text in to_upsert_documents:
-                doc_idx = len(self._doc_contents)
+            for doc_id, text, meta, embedding in zip(
+                to_upsert_ids, to_upsert_documents, to_upsert_metadatas, to_upsert_embeddings
+            ):
+                self._doc_ids.append(doc_id)
                 self._doc_contents.append(text)
-                tokens = self._tokenize(text)
-                for token in set(tokens):
-                    self.keyword_index.setdefault(token, []).append(doc_idx)
-                tf: dict[str, int] = {}
-                for token in tokens:
-                    tf[token] = tf.get(token, 0) + 1
-                self._doc_term_freqs[doc_idx] = tf
+                self._doc_metadatas.append(meta)
+                self._doc_embeddings.append(embedding)
+            self._rebuild_in_memory_indexes()
         else:
             self._index_dirty = True
         self.last_indexing_stats = stats
@@ -502,11 +566,14 @@ class ChromaVectorStore:
                 tokenize=self._tokenize,
             )
         else:
-            all_data = self._collection.get(include=["documents", "metadatas", "embeddings"])
-            chroma_ids = list(all_data.get("ids", []))
-            chroma_docs = list(all_data.get("documents", []))
-            chroma_embeddings = all_data.get("embeddings", [])
-            chroma_metadatas = list(all_data.get("metadatas", []))
+            self._rebuild_index_if_needed()
+            # Lazy-load embeddings only when needed for semantic search
+            if use_semantic:
+                self._ensure_embeddings_loaded()
+            chroma_ids = list(self._doc_ids)
+            chroma_docs = list(self._doc_contents)
+            chroma_embeddings = list(self._doc_embeddings)
+            chroma_metadatas = list(self._doc_metadatas)
             chroma_distances = []
             keyword_scores = self._keyword_score(query)
 
@@ -668,9 +735,9 @@ class ChromaVectorStore:
 
     def get_hypothetical_questions(self) -> dict[str, list[str]]:
         result: dict[str, list[str]] = {}
-        all_data = self._collection.get(ids=None, include=["metadatas"])
-        for i, doc_id in enumerate(all_data["ids"]):
-            meta = all_data["metadatas"][i]
+        self._rebuild_index_if_needed()
+        for i, doc_id in enumerate(self._doc_ids):
+            meta = self._doc_metadatas[i]
             if meta and "hypothetical_questions" in meta:
                 result[doc_id] = meta["hypothetical_questions"]
         return result
@@ -680,10 +747,9 @@ class ChromaVectorStore:
         if not query_tokens:
             return []
 
-        all_data = self._collection.get(include=["metadatas"])
-
         scored: list[tuple[float, str]] = []
-        for i, meta in enumerate(all_data.get("metadatas", [])):
+        self._rebuild_index_if_needed()
+        for i, meta in enumerate(self._doc_metadatas):
             if not meta:
                 continue
             quality_score = float(meta.get("quality_score", 1.0))
@@ -715,9 +781,14 @@ class ChromaVectorStore:
             self._collection.delete(ids=all_ids)
         self.content_hashes = set()
         self._id_set = set()
+        self._doc_ids = []
         self._doc_contents = []
+        self._doc_metadatas = []
+        self._doc_embeddings = []
+        self._doc_id_to_index = {}
         self.keyword_index = {}
         self._doc_term_freqs = {}
+        self._extracted_keywords_list = []
         self._index_metadata = {}
         self._index_dirty = False
         self.last_indexing_stats = {}

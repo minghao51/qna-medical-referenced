@@ -12,9 +12,11 @@ __all__ = [
     "evaluate_retrieval",
     "evaluate_thresholds",
     "git_head",
+    "keyword_ablation_configs",
     "render_summary",
     "run_assessment",
     "run_diversity_sweep",
+    "run_keyword_ablations",
     "run_retrieval_ablations",
     "sha256_file",
 ]

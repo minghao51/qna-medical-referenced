@@ -27,6 +27,8 @@ def _build_client(
     rate_limit: int = 10,
     anonymous_chat_rate_limit: int = 2,
     trust_proxy_headers: bool = False,
+    rate_limit_bypass_key_ids: str = "",
+    rate_limit_bypass_roles: str = "",
 ):
     monkeypatch.setattr("src.app.factory.validate_security_configuration", lambda: None)
     monkeypatch.setattr("src.app.factory.initialize_runtime_index", lambda: None)
@@ -38,6 +40,8 @@ def _build_client(
     monkeypatch.setattr(settings, "chat_session_cookie_name", "chat_session_id")
     monkeypatch.setattr(settings, "chat_session_cookie_max_age_seconds", 3600)
     monkeypatch.setattr(settings, "trust_proxy_headers", trust_proxy_headers)
+    monkeypatch.setattr(settings, "rate_limit_bypass_key_ids", rate_limit_bypass_key_ids)
+    monkeypatch.setattr(settings, "rate_limit_bypass_roles", rate_limit_bypass_roles)
     APIKeyConfig.reload()
     app = create_app()
     app.state.llm_client = DummyLLMClient()
@@ -105,6 +109,54 @@ def test_chat_success_and_rate_limit_headers(monkeypatch, tmp_path: Path):
     assert second.headers["X-RateLimit-Remaining"] == "0"
     assert third.status_code == 429
     assert third.headers["Retry-After"]
+
+
+def test_rate_limit_bypass_by_key_id(monkeypatch, tmp_path: Path):
+    async def mock_stream_chat_message(**kwargs):
+        yield ("ok", {"done": True, "sources": [], "pipeline": None})
+
+    monkeypatch.setattr("src.app.routes.chat.stream_chat_message", mock_stream_chat_message)
+    client = _build_client(
+        monkeypatch,
+        tmp_path,
+        api_keys="master-key",
+        rate_limit=1,
+        rate_limit_bypass_key_ids="key-1",
+    )
+
+    first = client.post("/chat", headers={"X-API-Key": "master-key"}, json={"message": "hello"})
+    second = client.post("/chat", headers={"X-API-Key": "master-key"}, json={"message": "again"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert "X-RateLimit-Limit" not in second.headers
+
+
+def test_rate_limit_bypass_by_role(monkeypatch, tmp_path: Path):
+    async def mock_stream_chat_message(**kwargs):
+        yield ("ok", {"done": True, "sources": [], "pipeline": None})
+
+    monkeypatch.setattr("src.app.routes.chat.stream_chat_message", mock_stream_chat_message)
+    client = _build_client(
+        monkeypatch,
+        tmp_path,
+        api_keys=None,
+        rate_limit=1,
+        rate_limit_bypass_roles="master",
+    )
+    monkeypatch.setattr(
+        settings,
+        "api_keys_json",
+        '[{"id":"ops-master","key":"master-key","role":"master","status":"active"}]',
+    )
+    APIKeyConfig.reload()
+
+    first = client.post("/chat", headers={"X-API-Key": "master-key"}, json={"message": "hello"})
+    second = client.post("/chat", headers={"X-API-Key": "master-key"}, json={"message": "again"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert "X-RateLimit-Limit" not in second.headers
 
 
 def test_request_id_preserved_on_http_errors(monkeypatch, tmp_path: Path):

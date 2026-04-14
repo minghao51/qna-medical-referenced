@@ -1,19 +1,11 @@
-import sys
-
 from src.ingestion.steps.load_pdfs import (
     PDFLoader,
     get_documents,
+    get_pdf_extractor_strategy,
+    get_pdf_table_extractor,
     set_pdf_extractor_strategy,
     set_pdf_table_extractor,
 )
-
-
-def _pdf_strategy():
-    return sys.modules["src.ingestion.steps.load_pdfs"].PDF_EXTRACTOR_STRATEGY
-
-
-def _pdf_table_extractor():
-    return sys.modules["src.ingestion.steps.load_pdfs"].PDF_TABLE_EXTRACTOR
 
 
 class TestPDFLoader:
@@ -97,19 +89,19 @@ class TestPDFLoader:
 class TestPDFExtractorStrategy:
     def test_set_pdf_extractor_strategy_valid(self):
         set_pdf_extractor_strategy("pymupdf_pdfplumber")
-        assert _pdf_strategy() == "pymupdf_pdfplumber"
+        assert get_pdf_extractor_strategy() == "pymupdf_pdfplumber"
 
     def test_set_pdf_extractor_strategy_invalid_defaults_to_baseline(self):
         set_pdf_extractor_strategy("invalid_strategy")
-        assert _pdf_strategy() == "pypdf_pdfplumber"
+        assert get_pdf_extractor_strategy() == "pypdf_pdfplumber"
 
     def test_set_pdf_table_extractor_valid(self):
         set_pdf_table_extractor("camelot")
-        assert _pdf_table_extractor() == "camelot"
+        assert get_pdf_table_extractor() == "camelot"
 
     def test_set_pdf_table_extractor_invalid_defaults_to_heuristic(self):
         set_pdf_table_extractor("invalid")
-        assert _pdf_table_extractor() == "heuristic"
+        assert get_pdf_table_extractor() == "heuristic"
 
     def test_extractor_strategy_persisted_in_metadata(self):
         loader = PDFLoader("data/raw")

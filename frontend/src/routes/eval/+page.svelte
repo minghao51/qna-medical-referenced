@@ -10,6 +10,7 @@
 	import RetrievalTab from '$lib/components/RetrievalTab.svelte';
 	import TabNav from '$lib/components/TabNav.svelte';
 	import TrendingTab from '$lib/components/TrendingTab.svelte';
+	import { fetchHealthStatus, getApiBaseUrl, parseApiError } from '$lib/utils/api';
 	import { exportCharts, exportToCSV, exportToJSON } from '$lib/utils/export';
 	import { calculateHealthScore, getHealthGrade } from '$lib/utils/health-score';
 	import {
@@ -26,10 +27,11 @@
 		EvalTrendMetric,
 		EvaluationHistoryResponse,
 		EvaluationHistoryRun,
-		EvaluationResponse
+		EvaluationResponse,
+		HealthResponse
 	} from '$lib/types';
 
-	const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+	const API_URL = getApiBaseUrl();
 
 	const tabs: Array<{ id: EvalTabId; label: string }> = [
 		{ id: 'ingestion', label: 'Ingestion' },
@@ -52,6 +54,8 @@
 	let selectedRunKey = $state('');
 	let urlStateReady = false;
 	let drillDownModal = $state(emptyDrillDownState());
+	let healthStatus = $state<HealthResponse | null>(null);
+	let operationalNotice = $state('');
 
 	const healthScore = $derived(data ? calculateHealthScore(data) : 0);
 	const healthGrade = $derived(getHealthGrade(healthScore));
@@ -82,7 +86,7 @@
 	async function loadData() {
 		try {
 			const response = await fetch(`${API_URL}/evaluation/latest`);
-			if (!response.ok) throw new Error('Failed to fetch evaluation data');
+			if (!response.ok) throw new Error(await parseApiError(response));
 			const payload = (await response.json()) as EvaluationResponse;
 			latestData = payload;
 			if (!selectedRunKey || selectedRunKey === selectionKey(payload) || !data) {
@@ -91,11 +95,23 @@
 			}
 			error = '';
 		} catch (err) {
-			error = 'Failed to load evaluation data. Make sure the API is running.';
+			error = err instanceof Error ? err.message : 'Failed to load evaluation data.';
 			console.error(err);
 		} finally {
 			loading = false;
 			refreshing = false;
+		}
+	}
+
+	async function loadHealth() {
+		try {
+			healthStatus = await fetchHealthStatus(API_URL);
+			operationalNotice =
+				healthStatus.vector_store && healthStatus.vector_store.initialized === false
+					? 'Backend is up, but the runtime index is not ready yet.'
+					: '';
+		} catch (err) {
+			operationalNotice = err instanceof Error ? err.message : 'Backend status unavailable.';
 		}
 	}
 
@@ -187,7 +203,7 @@
 
 	onMount(async () => {
 		applyUrlStateFromLocation();
-		await Promise.all([loadData(), loadHistory(), loadAblationResults()]);
+		await Promise.all([loadData(), loadHistory(), loadAblationResults(), loadHealth()]);
 		if (selectedRunKey && latestData && selectedRunKey !== selectionKey(latestData)) {
 			const selected = await loadRun(selectedRunKey);
 			if (selected) data = selected;
@@ -212,6 +228,10 @@
 				<HealthScoreBadge score={healthScore} grade={healthGrade} />
 			{/if}
 		</div>
+
+		{#if operationalNotice}
+			<div class="ops-banner">{operationalNotice}</div>
+		{/if}
 
 		{#if data?.summary}
 			<div class="run-bar">
@@ -322,11 +342,18 @@
 	.run-bar,
 	.tabs-wrap,
 	.loading-panel,
-	.error-panel {
+	.error-panel,
+	.ops-banner {
 		padding: 1rem;
 		border: 1px solid var(--border-color);
 		border-radius: 18px;
 		background: white;
+	}
+
+	.ops-banner {
+		border-color: #f0c36d;
+		background: #fff7e6;
+		color: #7a4b00;
 	}
 
 	.run-bar {

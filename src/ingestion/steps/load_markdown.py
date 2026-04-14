@@ -20,11 +20,12 @@ from src.source_metadata import (
     normalize_source_class,
 )
 
-INDEX_ONLY_CLASSIFIED_PAGES = True  # backward-compat module global
-
-
 def _is_index_only_classified_pages() -> bool:
     return get_runtime_state().index_only_classified_pages
+
+
+def get_index_only_classified_pages() -> bool:
+    return _is_index_only_classified_pages()
 
 
 class MarkdownLoader:
@@ -39,7 +40,7 @@ class MarkdownLoader:
                 continue
             artifact = load_source_artifact("html", md_file.stem)
             if (
-                INDEX_ONLY_CLASSIFIED_PAGES
+                _is_index_only_classified_pages()
                 and artifact
                 and not artifact.get("metadata", {}).get("indexable", True)
             ):
@@ -94,6 +95,4 @@ def get_markdown_documents() -> List[dict]:
 
 
 def set_index_only_classified_pages(enabled: bool) -> None:
-    global INDEX_ONLY_CLASSIFIED_PAGES
-    INDEX_ONLY_CLASSIFIED_PAGES = bool(enabled)
     get_runtime_state().index_only_classified_pages = bool(enabled)

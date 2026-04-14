@@ -5,11 +5,12 @@
 	import EvalSection from '$lib/components/EvalSection.svelte';
 	import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import { getApiBaseUrl } from '$lib/utils/api';
 	import type { FullAblationResponse, FullAblationRun } from '$lib/types';
 
 	type DimensionKey = 'all' | 'pdf_extraction' | 'html_extraction' | 'chunking_strategy' | 'chunk_size' | 'retrieval' | 'combined';
 
-	const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+	const API_URL = getApiBaseUrl();
 
 	let data: FullAblationResponse | null = null;
 	let loading = true;

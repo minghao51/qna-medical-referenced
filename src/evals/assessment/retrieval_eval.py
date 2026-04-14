@@ -132,6 +132,13 @@ def evaluate_retrieval(
     hyde_hit_values: list[float] = []
     hyde_mrr_values: list[float] = []
     hyde_source_hit_values: list[float] = []
+    medical_expansion_queries_count = 0
+    medical_expansion_term_counts: list[float] = []
+    rerank_enabled_queries_count = 0
+    rerank_timing_values: list[float] = []
+    rerank_candidate_values: list[float] = []
+    rerank_output_values: list[float] = []
+    rerank_filtered_values: list[float] = []
 
     for item in dataset:
         query = item["query"]
@@ -223,6 +230,34 @@ def evaluate_retrieval(
             "hyde_enabled": bool(
                 getattr(trace.retrieval, "score_weights", {}).get("hyde_enabled", False)
             ),
+            "medical_expansion_enabled": bool(
+                getattr(trace.retrieval, "score_weights", {}).get(
+                    "enable_medical_expansion", False
+                )
+            ),
+            "medical_expansion_term_count": float(
+                getattr(trace.retrieval, "score_weights", {}).get(
+                    "medical_expansion_term_count", 0
+                )
+            ),
+            "reranking_enabled": bool(
+                getattr(trace.retrieval, "score_weights", {}).get("enable_reranking", False)
+            ),
+            "rerank_timing_ms": float(
+                getattr(trace.retrieval, "score_weights", {}).get("rerank_timing_ms", 0)
+            ),
+            "rerank_candidates_reranked": float(
+                getattr(trace.retrieval, "score_weights", {}).get(
+                    "rerank_candidates_reranked",
+                    getattr(trace.retrieval, "score_weights", {}).get("rerank_candidates", 0),
+                )
+            ),
+            "rerank_output": float(
+                getattr(trace.retrieval, "score_weights", {}).get("rerank_output", 0)
+            ),
+            "rerank_filtered_out": float(
+                getattr(trace.retrieval, "score_weights", {}).get("rerank_filtered_out", 0)
+            ),
         }
         if item.get("label_confidence") == "high":
             high_conf_hit_values.append(row_metrics["hit_rate_at_k"])
@@ -257,6 +292,15 @@ def evaluate_retrieval(
             hyde_hit_values.append(row_metrics["hit_rate_at_k"])
             hyde_mrr_values.append(row_metrics["mrr"])
             hyde_source_hit_values.append(row_metrics["source_hit"])
+        if row_metrics["medical_expansion_enabled"]:
+            medical_expansion_queries_count += 1
+        medical_expansion_term_counts.append(row_metrics["medical_expansion_term_count"])
+        if row_metrics["reranking_enabled"]:
+            rerank_enabled_queries_count += 1
+        rerank_timing_values.append(row_metrics["rerank_timing_ms"])
+        rerank_candidate_values.append(row_metrics["rerank_candidates_reranked"])
+        rerank_output_values.append(row_metrics["rerank_output"])
+        rerank_filtered_values.append(row_metrics["rerank_filtered_out"])
         category = str(item.get("query_category") or "uncategorized")
         task_type = str(item.get("task_type") or "unspecified")
         source_type = expected_source_type_for_item(item)
@@ -341,6 +385,15 @@ def evaluate_retrieval(
         "hyde_hit_rate": mean(hyde_hit_values) if hyde_hit_values else None,
         "hyde_mrr": mean(hyde_mrr_values) if hyde_mrr_values else None,
         "hyde_source_hit_rate": mean(hyde_source_hit_values) if hyde_source_hit_values else None,
+        "medical_expansion_enabled": medical_expansion_queries_count > 0,
+        "medical_expansion_queries_count": medical_expansion_queries_count,
+        "medical_expansion_term_count_mean": mean(medical_expansion_term_counts),
+        "reranking_enabled": rerank_enabled_queries_count > 0,
+        "rerank_latency_p50_ms": percentile(rerank_timing_values, 50),
+        "rerank_latency_p95_ms": percentile(rerank_timing_values, 95),
+        "rerank_candidates_mean": mean(rerank_candidate_values),
+        "rerank_output_mean": mean(rerank_output_values),
+        "rerank_filtered_out_mean": mean(rerank_filtered_values),
         "retrieval_options": dict(retrieval_options or {}),
         "by_query_category": {k: _slice_aggregate(v) for k, v in sorted(by_query_category.items())},
         "by_task_type": {k: _slice_aggregate(v) for k, v in sorted(by_task_type.items())},
@@ -486,6 +539,58 @@ def run_retrieval_ablations(
     return outputs
 
 
+def keyword_ablation_configs(
+    base_options: dict[str, Any] | None = None,
+) -> list[tuple[str, dict[str, Any]]]:
+    """Ablation configs for LLM-extracted keyword and chunk summary evaluation.
+
+    Tests the impact of keyword extraction and chunk summarization at ingestion time
+    on retrieval quality. Variants:
+    - baseline: Neither keywords nor summaries
+    - keywords_only: LLM-extracted keywords for BM25 boosting
+    - summaries_only: Chunk summaries prepended to content
+    - both: Keywords + summaries combined
+    """
+    base = dict(base_options or {})
+    return [
+        (
+            "baseline",
+            {**base, "enable_keyword_extraction": False, "enable_chunk_summaries": False},
+        ),
+        (
+            "keywords_only",
+            {**base, "enable_keyword_extraction": True, "enable_chunk_summaries": False},
+        ),
+        (
+            "summaries_only",
+            {**base, "enable_keyword_extraction": False, "enable_chunk_summaries": True},
+        ),
+        (
+            "both",
+            {**base, "enable_keyword_extraction": True, "enable_chunk_summaries": True},
+        ),
+    ]
+
+
+def run_keyword_ablations(
+    dataset: list[dict[str, Any]],
+    top_k: int,
+    *,
+    base_options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run keyword extraction and chunk summary ablation study.
+
+    Evaluates the impact of LLM-extracted keywords and chunk summaries
+    on retrieval quality across four variants: baseline, keywords_only,
+    summaries_only, and both.
+    """
+    outputs: dict[str, Any] = {}
+    for name, options in keyword_ablation_configs(base_options):
+        _, metrics = evaluate_retrieval(dataset, top_k, retrieval_options=options)
+        outputs[name] = metrics
+    return outputs
+
+
 def reranking_ablation_configs(
     base_options: dict[str, Any] | None = None,
 ) -> list[tuple[str, dict[str, Any]]]:
@@ -543,11 +648,23 @@ def run_reranking_ablations(
         _, metrics = evaluate_retrieval(dataset, top_k, retrieval_options=options)
         outputs[name] = metrics
     if "no_reranking" in outputs:
-        baseline_hit = outputs["no_reranking"].get("hit_rate_at_k", 0)
+        baseline = outputs["no_reranking"]
         for name in outputs:
             if name != "no_reranking":
-                variant_hit = outputs[name].get("hit_rate_at_k", 0)
-                outputs[name]["rerank_improvement_delta"] = variant_hit - baseline_hit
+                variant = outputs[name]
+                variant["rerank_improvement_delta"] = (
+                    variant.get("hit_rate_at_k", 0) - baseline.get("hit_rate_at_k", 0)
+                )
+                variant["rerank_mrr_delta"] = variant.get("mrr", 0) - baseline.get("mrr", 0)
+                variant["rerank_exact_chunk_delta"] = variant.get(
+                    "exact_chunk_hit_rate", 0
+                ) - baseline.get("exact_chunk_hit_rate", 0)
+                variant["rerank_evidence_delta"] = variant.get(
+                    "evidence_hit_rate", 0
+                ) - baseline.get("evidence_hit_rate", 0)
+                variant["rerank_latency_delta_ms"] = variant.get(
+                    "rerank_latency_p50_ms", 0
+                ) - baseline.get("rerank_latency_p50_ms", 0)
     return outputs
 
 

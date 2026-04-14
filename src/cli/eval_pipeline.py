@@ -178,6 +178,7 @@ def main() -> None:
     parser.add_argument("--max-chunks-per-source", type=int, default=None)
     parser.add_argument("--run-retrieval-ablations", action="store_true")
     parser.add_argument("--run-hype-ablations", action="store_true")
+    parser.add_argument("--run-keyword-ablations", action="store_true")
     parser.add_argument("--run-reranking-ablations", action="store_true")
     parser.add_argument("--run-diversity-sweep", action="store_true")
     parser.add_argument(
@@ -282,6 +283,10 @@ def main() -> None:
             "--run-hype-ablations": (
                 "run_hype_ablations",
                 args.run_hype_ablations,
+            ),
+            "--run-keyword-ablations": (
+                "run_keyword_ablations",
+                args.run_keyword_ablations,
             ),
             "--run-reranking-ablations": (
                 "run_reranking_ablations",
@@ -398,6 +403,9 @@ def main() -> None:
         export_failed_generations=args.export_failed_generations,
         retrieval_options=retrieval_options,
         run_retrieval_ablations=args.run_retrieval_ablations,
+        run_hype_ablations=args.run_hype_ablations,
+        run_keyword_ablations=args.run_keyword_ablations,
+        run_reranking_ablations=args.run_reranking_ablations,
         run_diversity_sweep=args.run_diversity_sweep,
         diversity_sweep=diversity_sweep,
     )

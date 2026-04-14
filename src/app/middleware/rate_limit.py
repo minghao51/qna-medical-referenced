@@ -1,4 +1,4 @@
-"""Rate limiting middleware using a fixed-window backend."""
+"""Rate limiting middleware using a sliding-window backend."""
 
 from __future__ import annotations
 
@@ -53,62 +53,72 @@ class SQLiteRateLimitBackend(RateLimitBackend):
 
     def _init_db(self) -> None:
         with get_connection() as conn:
+            # Migrate old table if exists (breaking change from counters to events)
+            old_table_exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='rate_limit_counters'"
+            ).fetchone()
+
+            if old_table_exists:
+                logger.info("Migrating rate_limit_counters to rate_limit_events schema")
+                conn.execute("DROP TABLE IF EXISTS rate_limit_counters")
+
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS rate_limit_counters (
-                    key TEXT PRIMARY KEY,
-                    window_start INTEGER NOT NULL,
-                    count INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL
+                CREATE TABLE IF NOT EXISTS rate_limit_events (
+                    key TEXT NOT NULL,
+                    occurred_at INTEGER NOT NULL
                 )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_rate_limit_events_key_time
+                ON rate_limit_events (key, occurred_at)
                 """
             )
             conn.commit()
 
     def _cleanup(self, conn: sqlite3.Connection, now: int) -> None:
         cutoff = now - (self.window_seconds * 2)
-        conn.execute("DELETE FROM rate_limit_counters WHERE updated_at < ?", (cutoff,))
+        conn.execute("DELETE FROM rate_limit_events WHERE occurred_at < ?", (cutoff,))
 
     def check(self, key: str, limit: int, now: int | None = None) -> RateLimitDecision:
         if limit <= 0:
             return RateLimitDecision(True, limit, limit, 0)
         current = now or int(time.time())
-        window_start = current - (current % self.window_seconds)
+        window_start = current - self.window_seconds + 1
         with get_connection() as conn:
-            row = conn.execute(
-                "SELECT window_start, count FROM rate_limit_counters WHERE key = ?",
-                (key,),
-            ).fetchone()
-            if not row or int(row["window_start"]) != window_start:
-                count = 1
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO rate_limit_counters (key, window_start, count, updated_at)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (key, window_start, count, current),
-                )
-            else:
-                count = int(row["count"]) + 1
-                conn.execute(
-                    """
-                    UPDATE rate_limit_counters
-                    SET count = ?, updated_at = ?
-                    WHERE key = ? AND window_start = ?
-                    """,
-                    (count, current, key, window_start),
-                )
             self._cleanup(conn, current)
+            recent_rows = conn.execute(
+                """
+                SELECT occurred_at
+                FROM rate_limit_events
+                WHERE key = ? AND occurred_at >= ?
+                ORDER BY occurred_at ASC
+                """,
+                (key, window_start),
+            ).fetchall()
+            existing_count = len(recent_rows)
+            if existing_count < limit:
+                conn.execute(
+                    "INSERT INTO rate_limit_events (key, occurred_at) VALUES (?, ?)",
+                    (key, current),
+                )
+                count = existing_count + 1
+                retry_after = 0
+                allowed = True
+            else:
+                count = existing_count
+                oldest = int(recent_rows[0]["occurred_at"]) if recent_rows else current
+                retry_after = max(1, (oldest + self.window_seconds) - current)
+                allowed = False
             conn.commit()
 
-        allowed = count <= limit
-        remaining = max(0, limit - count)
-        retry_after = max(0, (window_start + self.window_seconds) - current)
         return RateLimitDecision(
             allowed=allowed,
             limit=limit,
-            remaining=remaining if allowed else 0,
-            retry_after=retry_after if not allowed else 0,
+            remaining=max(0, limit - count) if allowed else 0,
+            retry_after=retry_after,
         )
 
 
@@ -166,6 +176,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _build_rate_limit_key(self, request: Request, auth) -> tuple[str, int]:
         if auth:
+            if self._is_bypass_auth(auth):
+                return f"auth-bypass:{auth.key_id}", 0
             return f"auth:{auth.key_id}", rate_limiter.requests_per_minute
 
         client_ip = self._get_client_ip(request)
@@ -177,6 +189,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return f"anon-chat:{client_ip}:{browser_id}", limit
 
         return f"ip:{client_ip}", limit
+
+    @staticmethod
+    def _is_bypass_auth(auth) -> bool:
+        if not auth:
+            return False
+        return (
+            auth.key_id in settings.rate_limit_bypass_key_id_set
+            or bool(auth.role and auth.role in settings.rate_limit_bypass_role_set)
+        )
 
     @staticmethod
     def _get_client_ip(request: Request) -> str:

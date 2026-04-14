@@ -26,6 +26,12 @@ def test_hyde_config_defaults():
     assert settings.hyde_max_length == 200
 
 
+def test_medical_expansion_defaults():
+    """Test medical expansion seam defaults."""
+    assert settings.medical_expansion_enabled is False
+    assert settings.medical_expansion_provider == "noop"
+
+
 def test_cors_origins_parsing():
     """Test CORS origins are parsed correctly."""
     origins = settings.cors_origins

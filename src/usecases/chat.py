@@ -127,6 +127,7 @@ def process_chat_message(
     try:
         response = client.generate(prompt=message, context=full_context)
     except Exception as exc:
+        logger.exception("Chat generation failed for session %s", resolved_session_id)
         raise UpstreamServiceError("An error occurred processing your request") from exc
     gen_timing_ms = int((time.time() - gen_start) * 1000)
 
@@ -218,13 +219,13 @@ async def stream_chat_message(
         )
 
     except Exception as exc:
-        logger.error("Error during stream: %s", exc)
+        logger.exception("Error during stream for session %s", resolved_session_id)
         try:
             history_store.save_message(resolved_session_id, "user", message)
             if accumulated_response:
                 history_store.save_message(resolved_session_id, "assistant", accumulated_response)
         except Exception:
-            logger.warning("Failed to save error message to history: %s", exc)
+            logger.warning("Failed to save partial error message to history for session %s", resolved_session_id)
 
         try:
             yield (
@@ -234,8 +235,9 @@ async def stream_chat_message(
                     "sources": sources,
                     "pipeline": pipeline_trace,
                     "error": "An error occurred processing your request",
+                    "error_code": "chat_stream_failed",
                 },
             )
         except Exception as e:
-            logger.error("Failed to yield error event: %s", e)
+            logger.exception("Failed to yield error event for session %s", resolved_session_id)
         raise UpstreamServiceError("An error occurred processing your request") from exc

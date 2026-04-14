@@ -21,6 +21,8 @@ def run_pipeline(
     force_rebuild: bool = False,
     force_html_convert: bool = False,
     enable_hype: bool = False,
+    enable_keyword_extraction: bool = False,
+    enable_chunk_summaries: bool = False,
 ) -> None:
     """Run the full offline corpus refresh pipeline in sequence."""
     print("=" * 70)
@@ -33,15 +35,16 @@ def run_pipeline(
     print("=" * 70)
     print("STEP SUMMARY")
     print("=" * 70)
-    print(f"L0: Download web content     {'[SKIPPED]' if skip_download else '[RUNNING]'}")
-    print(f"L0b: Download PDFs           {'[SKIPPED]' if skip_download else '[RUNNING]'}")
-    print(f"L1: HTML -> Markdown         {'[RUNNING]' if not skip_download else '[SKIPPED]'}")
-    print("L2: Load PDF documents       [RUNNING]")
-    print("L3: Chunk documents          [RUNNING]")
-    print(f"L3b: Generate HyPE questions {'[RUNNING]' if enable_hype else '[SKIPPED]'}")
-    print("L4: Load reference data      [RUNNING]")
-    print(f"L5: Embed & store vectors    {'[FORCE REBUILD]' if force_rebuild else '[RUNNING]'}")
-    print("L6: Initialize RAG           [RUNNING]")
+    print(f"L0: Download web content             {'[SKIPPED]' if skip_download else '[RUNNING]'}")
+    print(f"L0b: Download PDFs                   {'[SKIPPED]' if skip_download else '[RUNNING]'}")
+    print(f"L1: HTML -> Markdown                 {'[RUNNING]' if not skip_download else '[SKIPPED]'}")
+    print("L2: Load PDF documents               [RUNNING]")
+    print("L3: Chunk documents                  [RUNNING]")
+    print(f"L3b: Generate HyPE questions         {'[RUNNING]' if enable_hype else '[SKIPPED]'}")
+    print(f"L3c: Enrich chunks (keywords/summary){'[RUNNING]' if (enable_keyword_extraction or enable_chunk_summaries) else '[SKIPPED]'}")
+    print("L4: Load reference data              [RUNNING]")
+    print(f"L5: Embed & store vectors            {'[FORCE REBUILD]' if force_rebuild else '[RUNNING]'}")
+    print("L6: Initialize RAG                   [RUNNING]")
     print("=" * 70)
     print()
 
@@ -56,7 +59,7 @@ def run_pipeline(
     from src.rag.runtime import initialize_runtime_index
 
     step_count = 0
-    total_steps = 9 if not skip_download else 6
+    total_steps = 10 if not skip_download else 7
 
     if not skip_download:
         print(f"[{step_count + 1}/{total_steps}] L0: Downloading web content...")
@@ -122,6 +125,41 @@ def run_pipeline(
         hype_questions = {}
     step_count += 1
 
+    # L3c: Enrich chunks with LLM-extracted keywords and/or summaries
+    enable_enrichment = enable_keyword_extraction or enable_chunk_summaries
+    if enable_enrichment:
+        print(f"[{step_count + 1}/{total_steps}] L3c: Enriching chunks (keywords={'ON' if enable_keyword_extraction else 'off'}, summaries={'ON' if enable_chunk_summaries else 'off'})...")
+        from src.config import settings
+        from src.infra.llm.qwen_client import get_client
+        from src.ingestion.steps.enrich_chunks import (
+            apply_enrichment_to_chunks,
+            enrich_chunks,
+        )
+
+        enrich_client = get_client()
+        enrichment_results = asyncio.run(
+            enrich_chunks(
+                chunks=chunks,
+                client=enrich_client,
+                enable_keywords=enable_keyword_extraction,
+                enable_summaries=enable_chunk_summaries,
+                sample_rate=settings.keyword_extraction_sample_rate,
+                max_chunks=settings.keyword_extraction_max_chunks,
+            )
+        )
+        enriched_count = apply_enrichment_to_chunks(
+            chunks,
+            enrichment_results,
+            enable_keywords=enable_keyword_extraction,
+            enable_summaries=enable_chunk_summaries,
+        )
+        print(f"  Enriched {enriched_count} chunks")
+        print()
+    else:
+        print("[SKIPPED] L3c: Enrich chunks (disabled)")
+        print()
+    step_count += 1
+
     print(f"[{step_count + 1}/{total_steps}] L4: Loading reference data...")
     ref_loader = ReferenceDataLoader()
     ref_docs = ref_loader.load_reference_ranges_as_docs()
@@ -180,6 +218,16 @@ def main() -> None:
         action="store_true",
         help="Enable HyPE question generation at ingestion time",
     )
+    parser.add_argument(
+        "--enable-keyword-extraction",
+        action="store_true",
+        help="Enable LLM-based medical entity keyword extraction at ingestion time",
+    )
+    parser.add_argument(
+        "--enable-chunk-summaries",
+        action="store_true",
+        help="Enable LLM-based chunk summarization at ingestion time",
+    )
     args = parser.parse_args()
 
     run_pipeline(
@@ -187,6 +235,8 @@ def main() -> None:
         force_rebuild=args.force,
         force_html_convert=args.force_html,
         enable_hype=args.enable_hype,
+        enable_keyword_extraction=args.enable_keyword_extraction,
+        enable_chunk_summaries=args.enable_chunk_summaries,
     )
 
 

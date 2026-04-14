@@ -7,9 +7,11 @@ This guide covers the smallest reasonable setup for publishing the app without a
 - Put the backend behind Cloudflare Free.
 - Keep backend API-key auth disabled for the public chat experience.
 - Keep backend anonymous rate limiting enabled.
+- Keep the general backend limiter enabled too; use privileged bypass keys for internal/admin traffic instead of setting `RATE_LIMIT_PER_MINUTE=0`.
 - Use the built-in anonymous session cookie for chat history isolation.
 - Set a real production `CORS_ALLOWED_ORIGINS` value.
 - Keep `TRUST_PROXY_HEADERS=false` unless traffic only reaches the backend through your trusted proxy/load balancer.
+- Prefer a same-site deployment for frontend and backend so the anonymous session cookie works cleanly in browsers.
 
 ## Suggested Production Settings
 
@@ -24,6 +26,18 @@ TRUST_PROXY_HEADERS=true
 ```
 
 Only set `TRUST_PROXY_HEADERS=true` when the app is actually deployed behind Cloudflare or another trusted reverse proxy.
+
+## Privileged Access
+
+If you want a “master” key for demos, configure it explicitly instead of silently overloading all API keys:
+
+```dotenv
+API_KEYS_JSON=[{"id":"demo-master","key":"replace-me","owner":"ops","role":"master","status":"active"}]
+RATE_LIMIT_BYPASS_KEY_IDS=demo-master
+# or: RATE_LIMIT_BYPASS_ROLES=master
+```
+
+This bypass only affects the app-level rate limiter. It does not create a user account system and it should still be treated like a highly sensitive secret.
 
 ## Cloudflare Free Setup
 
@@ -47,5 +61,6 @@ This setup is fine for a small public app, but it is still intentionally minimal
 - chat history is file-backed, not multi-instance shared
 - rate limiting is still origin-local inside the app
 - there is no end-user identity, moderation workflow, or abuse appeals flow
+- frontend and backend should ideally be served on the same site or through a reverse proxy if you want cookie-backed sessions without cross-site surprises
 
 If traffic grows or you move to multiple backend instances, plan to revisit shared storage and edge-layer controls.

@@ -1,4 +1,5 @@
 from src.rag import runtime
+from src.config.context import get_runtime_state
 
 
 class _FakeVectorStore:
@@ -37,8 +38,8 @@ def test_initialize_vector_store_rebuilds_after_runtime_config_switch(monkeypatc
     monkeypatch.setattr(runtime, "get_vector_store", fake_get_vector_store)
     monkeypatch.setattr(runtime, "get_vector_store_runtime_config", fake_get_runtime_config)
     monkeypatch.setattr(runtime, "_build_index_from_sources", fake_build_index)
-    monkeypatch.setattr(runtime, "_vector_store_initialized", False)
-    monkeypatch.setattr(runtime, "_vector_store_initialized_signature", None)
+    state = get_runtime_state()
+    state.reset_vector_store_state()
 
     first = runtime.initialize_vector_store()
     active_collection["name"] = "collection_b"

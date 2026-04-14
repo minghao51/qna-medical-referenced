@@ -108,8 +108,8 @@ Directory for raw downloaded documents (HTML, PDF files).
 
 **Note:** This directory is created automatically if it doesn't exist.
 
-#### `VECTOR_DIR`
-**Default:** `data/vectors`
+#### `CHROMA_PERSIST_DIRECTORY`
+**Default:** `data/chroma`
 
 Directory for persistent ChromaDB vector storage.
 
@@ -118,6 +118,8 @@ Directory for persistent ChromaDB vector storage.
 - When using network-mounted storage for distributed deployments
 
 **Important:** This directory contains the vector index. Losing it requires re-indexing all documents.
+
+`VECTOR_DIR` still exists in Python as a backwards-compatible alias, but the environment variable to configure is `CHROMA_PERSIST_DIRECTORY`.
 
 ### Chat Configuration
 
@@ -143,7 +145,7 @@ Maximum message length in characters.
 
 Runtime environment name. Use `development` or `test` for local work, and `staging` or `production` for internet-exposed deployments.
 
-Outside development/test, the backend requires API keys at startup.
+Outside development/test, treat API keys as the default for any internal or privileged callers. If you expose a mostly anonymous public chat experience, keep the backend behind your own trusted proxy and rely on the anonymous chat limiter plus edge-layer controls rather than disabling rate limiting globally.
 
 #### `API_KEYS`
 **Default:** (not set)
@@ -165,9 +167,9 @@ curl -X POST http://localhost:8000/chat \\
 ```
 
 **When to set:**
-- **Always** in production deployments
 - In development when testing authentication flow
-- When deploying to public networks
+- For internal dashboards, scripts, or privileged callers
+- For any deployment where the backend is not strictly behind your own trusted frontend/proxy
 
 **Security best practices:**
 - Use long, random keys (32+ characters)
@@ -186,6 +188,8 @@ API_KEYS_JSON=[{"id":"frontend","key":"super-secret-key","owner":"web","role":"c
 ```
 
 You may provide either `key` or a SHA-256 `hash`.
+
+This is also the recommended format when you want stable key IDs or roles for a trusted demo/admin key.
 
 #### `CORS_ALLOWED_ORIGINS`
 **Default:** local development origins
@@ -216,6 +220,20 @@ Maximum unauthenticated `POST /chat` requests allowed per minute for a single an
 - Issues an anonymous browser cookie for `/chat` traffic when API key auth is not used
 - Applies a tighter limit to the expensive LLM-backed chat endpoint
 - Helps prevent one NATed office or school from forcing all anonymous users into the same bucket
+
+#### `RATE_LIMIT_BYPASS_KEY_IDS`
+**Default:** empty
+
+Comma-separated authenticated API key IDs that bypass the application rate limiter.
+
+Use this for trusted internal or demo “master” keys defined through `API_KEYS_JSON`.
+
+#### `RATE_LIMIT_BYPASS_ROLES`
+**Default:** empty
+
+Comma-separated API key roles that bypass the application rate limiter.
+
+Use this only with `API_KEYS_JSON`, since plain `API_KEYS` values do not carry role metadata.
 
 #### `ANONYMOUS_BROWSER_COOKIE_NAME`
 **Default:** `anon_browser_id`
@@ -359,7 +377,7 @@ MODEL_NAME=qwen3.5-flash
 # Storage
 COLLECTION_NAME=medical_docs_dev
 DATA_DIR=data/raw
-VECTOR_DIR=data/vectors
+CHROMA_PERSIST_DIRECTORY=data/chroma
 
 # Chat
 MAX_MESSAGE_LENGTH=2000
@@ -370,6 +388,7 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 # Rate limiting
 RATE_LIMIT_PER_MINUTE=60
+ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE=12
 
 # Retry
 MAX_RETRIES=3
@@ -387,17 +406,19 @@ MODEL_NAME=qwen-plus
 # Storage
 COLLECTION_NAME=medical_docs_prod
 DATA_DIR=/mnt/data/raw
-VECTOR_DIR=/mnt/data/vectors
+CHROMA_PERSIST_DIRECTORY=/mnt/data/chroma
 
 # Chat
 MAX_MESSAGE_LENGTH=4000
 
-# API (enabled in production)
-API_KEYS=key_abc123,key_xyz789
+# API (recommended for internal/admin callers)
+API_KEYS_JSON=[{"id":"internal-dashboard","key":"replace-me","owner":"ops","role":"master","status":"active"}]
+RATE_LIMIT_BYPASS_KEY_IDS=internal-dashboard
 CORS_ALLOWED_ORIGINS=https://your-frontend.example.com
 
 # Rate limiting
 RATE_LIMIT_PER_MINUTE=120
+ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE=12
 
 # Retry
 MAX_RETRIES=5
@@ -415,7 +436,7 @@ MODEL_NAME=qwen3.5-flash
 # Storage (use test collections)
 COLLECTION_NAME=medical_docs_test
 DATA_DIR=/tmp/test_data/raw
-VECTOR_DIR=/tmp/test_data/vectors
+CHROMA_PERSIST_DIRECTORY=/tmp/test_data/chroma
 
 # Chat
 MAX_MESSAGE_LENGTH=1000
@@ -474,7 +495,7 @@ RETRY_DELAY=0.1
    uv run python -m src.cli.ingest
    ```
 2. Verify `COLLECTION_NAME` matches the indexed collection
-3. Check `VECTOR_DIR` exists and contains index files
+3. Check `CHROMA_PERSIST_DIRECTORY` exists and contains index files
 
 ### High API costs
 
@@ -492,11 +513,12 @@ Before deploying to production, ensure:
 
 - [ ] `DASHSCOPE_API_KEY` is set from environment variable, not in code
 - [ ] `ENVIRONMENT` is set correctly for the deployment
-- [ ] `API_KEYS` or `API_KEYS_JSON` is set with strong, unique keys for each client
+- [ ] `API_KEYS` or `API_KEYS_JSON` is set for any internal/admin callers
 - [ ] `CORS_ALLOWED_ORIGINS` only includes trusted frontend origins
 - [ ] `.env` file is NOT committed to version control
 - [ ] `.env` file has restricted permissions (chmod 600)
 - [ ] `RATE_LIMIT_PER_MINUTE` is set to prevent abuse
+- [ ] `ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE` is set for public chat deployments
 - [ ] SSL/TLS is enabled for API endpoints
 - [ ] API keys are rotated regularly
 - [ ] Separate API keys for development and production

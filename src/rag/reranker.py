@@ -20,6 +20,7 @@ class RerankResult:
     timing_ms: int
     candidates_count: int
     output_count: int
+    filtered_out_count: int = 0
 
 
 class CrossEncoderReranker:
@@ -57,6 +58,7 @@ class CrossEncoderReranker:
         query: str,
         results: list[dict],
         top_k: int,
+        min_score: float | None = None,
     ) -> RerankResult:
         if not results:
             return RerankResult(
@@ -67,6 +69,7 @@ class CrossEncoderReranker:
                 timing_ms=0,
                 candidates_count=0,
                 output_count=0,
+                filtered_out_count=0,
             )
 
         self._load_model()
@@ -83,6 +86,13 @@ class CrossEncoderReranker:
             scored_results.append(item_copy)
 
         scored_results.sort(key=lambda x: x["rerank_score"], reverse=True)
+        filtered_out_count = 0
+        if min_score is not None:
+            threshold = float(min_score)
+            kept_results = [item for item in scored_results if item["rerank_score"] >= threshold]
+            filtered_out_count = len(scored_results) - len(kept_results)
+            scored_results = kept_results
+
         reranked = scored_results[:top_k]
 
         for rank, item in enumerate(reranked, start=1):
@@ -98,6 +108,7 @@ class CrossEncoderReranker:
             timing_ms=timing_ms,
             candidates_count=len(results),
             output_count=len(reranked),
+            filtered_out_count=filtered_out_count,
         )
 
     def _predict_batch(self, pairs: list[tuple[str, str]]) -> list[float]:

@@ -42,8 +42,8 @@ def clean_chroma_collection(collection_name: str) -> None:
     try:
         client.delete_collection(collection_name)
         print(f"  Deleted ChromaDB collection: {collection_name}")
-    except Exception:
-        pass  # Collection doesn't exist
+    except Exception as exc:
+        logger.warning("Unable to delete ChromaDB collection %s: %s", collection_name, exc)
 
 
 def clean_html_artifacts() -> None:
@@ -64,33 +64,23 @@ def clean_html_artifacts() -> None:
 
 def reset_global_state() -> None:
     """Reset all global state modules to defaults."""
+    from src.config.context import reset_runtime_state
+    from src.infra.di import reset_container
+    from src.rag.runtime import reset_runtime_index_state
+
+    reset_container()
+    reset_runtime_state()
+    reset_runtime_index_state()
+
     # Reset ChromaDB factory singleton
     from src.ingestion.indexing.chroma_store import ChromaVectorStoreFactory
     ChromaVectorStoreFactory.reset()
-
-    # Reset HTML processor config
-    from src.ingestion.steps.convert_html import _html_config, HTMLProcessorConfig
-    _html_config.__dict__ = HTMLProcessorConfig().__dict__
 
     # Reset chunking config
     import src.ingestion.steps.chunking.config as chunking_config
     chunking_config.set_source_chunk_configs(None)
     chunking_config.set_structured_chunking_enabled(True)
     chunking_config.set_auto_select_strategy(False)
-
-    # Reset runtime globals
-    import src.rag.runtime as runtime
-    runtime._vector_store_initialized = False
-    runtime._vector_store_initialized_signature = None
-
-    # Reset load_markdown globals
-    import src.ingestion.steps.load_markdown as load_md
-    load_md.INDEX_ONLY_CLASSIFIED_PAGES = True
-
-    # Reset load_pdfs globals
-    import src.ingestion.steps.load_pdfs as load_pdfs
-    load_pdfs.PDF_EXTRACTOR_STRATEGY = "pypdf_pdfplumber"
-    load_pdfs.PDF_TABLE_EXTRACTOR = "heuristic"
 
     print("  Reset all global state")
 
@@ -138,8 +128,8 @@ def run_variant_clean(
     configure_runtime_for_experiment(experiment_config)
 
     # Verify strategy was set
-    from src.ingestion.steps.convert_html import _html_config
-    print(f"   HTML strategy: {_html_config.extractor_strategy}")
+    from src.ingestion.steps.convert_html import get_html_processor_config
+    print(f"   HTML strategy: {get_html_processor_config().extractor_strategy}")
     print(f"   PDF strategy: {experiment_config.get('ingestion', {}).get('pdf_extractor_strategy')}")
 
     print(f"\n3. Running assessment...")

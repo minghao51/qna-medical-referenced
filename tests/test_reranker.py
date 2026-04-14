@@ -102,6 +102,22 @@ class TestCrossEncoderReranker:
         assert result.reranked_results[0]["rerank_rank"] == 1
         assert result.reranked_results[1]["rerank_rank"] == 2
 
+    def test_rerank_applies_score_threshold(self):
+        reranker = CrossEncoderReranker(model_name="test-model")
+        results = [
+            {"id": "1", "content": "a", "score": 0.1},
+            {"id": "2", "content": "b", "score": 0.2},
+            {"id": "3", "content": "c", "score": 0.3},
+        ]
+
+        with patch.object(reranker, "_load_model"):
+            reranker._model = MagicMock()
+            reranker._model.predict.return_value = [0.2, 0.7, 0.4]
+            result = reranker.rerank(query="test", results=results, top_k=5, min_score=0.5)
+
+        assert [item["id"] for item in result.reranked_results] == ["2"]
+        assert result.filtered_out_count == 2
+
     def test_predict_batch_splits_into_batches(self):
         reranker = CrossEncoderReranker(model_name="test-model", batch_size=2)
         pairs = [(f"q{i}", f"d{i}") for i in range(5)]

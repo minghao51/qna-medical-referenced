@@ -102,8 +102,9 @@ class TestVectorStoreInitConcurrency:
         monkeypatch.setattr(runtime_mod, "_build_index_from_sources", counting_build)
 
         # Reset init state
-        runtime_mod._vector_store_initialized = False
-        runtime_mod._vector_store_initialized_signature = None
+        from src.config.context import get_runtime_state
+
+        get_runtime_state().reset_vector_store_state()
 
         # Mock get_vector_store to return empty store
         from src.ingestion.indexing import chroma_store

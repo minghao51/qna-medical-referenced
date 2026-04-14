@@ -6,7 +6,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 targets=(
   "README.md"
-  "ARCHITECTURE.md"
   "docs/architecture/overview.md"
   "docs/architecture/rag-system.md"
   "docs/configuration.md"

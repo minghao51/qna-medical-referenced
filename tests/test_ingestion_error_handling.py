@@ -10,7 +10,6 @@ Tests cover:
 - Invalid input validation
 """
 
-import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -21,14 +20,10 @@ from src.ingestion.indexing.vector_store import VectorStore
 from src.ingestion.steps.chunk_text import chunk_documents
 from src.ingestion.steps.convert_html import (
     convert_html_to_md,
+    get_html_extractor_strategy,
     set_html_extractor_strategy,
 )
 from src.ingestion.steps.load_pdfs import get_documents
-
-
-def _html_strategy():
-    return sys.modules["src.ingestion.steps.convert_html"].HTML_EXTRACTOR_STRATEGY
-
 
 # =============================================================================
 # Network Failure Tests
@@ -362,11 +357,11 @@ def test_none_metadata_values():
 class TestHTMLExtractorStrategy:
     def test_set_html_extractor_strategy_valid(self):
         set_html_extractor_strategy("html2md_trafilatura_bs")
-        assert _html_strategy() == "html2md_trafilatura_bs"
+        assert get_html_extractor_strategy() == "html2md_trafilatura_bs"
 
     def test_set_html_extractor_strategy_invalid_defaults_to_baseline(self):
         set_html_extractor_strategy("invalid_strategy")
-        assert _html_strategy() == "trafilatura_bs"
+        assert get_html_extractor_strategy() == "trafilatura_bs"
 
     def test_set_html_extractor_strategy_all_valid(self):
         for strategy in [
@@ -376,7 +371,7 @@ class TestHTMLExtractorStrategy:
             "full_cascade",
         ]:
             set_html_extractor_strategy(strategy)
-            assert _html_strategy() == strategy
+            assert get_html_extractor_strategy() == strategy
 
     def test_cascade_depth_written_to_artifact(self, tmp_path: Path):
 

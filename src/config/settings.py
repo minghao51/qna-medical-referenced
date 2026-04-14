@@ -262,6 +262,24 @@ class Settings(BaseSettings):
     Environment variable: ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE
     """
 
+    rate_limit_bypass_key_ids: str = ""
+    """Comma-separated authenticated key IDs exempt from application rate limiting.
+
+    Default: "" (no bypass)
+    Use this for trusted internal/admin callers that should bypass request quotas.
+
+    Environment variable: RATE_LIMIT_BYPASS_KEY_IDS
+    """
+
+    rate_limit_bypass_roles: str = ""
+    """Comma-separated API key roles exempt from application rate limiting.
+
+    Default: "" (no bypass)
+    Roles are sourced from API key records in `API_KEYS_JSON`.
+
+    Environment variable: RATE_LIMIT_BYPASS_ROLES
+    """
+
     anonymous_browser_cookie_name: str = "anon_browser_id"
     """Cookie name used to persist an anonymous browser identifier.
 
@@ -372,7 +390,65 @@ class Settings(BaseSettings):
     Environment variable: HYPE_QUESTIONS_PER_CHUNK
     """
 
+    # LLM Keyword Extraction & Chunk Summarization
+    enable_keyword_extraction: bool = False
+    """Enable LLM-based medical entity keyword extraction at ingestion time.
+
+    Default: False
+    When enabled, extracts 5-10 medical entities (conditions, drugs, procedures,
+    specialties) from each chunk and stores them in metadata for BM25 indexing
+    and query-time keyword boosting.
+
+    Environment variable: ENABLE_KEYWORD_EXTRACTION
+    """
+
+    enable_chunk_summaries: bool = False
+    """Enable LLM-based chunk summarization at ingestion time.
+
+    Default: False
+    When enabled, generates a 1-2 sentence summary for each chunk and prepends
+    it to the chunk content before embedding, improving semantic match for
+    overview queries.
+
+    Environment variable: ENABLE_CHUNK_SUMMARIES
+    """
+
+    keyword_extraction_sample_rate: float = 1.0
+    """Fraction of chunks to process for keyword extraction (0.0-1.0).
+
+    Weighted by quality_score — higher quality chunks are prioritized.
+
+    Default: 1.0 (process all chunks)
+    Environment variable: KEYWORD_EXTRACTION_SAMPLE_RATE
+    """
+
+    keyword_extraction_max_chunks: int = 500
+    """Maximum number of chunks to process for keyword extraction per ingestion.
+
+    Default: 500
+    Environment variable: KEYWORD_EXTRACTION_MAX_CHUNKS
+    """
+
     # Retrieval Configuration
+    medical_expansion_enabled: bool = False
+    """Enable provider-backed medical query expansion during retrieval.
+
+    Default: False
+    This seam is independent of HyDE/HyPE and is safe to leave disabled until
+    a real ontology-backed provider is configured.
+
+    Environment variable: MEDICAL_EXPANSION_ENABLED
+    """
+
+    medical_expansion_provider: str = "noop"
+    """Medical expansion provider name.
+
+    Default: "noop"
+    Supported values currently: noop
+
+    Environment variable: MEDICAL_EXPANSION_PROVIDER
+    """
+
     # Reranking Configuration
     reranker_model: str = "BAAI/bge-reranker-base"
     """Cross-encoder model for reranking retrieval results.
@@ -419,6 +495,16 @@ class Settings(BaseSettings):
     Environment variable: RERANK_TOP_K
     """
 
+    rerank_score_threshold: float | None = None
+    """Optional minimum cross-encoder score required after reranking.
+
+    Default: None (no threshold)
+    When set, candidates scoring below the threshold are dropped before
+    diversification and context assembly.
+
+    Environment variable: RERANK_SCORE_THRESHOLD
+    """
+
     reranking_mode: str = "cross_encoder"
     """Reranking strategy to use.
 
@@ -439,6 +525,14 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def rate_limit_bypass_key_id_set(self) -> set[str]:
+        return {value.strip() for value in self.rate_limit_bypass_key_ids.split(",") if value.strip()}
+
+    @property
+    def rate_limit_bypass_role_set(self) -> set[str]:
+        return {value.strip() for value in self.rate_limit_bypass_roles.split(",") if value.strip()}
 
     @property
     def vector_dir(self) -> str:

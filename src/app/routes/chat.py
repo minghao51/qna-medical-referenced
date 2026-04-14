@@ -74,19 +74,28 @@ async def chat_stream_generator(
                             "sources": sources_data,
                             "pipeline": pipeline_data,
                             "error": metadata.get("error"),
+                            "error_code": metadata.get("error_code"),
+                            "request_id": getattr(request.state, "request_id", None),
                         }
                     )
                     sent_terminal_event = True
                     yield f"data: {event}\n\n"
                 except Exception as e:
-                    logger.error("Failed to serialize SSE event: %s", e)
+                    logger.exception("Failed to serialize SSE event")
                     error_event = json.dumps(
-                        {"content": "", "done": True, "error": "Serialization error"}
+                        {
+                            "content": "",
+                            "done": True,
+                            "error": "Serialization error",
+                            "error_code": "sse_serialization_failed",
+                            "request_id": getattr(request.state, "request_id", None),
+                        }
                     )
                     sent_terminal_event = True
                     yield f"data: {error_event}\n\n"
 
     except Exception:
+        logger.exception("Chat stream generator failed")
         log_event(
             logger,
             logging.ERROR,
@@ -98,7 +107,15 @@ async def chat_stream_generator(
             auth_key_id=getattr(getattr(request.state, "auth", None), "key_id", None),
         )
         if not sent_terminal_event:
-            error_event = json.dumps({"content": "", "done": True, "error": "An error occurred"})
+            error_event = json.dumps(
+                {
+                    "content": "",
+                    "done": True,
+                    "error": "An error occurred",
+                    "error_code": "chat_failed",
+                    "request_id": getattr(request.state, "request_id", None),
+                }
+            )
             yield f"data: {error_event}\n\n"
 
 

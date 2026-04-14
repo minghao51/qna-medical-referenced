@@ -9,8 +9,11 @@ from src.ingestion.steps.chunking import config
 from src.ingestion.steps.chunking.helpers import (
     build_block_chunk,
     build_chunk_metadata,
+    group_list_items,
     hash_content,
     quality_score_for_block,
+    split_list_items,
+    split_table_rows,
     source_kind,
     split_markdown_sections,
 )
@@ -205,6 +208,7 @@ class TextChunker:
     ) -> List[dict]:
         chunks: list[dict] = []
         chunk_index = start_chunk_index
+        block_group_limit = max(900, self.chunk_size)
         for block in blocks:
             block_text = str(block.get("text", "")).strip()
             if not block_text:
@@ -219,34 +223,14 @@ class TextChunker:
                 continue
 
             if block_type == "table":
-                rows = [row for row in block_text.splitlines() if row.strip()]
-                group: list[str] = []
-                for row in rows:
-                    candidate = "\n".join(group + [row]).strip()
-                    if group and len(candidate) > max(900, self.chunk_size):
-                        chunks.append(
-                            build_block_chunk(
-                                text="\n".join(group),
-                                source=source,
-                                doc_id=doc_id,
-                                page=page,
-                                chunk_index=chunk_index,
-                                content_type="table",
-                                section_path=section_path,
-                                quality_score=quality_score,
-                                parent_block_ids=[block_id],
-                                source_type=self._source_kind(source),
-                                doc_metadata=doc_metadata,
-                            )
-                        )
-                        chunk_index += 1
-                        group = [row]
-                    else:
-                        group.append(row)
-                if group:
+                for table_group in split_table_rows(
+                    block_text,
+                    max_chars=block_group_limit,
+                    repeat_header=True,
+                ):
                     chunks.append(
                         build_block_chunk(
-                            text="\n".join(group),
+                            text=str(table_group["text"]),
                             source=source,
                             doc_id=doc_id,
                             page=page,
@@ -262,24 +246,45 @@ class TextChunker:
                     chunk_index += 1
                 continue
 
-            if block_type == "list" and len(block_text) <= 900:
-                chunks.append(
-                    build_block_chunk(
-                        text=block_text,
-                        source=source,
-                        doc_id=doc_id,
-                        page=page,
-                        chunk_index=chunk_index,
-                        content_type="list",
-                        section_path=section_path,
-                        quality_score=quality_score,
-                        parent_block_ids=[block_id],
-                        source_type=self._source_kind(source),
-                        doc_metadata=doc_metadata,
+            if block_type == "list":
+                list_items = split_list_items(block_text)
+                if list_items:
+                    for list_group in group_list_items(list_items, max_chars=block_group_limit):
+                        chunks.append(
+                            build_block_chunk(
+                                text=list_group,
+                                source=source,
+                                doc_id=doc_id,
+                                page=page,
+                                chunk_index=chunk_index,
+                                content_type="list",
+                                section_path=section_path,
+                                quality_score=quality_score,
+                                parent_block_ids=[block_id],
+                                source_type=self._source_kind(source),
+                                doc_metadata=doc_metadata,
+                            )
+                        )
+                        chunk_index += 1
+                    continue
+                if len(block_text) <= block_group_limit:
+                    chunks.append(
+                        build_block_chunk(
+                            text=block_text,
+                            source=source,
+                            doc_id=doc_id,
+                            page=page,
+                            chunk_index=chunk_index,
+                            content_type="list",
+                            section_path=section_path,
+                            quality_score=quality_score,
+                            parent_block_ids=[block_id],
+                            source_type=self._source_kind(source),
+                            doc_metadata=doc_metadata,
+                        )
                     )
-                )
-                chunk_index += 1
-                continue
+                    chunk_index += 1
+                    continue
 
             split_chunks = self._chunk_text_with_base_index(
                 block_text,

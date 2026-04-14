@@ -126,7 +126,7 @@ def _resolve_path_for_contract(path: Path | None) -> str | None:
     try:
         return str(path.resolve())
     except Exception:
-        logger.debug("Path resolution failed for %s", path)
+        logger.warning("Path resolution failed for %s", path)
         return str(path)
 
 
@@ -177,7 +177,7 @@ def _load_cached_dataset_manifest(run_dir: Path) -> dict[str, Any]:
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception:
-        logger.debug("Failed to read manifest at %s", manifest_path)
+        logger.warning("Failed to read manifest at %s", manifest_path)
         return {}
     return payload if isinstance(payload, dict) else {}
 
@@ -211,7 +211,7 @@ def _resolve_cached_dataset_path(
         try:
             resolved = run_dir.resolve()
         except Exception:
-            logger.debug("Path resolution failed for %s", run_dir)
+            logger.warning("Path resolution failed for %s", run_dir)
             resolved = run_dir
         if resolved in seen:
             continue
@@ -451,6 +451,7 @@ def _try_generate_synthetic_questions(
             attempt["parsed"] = accepted[-1]
         except Exception as exc:
             attempt["error"] = str(exc)
+            logger.warning("Synthetic dataset generation failed for doc %s: %s", doc.get("id"), exc)
         attempts.append(attempt)
 
     return accepted, attempts

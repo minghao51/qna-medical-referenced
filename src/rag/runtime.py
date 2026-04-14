@@ -3,12 +3,12 @@
 
 import json
 import logging
-import threading
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from src.config import settings
+from src.config.context import get_runtime_state
 from src.ingestion.indexing.text_utils import ACRONYM_EXPANSIONS, tokenize_text
 from src.ingestion.indexing.vector_store import (
     get_vector_store,
@@ -39,14 +39,12 @@ from src.ingestion.steps.load_pdfs import (
 )
 from src.ingestion.steps.load_reference_data import ReferenceDataLoader
 from src.rag.formatting import build_context_and_sources
+from src.rag.medical_expansion import MedicalExpansion, get_medical_expansion_provider
 from src.rag.trace_models import ChatSource, RetrievedDocument
 
 logger = logging.getLogger(__name__)
 
 
-_vector_store_initialized = False
-_vector_store_initialized_signature: str | None = None
-_init_lock = threading.Lock()
 _VALID_SEARCH_MODES = {"rrf_hybrid", "semantic_only", "bm25_only"}
 
 
@@ -88,9 +86,14 @@ class RetrievalDiversityConfig:
     enable_hyde: bool = False
     hyde_max_length: int = 200  # Maximum length for HyDE hypothetical answers
     enable_hype: bool = False  # Use pre-stored HyPE questions at retrieval time
+    enable_medical_expansion: bool = False  # Enable provider-backed medical expansion
+    medical_expansion_provider: str = "noop"  # Provider name for medical expansion
     enable_reranking: bool = False  # Enable cross-encoder reranking
     rerank_top_k: int | None = None  # Candidates to fetch before reranking (None = auto)
+    rerank_score_threshold: float | None = None  # Drop candidates below this rerank score
     reranking_mode: str = "cross_encoder"  # cross_encoder, mmr, or both
+    enable_keyword_extraction: bool = False  # Use LLM-extracted keywords for BM25 boosting
+    enable_chunk_summaries: bool = False  # Chunks have summaries prepended to content
 
 
 def get_runtime_retrieval_config() -> dict[str, Any]:
@@ -127,14 +130,34 @@ def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> Retrie
     cfg.enable_hyde = bool(cfg.enable_hyde)
     cfg.hyde_max_length = max(50, min(500, int(cfg.hyde_max_length)))
     cfg.enable_hype = bool(cfg.enable_hype) or bool(getattr(settings, "hype_enabled", False))
+    cfg.enable_medical_expansion = bool(cfg.enable_medical_expansion) or bool(
+        getattr(settings, "medical_expansion_enabled", False)
+    )
+    cfg.medical_expansion_provider = str(
+        cfg.medical_expansion_provider or getattr(settings, "medical_expansion_provider", "noop")
+    ).lower()
     cfg.enable_reranking = bool(cfg.enable_reranking) or bool(
         getattr(settings, "enable_reranking", False)
     )
+    if cfg.rerank_top_k is None:
+        cfg.rerank_top_k = getattr(settings, "rerank_top_k", None)
+    elif cfg.rerank_top_k is not None:
+        cfg.rerank_top_k = max(1, int(cfg.rerank_top_k))
+    if cfg.rerank_score_threshold is None:
+        cfg.rerank_score_threshold = getattr(settings, "rerank_score_threshold", None)
+    elif cfg.rerank_score_threshold is not None:
+        cfg.rerank_score_threshold = float(cfg.rerank_score_threshold)
     cfg.reranking_mode = str(
         cfg.reranking_mode or getattr(settings, "reranking_mode", "cross_encoder")
     ).lower()
     if cfg.reranking_mode not in {"cross_encoder", "mmr", "both"}:
         cfg.reranking_mode = "cross_encoder"
+    cfg.enable_keyword_extraction = bool(cfg.enable_keyword_extraction) or bool(
+        getattr(settings, "enable_keyword_extraction", False)
+    )
+    cfg.enable_chunk_summaries = bool(cfg.enable_chunk_summaries) or bool(
+        getattr(settings, "enable_chunk_summaries", False)
+    )
     return cfg
 
 
@@ -154,21 +177,8 @@ def _dedupe_queries(queries: list[str]) -> list[str]:
     return deduped
 
 
-def _expand_queries(query: str, hyde_client: Any = None, enable_hyde: bool = False) -> list[str]:
-    """Expand query using multiple techniques: tokenization, acronym expansion, and optionally HyDE.
-
-    Args:
-        query: The user's original query
-        hyde_client: Optional LLM client for HyDE expansion (not used in sync version)
-        enable_hyde: Whether to enable HyDE expansion (not effective in sync version)
-
-    Returns:
-        List of expanded query variants
-
-    Note:
-        For full HyDE functionality, use _expand_queries_async instead.
-        This synchronous version does not perform LLM-based HyDE expansion.
-    """
+def _expand_lexical_queries(query: str) -> list[str]:
+    """Expand query using lexical normalization and acronym expansion."""
     query = str(query or "").strip()
     if not query:
         return []
@@ -186,11 +196,81 @@ def _expand_queries(query: str, hyde_client: Any = None, enable_hyde: bool = Fal
     return _dedupe_queries(outputs)
 
 
+def _expand_medical_terms(
+    query: str,
+    *,
+    base_queries: list[str],
+    enable_medical_expansion: bool = False,
+    provider_name: str = "noop",
+) -> list[MedicalExpansion]:
+    """Expand query with provider-backed medical terms."""
+    if not enable_medical_expansion:
+        return []
+    provider = get_medical_expansion_provider(provider_name)
+    expansions = provider.expand(query, base_queries=base_queries)
+    normalized: list[MedicalExpansion] = []
+    seen: set[tuple[str, str, str | None]] = set()
+    for expansion in expansions:
+        term = expansion.normalized()
+        if not term:
+            continue
+        key = (term, str(expansion.source), expansion.relation)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(
+            MedicalExpansion(term=term, source=str(expansion.source), relation=expansion.relation)
+        )
+    return normalized
+
+
+def _prepare_expanded_queries(
+    query: str,
+    *,
+    enable_medical_expansion: bool = False,
+    medical_expansion_provider: str = "noop",
+) -> tuple[list[str], list[dict[str, str | None]]]:
+    """Return lexical plus provider-backed expansion queries and trace metadata."""
+    base_queries = _expand_lexical_queries(query)
+    medical_expansions = _expand_medical_terms(
+        query,
+        base_queries=base_queries,
+        enable_medical_expansion=enable_medical_expansion,
+        provider_name=medical_expansion_provider,
+    )
+    medical_terms = [expansion.term for expansion in medical_expansions]
+    return (
+        _dedupe_queries(base_queries + medical_terms),
+        [expansion.as_trace_payload() for expansion in medical_expansions],
+    )
+
+
+def _expand_queries(query: str, hyde_client: Any = None, enable_hyde: bool = False) -> list[str]:
+    """Backward-compatible sync expansion entrypoint.
+
+    Args:
+        query: The user's original query
+        hyde_client: Optional LLM client for HyDE expansion (not used in sync version)
+        enable_hyde: Whether to enable HyDE expansion (not effective in sync version)
+
+    Returns:
+        List of expanded query variants
+
+    Note:
+        For full HyDE functionality, use _expand_queries_async instead.
+        This synchronous version does not perform LLM-based HyDE expansion.
+    """
+    return _expand_lexical_queries(query)
+
+
 async def _expand_queries_async(
     query: str,
     hyde_client: Any = None,
     enable_hyde: bool = False,
     hyde_max_length: int = 200,
+    enable_medical_expansion: bool = False,
+    medical_expansion_provider: str = "noop",
+    pre_expanded_queries: list[str] | None = None,
 ) -> list[str]:
     """Async version of query expansion with HyDE support.
 
@@ -205,8 +285,15 @@ async def _expand_queries_async(
     """
     from src.rag.hyde import expand_query_with_hyde_async
 
-    # Get base query expansions (tokenization, acronyms)
-    base_queries = _expand_queries(query)
+    base_queries = (
+        list(pre_expanded_queries)
+        if pre_expanded_queries is not None
+        else _prepare_expanded_queries(
+            query,
+            enable_medical_expansion=enable_medical_expansion,
+            medical_expansion_provider=medical_expansion_provider,
+        )[0]
+    )
 
     # If HyDE is disabled, return base expansions only
     if not enable_hyde or not hyde_client:
@@ -271,33 +358,31 @@ def initialize_vector_store(
     materialize_html: bool = False,
     force_html_reconvert: bool = False,
 ):
-    global _vector_store_initialized, _vector_store_initialized_signature
-
-    with _init_lock:
+    state = get_runtime_state()
+    with state._lock:
         runtime_signature = _vector_store_runtime_signature()
-        if _vector_store_initialized_signature != runtime_signature:
-            _vector_store_initialized = False
+        if state.vector_store_initialized_signature != runtime_signature:
+            state.vector_store_initialized = False
 
         vector_store = get_vector_store()
 
         if rebuild:
             vector_store.clear()
-            _vector_store_initialized = False
-            _vector_store_initialized_signature = None
+            state.reset_vector_store_state()
 
         if materialize_html:
             convert_html_main(force=force_html_reconvert)
 
         if vector_store.documents.get("contents"):
-            if not _vector_store_initialized:
-                _vector_store_initialized = True
-                _vector_store_initialized_signature = runtime_signature
+            if not state.vector_store_initialized:
+                state.vector_store_initialized = True
+                state.vector_store_initialized_signature = runtime_signature
                 logger.info(
                     "Loaded existing vector store with %d documents",
                     len(vector_store.documents["contents"]),
                 )
             else:
-                _vector_store_initialized_signature = runtime_signature
+                state.vector_store_initialized_signature = runtime_signature
             return {
                 "status": "ready",
                 "reused_existing_index": True,
@@ -308,8 +393,8 @@ def initialize_vector_store(
             }
 
         build_stats = _build_index_from_sources(vector_store)
-        _vector_store_initialized = True
-        _vector_store_initialized_signature = runtime_signature
+        state.vector_store_initialized = True
+        state.vector_store_initialized_signature = runtime_signature
         return {
             "status": "built",
             "reused_existing_index": False,
@@ -331,6 +416,26 @@ def initialize_runtime_index(
         materialize_html=materialize_html,
         force_html_reconvert=force_html_reconvert,
     )
+
+
+def reset_runtime_index_state() -> None:
+    """Reset runtime-owned vector store initialization state."""
+    get_runtime_state().reset_vector_store_state()
+
+
+def get_runtime_status() -> dict[str, Any]:
+    """Return lightweight runtime/index health metadata."""
+    state = get_runtime_state()
+    vector_store_config = get_vector_store_runtime_config()
+    status = state.get_vector_store_status()
+    return {
+        "vector_store": {
+            "initialized": status["initialized"],
+            "signature": status["signature"],
+            "config": vector_store_config,
+        },
+        "runtime": state.snapshot(),
+    }
 
 
 def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -381,6 +486,7 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
         },
     }
     set_vector_store_runtime_config(vector_config)
+    get_runtime_state().reset_vector_store_state()
     return {
         "ingestion": ingestion,
         "embedding_index": embedding_index,
@@ -551,6 +657,41 @@ def _build_retrieved_documents(results: list[dict]) -> list[RetrievedDocument]:
     return retrieved_docs
 
 
+def _apply_reranking(
+    query: str,
+    results: list[dict],
+    *,
+    fetch_k: int,
+    cfg: RetrievalDiversityConfig,
+):
+    """Apply cross-encoder reranking with candidate-window and score-threshold controls."""
+    if not (cfg.enable_reranking and cfg.reranking_mode in {"cross_encoder", "both"}):
+        return results, None, {}
+
+    from src.rag.reranker import get_reranker
+
+    reranker = get_reranker()
+    rerank_candidates_count = cfg.rerank_top_k or fetch_k
+    candidates = results[:rerank_candidates_count] if rerank_candidates_count < len(results) else results
+    rerank_result = reranker.rerank(
+        query=query,
+        results=candidates,
+        top_k=fetch_k,
+        min_score=cfg.rerank_score_threshold,
+    )
+    rerank_info = {
+        "reranker_model": rerank_result.model_name,
+        "rerank_timing_ms": rerank_result.timing_ms,
+        "rerank_candidates_requested": rerank_candidates_count,
+        "rerank_candidates_available": len(results),
+        "rerank_candidates_reranked": rerank_result.candidates_count,
+        "rerank_output": rerank_result.output_count,
+        "rerank_score_threshold": cfg.rerank_score_threshold,
+        "rerank_filtered_out": rerank_result.filtered_out_count,
+    }
+    return rerank_result.reranked_results, rerank_result, rerank_info
+
+
 def retrieve_context(
     query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None
 ) -> tuple[str, list[ChatSource]]:
@@ -559,7 +700,11 @@ def retrieve_context(
 
     vector_store = get_vector_store()
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
-    expanded_queries = _expand_queries(query)
+    expanded_queries, _ = _prepare_expanded_queries(
+        query,
+        enable_medical_expansion=cfg.enable_medical_expansion,
+        medical_expansion_provider=cfg.medical_expansion_provider,
+    )
     expanded_queries, _ = _extend_with_hype_questions(
         vector_store,
         query,
@@ -573,16 +718,7 @@ def retrieve_context(
         cfg.search_mode,
         pre_expanded_queries=expanded_queries,
     )
-    if cfg.enable_reranking and cfg.reranking_mode in {"cross_encoder", "both"}:
-        from src.rag.reranker import get_reranker
-
-        reranker = get_reranker()
-        rerank_candidates_count = cfg.rerank_top_k or fetch_k
-        candidates = (
-            results[:rerank_candidates_count] if rerank_candidates_count < len(results) else results
-        )
-        rerank_result = reranker.rerank(query=query, results=candidates, top_k=fetch_k)
-        results = rerank_result.reranked_results
+    results, _, _ = _apply_reranking(query, results, fetch_k=fetch_k, cfg=cfg)
 
     apply_diversification = _should_apply_diversification(cfg)
     results = _diversify_results(
@@ -625,7 +761,11 @@ def retrieve_context_with_trace(
     vector_store = get_vector_store()
 
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
-    expanded_queries = _expand_queries(query)
+    expanded_queries, medical_expansion_trace = _prepare_expanded_queries(
+        query,
+        enable_medical_expansion=cfg.enable_medical_expansion,
+        medical_expansion_provider=cfg.medical_expansion_provider,
+    )
     expanded_queries, selected_hype_questions = _extend_with_hype_questions(
         vector_store,
         query,
@@ -640,17 +780,7 @@ def retrieve_context_with_trace(
         pre_expanded_queries=expanded_queries,
     )
 
-    rerank_result = None
-    if cfg.enable_reranking and cfg.reranking_mode in {"cross_encoder", "both"}:
-        from src.rag.reranker import get_reranker
-
-        reranker = get_reranker()
-        rerank_candidates_count = cfg.rerank_top_k or fetch_k
-        candidates = (
-            results[:rerank_candidates_count] if rerank_candidates_count < len(results) else results
-        )
-        rerank_result = reranker.rerank(query=query, results=candidates, top_k=fetch_k)
-        results = rerank_result.reranked_results
+    results, rerank_result, rerank_info = _apply_reranking(query, results, fetch_k=fetch_k, cfg=cfg)
 
     apply_diversification = _should_apply_diversification(cfg)
     results = _diversify_results(
@@ -666,14 +796,6 @@ def retrieve_context_with_trace(
     retrieved_docs = _build_retrieved_documents(results)
 
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
-    rerank_info = {}
-    if rerank_result is not None:
-        rerank_info = {
-            "reranker_model": rerank_result.model_name,
-            "rerank_timing_ms": rerank_result.timing_ms,
-            "rerank_candidates": rerank_result.candidates_count,
-            "rerank_output": rerank_result.output_count,
-        }
     retrieval_stage = RetrievalStage(
         query=query,
         top_k=top_k,
@@ -684,6 +806,10 @@ def retrieve_context_with_trace(
             "query_embedding_timing_ms": retrieval_trace.get("query_embedding_timing_ms", 0),
             "search_mode": cfg.search_mode,
             "expanded_queries": retrieval_trace.get("expanded_queries", []),
+            "enable_medical_expansion": cfg.enable_medical_expansion,
+            "medical_expansion_provider": cfg.medical_expansion_provider,
+            "medical_expansion_terms": medical_expansion_trace,
+            "medical_expansion_term_count": len(medical_expansion_trace),
             "enable_diversification": apply_diversification,
             "mmr_lambda": cfg.mmr_lambda,
             "overfetch_multiplier": cfg.overfetch_multiplier,
@@ -691,7 +817,9 @@ def retrieve_context_with_trace(
             "max_chunks_per_source": cfg.max_chunks_per_source,
             "enable_reranking": cfg.enable_reranking,
             "reranking_mode": cfg.reranking_mode,
+            "retrieval_candidate_count": retrieval_trace.get("result_count", len(results)),
             **rerank_info,
+            "returned_documents": len(results),
         },
         timing_ms=retrieval_timing_ms,
     )
@@ -761,11 +889,19 @@ async def retrieve_context_with_trace_async(
 
     # Step 1: Query Expansion
     query_expansion_start = time.time()
+    expanded_queries, medical_expansion_trace = _prepare_expanded_queries(
+        query,
+        enable_medical_expansion=cfg.enable_medical_expansion,
+        medical_expansion_provider=cfg.medical_expansion_provider,
+    )
     expanded_queries = await _expand_queries_async(
         query,
         hyde_client=hyde_client,
         enable_hyde=cfg.enable_hyde,
         hyde_max_length=cfg.hyde_max_length,
+        enable_medical_expansion=cfg.enable_medical_expansion,
+        medical_expansion_provider=cfg.medical_expansion_provider,
+        pre_expanded_queries=expanded_queries,
     )
     query_expansion_timing_ms = int((time.time() - query_expansion_start) * 1000)
 
@@ -803,9 +939,12 @@ async def retrieve_context_with_trace_async(
             skipped=False,
             details={
                 "expanded_queries": expanded_queries,
+                "medical_expansion_terms": medical_expansion_trace,
                 "selected_hype_questions": selected_hype_questions,
                 "hyde_enabled": cfg.enable_hyde,
                 "hype_enabled": cfg.enable_hype,
+                "medical_expansion_enabled": cfg.enable_medical_expansion,
+                "medical_expansion_provider": cfg.medical_expansion_provider,
             },
         )
     )
@@ -839,17 +978,7 @@ async def retrieve_context_with_trace_async(
 
     # Step 3: Reranking/Diversification
     reranking_start = time.time()
-    rerank_result = None
-    if cfg.enable_reranking and cfg.reranking_mode in {"cross_encoder", "both"}:
-        from src.rag.reranker import get_reranker
-
-        reranker = get_reranker()
-        rerank_candidates_count = cfg.rerank_top_k or fetch_k
-        candidates = (
-            results[:rerank_candidates_count] if rerank_candidates_count < len(results) else results
-        )
-        rerank_result = reranker.rerank(query=query, results=candidates, top_k=fetch_k)
-        results = rerank_result.reranked_results
+    results, rerank_result, rerank_info = _apply_reranking(query, results, fetch_k=fetch_k, cfg=cfg)
 
     apply_diversification = _should_apply_diversification(cfg)
     results = _diversify_results(
@@ -876,6 +1005,8 @@ async def retrieve_context_with_trace_async(
                 "reranking_mode": cfg.reranking_mode,
                 "reranker_model": rerank_result.model_name if rerank_result else None,
                 "rerank_timing_ms": rerank_result.timing_ms if rerank_result else 0,
+                "rerank_score_threshold": cfg.rerank_score_threshold,
+                **rerank_info,
             },
         )
     )
@@ -883,14 +1014,6 @@ async def retrieve_context_with_trace_async(
     retrieved_docs = _build_retrieved_documents(results)
 
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
-    rerank_info = {}
-    if rerank_result is not None:
-        rerank_info = {
-            "reranker_model": rerank_result.model_name,
-            "rerank_timing_ms": rerank_result.timing_ms,
-            "rerank_candidates": rerank_result.candidates_count,
-            "rerank_output": rerank_result.output_count,
-        }
     retrieval_stage = RetrievalStage(
         query=query,
         top_k=top_k,
@@ -901,6 +1024,10 @@ async def retrieve_context_with_trace_async(
             "query_embedding_timing_ms": retrieval_trace.get("query_embedding_timing_ms", 0),
             "search_mode": cfg.search_mode,
             "expanded_queries": retrieval_trace.get("expanded_queries", []),
+            "enable_medical_expansion": cfg.enable_medical_expansion,
+            "medical_expansion_provider": cfg.medical_expansion_provider,
+            "medical_expansion_terms": medical_expansion_trace,
+            "medical_expansion_term_count": len(medical_expansion_trace),
             "enable_diversification": apply_diversification,
             "mmr_lambda": cfg.mmr_lambda,
             "overfetch_multiplier": cfg.overfetch_multiplier,
@@ -908,7 +1035,9 @@ async def retrieve_context_with_trace_async(
             "max_chunks_per_source": cfg.max_chunks_per_source,
             "enable_reranking": cfg.enable_reranking,
             "reranking_mode": cfg.reranking_mode,
+            "retrieval_candidate_count": retrieval_trace.get("result_count", len(results)),
             **rerank_info,
+            "returned_documents": len(results),
         },
         timing_ms=retrieval_timing_ms,
     )
@@ -1033,6 +1162,7 @@ def _retrieve_candidates_with_trace(
     merged_trace = traces[0] if traces else {}
     merged_trace["expanded_queries"] = expanded_queries
     merged_trace["candidate_traces"] = traces
+    merged_trace["result_count"] = len(merged_results)
     return merged_results, merged_trace
 
 
@@ -1073,4 +1203,5 @@ async def _retrieve_candidates_with_trace_async(
     merged_trace["expanded_queries"] = expanded_queries
     merged_trace["candidate_traces"] = traces
     merged_trace["hyde_enabled"] = enable_hyde
+    merged_trace["result_count"] = len(merged_results)
     return merged_results, merged_trace
