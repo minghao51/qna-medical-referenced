@@ -29,13 +29,7 @@ Only set `TRUST_PROXY_HEADERS=true` when the app is actually deployed behind Clo
 
 ## Privileged Access
 
-If you want a “master” key for demos, configure it explicitly instead of silently overloading all API keys:
-
-```dotenv
-API_KEYS_JSON=[{"id":"demo-master","key":"replace-me","owner":"ops","role":"master","status":"active"}]
-RATE_LIMIT_BYPASS_KEY_IDS=demo-master
-# or: RATE_LIMIT_BYPASS_ROLES=master
-```
+If you want a “master” key for demos, configure it via `API_KEYS_JSON` with `RATE_LIMIT_BYPASS_KEY_IDS` or `RATE_LIMIT_BYPASS_ROLES`. See [`configuration.md`](./configuration.md) for the full setting reference.
 
 This bypass only affects the app-level rate limiter. It does not create a user account system and it should still be treated like a highly sensitive secret.
 

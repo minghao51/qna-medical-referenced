@@ -132,10 +132,25 @@ async def _prepare_answer_case(
     from src.rag.runtime import retrieve_context_with_trace
 
     client = get_client()
-    query = item["query"]
+    query = str(item.get("query") or "")
     query_start = time.time()
     retrieval_cached = False
     generation_cached = False
+
+    if not query.strip():
+        _, _, trace_obj = await asyncio.to_thread(
+            retrieve_context_with_trace, query, max(0, top_k), retrieval_options
+        )
+        return AnswerQualityCase(
+            query_id=item.get("query_id"),
+            query=query,
+            context="",
+            sources=[],
+            trace=_trace_to_dict(trace_obj),
+            answer="",
+            timings={"retrieval_ms": 0, "generation_ms": 0, "metrics_ms": 0, "total_ms": 0},
+            cache={"retrieval": False, "generation": False, "metrics": False},
+        )
 
     async with semaphore:
         retrieval_key = _cache_key({"query": query, **runtime_signature})
@@ -372,6 +387,8 @@ async def evaluate_answer_quality_async(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not settings.dashscope_api_key or settings.dashscope_api_key == "test-api-key":
         return [], {"status": "skipped", "reason": "missing_dashscope_api_key"}
+
+    top_k = max(0, int(top_k))
 
     query_concurrency = max(1, int(getattr(settings, "deepeval_query_concurrency", 2)))
     metric_concurrency = max(1, int(getattr(settings, "deepeval_metric_concurrency", 3)))

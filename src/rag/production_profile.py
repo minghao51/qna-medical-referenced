@@ -12,7 +12,8 @@ Usage:
 
 Supported profiles:
     - pymupdf_semantic_hybrid (optimal, NDCG=0.9976)
-    - baseline (default production settings)
+    - baseline (baseline production settings)
+    - baseline_cross_encoder (baseline ingestion + cross-encoder reranking)
 """
 
 import logging
@@ -51,6 +52,17 @@ def register_builtin_profiles() -> None:
     if baseline:
         _PROFILE_REGISTRY["baseline"] = baseline
         logger.info("Registered production profile: baseline")
+
+        baseline_cross_encoder = {
+            **baseline,
+            "retrieval": {
+                **dict(baseline.get("retrieval", {})),
+                "enable_reranking": True,
+                "reranking_mode": "cross_encoder",
+            },
+        }
+        _PROFILE_REGISTRY["baseline_cross_encoder"] = baseline_cross_encoder
+        logger.info("Registered production profile: baseline_cross_encoder")
     else:
         logger.warning("Failed to register baseline production profile")
 

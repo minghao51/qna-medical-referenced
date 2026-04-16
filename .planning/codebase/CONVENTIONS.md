@@ -1,114 +1,128 @@
-# Coding Conventions
+# Codebase Conventions
 
-**Analysis Date:** 2026-04-06
+## Python Backend
 
-## Naming Patterns
+### Code Style & Formatting
+- **Line Length**: 100 characters (ruff config)
+- **Python Version**: 3.12 required
+- **Type Checking**: MyPy with strict mode enabled
+- **Linter**: Ruff with E, F, I, N, W rules (E501 ignored)
+- **Format**: Black-compatible formatting
 
-**Files:**
-- Python: `snake_case.py` (e.g., `test_chunker.py`, `chunk_text.py`, `production_profile.py`)
-- TypeScript: `kebab-case.ts` (e.g., `playwright.config.ts`)
-- Test files: `test_*.py` (backend), `*.spec.ts` (frontend)
+### Naming Patterns
+- **Classes**: PascalCase (e.g., `VectorStore`, `AppError`)
+- **Functions**: snake_case (e.g., `similarity_search`, `log_event`)
+- **Variables**: snake_case with descriptive names
+- **Constants**: UPPER_SNAKE_CASE (e.g., `L6_ANSWER_QUALITY_ROWS`)
+- **Private members**: Leading underscore (e.g., `_error_payload`)
 
-**Functions:**
-- Python: `snake_case` (e.g., `chunk_documents`, `configure_logging`, `evaluate_answer_quality_async`)
-- TypeScript: `camelCase` (e.g., `pressSequentially`, `toHaveTitle`)
-
-**Variables:**
-- Python: `snake_case` (e.g., `chunk_size`, `base_url`, `request_id`)
-- TypeScript: `camelCase` (e.g., `sendButton`, `mockGen`)
-
-**Types:**
-- Python classes: `PascalCase` (e.g., `Settings`, `TextChunker`, `AppError`, `VectorStore`)
-- TypeScript types: `PascalCase` (inferred from Svelte conventions)
-
-## Code Style
-
-**Formatting:**
-- Ruff with `line-length = 100`, `target-version = "py313"`
-- TypeScript uses tabs for indentation (2-space equivalent via SvelteKit defaults)
-
-**Linting:**
-- Ruff: `select = ["E", "F", "I", "N", "W"]`, `ignore = ["E501"]`
-  - E: pycodestyle errors
-  - F: Pyflakes
-  - I: isort (import sorting)
-  - N: pep8-naming
-  - W: pycodestyle warnings
-- mypy: strict mode with `warn_return_any`, `warn_unused_ignores`, `warn_redundant_casts`, `strict_optional`
-- Frontend: `svelte-check` for type checking (no ESLint/Prettier configured)
-
-## Import Organization
-
-**Order:**
-1. Standard library imports (e.g., `import os`, `from pathlib import Path`)
-2. Third-party imports (e.g., `import pytest`, `from fastapi import HTTPException`)
-3. Local imports (e.g., `from src.config import settings`)
-
-**Path Aliases:**
-- Python: No path aliases; uses `src.` prefix (e.g., `from src.config.settings import Settings`)
-- TypeScript: SvelteKit `$lib` alias (handled by framework)
-
-## Error Handling
-
-**Patterns:**
-- Custom exception hierarchy with `AppError` as base class (`src/app/exceptions.py:13`)
+### Error Handling
+- **Base Exception**: `AppError` dataclass with HTTP semantics
+- **Specific Errors**:
   - `InvalidInputError` (400)
   - `UpstreamServiceError` (502)
   - `ArtifactNotFoundError` (404)
   - `StorageError` (500)
-- `ValueError` for validation errors (e.g., `src/config/settings.py`, `src/experiments/config.py`)
-- FastAPI exception handlers for `HTTPException`, `AppError`, and generic `Exception`
-- Error responses include `code`, `status_code`, `request_id`, and optional `extra` dict
-- `pytest.raises` for testing expected exceptions (e.g., `test_chunker.py:128`)
-- Broad `except Exception` with logging used in ingestion/evaluation pipelines
-- Optional dependencies handled with `except Exception:  # pragma: no cover`
+- **Error Response Format**:
+  ```json
+  {
+    "detail": "Error message",
+    "error": {
+      "code": "error_code",
+      "status_code": 400,
+      "request_id": "req-id"
+    }
+  }
+  ```
+- **Request ID Tracking**: Added to error headers for traceability
 
-## Logging
+### Logging
+- **Structured Logging**: JSON-formatted logs with `log_event()` function
+- **Format**: `%(asctime)s %(levelname)s %(name)s %(message)s`
+- **Levels**: INFO, WARNING, ERROR, DEBUG
+- **JSON Payload**: Events logged with sorted keys for consistency
+- **Logger Names**: Module-level loggers (e.g., `__name__`)
 
-**Framework:** Standard Python `logging` module with `dictConfig`
+### File Organization
+- **Source Structure**: 
+  ```
+  src/
+  ├── app/          # FastAPI application
+  ├── infra/        # Infrastructure (LLM, storage)
+  ├── usecases/     # Business logic
+  ├── rag/          # RAG components
+  ├── ingestion/    # Data processing
+  ├── evals/        # Evaluation pipeline
+  ├── config/       # Configuration management
+  └── cli/          # CLI commands
+  ```
+- **Tests**: `tests/` directory with `conftest.py`
+- **Fixtures**: `tests/fixtures/` for test data
 
-**Patterns:**
-- Module-level loggers: `logger = logging.getLogger(__name__)`
-- Centralized configuration via `configure_logging()` in `src/app/logging.py`
-- Format: `%(asctime)s %(levelname)s %(name)s %(message)s`
-- Structured logging helper: `log_event(logger, level, event, **fields)` outputs JSON
-- Levels used: `INFO` (startup, operations), `WARNING` (fallbacks, degraded mode), `ERROR` (failures), `DEBUG` (detailed operations)
+### Configuration
+- **Settings**: Pydantic BaseSettings with .env support
+- **Environment**: Development, test, staging, production
+- **Secrets**: Environment variables only (no hardcoded values)
 
-## Comments
+### Patterns
+- **Dependency Injection**: Custom DI container in `src/infra/di.py`
+- **Middleware**: Request ID, auth, rate limiting
+- **Async/Await**: Throughout for I/O operations
+- **Type Hints**: Required for all functions and classes
+- **Protocol**: Defined interfaces for storage
 
-**When to Comment:**
-- Docstrings on modules, classes, and public functions
-- Configuration fields have detailed docstrings with environment variable names and defaults
-- Section dividers used in test files (e.g., `# Network Failure Tests`)
+## Frontend (SvelteKit)
 
-**JSDoc/TSDoc:**
-- Python: Google-style docstrings with `Args:`, `Returns:`, `Raises:` sections
-- Heavy inline documentation on `Settings` class attributes
+### Code Style
+- **Language**: TypeScript with strict mode
+- **Framework**: SvelteKit with Svelte 5
+- **Build Tool**: Vite
+- **Testing**: Playwright for E2E tests
 
-## Function Design
+### Naming Patterns
+- **Components**: PascalCase (e.g., `StepCard.svelte`)
+- **Functions**: camelCase (e.g., `getApiBaseUrl`)
+- **Variables**: camelCase
+- **Constants**: UPPER_SNAKE_CASE
 
-**Size:**
-- Small, focused functions (typically <50 lines)
-- Pipeline steps as separate modules (e.g., `chunk_text.py`, `convert_html.py`)
+### File Organization
+```
+frontend/src/
+├── routes/         # SvelteKit routes
+├── lib/
+│   ├── components/ # Reusable components
+│   ├── utils/      # Utility functions
+│   └── types.ts    # TypeScript definitions
+└── tests/          # Playwright tests
+```
 
-**Parameters:**
-- Configuration objects passed as dataclasses or Pydantic models
-- Keyword arguments for optional parameters
+### Frontend Patterns
+- **API Integration**: Centralized API utilities with error handling
+- **State Management**: Svelte stores + local state
+- **Routing**: File-based routing with +page.svelte
+- **Styling**: CSS modules with global styles
 
-**Return Values:**
-- Typed returns where practical (e.g., `list[dict]`, `tuple[list, dict]`)
-- `None` for side-effect-only functions
+## Shared Conventions
 
-## Module Design
+### Code Quality
+- **Imports**: Explicit imports, avoid relative imports when possible
+- **Documentation**: Module-level docstrings, function-level comments
+- **Validation**: Pydantic schemas for data models
+- **Testing**: Pytest with markers for test categories
 
-**Exports:**
-- `__init__.py` files used for package structure (often empty)
-- Singleton pattern for `settings` object (`src/config/settings.py:430`)
+### Performance
+- **Batch Processing**: For embeddings and operations
+- **Caching**: Configurable caching for expensive operations
+- **Connection Pooling**: HTTP clients with proper pooling
 
-**Barrel Files:**
-- Minimal barrel files; direct imports preferred
-- `src/config/__init__.py` re-exports `settings`
+### Security
+- **API Keys**: Environment variables only
+- **CORS**: Configurable allowed origins
+- **Input Validation**: Pydantic models for all inputs
+- **Rate Limiting**: Middleware for API endpoints
 
----
-
-*Convention analysis: 2026-04-06*
+### Monitoring
+- **Request IDs**: Trace across API boundaries
+- **Structured Logging**: JSON for parsing
+- **Error Tracking**: Consistent error formats
+- **Metrics**: Custom metrics for evaluation pipeline

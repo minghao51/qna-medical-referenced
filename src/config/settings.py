@@ -148,14 +148,14 @@ class Settings(BaseSettings):
     Environment variable: COLLECTION_NAME
     """
 
-    production_profile: str | None = None
+    production_profile: str | None = "baseline_cross_encoder"
     """Production profile to apply at startup.
 
     When set, loads the optimal configuration from the ablation study
     and applies it before building the vector index.
 
-    Supported values: pymupdf_semantic_hybrid, baseline
-    Default: None (use hardcoded defaults)
+    Supported values: pymupdf_semantic_hybrid, baseline, baseline_cross_encoder
+    Default: baseline_cross_encoder
 
     Environment variable: PRODUCTION_PROFILE
     """

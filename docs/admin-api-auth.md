@@ -11,12 +11,7 @@ The current public app can run with backend API-key auth disabled. API keys are 
 
 ## Configuration
 
-Use either:
-
-- `API_KEYS=key1,key2,key3`
-- `API_KEYS_JSON=[{"id":"frontend","key":"secret","owner":"web","role":"client","status":"active"}]`
-
-See [`configuration.md`](./configuration.md) for the full setting reference.
+See [`configuration.md`](./configuration.md) for the full `API_KEYS` and `API_KEYS_JSON` setting reference.
 
 ## Request Format
 

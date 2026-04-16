@@ -489,6 +489,7 @@ def build_run_assessment_kwargs(experiment: dict[str, Any]) -> dict[str, Any]:
         },
         "run_retrieval_ablations": bool(evaluation.get("run_retrieval_ablations", False)),
         "run_hype_ablations": bool(evaluation.get("run_hype_ablations", False)),
+        "run_keyword_ablations": bool(evaluation.get("run_keyword_ablations", False)),
         "run_reranking_ablations": bool(evaluation.get("run_reranking_ablations", False)),
         "run_diversity_sweep": bool(evaluation.get("run_diversity_sweep", False)),
         "diversity_sweep": dict(evaluation.get("diversity_sweep", {})),

@@ -39,7 +39,12 @@ async def test_generate_hypothetical_answer_basic():
     client = get_client()
     query = "What is the LDL-C target for secondary prevention?"
 
-    answer = await generate_hypothetical_answer(query, client, max_length=200)
+    with patch.object(
+        client,
+        "generate",
+        return_value="The LDL cholesterol target for secondary prevention is typically below 1.8 mmol/L.",
+    ):
+        answer = await generate_hypothetical_answer(query, client, max_length=200)
 
     # Should generate a non-empty answer
     assert isinstance(answer, str)
@@ -75,7 +80,8 @@ async def test_generate_hypothetical_answer_max_length():
     query = "What is statin therapy?"
 
     # Test with short max_length
-    answer = await generate_hypothetical_answer(query, client, max_length=50)
+    with patch.object(client, "generate", return_value="word " * 100):
+        answer = await generate_hypothetical_answer(query, client, max_length=50)
 
     # Should be truncated to around 50 words
     word_count = len(answer.split())

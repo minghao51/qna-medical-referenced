@@ -4,7 +4,7 @@ This folder is organized by purpose, not by chronology.
 
 ## Reference Guides
 
-- `quickstart.md` — Get the project running locally with minimal setup
+- `quickstart.md` — Prerequisites and first-time setup
 - `local-workflows.md` — Canonical local runbook for ingestion, serving, and evals
 - `configuration.md` — Full environment variable and deployment settings reference
 - `dependencies.md` — Dependency management, extras, and troubleshooting
@@ -12,9 +12,9 @@ This folder is organized by purpose, not by chronology.
 
 ## Architecture
 
-- `architecture/overview.md` — Repository map and system structure
-- `architecture/pipeline-strategies.md` — Pipeline DAGs and strategy reference (HyDE vs HyPE, chunking, search modes)
-- `architecture/rag-system.md` — Ingestion and retrieval flow
+- `architecture/overview.md` — Repository map, runtime vs offline responsibilities, frontend overview
+- `architecture/rag-system.md` — Ingestion and retrieval data flow, module ownership
+- `architecture/pipeline-strategies.md` — Pipeline DAGs, configurable strategies, gap tracker
 
 ## Deployment
 
@@ -29,6 +29,7 @@ This folder is organized by purpose, not by chronology.
 ## Evaluation
 
 - `evaluation/pipeline_quality_assessment_plan.md` — Implemented evaluation system reference
+- `feature_ablation_findings.md` — Latest feature-family ablation results on the 54-query benchmark (supersedes older ablation studies)
 
 ## Testing
 
@@ -51,6 +52,7 @@ Dated implementation notes, summaries, and historical snapshots:
 - `reports/2025-03/` — Frontend dashboard implementation phases
 - `reports/2026-02/` — Pipeline visualization, Playwright testing, verification summaries
 - `reports/2026-03/` — RAG pipeline reports, tracing improvements, completed plans, operational how-tos
+- `reports/2026-04/` — Ablation study handoff notes
 
 ## Conventions
 

@@ -51,7 +51,7 @@ test.describe('Markdown Rendering', () => {
 	test.beforeEach(async ({ page, baseURL, context }) => {
 		await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 		await mockChatApi(page);
-		await page.goto(baseURL || 'http://127.0.0.1:5174');
+	await page.goto(baseURL || 'http://127.0.0.1:5173');
 	});
 
 	test('renders markdown structure with deterministic content', async ({ page }) => {

@@ -1,102 +1,59 @@
 # External Integrations
 
-**Analysis Date:** 2026-04-06
+## LLM Providers
 
-## APIs & External Services
+### Primary
+- **Alibaba Qwen (DashScope)** - Main inference provider
+  - Accessed via OpenAI-compatible SDK
+  - Configured via `QWEN_API_KEY` and `QWEN_BASE_URL`
 
-**LLM Provider:**
-- Alibaba Dashscope (Qwen models) - Text generation and embeddings
-- SDK/Client: openai (OpenAI-compatible endpoint)
-- Auth: DASHSCOPE_API_KEY
-- Models: qwen3.5-flash, qwen3.5-plus, qwen-plus, qwen-max, qwen3.5-35b-a3b
-- Base URL: https://dashscope-us.aliyuncs.com/compatible-mode/v1
+### Secondary
+- **Google Gemini** - Alternative/fallback LLM
+  - Routed through LiteLLM proxy
+  - Configured via `GEMINI_API_KEY`
 
-**Experiment Tracking:**
-- Weights & Biases (W&B) - Experiment logging and run history
-- SDK/Client: wandb
-- Auth: WANDB_API_KEY (optional)
+## Vector Database
 
-**Evaluation:**
-- DeepEval - RAG pipeline evaluation (faithfulness, answer correctness)
-- LiteLLM - Multi-provider LLM abstraction for evaluation
+- **ChromaDB** - Local vector store
+  - Persistent storage on filesystem
+  - Embeddings stored in `.chroma` directory
+  - No external hosting required
 
-## Data Storage
+## Document Sources
 
-**Databases:**
-- ChromaDB (embedded) - Vector database for document embeddings
-- Connection: Local filesystem (data/chroma)
-- Client: chromadb Python SDK
-- Collection: medical_docs (configurable via COLLECTION_NAME)
+- **Local file system** - PDF/HTML document storage
+- **Web scraping** - HTTP-based content fetching via trafilatura/readability
 
-**File Storage:**
-- Local filesystem only
-- Raw documents: data/raw (HTML, PDF)
-- Vector index: data/chroma (persistent ChromaDB)
-- Evaluation cache: data/evals/cache
-- Chat history: file-backed JSON
+## Experiment Tracking
 
-**Caching:**
-- DeepEval answer/metric cache (local filesystem)
-- W&B history cache (in-memory, 60s TTL)
+- **Weights & Biases (wandb)**
+  - Run tracking and logging
+  - Configured via `WANDB_API_KEY`
+  - Project: medical RAG evaluation
 
-## Authentication & Identity
+## Authentication
 
-**Auth Provider:**
-- Custom API key authentication
-- Implementation: X-API-Key header validation against configured keys (API_KEYS env var)
-- Anonymous session support via browser cookies (anon_browser_id, chat_session_id)
-- Rate limiting per IP and per anonymous browser session
+- **API Key-based** - Custom implementation
+  - Simple shared secret validation
+  - Configured via `SHARED_API_KEY`
+  - Disabled by default in development
 
-## Monitoring & Observability
+## External Services (None)
 
-**Error Tracking:**
-- Python logging module (structured logging)
-- W&B for experiment tracking
+Notable: This system is intentionally self-contained with minimal external dependencies:
+- No cloud database (uses ChromaDB on disk)
+- no auth provider (custom API key)
+- No message queue (async in-process)
+- No external logging (stdout/file-based)
 
-**Logs:**
-- Standard Python logging with configurable log level
-- Request ID middleware for request tracing
+## File Storage
 
-## CI/CD & Deployment
+- **Local filesystem** - All document storage
+- **Data directory**: `data/` for input documents
+- **Processed content**: Embedded directly in vector store
 
-**Hosting:**
-- Docker Compose (backend + frontend services)
-- Backend: uvicorn on port 8000
-- Frontend: Vite dev server / Node.js on port 5173
+## Web Scraping
 
-**CI Pipeline:**
-- Playwright E2E tests (containerized)
-- pytest with markers (live_api, deepeval, e2e_real_apis, slow)
-
-## Environment Configuration
-
-**Required env vars:**
-- DASHSCOPE_API_KEY - Alibaba Dashscope API key
-
-**Optional env vars:**
-- MODEL_NAME - Qwen model selection
-- EMBEDDING_MODEL - Embedding model selection
-- API_KEYS - Comma-separated API keys for auth
-- RATE_LIMIT_PER_MINUTE - Rate limiting threshold
-- WANDB_API_KEY - Weights & Biases key
-- VITE_API_URL - Frontend API endpoint
-- CORS_ALLOWED_ORIGINS - Allowed CORS origins
-- PRODUCTION_PROFILE - RAG profile selection
-- HYDE_ENABLED / HYPE_ENABLED - Query expansion features
-- ENABLE_RERANKING - Cross-encoder reranking toggle
-
-**Secrets location:**
-- .env file (local development)
-- Environment variables (production/Docker)
-
-## Webhooks & Callbacks
-
-**Incoming:**
-- None
-
-**Outgoing:**
-- None
-
----
-
-*Integration audit: 2026-04-06*
+- **trafilatura** - Main content extractor
+- **readability-lxml** - Fallback HTML cleaner
+- **BeautifulSoup4** - HTML parsing utilities

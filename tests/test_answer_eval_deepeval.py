@@ -4,9 +4,8 @@ import pytest
 
 from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
+pytestmark = [pytest.mark.deepeval, pytest.mark.slow, pytest.mark.live_api]
 
-@pytest.mark.deepeval
-@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_evaluate_answer_quality_async_basic():
     """Test basic functionality of DeepEval answer evaluation."""
@@ -59,8 +58,6 @@ async def test_evaluate_answer_quality_async_basic():
     assert "faithfulness" in aggregate
 
 
-@pytest.mark.deepeval
-@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_evaluate_answer_quality_async_multiple_queries():
     """Test evaluation with multiple queries."""
@@ -105,8 +102,6 @@ async def test_evaluate_answer_quality_async_multiple_queries():
             assert 0 <= mean <= 1, f"{metric_key} mean {mean} not in range [0, 1]"
 
 
-@pytest.mark.deepeval
-@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_evaluate_answer_quality_async_includes_trace():
     """Test that pipeline trace information is included in results."""

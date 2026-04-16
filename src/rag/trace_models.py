@@ -65,6 +65,8 @@ class RetrievalStage(BaseModel):
     """Metadata about the retrieval stage."""
 
     query: str
+    query_original_length: int | None = None
+    query_truncated: bool = False
     top_k: int
     documents: list[RetrievedDocument]
     score_weights: dict

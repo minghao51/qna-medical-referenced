@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from src.app.factory import create_app
 from src.app.middleware.auth import APIKeyConfig
 from src.app.middleware.rate_limit import RateLimiter
+from src.app.security import generate_api_key_record
 from src.config import settings
 from src.infra.storage.file_chat_history_store import FileChatHistoryStore
 
@@ -157,6 +158,29 @@ def test_rate_limit_bypass_by_role(monkeypatch, tmp_path: Path):
     assert first.status_code == 200
     assert second.status_code == 200
     assert "X-RateLimit-Limit" not in second.headers
+
+
+def test_chat_accepts_bcrypt_hashed_api_keys_json(monkeypatch, tmp_path: Path):
+    async def mock_stream_chat_message(**kwargs):
+        yield ("ok", {"done": True, "sources": [], "pipeline": None})
+
+    monkeypatch.setattr("src.app.routes.chat.stream_chat_message", mock_stream_chat_message)
+    client = _build_client(
+        monkeypatch,
+        tmp_path,
+        api_keys=None,
+        rate_limit=5,
+    )
+    monkeypatch.setattr(
+        settings,
+        "api_keys_json",
+        json.dumps([generate_api_key_record("ops-admin", "secret-key", role="admin")]),
+    )
+    APIKeyConfig.reload()
+
+    response = client.post("/chat", headers={"X-API-Key": "secret-key"}, json={"message": "hello"})
+
+    assert response.status_code == 200
 
 
 def test_request_id_preserved_on_http_errors(monkeypatch, tmp_path: Path):

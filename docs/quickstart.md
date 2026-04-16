@@ -1,6 +1,6 @@
 # Quick Start
 
-This guide gets the project running locally with the fewest moving parts.
+Prerequisites and first-time setup. For daily commands, see `docs/local-workflows.md`.
 
 ## Prerequisites
 
@@ -8,121 +8,44 @@ This guide gets the project running locally with the fewest moving parts.
 - `uv`
 - Node.js and `npm` for the frontend
 - A DashScope API key for Qwen (`DASHSCOPE_API_KEY`)
+- [dotenvx](https://dotenvx.com) for encrypted environment variables (`npm install @dotenvx/dotenvx -g`)
 
-## 1. Install backend dependencies
-
-From the repository root:
-
-```bash
-uv sync
-```
-
-## 2. Configure environment
-
-Copy the example file and add your API key:
+## First-Time Setup
 
 ```bash
-cp .env.example .env
-```
+# 1. Install dependencies
+uv sync --extra test
 
-Minimum required setting:
+# 2. Configure API key
+dotenvx set DASHSCOPE_API_KEY "your_api_key_here"
 
-```dotenv
-DASHSCOPE_API_KEY=your_api_key_here
-```
-
-Optional:
-
-- Leave `ENVIRONMENT=development` for local work.
-- Set `API_KEYS` or `API_KEYS_JSON` if you want backend request authentication enabled locally.
-- See `docs/configuration.md` for the full configuration reference.
-
-## 3. Download NLTK data
-
-```bash
+# 3. Download NLTK data
 uv run python scripts/download_nltk_data.py
 ```
 
-## 4. Start the backend API
+See `docs/configuration.md` for all settings and `docs/dependencies.md` for dependency details.
 
-```bash
-uv run python -m src.cli.serve
-```
+## Run the System
 
-The API will be available at `http://localhost:8000`.
+Follow the full workflow in `docs/local-workflows.md`:
 
-If you configured API keys, include `X-API-Key` in backend requests.
+1. Build the search index: `dotenvx run -- uv run python -m src.cli.ingest`
+2. Start the backend: `dotenvx run -- uv run python -m src.cli.serve`
+3. Start the frontend: `cd frontend && npm install && npm run dev`
 
-Useful endpoints:
+Backend API: `http://localhost:8000`
+Frontend: `http://localhost:5173`
 
-- `GET /health`
-- `POST /chat`
-- `GET /history`
-
-## 5. Build the local search index
-
-Run ingestion once before expecting full RAG retrieval results:
-
-```bash
-uv run python -m src.cli.ingest
-```
-
-Useful variants:
-
-```bash
-uv run python -m src.cli.ingest --skip-download
-uv run python -m src.cli.ingest --force
-```
-
-## 6. Start the frontend
-
-In a second terminal:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open the frontend URL printed by Vite, typically `http://localhost:5173`.
-
-## 7. Run tests
-
-Backend:
+## Run Tests
 
 ```bash
 uv run pytest
 uv run ruff check .
+cd frontend && npm test
 ```
-
-Frontend:
-
-```bash
-cd frontend
-npm test
-```
-
-## 8. Run evaluation (optional)
-
-The system includes a comprehensive evaluation framework for assessing pipeline quality:
-
-```bash
-# Run full pipeline evaluation
-uv run python -m src.cli.eval_pipeline
-
-# Run specific experiment variant
-uv run python -m src.cli.eval_pipeline --variant my-experiment
-
-# View evaluation results
-# Access http://localhost:8000/evaluation/latest (after starting backend)
-# Or visit the frontend evaluation dashboard at http://localhost:5173/eval
-```
-
-See `docs/architecture/overview.md` for evaluation system details.
-See `docs/local-workflows.md` for the recommended operator workflow that combines ingestion, serving, frontend, and eval runs.
 
 ## Troubleshooting
 
-- If chat responses fail immediately, re-check `.env` and confirm `DASHSCOPE_API_KEY` is set.
-- If retrieval looks empty or weak, run `uv run python -m src.cli.ingest` and wait for indexing to finish.
-- If docs drift from the code, run `bash scripts/check_docs_consistency.sh`.
+- Chat fails immediately: verify API key with `dotenvx get DASHSCOPE_API_KEY`
+- Retrieval looks empty: run `dotenvx run -- uv run python -m src.cli.ingest`
+- Docs drift from code: run `bash scripts/check_docs_consistency.sh`

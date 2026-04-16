@@ -5,17 +5,21 @@ build/
 dist/
 wheels/
 *.egg-info
-.claude
+.claude/
 
 # Virtual environments
-.venv/
+.venv*/
+venv*/
 
 # Git worktrees
 .worktrees/
 
 # Environment files
-.env
+# .env is now encrypted with dotenvx - safe to commit
 .env.*
+!.env.example
+.env.keys
+.env.backup
 
 # Data and logs
 data/
@@ -23,8 +27,12 @@ data/
 logs/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 test-results/
 wandb/
+.coverage
+htmlcov/
+.hypothesis/
 
 # IDE
 .idea/
@@ -36,4 +44,19 @@ wandb/
 # OS
 .DS_Store
 Thumbs.db
+
+# External caches
+.context7/
+.qwen/
 .deepeval/
+
+# Temporary/development
+.tmpfix/
+*.skill
+qwen-code-export-*.md
+.deepeval_telemtry.txt
+
+# Frontend (root level)
+node_modules/
+.svelte-kit/
+*.tsbuildinfo

@@ -74,17 +74,7 @@ Flow:
 
 Used when preparing/refreshing the corpus and vector index.
 
-Flow:
-
-1. `src.usecases.pipeline.run_pipeline()` orchestrates the refresh
-2. `src.ingestion.steps.download_web` (optional web downloads)
-3. `src.ingestion.steps.convert_html` (HTML -> Markdown)
-4. `src.ingestion.steps.load_pdfs`
-5. `src.ingestion.steps.chunk_text`
-6. `src.ingestion.steps.hype` (HyPE query expansion - index-time hypothetical question generation)
-7. `src.ingestion.steps.load_reference_data`
-8. `src.ingestion.indexing.vector_store` (embedding + persistence)
-9. `src.rag.runtime.initialize_runtime_index()` confirms runtime index availability
+See `docs/architecture/rag-system.md` for the full ingestion module list and data path details.
 
 ### Evaluation system (`src.evals`, `src.app.routes.evaluation`)
 
@@ -156,43 +146,13 @@ The frontend is a SvelteKit application that provides the user interface for the
 | `/` | Chat interface with pipeline toggle |
 | `/eval` | Evaluation dashboard with metrics and historical trending |
 
-## Key Components
+## Key Features
 
-### Confidence Indicators (Phase 1)
-
-| Component | File | Description |
-|-----------|------|-------------|
-| `ConfidenceBadge.svelte` | `frontend/src/lib/components/` | Color-coded confidence level badges (high/medium/low) |
-| `MetricBar.svelte` | `frontend/src/lib/components/` | Visual progress bar for scores |
-| `SourceQualityIndicator.svelte` | `frontend/src/lib/components/` | Domain credibility badges (.gov, .edu, .org, .com) |
-| `health-score.ts` | `frontend/src/lib/utils/` | Client-side confidence scoring logic |
-
-### Document Inspection (Phase 2)
-
-| Component | File | Description |
-|-----------|------|-------------|
-| `DocumentInspector.svelte` | `frontend/src/lib/components/` | Modal for full document view with metadata |
-| `PipelinePanel.svelte` | `frontend/src/lib/components/` | Enhanced with clickable documents |
-
-### Visual Flow Diagrams (Phase 3)
-
-| Component | File | Description |
-|-----------|------|-------------|
-| `FlowNode.svelte` | `frontend/src/lib/components/` | Individual pipeline stage node |
-| `PipelineFlowDiagram.svelte` | `frontend/src/lib/components/` | Animated pipeline flow visualization |
-
-### Historical Trending (Phase 4)
-
-| Component | File | Description |
-|-----------|------|-------------|
-| `MetricChart.svelte` | `frontend/src/lib/components/` | Reusable Chart.js wrapper |
-| `eval/+page.svelte` | `frontend/src/routes/` | Enhanced with historical charts |
-
-### Markdown Rendering (Phase 5)
-
-| Component | File | Description |
-|-----------|------|-------------|
-| `MarkdownRenderer.svelte` | `frontend/src/lib/components/` | Full markdown rendering with syntax highlighting |
+- Confidence indicators: color-coded badges, metric bars, source quality indicators
+- Document inspector: modal for full document view with metadata
+- Pipeline flow diagrams: animated pipeline stage visualization
+- Historical trending: Chart.js-based metric charts on the eval page
+- Markdown rendering: syntax highlighting via highlight.js
 
 ## Data Flow
 
@@ -234,29 +194,3 @@ npm run dev    # Development server on http://localhost:5173
 npm run build  # Production build
 npm run test   # Playwright E2E tests
 ```
-
-## Markdown Rendering
-
-The application uses a custom `MarkdownRenderer` component for rendering chat message content with full markdown support.
-
-**Technology:**
-- svelte-markdown 0.4.1: Markdown parsing
-- highlight.js 11.9.0: Code syntax highlighting with tree-shaking
-
-**Features:**
-- Tables with responsive scrolling
-- Headings (H1-H6) with proper hierarchy
-- Code blocks with syntax highlighting (Python, JavaScript, TypeScript, Bash, JSON, XML)
-- Lists (ordered/unordered) with proper indentation
-- Bold, italic, strikethrough, links, blockquotes
-- Copy button for code blocks
-
-**Security:**
-- Built-in XSS sanitization via svelte-markdown
-- Only safe HTML tags allowed
-- No script execution or dangerous protocols
-
-**Responsive Layout:**
-- Max-width: 1400px (up from 800px)
-- Optimal line length: 75ch on wide screens
-- Mobile-optimized with scrollable tables

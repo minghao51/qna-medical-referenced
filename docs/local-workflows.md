@@ -13,17 +13,18 @@ Use this document when you need to:
 
 There are three supported entrypoints:
 
-1. `uv run python -m src.cli.ingest`
+1. `dotenvx run -- uv run python -m src.cli.ingest`
    Refreshes the offline data pipeline from source content through indexing.
-2. `uv run python -m src.cli.serve`
+2. `dotenvx run -- uv run python -m src.cli.serve`
    Starts the backend API and runtime RAG service.
-3. `uv run python -m src.cli.eval_pipeline`
+3. `dotenvx run -- uv run python -m src.cli.eval_pipeline`
    Runs offline evaluation and writes artifacts under `data/evals/`.
 
 There is no separate canonical CLI for "chunk only" or "RAG only".
 
 - Chunking is an internal stage inside `src.cli.ingest` (`L3` in the pipeline).
 - Runtime RAG is provided by the API server started via `src.cli.serve`.
+- All commands require `dotenvx run --` to decrypt environment variables.
 
 ## Recommended End-to-End Flow
 
@@ -31,14 +32,9 @@ There is no separate canonical CLI for "chunk only" or "RAG only".
 
 ```bash
 uv sync
-cp .env.example .env
+npm install @dotenvx/dotenvx -g
+dotenvx set DASHSCOPE_API_KEY "your_api_key_here"
 uv run python scripts/download_nltk_data.py
-```
-
-Minimum required env:
-
-```dotenv
-DASHSCOPE_API_KEY=your_api_key_here
 ```
 
 ### 2. Refresh the corpus and index
@@ -46,7 +42,7 @@ DASHSCOPE_API_KEY=your_api_key_here
 Run the full ingestion pipeline:
 
 ```bash
-uv run python -m src.cli.ingest
+dotenvx run -- uv run python -m src.cli.ingest
 ```
 
 This executes the full offline refresh flow:
@@ -64,19 +60,19 @@ Useful variants:
 
 ```bash
 # Reuse existing downloaded raw files and only rebuild downstream stages
-uv run python -m src.cli.ingest --skip-download
+dotenvx run -- uv run python -m src.cli.ingest --skip-download
 
 # Force-clear and rebuild the vector store
-uv run python -m src.cli.ingest --force
+dotenvx run -- uv run python -m src.cli.ingest --force
 
 # Re-convert HTML to Markdown even if markdown files already exist
-uv run python -m src.cli.ingest --force-html
+dotenvx run -- uv run python -m src.cli.ingest --force-html
 ```
 
 ### 3. Start the backend API and runtime RAG
 
 ```bash
-uv run python -m src.cli.serve
+dotenvx run -- uv run python -m src.cli.serve
 ```
 
 The backend serves on `http://localhost:8000`.
@@ -105,26 +101,26 @@ Open the frontend URL printed by Vite, typically `http://localhost:5173`.
 In a third terminal, run the eval pipeline:
 
 ```bash
-uv run python -m src.cli.eval_pipeline
+dotenvx run -- uv run python -m src.cli.eval_pipeline
 ```
 
 Common variants:
 
 ```bash
 # Run a versioned experiment config
-uv run python -m src.cli.eval_pipeline --config experiments/v1/baseline.yaml
+dotenvx run -- uv run python -m src.cli.eval_pipeline --config experiments/v1/baseline.yaml
 
 # Run a specific experiment variant from the config
-uv run python -m src.cli.eval_pipeline --config experiments/v1/baseline.yaml --variant chunk_small
+dotenvx run -- uv run python -m src.cli.eval_pipeline --config experiments/v1/baseline.yaml --variant chunk_small
 
 # Run the base experiment plus all named variants
-uv run python -m src.cli.eval_pipeline --config experiments/v1/baseline.yaml --all-variants
+dotenvx run -- uv run python -m src.cli.eval_pipeline --config experiments/v1/baseline.yaml --all-variants
 
 # Reuse a cached dataset when iterating on evaluation
-uv run python -m src.cli.eval_pipeline --reuse-cached-dataset
+dotenvx run -- uv run python -m src.cli.eval_pipeline --reuse-cached-dataset
 
 # Force a new eval run instead of dedup-reusing a prior matching run
-uv run python -m src.cli.eval_pipeline --force-rerun
+dotenvx run -- uv run python -m src.cli.eval_pipeline --force-rerun
 ```
 
 Evaluation artifacts are written to `data/evals/`.
@@ -149,24 +145,24 @@ Recommended wording:
 ### Daily local development
 
 ```bash
-uv run python -m src.cli.ingest --skip-download
-uv run python -m src.cli.serve
+dotenvx run -- uv run python -m src.cli.ingest --skip-download
+dotenvx run -- uv run python -m src.cli.serve
 cd frontend && npm run dev
 ```
 
 ### Full corpus refresh
 
 ```bash
-uv run python -m src.cli.ingest
-uv run python -m src.cli.serve
+dotenvx run -- uv run python -m src.cli.ingest
+dotenvx run -- uv run python -m src.cli.serve
 cd frontend && npm run dev
 ```
 
 ### Regression check before sharing changes
 
 ```bash
-uv run python -m src.cli.ingest --skip-download
-uv run python -m src.cli.eval_pipeline --config experiments/v1/baseline.yaml --all-variants
+dotenvx run -- uv run python -m src.cli.ingest --skip-download
+dotenvx run -- uv run python -m src.cli.eval_pipeline --config experiments/v1/baseline.yaml --all-variants
 uv run pytest
 ```
 

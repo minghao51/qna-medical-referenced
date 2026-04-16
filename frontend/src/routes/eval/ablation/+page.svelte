@@ -9,6 +9,14 @@
 	import type { FullAblationResponse, FullAblationRun } from '$lib/types';
 
 	type DimensionKey = 'all' | 'pdf_extraction' | 'html_extraction' | 'chunking_strategy' | 'chunk_size' | 'retrieval' | 'combined';
+	type FeatureFinding = {
+		family: string;
+		winner: string;
+		dataset: string;
+		queryCount: number;
+		metrics: string[];
+		verdict: string;
+	};
 
 	const API_URL = getApiBaseUrl();
 
@@ -17,6 +25,51 @@
 	let error: string | null = null;
 	let activeDimension: DimensionKey = 'all';
 	let showFindings = true;
+
+	const latestFeatureFindings: FeatureFinding[] = [
+		{
+			family: 'Keyword / Summaries',
+			winner: 'baseline',
+			dataset: 'golden_queries_expanded.json',
+			queryCount: 54,
+			metrics: [
+				'NDCG@K 0.6813',
+				'MRR 0.6673',
+				'Exact chunk hit 0.0556',
+				'Evidence hit 0.0185',
+				'Latency p50 515.0ms'
+			],
+			verdict: 'Keyword extraction and chunk summaries tied the baseline on retrieval quality and only added latency.'
+		},
+		{
+			family: 'HyPE / HyDE',
+			winner: 'hype_10pct',
+			dataset: 'golden_queries_expanded.json',
+			queryCount: 54,
+			metrics: [
+				'NDCG@K 0.6813',
+				'MRR 0.6673',
+				'Exact chunk hit 0.0556',
+				'Evidence hit 0.0185',
+				'Latency p50 520.0ms'
+			],
+			verdict: 'HyPE and HyDE did not improve retrieval quality on the expanded benchmark; the winning variant was simply the fastest.'
+		},
+		{
+			family: 'Reranking',
+			winner: 'cross_encoder_only',
+			dataset: 'golden_queries_expanded.json',
+			queryCount: 54,
+			metrics: [
+				'NDCG@K 0.7205',
+				'MRR 0.7034',
+				'Exact chunk hit 0.0741',
+				'Evidence hit 0.1852',
+				'Latency p50 485.0ms'
+			],
+			verdict: 'Cross-encoder reranking was the only tested feature family with a clear retrieval-quality gain, but it roughly doubled p50 latency versus no reranking.'
+		}
+	];
 
 	const allDimensions: { key: DimensionKey; label: string }[] = [
 		{ key: 'all', label: 'All Variants' },
@@ -97,6 +150,31 @@
 				{data.total_variants} variants · Clean-state isolation · Optimal: <strong>{data.optimal_variant}</strong>
 			</p>
 		</div>
+
+		<EvalSection
+			title="Latest Feature Benchmark"
+			description="Expanded 54-query feature-family snapshot from 2026-04-15"
+		>
+			<div class="feature-findings-grid">
+				{#each latestFeatureFindings as finding}
+					<div class="feature-finding-card">
+						<div class="feature-finding-header">
+							<div>
+								<h3>{finding.family}</h3>
+								<p>{finding.queryCount} queries · {finding.dataset}</p>
+							</div>
+							<span class="badge optimal-badge">{finding.winner}</span>
+						</div>
+						<div class="feature-metrics">
+							{#each finding.metrics as metric}
+								<span class="feature-metric-pill">{metric}</span>
+							{/each}
+						</div>
+						<p class="feature-verdict">{finding.verdict}</p>
+					</div>
+				{/each}
+			</div>
+		</EvalSection>
 
 		<!-- Key metrics -->
 		<div class="summary-grid">
@@ -237,6 +315,60 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 		gap: 0.9rem;
+	}
+
+	.feature-findings-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+		gap: 0.9rem;
+	}
+
+	.feature-finding-card {
+		padding: 1rem;
+		border: 1px solid var(--border-color);
+		border-radius: 14px;
+		background: linear-gradient(180deg, rgba(99, 102, 241, 0.04), rgba(255, 255, 255, 0.98));
+	}
+
+	.feature-finding-header {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.75rem;
+		align-items: flex-start;
+		margin-bottom: 0.75rem;
+	}
+
+	.feature-finding-header h3 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.feature-finding-header p {
+		margin: 0.2rem 0 0;
+		font-size: 0.82rem;
+		color: var(--muted-color);
+	}
+
+	.feature-metrics {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.feature-metric-pill {
+		padding: 0.35rem 0.55rem;
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.06);
+		font-size: 0.78rem;
+		font-weight: 600;
+	}
+
+	.feature-verdict {
+		margin: 0;
+		font-size: 0.9rem;
+		line-height: 1.5;
+		color: var(--text-color);
 	}
 
 	.findings-grid {

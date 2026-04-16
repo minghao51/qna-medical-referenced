@@ -591,6 +591,52 @@ def run_keyword_ablations(
     return outputs
 
 
+def run_keyword_ablations_with_reingest(
+    dataset: list[dict[str, Any]],
+    top_k: int,
+    *,
+    base_options: dict[str, Any] | None = None,
+    base_collection_name: str | None = None,
+    reconfigure_and_rebuild_fn=None,
+) -> dict[str, Any]:
+    """Run keyword/summaries ablation with automatic re-ingestion for each variant."""
+    from src.config import settings
+
+    collection_base = base_collection_name or settings.collection_name
+    outputs: dict[str, Any] = {}
+
+    for name, options in keyword_ablation_configs(base_options):
+        enrichment_config = {
+            "enable_keyword_extraction": bool(options.get("enable_keyword_extraction", False)),
+            "enable_chunk_summaries": bool(options.get("enable_chunk_summaries", False)),
+            "keyword_extraction_sample_rate": options.get(
+                "keyword_extraction_sample_rate", settings.keyword_extraction_sample_rate
+            ),
+            "keyword_extraction_max_chunks": options.get(
+                "keyword_extraction_max_chunks", settings.keyword_extraction_max_chunks
+            ),
+        }
+        variant_collection = f"{collection_base}_{name}"
+
+        if reconfigure_and_rebuild_fn:
+            logger.info(
+                "Rebuilding index for keyword variant: %s (collection: %s)",
+                name,
+                variant_collection,
+            )
+            reconfigure_and_rebuild_fn(
+                enrichment_config=enrichment_config,
+                collection_name=variant_collection,
+            )
+
+        _, metrics = evaluate_retrieval(dataset, top_k, retrieval_options=options)
+        metrics["collection_name"] = variant_collection
+        metrics["enrichment_config"] = enrichment_config
+        outputs[name] = metrics
+
+    return outputs
+
+
 def reranking_ablation_configs(
     base_options: dict[str, Any] | None = None,
 ) -> list[tuple[str, dict[str, Any]]]:

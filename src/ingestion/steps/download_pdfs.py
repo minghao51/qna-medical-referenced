@@ -19,6 +19,10 @@ from src.ingestion.steps.download_web import _manifest_indexes as _manifest_inde
 from src.ingestion.steps.download_web import _save_manifest as _save_web_manifest
 from src.ingestion.steps.download_web import normalize_url as normalize_url_web
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 MANIFEST_PATH = DATA_RAW_DIR / "download_manifest.json"
 
 
@@ -85,11 +89,14 @@ async def download_pdf(url: str, timeout: int = 60) -> bytes | None:
             content_type = response.headers.get("content-type", "")
             looks_like_pdf = response.content.startswith(b"%PDF")
             if "pdf" not in content_type.lower() and not looks_like_pdf:
-                print(f"Warning: Expected PDF but got {content_type} for {url}")
+                logger.warning("Expected PDF but got %s for %s", content_type, url)
                 return None
             return response.content
-        except Exception as e:
-            print(f"Error downloading {url}: {e}")
+        except httpx.HTTPStatusError as e:
+            logger.warning("HTTP error downloading %s: %s", url, e)
+            return None
+        except httpx.RequestError as e:
+            logger.warning("Request error downloading %s: %s", url, e)
             return None
 
 

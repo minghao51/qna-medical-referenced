@@ -291,182 +291,24 @@ HYPE_QUESTIONS_PER_CHUNK=2
 
 ## Identified Gaps & Next Steps
 
-### High Priority
+### Resolved
+
+| Gap | Resolution |
+|-----|------------|
+| **HyPE Ablation Missing** | ✅ Evaluated on 54-query set. No retrieval gain. See `docs/feature_ablation_findings.md` |
+| **Cross-Encoder Reranking** | ✅ Implemented. NDCG +0.0392, evidence_hit_rate +0.1667. See `docs/feature_ablation_findings.md` |
+
+### Open
 
 | Gap | Description | Impact |
 |-----|-------------|--------|
-| **HyPE Ablation Missing** | HyPE impact on retrieval not systematically evaluated | Can't quantify HyPE value |
 | **Strategy Interaction Effects** | PDF extractor × chunking strategy combos unexplored | Suboptimal default config |
 | **Late Chunker Not in Experiments** | `chonkie_late` defined but not in `chunking_strategies.yaml` | Missing evaluation coverage |
-
-### Medium Priority
-
-| Gap | Description | Impact |
-|-----|-------------|--------|
 | **Query Variation Benchmarks** | Which expansion layer matters most? | Unclear optimization target |
 | **Acronym Expansion Scope** | Limited to predefined medical acronyms | May miss domain-specific terms |
 | **Synthetic Question Quality** | Hard paraphrase / distractor generation not measured | Dataset bias unknown |
-
-### Low Priority (Nice to Have)
-
-| Gap | Description | Impact |
-|-----|-------------|--------|
 | **HyDE LLM Cost Tracking** | LLM calls for HyDE not in metrics | Can't track API costs |
 | **Cold Start HyPE** | No incremental HyPE for new chunks | Recompute full index on small updates |
-| **Cross-Encoder Reranking** | Not implemented | Could improve top-k precision |
-
----
-
-### HyPE Ablation: Detailed Gap Analysis
-
-#### Current State
-
-HyPE (Hypothetical Prompt Embedding) is implemented but **not systematically evaluated**:
-
-| Component | Status | Location |
-|-----------|--------|----------|
-| HyPE generation at index time | ✅ Implemented | `src/ingestion/steps/hype.py` |
-| HyPE retrieval at query time | ✅ Implemented | `src/rag/runtime.py:658-664` |
-| HyPE config in settings | ✅ Implemented | `src/config/settings.py:293-324` |
-| HyPE in experiment YAMLs | ❌ **Missing** | Not in any `experiments/v1/*.yaml` |
-| HyPE ablation variants | ❌ **Missing** | `retrieval_ablation_configs` doesn't test HyPE |
-| HyPE metrics tracking | ⚠️ Partial | No dedicated HyPE-use metrics |
-
-#### Root Cause
-
-1. **Experiment config gap**: `RetrievalDiversityConfig` has `enable_hype` but `compute_assessment_config()` in `src/experiments/config.py:458-465` doesn't include it in `retrieval_options`:
-
-```python
-# Current retrieval_options excludes enable_hype:
-"retrieval_options": {
-    "search_mode": retrieval["search_mode"],
-    "enable_diversification": retrieval["enable_diversification"],
-    "mmr_lambda": retrieval["mmr_lambda"],
-    "overfetch_multiplier": retrieval["overfetch_multiplier"],
-    "max_chunks_per_source_page": retrieval["max_chunks_per_source_page"],
-    "max_chunks_per_source": retrieval["max_chunks_per_source"],
-    # ❌ enable_hype is missing!
-}
-```
-
-2. **Ablation framework gap**: `retrieval_ablation_configs()` in `src/evals/assessment/retrieval_eval.py:354-369` only tests search modes, not HyPE.
-
-#### Proposed HyPE Experiment Design
-
-Create `experiments/v1/hype_strategies.yaml` with these variants:
-
-```yaml
-variants:
-  # === HyPE On/Off Comparison ===
-  - name: hype_disabled
-    description: Baseline without HyPE (enable_hype=false)
-    overrides:
-      retrieval:
-        enable_hype: false
-        hype_sample_rate: 0.0  # Ingest without HyPE
-
-  - name: hype_enabled_10pct
-    description: HyPE with 10% chunk coverage (default)
-    overrides:
-      retrieval:
-        enable_hype: true
-        hype_sample_rate: 0.1
-
-  - name: hype_enabled_50pct
-    description: HyPE with 50% chunk coverage
-    overrides:
-      retrieval:
-        enable_hype: true
-        hype_sample_rate: 0.5
-
-  - name: hype_enabled_100pct
-    description: HyPE with 100% chunk coverage
-    overrides:
-      retrieval:
-        enable_hype: true
-        hype_sample_rate: 1.0
-
-  # === HyPE + HyDE Combined ===
-  - name: hype_hyde_combined
-    description: Both HyPE (index-time) and HyDE (query-time) enabled
-    overrides:
-      retrieval:
-        enable_hype: true
-        enable_hyde: true
-        hype_sample_rate: 0.1
-        hyde_max_length: 200
-
-  - name: hyde_only
-    description: HyDE only, no HyPE
-    overrides:
-      retrieval:
-        enable_hype: false
-        enable_hyde: true
-        hyde_max_length: 200
-
-  # === HyPE Quality Thresholds ===
-  - name: hype_high_quality_only
-    description: HyPE only on high-quality chunks (quality_score > 0.8)
-    overrides:
-      retrieval:
-        enable_hype: true
-        hype_sample_rate: 0.05  # Tighter selection
-        hype_min_quality_threshold: 0.8
-```
-
-#### Required Code Changes
-
-1. **Add `enable_hype` to experiment config resolution** in `src/experiments/config.py`:
-
-```python
-"retrieval_options": {
-    ...
-    "enable_hype": retrieval.get("enable_hype", False),
-    "enable_hyde": retrieval.get("enable_hyde", False),
-    "hyde_max_length": retrieval.get("hyde_max_length", 200),
-}
-```
-
-2. **Add HyPE ablation configs** to `src/evals/assessment/retrieval_eval.py`:
-
-```python
-def hype_ablation_configs(base_options: dict[str, Any] | None = None) -> list[tuple[str, dict[str, Any]]]:
-    base = dict(base_options or {})
-    return [
-        ("hype_disabled", {**base, "enable_hype": False}),
-        ("hype_10pct", {**base, "enable_hype": True}),
-        ("hype_50pct", {**base, "enable_hype": True, "hype_sample_rate": 0.5}),
-        ("hype_100pct", {**base, "enable_hype": True, "hype_sample_rate": 1.0}),
-        ("hyde_only", {**base, "enable_hype": False, "enable_hyde": True}),
-        ("hype_plus_hyde", {**base, "enable_hype": True, "enable_hyde": True}),
-    ]
-```
-
-3. **Track HyPE contribution in metrics**:
-
-```python
-# In evaluate_retrieval, add:
-"hype_questions_used": sum(1 for q in expanded_queries if q in all_hype_questions.values()),
-"hype_coverage_pct": len(all_hype_questions) / total_chunks * 100,
-```
-
-#### Key Metrics to Compare
-
-| Metric | hype_disabled | hype_10pct | hype_50pct | hype_100pct |
-|--------|---------------|------------|------------|-------------|
-| hit_rate@k | baseline | Δ | Δ | Δ |
-| mrr | baseline | Δ | Δ | Δ |
-| ndcg@k | baseline | Δ | Δ | Δ |
-| evidence_hit_rate | baseline | Δ | Δ | Δ |
-| latency_ms | baseline | ≈ | ≈ | ≈ |
-| LLM cost/query | $0 | $0 | $0 | $0 |
-
-#### Expected Outcomes
-
-1. **HyPE should improve recall** for queries where the question phrasing differs from document language
-2. **Higher sample rate → diminishing returns** after some threshold
-3. **HyDE + HyPE combined** may overlap - need to verify complementary value
-4. **Zero latency cost** should make HyPE attractive vs HyDE
 
 ---
 

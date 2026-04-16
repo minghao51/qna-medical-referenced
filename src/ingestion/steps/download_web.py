@@ -269,8 +269,11 @@ async def download_url(url: str, timeout: int = 30) -> Optional[str]:
             response = await client.get(url)
             response.raise_for_status()
             return response.text
-        except Exception as e:
-            print(f"Error downloading {url}: {e}")
+        except httpx.HTTPStatusError as e:
+            logger.warning("HTTP error downloading %s: %s", url, e)
+            return None
+        except httpx.RequestError as e:
+            logger.warning("Request error downloading %s: %s", url, e)
             return None
 
 
@@ -281,8 +284,11 @@ async def download_binary(url: str, timeout: int = 60) -> Optional[bytes]:
             response = await client.get(url)
             response.raise_for_status()
             return response.content
-        except Exception as e:
-            print(f"Error downloading {url}: {e}")
+        except httpx.HTTPStatusError as e:
+            logger.warning("HTTP error downloading %s: %s", url, e)
+            return None
+        except httpx.RequestError as e:
+            logger.warning("Request error downloading %s: %s", url, e)
             return None
 
 
@@ -475,12 +481,10 @@ async def extract_ace_clinical_guidelines() -> list[str]:
         ),
     ]
 
-    downloaded = []
-    for url, name in guidelines:
-        result = await _download_and_save_html(url, name)
-        if result:
-            downloaded.append(result)
-    return downloaded
+    results = await asyncio.gather(
+        *[_download_and_save_html(url, name) for url, name in guidelines]
+    )
+    return [r for r in results if r]
 
 
 async def extract_ace_cues() -> list[str]:
@@ -500,12 +504,10 @@ async def extract_ace_cues() -> list[str]:
         ),
     ]
 
-    downloaded = []
-    for url, name in pages:
-        result = await _download_and_save_html(url, name)
-        if result:
-            downloaded.append(result)
-    return downloaded
+    results = await asyncio.gather(
+        *[_download_and_save_html(url, name) for url, name in pages]
+    )
+    return [r for r in results if r]
 
 
 async def extract_ace_drug_guidances() -> list[str]:
@@ -553,12 +555,10 @@ async def extract_ace_drug_guidances() -> list[str]:
         ),
     ]
 
-    downloaded = []
-    for url, name in guidances:
-        result = await _download_and_save_html(url, name)
-        if result:
-            downloaded.append(result)
-    return downloaded
+    results = await asyncio.gather(
+        *[_download_and_save_html(url, name) for url, name in guidances]
+    )
+    return [r for r in results if r]
 
 
 async def extract_healthhub_content() -> list[str]:
@@ -597,12 +597,10 @@ async def extract_healthhub_content() -> list[str]:
         ),
     ]
 
-    downloaded = []
-    for url, name in pages:
-        result = await _download_and_save_html(url, name)
-        if result:
-            downloaded.append(result)
-    return downloaded
+    results = await asyncio.gather(
+        *[_download_and_save_html(url, name) for url, name in pages]
+    )
+    return [r for r in results if r]
 
 
 async def extract_hpp_guidelines() -> list[str]:
@@ -635,12 +633,10 @@ async def extract_hpp_guidelines() -> list[str]:
         ),
     ]
 
-    downloaded = []
-    for url, name in pages:
-        result = await _download_and_save_html(url, name)
-        if result:
-            downloaded.append(result)
-    return downloaded
+    results = await asyncio.gather(
+        *[_download_and_save_html(url, name) for url, name in pages]
+    )
+    return [r for r in results if r]
 
 
 async def extract_moh_content() -> list[str]:
@@ -649,12 +645,10 @@ async def extract_moh_content() -> list[str]:
         ("https://www.moh.gov.sg/", "moh_singapore"),
     ]
 
-    downloaded = []
-    for url, name in pages:
-        result = await _download_and_save_html(url, name)
-        if result:
-            downloaded.append(result)
-    return downloaded
+    results = await asyncio.gather(
+        *[_download_and_save_html(url, name) for url, name in pages]
+    )
+    return [r for r in results if r]
 
 
 async def extract_international_guidelines() -> list[str]:
@@ -666,12 +660,10 @@ async def extract_international_guidelines() -> list[str]:
         ("https://www.nice.org.uk/guidance/ng236", "nice_heart_failure"),
     ]
 
-    downloaded = []
-    for url, name in pages:
-        result = await _download_and_save_html(url, name, timeout=60)
-        if result:
-            downloaded.append(result)
-    return downloaded
+    results = await asyncio.gather(
+        *[_download_and_save_html(url, name, timeout=60) for url, name in pages]
+    )
+    return [r for r in results if r]
 
 
 def list_downloaded_files() -> list[str]:

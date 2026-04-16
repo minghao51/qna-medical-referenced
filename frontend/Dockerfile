@@ -1,21 +1,21 @@
 # Stage 1: Builder
-FROM oven/bun:1.2.5-alpine AS builder
+FROM oven/bun:1.3.9-alpine AS builder
 
 WORKDIR /app
 
-# Accept build-time arguments
 ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
 
-COPY package.json ./package.json
-COPY bun.lock ./bun.lock
+# Copy lockfile and install deps first (better layer caching)
+COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
-COPY . ./
+# Copy source and build
+COPY . .
 RUN bun run build
 
 # Stage 2: Runtime
-FROM oven/bun:1.2.5-alpine AS runtime
+FROM oven/bun:1.3.9-alpine AS runtime
 
 WORKDIR /app
 
@@ -23,9 +23,10 @@ ENV HOST=0.0.0.0
 ENV PORT=5173
 ENV NODE_ENV=production
 
-COPY package.json ./package.json
-COPY bun.lock ./bun.lock
+# Only production deps needed at runtime
+COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
+
 COPY --from=builder /app/build ./build
 
 EXPOSE 5173

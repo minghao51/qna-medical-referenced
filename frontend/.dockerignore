@@ -1,12 +1,41 @@
+# Dependencies (large, installed during build)
 node_modules/
+.bun_install/
+
+# Build outputs (regenerated each build)
 build/
 .svelte-kit/
+
+# IDE and editor
 .vscode/
 .idea/
+
+# Documentation
+*.md
+
+# Git
+.git/
+.gitignore
+
+# Test files (not needed for production)
 tests/
-playwright-report/
 test-results/
+playwright-report/
+playwright.config.ts
+
+# Environment files
+.env
 .env.*
 !.env.example
-*.md
-.git/
+
+# Cache directories
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.deepeval/
+.wandb/
+.tmpfix/
+
+# OS files
+.DS_Store
+Thumbs.db

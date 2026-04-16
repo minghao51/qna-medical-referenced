@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -41,6 +40,7 @@ from .retrieval_eval import (
     run_hype_ablations,
     run_hype_ablations_with_reingest,
     run_keyword_ablations,
+    run_keyword_ablations_with_reingest,
     run_reranking_ablations,
     run_retrieval_ablations,
 )
@@ -166,6 +166,9 @@ def run_assessment(
     run_retrieval_ablations_fn: Callable[..., dict[str, Any]] = run_retrieval_ablations,
     run_hype_ablations_fn: Callable[..., dict[str, Any]] = run_hype_ablations,
     run_keyword_ablations_fn: Callable[..., dict[str, Any]] = run_keyword_ablations,
+    run_keyword_ablations_with_reingest_fn: Callable[
+        ..., dict[str, Any]
+    ] = run_keyword_ablations_with_reingest,
     run_hype_ablations_with_reingest_fn: Callable[
         ..., dict[str, Any]
     ] = run_hype_ablations_with_reingest,
@@ -394,14 +397,10 @@ def run_assessment(
         if config.experiment_config:
 
             def _rebuild_hype_index(hype_config, collection_name):
-                os.environ["HYPE_ENABLED"] = str(hype_config["enable_hype"]).lower()
-                os.environ["HYPE_SAMPLE_RATE"] = str(hype_config["hype_sample_rate"])
-                os.environ["HYPE_QUESTIONS_PER_CHUNK"] = str(
-                    hype_config["hype_questions_per_chunk"]
-                )
-                os.environ["COLLECTION_NAME"] = collection_name
-
                 exp = dict(config.experiment_config or {})
+                ingestion = dict(exp.get("ingestion", {}))
+                ingestion.update(hype_config)
+                exp["ingestion"] = ingestion
                 embedding_index = dict(exp.get("embedding_index", {}))
                 embedding_index["collection_name"] = collection_name
                 exp["embedding_index"] = embedding_index
@@ -428,9 +427,32 @@ def run_assessment(
         )
     keyword_ablations: dict[str, Any] = {}
     if config.run_keyword_ablations:
-        keyword_ablations = run_keyword_ablations_fn(
-            dataset, config.top_k, base_options=config.retrieval_options
-        )
+        if config.experiment_config:
+
+            def _rebuild_keyword_index(enrichment_config, collection_name):
+                exp = dict(config.experiment_config or {})
+                ingestion = dict(exp.get("ingestion", {}))
+                ingestion.update(enrichment_config)
+                exp["ingestion"] = ingestion
+                embedding_index = dict(exp.get("embedding_index", {}))
+                embedding_index["collection_name"] = collection_name
+                exp["embedding_index"] = embedding_index
+                configure_runtime_for_experiment_fn(exp)
+                initialize_runtime_index_fn(
+                    rebuild=True, materialize_html=True, force_html_reconvert=False
+                )
+
+            keyword_ablations = run_keyword_ablations_with_reingest_fn(
+                dataset,
+                config.top_k,
+                base_options=config.retrieval_options,
+                base_collection_name=l5_collection_name,
+                reconfigure_and_rebuild_fn=_rebuild_keyword_index,
+            )
+        else:
+            keyword_ablations = run_keyword_ablations_fn(
+                dataset, config.top_k, base_options=config.retrieval_options
+            )
     diversity_sweep_rows: list[dict[str, Any]] = []
     if config.run_diversity_sweep:
         diversity_sweep_rows = run_diversity_sweep_fn(

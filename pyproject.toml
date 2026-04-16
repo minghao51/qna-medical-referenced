@@ -2,7 +2,7 @@
 name = "qna-medical-referenced"
 version = "0.1.0"
 description = "Medical Q&A chatbot with RAG pipeline for health screening interpretation"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.129.0",
     "openai>=1.0.0",
@@ -20,6 +20,7 @@ dependencies = [
     "trafilatura>=1.12.2",
     "wandb>=0.23.0",
     "chromadb>=0.4.0",
+    "bcrypt>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,10 @@ dev = [
 ]
 evaluation = [
     "deepeval>=2.0.0,<2.1.0",
+    "langchain<1",
+    "langchain-community<1",
+    "langchain-core<1",
+    "langchain-openai<1",
     "litellm>=1.0.0",
 ]
 chunkers = [

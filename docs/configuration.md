@@ -1,37 +1,20 @@
 # Configuration Guide
 
-This guide explains all configuration options for the Health Screening Interpreter Chatbot, including environment variables, defaults, and security considerations.
+All configuration options, environment variables, defaults, and security considerations.
 
-Evaluation runs now use the canonical L6 answer-quality artifacts and summary keys:
-
-- `l6_answer_quality.jsonl`
-- `l6_answer_quality_metrics.json`
-- `summary.json["l6_answer_quality_metrics"]`
+For first-time setup, see `docs/quickstart.md`.
 
 ## Overview
 
 The application uses [Pydantic BaseSettings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) for configuration management. Configuration is loaded from:
 
 1. Environment variables (highest priority)
-2. `.env` file in the project root
+2. `.env` file in the project root (encrypted with [dotenvx](https://dotenvx.com))
 3. Default values defined in `src/config/settings.py`
 
-## Quick Start
+This project uses **dotenvx** for encrypted environment variable management. The `.env` file contains encrypted secrets and is safe to commit to version control.
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Edit `.env` and add your Dashscope API key:
-   ```
-   DASHSCOPE_API_KEY=your_api_key_here
-   ```
-
-3. Start the application:
-   ```bash
-   docker-compose up
-   ```
+See [`.context7/dotenvx-best-practices.md`](../.context7/dotenvx-best-practices.md) for complete dotenvx usage.
 
 ## Configuration Reference
 
@@ -176,6 +159,7 @@ curl -X POST http://localhost:8000/chat \\
 - Never reuse keys across applications
 - Rotate keys regularly
 - Use separate keys for different client types
+- Store keys in dotenvx: `dotenvx set API_KEYS "key1,key2"`
 
 #### `API_KEYS_JSON`
 **Default:** (not set)
@@ -364,90 +348,28 @@ delay = RETRY_DELAY * (2 ^ attempt_number)
 - Decrease to `0.5` for faster retries
 - Set based on observed API recovery times
 
-## Example Configuration Files
+## Example Configurations (Non-Default Values Only)
 
-### Development (.env.development)
-```bash
-ENVIRONMENT=development
-
-# LLM
-DASHSCOPE_API_KEY=dev_key_xyz
-MODEL_NAME=qwen3.5-flash
-
-# Storage
-COLLECTION_NAME=medical_docs_dev
-DATA_DIR=data/raw
-CHROMA_PERSIST_DIRECTORY=data/chroma
-
-# Chat
-MAX_MESSAGE_LENGTH=2000
-
-# API (optional in development)
-# API_KEYS=
-CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-
-# Rate limiting
-RATE_LIMIT_PER_MINUTE=60
-ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE=12
-
-# Retry
-MAX_RETRIES=3
-RETRY_DELAY=1.0
-```
-
-### Production (.env.production)
+### Production
 ```bash
 ENVIRONMENT=production
-
-# LLM
 DASHSCOPE_API_KEY=prod_key_secure_random
 MODEL_NAME=qwen-plus
-
-# Storage
-COLLECTION_NAME=medical_docs_prod
-DATA_DIR=/mnt/data/raw
-CHROMA_PERSIST_DIRECTORY=/mnt/data/chroma
-
-# Chat
 MAX_MESSAGE_LENGTH=4000
-
-# API (recommended for internal/admin callers)
+MAX_RETRIES=5
+RETRY_DELAY=2.0
+RATE_LIMIT_PER_MINUTE=120
 API_KEYS_JSON=[{"id":"internal-dashboard","key":"replace-me","owner":"ops","role":"master","status":"active"}]
 RATE_LIMIT_BYPASS_KEY_IDS=internal-dashboard
 CORS_ALLOWED_ORIGINS=https://your-frontend.example.com
-
-# Rate limiting
-RATE_LIMIT_PER_MINUTE=120
-ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE=12
-
-# Retry
-MAX_RETRIES=5
-RETRY_DELAY=2.0
 ```
 
-### Testing (.env.test)
+### Testing
 ```bash
 ENVIRONMENT=test
-
-# LLM
-DASHSCOPE_API_KEY=test_key
-MODEL_NAME=qwen3.5-flash
-
-# Storage (use test collections)
 COLLECTION_NAME=medical_docs_test
-DATA_DIR=/tmp/test_data/raw
-CHROMA_PERSIST_DIRECTORY=/tmp/test_data/chroma
-
-# Chat
 MAX_MESSAGE_LENGTH=1000
-
-# API (disabled in tests)
-# API_KEYS=
-
-# Rate limiting (disabled in tests)
 RATE_LIMIT_PER_MINUTE=0
-
-# Retry (minimal for faster tests)
 MAX_RETRIES=1
 RETRY_DELAY=0.1
 ```
@@ -465,9 +387,10 @@ RETRY_DELAY=0.1
 **Cause:** API key is invalid or missing.
 
 **Solution:**
-1. Verify `DASHSCOPE_API_KEY` is set in `.env`
+1. Verify `DASHSCOPE_API_KEY` is set: `dotenvx get DASHSCOPE_API_KEY`
 2. Check the key is valid at [Dashscope Console](https://dashscope-us.aliyuncs.com/)
 3. Ensure the key has not been rotated or revoked
+4. Update key: `dotenvx set DASHSCOPE_API_KEY "new_key"`
 
 ### Rate limit errors during testing
 
@@ -515,8 +438,8 @@ Before deploying to production, ensure:
 - [ ] `ENVIRONMENT` is set correctly for the deployment
 - [ ] `API_KEYS` or `API_KEYS_JSON` is set for any internal/admin callers
 - [ ] `CORS_ALLOWED_ORIGINS` only includes trusted frontend origins
-- [ ] `.env` file is NOT committed to version control
-- [ ] `.env` file has restricted permissions (chmod 600)
+- [ ] `.env.keys` file is **NEVER** committed to version control
+- [ ] `DOTENV_PRIVATE_KEY` is stored in secure vault (1Password, etc.)
 - [ ] `RATE_LIMIT_PER_MINUTE` is set to prevent abuse
 - [ ] `ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE` is set for public chat deployments
 - [ ] SSL/TLS is enabled for API endpoints

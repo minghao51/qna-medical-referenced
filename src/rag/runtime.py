@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Runtime RAG retrieval and index initialization."""
 
+import asyncio
 import json
 import logging
 import time
@@ -46,6 +47,26 @@ logger = logging.getLogger(__name__)
 
 
 _VALID_SEARCH_MODES = {"rrf_hybrid", "semantic_only", "bm25_only"}
+
+
+def _empty_pipeline_trace(query: str, top_k: int):
+    from src.rag.trace_models import ContextStage, GenerationStage, PipelineTrace, RetrievalStage
+
+    return PipelineTrace(
+        retrieval=RetrievalStage(
+            query=query,
+            query_original_length=len(query),
+            query_truncated=False,
+            top_k=max(0, top_k),
+            documents=[],
+            score_weights={},
+            timing_ms=0,
+            steps=[],
+        ),
+        context=ContextStage(total_chunks=0, total_chars=0, sources=[], preview=""),
+        generation=GenerationStage(model=settings.model_name, timing_ms=0, tokens_estimate=0),
+        total_time_ms=0,
+    )
 
 
 @dataclass
@@ -323,11 +344,77 @@ async def _expand_queries_async(
 
 def _build_index_from_sources(vector_store) -> dict[str, Any]:
     build_start = time.time()
+    runtime_cfg = get_vector_store_runtime_config()
+    indexing_features = dict(runtime_cfg.get("indexing_features", {}) or {})
     loader = ReferenceDataLoader()
     pdf_docs = get_documents()
     markdown_docs = get_markdown_documents()
     chunked_docs = chunk_documents(pdf_docs)
     chunked_docs.extend(chunk_documents(markdown_docs))
+
+    hype_chunk_count = 0
+    if indexing_features.get("enable_hype"):
+        from src.infra.llm.qwen_client import get_client
+        from src.ingestion.steps.hype import generate_hype_questions_for_chunks
+
+        hype_questions = asyncio.run(
+            generate_hype_questions_for_chunks(
+                chunks=chunked_docs,
+                client=get_client(),
+                sample_rate=float(
+                    indexing_features.get("hype_sample_rate", settings.hype_sample_rate)
+                ),
+                max_chunks=int(indexing_features.get("hype_max_chunks", settings.hype_max_chunks)),
+                questions_per_chunk=int(
+                    indexing_features.get(
+                        "hype_questions_per_chunk", settings.hype_questions_per_chunk
+                    )
+                ),
+            )
+        )
+        hype_chunk_count = len(hype_questions)
+        for doc in chunked_docs:
+            if doc["id"] in hype_questions:
+                doc.setdefault("metadata", {})
+                doc["metadata"]["hypothetical_questions"] = hype_questions[doc["id"]]
+
+    enriched_chunk_count = 0
+    if indexing_features.get("enable_keyword_extraction") or indexing_features.get(
+        "enable_chunk_summaries"
+    ):
+        from src.infra.llm.qwen_client import get_client
+        from src.ingestion.steps.enrich_chunks import (
+            apply_enrichment_to_chunks,
+            enrich_chunks,
+        )
+
+        enrichment_results = asyncio.run(
+            enrich_chunks(
+                chunks=chunked_docs,
+                client=get_client(),
+                enable_keywords=bool(indexing_features.get("enable_keyword_extraction")),
+                enable_summaries=bool(indexing_features.get("enable_chunk_summaries")),
+                sample_rate=float(
+                    indexing_features.get(
+                        "keyword_extraction_sample_rate",
+                        settings.keyword_extraction_sample_rate,
+                    )
+                ),
+                max_chunks=int(
+                    indexing_features.get(
+                        "keyword_extraction_max_chunks",
+                        settings.keyword_extraction_max_chunks,
+                    )
+                ),
+            )
+        )
+        enriched_chunk_count = apply_enrichment_to_chunks(
+            chunked_docs,
+            enrichment_results,
+            enable_keywords=bool(indexing_features.get("enable_keyword_extraction")),
+            enable_summaries=bool(indexing_features.get("enable_chunk_summaries")),
+        )
+
     ref_docs = loader.load_reference_ranges_as_docs()
     chunked_docs.extend(ref_docs)
     stats = vector_store.add_documents(chunked_docs)
@@ -336,10 +423,14 @@ def _build_index_from_sources(vector_store) -> dict[str, Any]:
     stats["markdown_document_count"] = len(markdown_docs)
     stats["reference_document_count"] = len(ref_docs)
     stats["chunk_count"] = len(chunked_docs)
-    print(
+    stats["hype_chunk_count"] = hype_chunk_count
+    stats["enriched_chunk_count"] = enriched_chunk_count
+    logger.info(
         "Indexed document chunks "
-        f"(attempted={stats['attempted']}, inserted={stats['inserted']}, "
-        f"duplicate_id={stats['skipped_duplicate_id']}, duplicate_content={stats['skipped_duplicate_content']})"
+        "(attempted=%d, inserted=%d, "
+        "duplicate_id=%d, duplicate_content=%d)",
+        stats['attempted'], stats['inserted'],
+        stats['skipped_duplicate_id'], stats['skipped_duplicate_content'],
     )
     return stats
 
@@ -361,48 +452,54 @@ def initialize_vector_store(
     state = get_runtime_state()
     with state._lock:
         runtime_signature = _vector_store_runtime_signature()
-        if state.vector_store_initialized_signature != runtime_signature:
-            state.vector_store_initialized = False
+        if state._vector_store_initialized_signature != runtime_signature:
+            state._vector_store_initialized = False
 
-        vector_store = get_vector_store()
+    vector_store = get_vector_store()
 
-        if rebuild:
-            vector_store.clear()
-            state.reset_vector_store_state()
+    if rebuild:
+        vector_store.clear()
+        with state._lock:
+            state._vector_store_initialized = False
+            state._vector_store_initialized_signature = None
 
-        if materialize_html:
-            convert_html_main(force=force_html_reconvert)
+    if materialize_html:
+        convert_html_main(force=force_html_reconvert)
 
-        if vector_store.documents.get("contents"):
-            if not state.vector_store_initialized:
-                state.vector_store_initialized = True
-                state.vector_store_initialized_signature = runtime_signature
+    documents = vector_store.documents
+    if documents.get("contents"):
+        with state._lock:
+            if not state._vector_store_initialized:
+                state._vector_store_initialized = True
+                state._vector_store_initialized_signature = runtime_signature
                 logger.info(
                     "Loaded existing vector store with %d documents",
-                    len(vector_store.documents["contents"]),
+                    len(documents["contents"]),
                 )
             else:
-                state.vector_store_initialized_signature = runtime_signature
-            return {
-                "status": "ready",
-                "reused_existing_index": True,
-                "vector_store_config": get_vector_store_runtime_config(),
-                "index_metadata": vector_store.documents.get("index_metadata", {}),
-                "vector_document_count": len(vector_store.documents.get("contents", [])),
-                "indexing_stats": vector_store.last_indexing_stats,
-            }
-
-        build_stats = _build_index_from_sources(vector_store)
-        state.vector_store_initialized = True
-        state.vector_store_initialized_signature = runtime_signature
+                state._vector_store_initialized_signature = runtime_signature
         return {
-            "status": "built",
-            "reused_existing_index": False,
+            "status": "ready",
+            "reused_existing_index": True,
             "vector_store_config": get_vector_store_runtime_config(),
-            "index_metadata": vector_store.documents.get("index_metadata", {}),
-            "vector_document_count": len(vector_store.documents.get("contents", [])),
-            "indexing_stats": build_stats,
+            "index_metadata": documents.get("index_metadata", {}),
+            "vector_document_count": len(documents.get("contents", [])),
+            "indexing_stats": vector_store.last_indexing_stats,
         }
+
+    build_stats = _build_index_from_sources(vector_store)
+    documents = vector_store.documents
+    with state._lock:
+        state._vector_store_initialized = True
+        state._vector_store_initialized_signature = runtime_signature
+    return {
+        "status": "built",
+        "reused_existing_index": False,
+        "vector_store_config": get_vector_store_runtime_config(),
+        "index_metadata": documents.get("index_metadata", {}),
+        "vector_document_count": len(documents.get("contents", [])),
+        "indexing_stats": build_stats,
+    }
 
 
 def initialize_runtime_index(
@@ -453,6 +550,28 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
     set_structured_chunking_enabled(ingestion.get("structured_chunking_enabled", True))
     set_source_chunk_configs(ingestion.get("source_chunk_configs"))
     set_auto_select_strategy(ingestion.get("auto_select_chunk_strategy", False))
+    indexing_features = {
+        "enable_hype": bool(ingestion.get("enable_hype", settings.hype_enabled)),
+        "hype_sample_rate": float(ingestion.get("hype_sample_rate", settings.hype_sample_rate)),
+        "hype_max_chunks": int(ingestion.get("hype_max_chunks", settings.hype_max_chunks)),
+        "hype_questions_per_chunk": int(
+            ingestion.get("hype_questions_per_chunk", settings.hype_questions_per_chunk)
+        ),
+        "enable_keyword_extraction": bool(
+            ingestion.get("enable_keyword_extraction", settings.enable_keyword_extraction)
+        ),
+        "enable_chunk_summaries": bool(
+            ingestion.get("enable_chunk_summaries", settings.enable_chunk_summaries)
+        ),
+        "keyword_extraction_sample_rate": float(
+            ingestion.get(
+                "keyword_extraction_sample_rate", settings.keyword_extraction_sample_rate
+            )
+        ),
+        "keyword_extraction_max_chunks": int(
+            ingestion.get("keyword_extraction_max_chunks", settings.keyword_extraction_max_chunks)
+        ),
+    }
     vector_config = {
         "collection_name": embedding_index.get("collection_name", settings.collection_name),
         "semantic_weight": embedding_index.get("semantic_weight", 0.6),
@@ -462,6 +581,7 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
         "embedding_batch_size": embedding_index.get(
             "embedding_batch_size", settings.embedding_batch_size
         ),
+        "indexing_features": indexing_features,
         "index_metadata": {
             "experiment_name": experiment.get("metadata", {}).get("name"),
             "experiment_file": experiment.get("experiment_file"),
@@ -483,6 +603,7 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
             "pdf_table_extractor": ingestion.get("pdf_table_extractor", "heuristic"),
             "structured_chunking_enabled": ingestion.get("structured_chunking_enabled", True),
             "source_chunk_configs": json.dumps(get_source_chunk_configs()),
+            **indexing_features,
         },
     }
     set_vector_store_runtime_config(vector_config)
@@ -695,6 +816,11 @@ def _apply_reranking(
 def retrieve_context(
     query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None
 ) -> tuple[str, list[ChatSource]]:
+    if not query or not query.strip():
+        return "", []
+    if len(query) > 4000:
+        logger.warning("Query truncated from %d to 4000 chars", len(query))
+        query = query[:4000]
     initialize_runtime_index()
     cfg = _resolve_retrieval_config(retrieval_options)
 
@@ -747,6 +873,13 @@ def retrieve_context_with_trace(
             - sources: List of source names
             - pipeline_trace: Dictionary with detailed pipeline metadata
     """
+    if not query or not query.strip():
+        return "", [], _empty_pipeline_trace("", top_k)
+    original_query = query
+    original_length = len(query)
+    if len(query) > 4000:
+        logger.warning("Query truncated from %d to 4000 chars", len(query))
+        query = query[:4000]
     from src.rag.trace_models import (
         ContextStage,
         GenerationStage,
@@ -798,6 +931,8 @@ def retrieve_context_with_trace(
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
     retrieval_stage = RetrievalStage(
         query=query,
+        query_original_length=original_length,
+        query_truncated=(original_length > 4000),
         top_k=top_k,
         documents=retrieved_docs,
         score_weights={
@@ -869,6 +1004,14 @@ async def retrieve_context_with_trace_async(
             - sources: List of source names
             - pipeline_trace: Dictionary with detailed pipeline metadata
     """
+    if not query or not query.strip():
+        from src.rag.trace_models import PipelineTrace as _PT
+        return "", [], _PT()
+    original_query = query
+    original_length = len(query)
+    if len(query) > 4000:
+        logger.warning("Query truncated from %d to 4000 chars", len(query))
+        query = query[:4000]
     from src.rag.trace_models import (
         ContextStage,
         GenerationStage,
@@ -1016,6 +1159,8 @@ async def retrieve_context_with_trace_async(
     retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
     retrieval_stage = RetrievalStage(
         query=query,
+        query_original_length=original_length,
+        query_truncated=(original_length > 4000),
         top_k=top_k,
         documents=retrieved_docs,
         score_weights={

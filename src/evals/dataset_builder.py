@@ -125,8 +125,8 @@ def _resolve_path_for_contract(path: Path | None) -> str | None:
         return None
     try:
         return str(path.resolve())
-    except Exception:
-        logger.warning("Path resolution failed for %s", path)
+    except OSError as e:
+        logger.warning("Path resolution failed for %s: %s", path, e)
         return str(path)
 
 
@@ -176,8 +176,8 @@ def _load_cached_dataset_manifest(run_dir: Path) -> dict[str, Any]:
         return {}
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception:
-        logger.warning("Failed to read manifest at %s", manifest_path)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning("Failed to read manifest at %s: %s", manifest_path, e)
         return {}
     return payload if isinstance(payload, dict) else {}
 
@@ -210,8 +210,8 @@ def _resolve_cached_dataset_path(
     for run_dir in candidate_run_dirs:
         try:
             resolved = run_dir.resolve()
-        except Exception:
-            logger.warning("Path resolution failed for %s", run_dir)
+        except OSError as e:
+            logger.warning("Path resolution failed for %s: %s", run_dir, e)
             resolved = run_dir
         if resolved in seen:
             continue

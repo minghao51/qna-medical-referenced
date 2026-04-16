@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,27 @@ from src.ingestion.indexing.keyword_index import (
     keyword_score,
     keyword_score_with_extracted_keywords,
 )
+
+logger = logging.getLogger(__name__)
+
+# Module-level cache for query embeddings (same query → same embedding).
+# Shared across all ChromaStore instances since embedding is model-deterministic.
+_embed_cache: dict[str, list[float]] = {}
+_EMBED_CACHE_MAX = 256
+
+
+def _get_cached_query_embedding(query: str, model: str) -> list[float]:
+    """Return embedding for query, using a simple size-bounded cache."""
+    cache_key = f"{model}::{query}"
+    if cache_key in _embed_cache:
+        return _embed_cache[cache_key]
+    result = embed_texts([query], batch_size=1, model=model)[0]
+    if len(_embed_cache) >= _EMBED_CACHE_MAX:
+        _embed_cache.pop(next(iter(_embed_cache)))
+    _embed_cache[cache_key] = result
+    return result
+
+
 from src.ingestion.indexing.search import cosine_similarity, rank_documents, reciprocal_rank_fusion
 from src.ingestion.indexing.text_utils import content_hash, sanitize_text, tokenize_text
 from src.source_metadata import (
@@ -522,7 +544,7 @@ class ChromaVectorStore:
         if use_semantic:
             try:
                 embedding_start = time.time()
-                query_embedding = self._embed([query], batch_size=1)[0]
+                query_embedding = _get_cached_query_embedding(query, self.embedding_model)
                 trace_info["query_embedding_timing_ms"] = int(
                     (time.time() - embedding_start) * 1000
                 )

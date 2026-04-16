@@ -30,7 +30,7 @@ async def test_dashscope_api_timeout_retry():
     dataset = [{"query": "Test query", "query_id": "timeout_test_001"}]
 
     # Mock timeout scenario
-    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.a_generate") as mock_gen:
         # First call times out, second succeeds
         mock_gen.side_effect = [
             Exception("Timeout"),
@@ -57,7 +57,7 @@ async def test_cache_during_failures():
     dataset = [{"query": "Cache test query", "query_id": "cache_test_001"}]
 
     # Run once to populate cache
-    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.a_generate") as mock_gen:
         mock_gen.return_value = "Cached answer for testing."
 
         try:
@@ -165,15 +165,16 @@ async def test_negative_top_k():
 
     dataset = [{"query": "Test query", "query_id": "topk_test_001"}]
 
-    # Should handle negative top_k
-    try:
-        results, aggregate = await evaluate_answer_quality_async(dataset, top_k=-1)
+    with patch("src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Test answer"):
+        # Should handle negative top_k
+        try:
+            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=-1)
 
-        # Should clamp to valid range or return empty
-        assert isinstance(results, list)
-    except (ValueError, AttributeError) as e:
-        # Expected to raise validation error
-        assert "top_k" in str(e).lower() or "invalid" in str(e).lower()
+            # Should clamp to valid range or return empty
+            assert isinstance(results, list)
+        except (ValueError, AttributeError) as e:
+            # Expected to raise validation error
+            assert "top_k" in str(e).lower() or "invalid" in str(e).lower()
 
 
 @pytest.mark.asyncio
@@ -183,11 +184,12 @@ async def test_zero_top_k():
 
     dataset = [{"query": "Test query", "query_id": "zero_topk_001"}]
 
-    # Should handle zero top_k
-    results, aggregate = await evaluate_answer_quality_async(dataset, top_k=0)
+    with patch("src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Test answer"):
+        # Should handle zero top_k
+        results, aggregate = await evaluate_answer_quality_async(dataset, top_k=0)
 
-    # Should return results with no context
-    assert isinstance(results, list)
+        # Should return results with no context
+        assert isinstance(results, list)
 
 
 # =============================================================================
@@ -244,7 +246,7 @@ async def test_concurrent_evaluation_with_failures():
     dataset = [{"query": f"Query {i}", "query_id": f"concurrent_{i}"} for i in range(5)]
 
     # Mock some to fail
-    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.a_generate") as mock_gen:
         # Alternate between success and failure
         mock_gen.side_effect = [
             "Answer 1",
@@ -281,8 +283,8 @@ async def test_metric_calculation_with_invalid_context():
     dataset = [{"query": "Test query", "query_id": "context_test_001"}]
 
     # Mock retrieval to return empty context
-    with patch("src.rag.runtime.retrieve_context") as mock_retrieve:
-        mock_retrieve.return_value = ("", [])  # Empty context
+    with patch("src.rag.runtime.retrieve_context_with_trace") as mock_retrieve:
+        mock_retrieve.return_value = ("", [], {"retrieval": {}, "context": {}, "generation": {}, "total_time_ms": 0})
 
         try:
             results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
@@ -324,23 +326,26 @@ async def test_metric_timeout_handling():
         with patch(
             "src.evals.assessment.answer_eval.asyncio.wait_for", side_effect=timeout_wait_for
         ):
-            try:
-                results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+            with patch(
+                "src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Timeout test answer"
+            ):
+                try:
+                    results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
-                # Should handle timeout
-                if len(results) > 0:
-                    metrics = results[0]["metrics"]
+                    # Should handle timeout
+                    if len(results) > 0:
+                        metrics = results[0]["metrics"]
 
-                    # At least some metrics should have error status
-                    error_metrics = [
-                        name for name, data in metrics.items() if data.get("status") == "error"
-                    ]
+                        # At least some metrics should have error status
+                        error_metrics = [
+                            name for name, data in metrics.items() if data.get("status") == "error"
+                        ]
 
-                    assert len(metrics) > 0
-                    assert error_metrics
-            except (asyncio.TimeoutError, Exception) as e:
-                # Expected if timeout occurs
-                assert "timeout" in str(e).lower() or "time" in str(e).lower()
+                        assert len(metrics) > 0
+                        assert error_metrics
+                except (asyncio.TimeoutError, Exception) as e:
+                    # Expected if timeout occurs
+                    assert "timeout" in str(e).lower() or "time" in str(e).lower()
 
 
 # =============================================================================
@@ -359,7 +364,7 @@ async def test_very_long_response_handling():
     # Mock very long response
     long_response = "This is a detailed answer. " * 1000  # ~20k chars
 
-    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.a_generate") as mock_gen:
         mock_gen.return_value = long_response
 
         try:
@@ -388,7 +393,7 @@ async def test_unicode_in_query_and_response():
 
     dataset = [{"query": "What is the recommended LDL-C target? 价值观", "query_id": "unicode_001"}]
 
-    with patch("src.infra.llm.qwen_client.QwenClient.generate") as mock_gen:
+    with patch("src.infra.llm.qwen_client.QwenClient.a_generate") as mock_gen:
         mock_gen.return_value = "The recommended target is < 1.8 mmol/L. 价值观测试"
 
         try:

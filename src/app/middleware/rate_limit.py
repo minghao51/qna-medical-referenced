@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import sqlite3
@@ -145,7 +146,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             self._attach_browser_cookie(request, response, auth)
             return response
-        decision = rate_limiter.backend.check(key=rate_key, limit=limit)
+        decision = await asyncio.to_thread(rate_limiter.backend.check, rate_key, limit)
         if not decision.allowed:
             log_event(
                 logger,

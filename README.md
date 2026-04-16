@@ -8,6 +8,25 @@ Medical Q&A system with:
 - an offline ingestion and indexing pipeline for the document corpus
 - a Svelte frontend for chat and evaluation dashboards
 
+## Security Notice
+
+**API Keys & Secrets**:
+- This project uses [dotenvx](https://dotenvx.com) for encrypted environment variables
+- Copy `.env.example` for reference, then set keys: `dotenvx set DASHSCOPE_API_KEY "your-key"`
+- **NEVER commit `.env.keys` to version control** - it contains private decryption keys
+- Share only `DOTENV_PRIVATE_KEY` with team via secure vault (1Password, etc.)
+- All API keys are hashed using bcrypt (with salt) before storage
+- For production deployments, enable API key authentication (`API_KEYS` or `API_KEYS_JSON`)
+- Rotate exposed keys immediately if accidentally committed
+- See [`.context7/dotenvx-best-practices.md`](.context7/dotenvx-best-practices.md) for complete guide
+
+**Production Checklist**:
+- [ ] Set strong API keys and enable authentication
+- [ ] Configure rate limiting (`RATE_LIMIT_PER_MINUTE`)
+- [ ] Use HTTPS and reverse proxy in production
+- [ ] Restrict CORS origins (`CORS_ALLOWED_ORIGINS`)
+- [ ] Monitor logs for security events
+
 ## Start Here
 
 For setup and day-to-day usage, use the docs in this order:
@@ -15,7 +34,10 @@ For setup and day-to-day usage, use the docs in this order:
 - `docs/quickstart.md` for local setup
 - `docs/local-workflows.md` for canonical ingestion, serving, and evaluation commands
 - `docs/configuration.md` for environment variables and runtime settings
+- `docs/dependencies.md` for dependency management
 - `docs/architecture/overview.md` for repository structure
+- `docs/architecture/rag-system.md` for ingestion and retrieval data flow
+- `docs/architecture/pipeline-strategies.md` for pipeline strategies and gap tracker
 - `docs/testing/backend-tests.md` and `docs/testing/playwright.md` for test workflows
 
 ## Canonical Commands
@@ -24,12 +46,14 @@ For setup and day-to-day usage, use the docs in this order:
 # Install all dependencies (including test dependencies)
 uv sync --extra test
 
-cp .env.example .env
+# Setup environment (requires dotenvx: npm install @dotenvx/dotenvx -g)
+dotenvx set DASHSCOPE_API_KEY "your-key"
 uv run python scripts/download_nltk_data.py
 
-uv run python -m src.cli.serve
-uv run python -m src.cli.ingest
-uv run python -m src.cli.eval_pipeline
+# Run with dotenvx to decrypt .env
+dotenvx run -- uv run python -m src.cli.serve
+dotenvx run -- uv run python -m src.cli.ingest
+dotenvx run -- uv run python -m src.cli.eval_pipeline
 
 uv run pytest
 uv run ruff check .
@@ -89,6 +113,34 @@ The system supports multiple query expansion layers:
 - Acronym expansion, keyword focus, tokenization
 
 See `docs/architecture/pipeline-strategies.md` for detailed comparison.
+
+## Deployment
+
+- `docs/public-app-deployment.md` — Publishing with anonymous public access
+- `docs/anonymous-sessions.md` — Cookie-backed chat history behavior
+- `docs/admin-api-auth.md` — Optional API key authentication
+
+## Data Sources
+
+- `docs/data/sources.md` — Ingestion source inventory (Singapore government health sites)
+
+## Latest Feature Ablation Findings
+
+The latest feature-family ablation pass on the expanded `54`-query golden set is summarized in `docs/feature_ablation_findings.md`.
+
+- **Keyword enrichment**: no measurable retrieval gain over baseline
+- **HyPE / HyDE**: no measurable retrieval gain; `hype_10pct` only wins on latency
+- **Cross-encoder reranking**: meaningful retrieval lift with a clear latency tradeoff
+
+Expanded benchmark snapshot:
+
+| Family | Winner | Key result |
+|---|---|---|
+| Keyword | `baseline` | Same quality as enriched variants, lowest p50 latency |
+| HyPE / HyDE | `hype_10pct` | Same quality as `hype_disabled`, slightly faster |
+| Reranking | `cross_encoder_only` | `NDCG@K` 0.7205 vs 0.6813 baseline, `evidence_hit_rate` 0.1852 vs 0.0185 |
+
+The default served runtime now uses `baseline_cross_encoder`, which keeps baseline ingestion/indexing settings and enables cross-encoder reranking at retrieval time.
 
 ## API Surface
 
