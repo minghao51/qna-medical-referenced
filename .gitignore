@@ -15,6 +15,7 @@ venv*/
 .worktrees/
 
 # Environment files
+.env
 # .env is now encrypted with dotenvx - safe to commit
 .env.*
 !.env.example
