@@ -25,6 +25,7 @@ class ChonkieChunkerAdapter:
         "chonkie_recursive",
         "chonkie_semantic",
         "chonkie_late",
+        "medical_semantic",
     }
 
     def __init__(
@@ -185,19 +186,33 @@ def get_chonkie_chunker(
     chunk_overlap: int = 64,
     min_chunk_size: int = 100,
     embedding_model: Optional[str] = None,
+    medical_model: Optional[str] = None,
 ) -> ChonkieChunkerAdapter:
     """Factory function to get a configured chonkie chunker.
 
     Args:
-        strategy: Chunking strategy (chonkie_recursive, chonkie_semantic, etc.)
+        strategy: Chunking strategy (chonkie_recursive, chonkie_semantic, medical_semantic, etc.)
         chunk_size: Target chunk size in tokens
         chunk_overlap: Overlap between chunks
         min_chunk_size: Minimum chunk size
         embedding_model: Embedding model for semantic strategies
+        medical_model: spaCy model for medical_semantic strategy
 
     Returns:
-        Configured ChonkieChunkerAdapter instance
+        Configured ChonkieChunkerAdapter or MedicalSemanticChunkerAdapter instance
     """
+    if strategy == "medical_semantic":
+        from src.ingestion.steps.chunking.medical_semantic import MedicalSemanticChunkerAdapter
+
+        return MedicalSemanticChunkerAdapter(
+            strategy=strategy,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            min_chunk_size=min_chunk_size,
+            embedding_model=embedding_model,
+            medical_model=medical_model or "en_core_web_sm",
+        )
+
     return ChonkieChunkerAdapter(
         strategy=strategy,
         chunk_size=chunk_size,

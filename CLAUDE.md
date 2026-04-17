@@ -11,8 +11,8 @@
 - **Python:**
   - Package manager: `uv`.
   - Execution: Always `uv run <command>`. Never `python`.
+  - Installing package : `uv add`
   - Sync: `uv sync`.
 - **Frontend:**
   - Verify: Run `npm run check` and `npm test` after changes.
-- **Docs:** Update `ARCHITECTURE.md` if structure changes.
 - **Files:** Markdown files must follow `YYYYMMDD-filename.md` format.

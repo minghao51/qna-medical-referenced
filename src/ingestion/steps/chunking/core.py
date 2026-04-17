@@ -40,6 +40,7 @@ class TextChunker:
         "chonkie_recursive",
         "chonkie_semantic",
         "chonkie_late",
+        "medical_semantic",
     }
 
     def __init__(

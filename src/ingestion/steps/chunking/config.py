@@ -14,6 +14,7 @@ _VALID_STRATEGIES = {
     "chonkie_semantic",
     "chonkie_recursive",
     "chonkie_late",
+    "medical_semantic",
 }
 
 DEFAULT_SOURCE_CHUNK_CONFIGS = {
@@ -51,9 +52,9 @@ RECOMMENDED_STRATEGIES = {
     "pdf": "chonkie_semantic",
     "markdown": "chonkie_recursive",
     "html": "chonkie_recursive",
-    "clinical_notes": "chonkie_late",
+    "clinical_notes": "medical_semantic",
     "research_paper": "chonkie_semantic",
-    "guideline": "chonkie_semantic",
+    "guideline": "medical_semantic",
 }
 
 
@@ -135,6 +136,6 @@ def get_source_chunk_configs(strict_validation: bool = False) -> dict:
 
     if errors:
         raise ValueError(
-            f"Chunking configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+            "Chunking configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
         )
     return cfg

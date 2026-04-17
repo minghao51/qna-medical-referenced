@@ -1,0 +1,1042 @@
+{
+  "experiment_name": "medical_semantic_chunking_exp",
+  "timestamp": "2026-04-17T10:55:50.755497Z",
+  "config": {
+    "name": "medical_semantic_chunking_exp",
+    "description": "Test medical semantic chunking and query understanding features",
+    "baseline": {
+      "name": "baseline",
+      "chunking_strategy": "chonkie_semantic",
+      "query_understanding": false,
+      "ingestion_overrides": null,
+      "retrieval_overrides": null
+    },
+    "variants": [
+      {
+        "name": "medical_chunking",
+        "chunking_strategy": "medical_semantic",
+        "query_understanding": false,
+        "ingestion_overrides": null,
+        "retrieval_overrides": null
+      },
+      {
+        "name": "query_understanding",
+        "chunking_strategy": "chonkie_semantic",
+        "query_understanding": true,
+        "ingestion_overrides": null,
+        "retrieval_overrides": null
+      },
+      {
+        "name": "both_features",
+        "chunking_strategy": "medical_semantic",
+        "query_understanding": true,
+        "ingestion_overrides": null,
+        "retrieval_overrides": null
+      }
+    ],
+    "metrics": {
+      "primary": "ndcg@5",
+      "target_improvement": 0.03,
+      "secondary": [
+        "mrr",
+        "exact_chunk_hit_rate",
+        "evidence_hit_rate"
+      ]
+    },
+    "dataset_path": "tests/fixtures/golden_queries_all.json",
+    "dataset_split": ""
+  },
+  "baseline": {
+    "name": "baseline",
+    "run_dir": "data/evals_medical_semantic_chunking_exp/baseline/20260417T013359.499237Z_comprehensive_ablation_baseline",
+    "metrics": {
+      "query_count": 57,
+      "hit_rate_at_k": 0.7368421052631579,
+      "precision_at_k": 0.5298245614035088,
+      "recall_at_k": 0.7368421052631579,
+      "mrr": 0.6459064327485381,
+      "ndcg_at_k": 0.6596215032368163,
+      "source_hit_rate": 0.22807017543859648,
+      "dedup_hit_rate_at_k": 0.7368421052631579,
+      "dedup_precision_at_k": 0.5298245614035088,
+      "dedup_mrr": 0.6459064327485381,
+      "unique_source_hit_rate_at_k": 0.7368421052631579,
+      "unique_source_precision_at_k": 0.547953216374269,
+      "duplicate_source_ratio_mean": 0.24210526315789474,
+      "duplicate_doc_ratio_mean": 0.0,
+      "exact_chunk_hit_rate": 0.05263157894736842,
+      "evidence_hit_rate": 0.017543859649122806,
+      "latency_p50_ms": 563.0,
+      "latency_p95_ms": 800.0,
+      "query_embedding_latency_p50_ms": 154.0,
+      "query_embedding_latency_p95_ms": 205.59999999999994,
+      "hit_rate_at_k_high_conf": 0.7358490566037735,
+      "mrr_high_conf": 0.6380503144654088,
+      "exact_chunk_hit_rate_high_conf": 0.05660377358490566,
+      "evidence_hit_rate_high_conf": 0.018867924528301886,
+      "topic_false_positive_rate": 0.8350877192982457,
+      "hyde_enabled": false,
+      "hyde_queries_count": 0,
+      "hyde_hit_rate": null,
+      "hyde_mrr": null,
+      "hyde_source_hit_rate": null,
+      "medical_expansion_enabled": false,
+      "medical_expansion_queries_count": 0,
+      "medical_expansion_term_count_mean": 0.0,
+      "reranking_enabled": false,
+      "rerank_latency_p50_ms": 0.0,
+      "rerank_latency_p95_ms": 0.0,
+      "rerank_candidates_mean": 0.0,
+      "rerank_output_mean": 0.0,
+      "rerank_filtered_out_mean": 0.0,
+      "retrieval_options": {
+        "search_mode": "rrf_hybrid",
+        "enable_diversification": true,
+        "mmr_lambda": 0.75,
+        "overfetch_multiplier": 4,
+        "max_chunks_per_source_page": 2,
+        "max_chunks_per_source": 3,
+        "enable_hyde": false,
+        "hyde_max_length": 200,
+        "enable_hype": false,
+        "enable_reranking": false,
+        "reranking_mode": "cross_encoder",
+        "enable_query_understanding": false
+      },
+      "by_query_category": {
+        "adversarial": {
+          "query_count": 7,
+          "hit_rate_at_k": 0.8571428571428571,
+          "mrr": 0.8571428571428571,
+          "source_hit_rate": 0.0,
+          "exact_chunk_hit_rate": 0.0,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.4
+        },
+        "anchor": {
+          "query_count": 45,
+          "hit_rate_at_k": 0.6888888888888889,
+          "mrr": 0.5737037037037037,
+          "source_hit_rate": 0.2222222222222222,
+          "exact_chunk_hit_rate": 0.044444444444444446,
+          "evidence_hit_rate": 0.022222222222222223,
+          "duplicate_source_ratio_mean": 0.2
+        },
+        "paraphrase": {
+          "query_count": 5,
+          "hit_rate_at_k": 1.0,
+          "mrr": 1.0,
+          "source_hit_rate": 0.6,
+          "exact_chunk_hit_rate": 0.2,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.4
+        }
+      },
+      "by_task_type": {
+        "unspecified": {
+          "query_count": 57,
+          "hit_rate_at_k": 0.7368421052631579,
+          "mrr": 0.6459064327485381,
+          "source_hit_rate": 0.22807017543859648,
+          "exact_chunk_hit_rate": 0.05263157894736842,
+          "evidence_hit_rate": 0.017543859649122806,
+          "duplicate_source_ratio_mean": 0.24210526315789474
+        }
+      },
+      "by_expected_source_type": {
+        "unknown": {
+          "query_count": 57,
+          "hit_rate_at_k": 0.7368421052631579,
+          "mrr": 0.6459064327485381,
+          "source_hit_rate": 0.22807017543859648,
+          "exact_chunk_hit_rate": 0.05263157894736842,
+          "evidence_hit_rate": 0.017543859649122806,
+          "duplicate_source_ratio_mean": 0.24210526315789474
+        }
+      },
+      "by_difficulty": {
+        "easy": {
+          "query_count": 13,
+          "hit_rate_at_k": 0.6923076923076923,
+          "mrr": 0.5448717948717948,
+          "source_hit_rate": 0.38461538461538464,
+          "exact_chunk_hit_rate": 0.15384615384615385,
+          "evidence_hit_rate": 0.07692307692307693,
+          "duplicate_source_ratio_mean": 0.24615384615384617
+        },
+        "hard": {
+          "query_count": 17,
+          "hit_rate_at_k": 0.8235294117647058,
+          "mrr": 0.707843137254902,
+          "source_hit_rate": 0.0,
+          "exact_chunk_hit_rate": 0.0,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.27058823529411763
+        },
+        "medium": {
+          "query_count": 27,
+          "hit_rate_at_k": 0.7037037037037037,
+          "mrr": 0.6555555555555556,
+          "source_hit_rate": 0.2962962962962963,
+          "exact_chunk_hit_rate": 0.037037037037037035,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.2222222222222222
+        }
+      },
+      "by_semantic_case": {
+        "paraphrase": {
+          "query_count": 5,
+          "hit_rate_at_k": 1.0,
+          "mrr": 1.0,
+          "source_hit_rate": 0.6,
+          "exact_chunk_hit_rate": 0.2,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.4
+        }
+      },
+      "contribution_analysis": {
+        "semantic_ranked_hits": 3,
+        "bm25_ranked_hits": 3,
+        "fused_ranked_hits": 3
+      },
+      "status": "degraded",
+      "query_count_scored": 57,
+      "metric_evaluations_total": 342,
+      "metric_evaluations_ok": 268,
+      "metric_evaluations_failed": 74,
+      "metric_error_rate": 0.21637426900584794,
+      "factual_accuracy": {
+        "mean": 0.9964912280701754,
+        "count": 57,
+        "error_count": 0,
+        "error_rate": 0.0
+      },
+      "completeness": {
+        "mean": 0.7087719298245614,
+        "count": 57,
+        "error_count": 0,
+        "error_rate": 0.0
+      },
+      "clinical_relevance": {
+        "mean": 0.9771929824561404,
+        "count": 57,
+        "error_count": 0,
+        "error_rate": 0.0
+      },
+      "clarity": {
+        "mean": 0.9192982456140351,
+        "count": 57,
+        "error_count": 0,
+        "error_rate": 0.0
+      },
+      "answer_relevancy": {
+        "mean": 0.8594487734487735,
+        "count": 25,
+        "error_count": 32,
+        "error_rate": 0.5614035087719298
+      },
+      "faithfulness": {
+        "mean": 0.9798534798534798,
+        "count": 15,
+        "error_count": 42,
+        "error_rate": 0.7368421052631579
+      }
+    }
+  },
+  "variants": [
+    {
+      "name": "medical_chunking",
+      "run_dir": "data/evals_medical_semantic_chunking_exp/medical_chunking/20260417T020246.763666Z_comprehensive_ablation_medical_chunking",
+      "metrics": {
+        "query_count": 57,
+        "hit_rate_at_k": 0.7368421052631579,
+        "precision_at_k": 0.5298245614035088,
+        "recall_at_k": 0.7368421052631579,
+        "mrr": 0.6459064327485381,
+        "ndcg_at_k": 0.6596215032368163,
+        "source_hit_rate": 0.22807017543859648,
+        "dedup_hit_rate_at_k": 0.7368421052631579,
+        "dedup_precision_at_k": 0.5298245614035088,
+        "dedup_mrr": 0.6459064327485381,
+        "unique_source_hit_rate_at_k": 0.7368421052631579,
+        "unique_source_precision_at_k": 0.547953216374269,
+        "duplicate_source_ratio_mean": 0.24210526315789474,
+        "duplicate_doc_ratio_mean": 0.0,
+        "exact_chunk_hit_rate": 0.05263157894736842,
+        "evidence_hit_rate": 0.017543859649122806,
+        "latency_p50_ms": 227.0,
+        "latency_p95_ms": 297.0,
+        "query_embedding_latency_p50_ms": 0.0,
+        "query_embedding_latency_p95_ms": 0.0,
+        "hit_rate_at_k_high_conf": 0.7358490566037735,
+        "mrr_high_conf": 0.6380503144654088,
+        "exact_chunk_hit_rate_high_conf": 0.05660377358490566,
+        "evidence_hit_rate_high_conf": 0.018867924528301886,
+        "topic_false_positive_rate": 0.8350877192982457,
+        "hyde_enabled": false,
+        "hyde_queries_count": 0,
+        "hyde_hit_rate": null,
+        "hyde_mrr": null,
+        "hyde_source_hit_rate": null,
+        "medical_expansion_enabled": false,
+        "medical_expansion_queries_count": 0,
+        "medical_expansion_term_count_mean": 0.0,
+        "reranking_enabled": false,
+        "rerank_latency_p50_ms": 0.0,
+        "rerank_latency_p95_ms": 0.0,
+        "rerank_candidates_mean": 0.0,
+        "rerank_output_mean": 0.0,
+        "rerank_filtered_out_mean": 0.0,
+        "retrieval_options": {
+          "search_mode": "rrf_hybrid",
+          "enable_diversification": true,
+          "mmr_lambda": 0.75,
+          "overfetch_multiplier": 4,
+          "max_chunks_per_source_page": 2,
+          "max_chunks_per_source": 3,
+          "enable_hyde": false,
+          "hyde_max_length": 200,
+          "enable_hype": false,
+          "enable_reranking": false,
+          "reranking_mode": "cross_encoder",
+          "enable_query_understanding": false
+        },
+        "by_query_category": {
+          "adversarial": {
+            "query_count": 7,
+            "hit_rate_at_k": 0.8571428571428571,
+            "mrr": 0.8571428571428571,
+            "source_hit_rate": 0.0,
+            "exact_chunk_hit_rate": 0.0,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.4
+          },
+          "anchor": {
+            "query_count": 45,
+            "hit_rate_at_k": 0.6888888888888889,
+            "mrr": 0.5737037037037037,
+            "source_hit_rate": 0.2222222222222222,
+            "exact_chunk_hit_rate": 0.044444444444444446,
+            "evidence_hit_rate": 0.022222222222222223,
+            "duplicate_source_ratio_mean": 0.2
+          },
+          "paraphrase": {
+            "query_count": 5,
+            "hit_rate_at_k": 1.0,
+            "mrr": 1.0,
+            "source_hit_rate": 0.6,
+            "exact_chunk_hit_rate": 0.2,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.4
+          }
+        },
+        "by_task_type": {
+          "unspecified": {
+            "query_count": 57,
+            "hit_rate_at_k": 0.7368421052631579,
+            "mrr": 0.6459064327485381,
+            "source_hit_rate": 0.22807017543859648,
+            "exact_chunk_hit_rate": 0.05263157894736842,
+            "evidence_hit_rate": 0.017543859649122806,
+            "duplicate_source_ratio_mean": 0.24210526315789474
+          }
+        },
+        "by_expected_source_type": {
+          "unknown": {
+            "query_count": 57,
+            "hit_rate_at_k": 0.7368421052631579,
+            "mrr": 0.6459064327485381,
+            "source_hit_rate": 0.22807017543859648,
+            "exact_chunk_hit_rate": 0.05263157894736842,
+            "evidence_hit_rate": 0.017543859649122806,
+            "duplicate_source_ratio_mean": 0.24210526315789474
+          }
+        },
+        "by_difficulty": {
+          "easy": {
+            "query_count": 13,
+            "hit_rate_at_k": 0.6923076923076923,
+            "mrr": 0.5448717948717948,
+            "source_hit_rate": 0.38461538461538464,
+            "exact_chunk_hit_rate": 0.15384615384615385,
+            "evidence_hit_rate": 0.07692307692307693,
+            "duplicate_source_ratio_mean": 0.24615384615384617
+          },
+          "hard": {
+            "query_count": 17,
+            "hit_rate_at_k": 0.8235294117647058,
+            "mrr": 0.707843137254902,
+            "source_hit_rate": 0.0,
+            "exact_chunk_hit_rate": 0.0,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.27058823529411763
+          },
+          "medium": {
+            "query_count": 27,
+            "hit_rate_at_k": 0.7037037037037037,
+            "mrr": 0.6555555555555556,
+            "source_hit_rate": 0.2962962962962963,
+            "exact_chunk_hit_rate": 0.037037037037037035,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.2222222222222222
+          }
+        },
+        "by_semantic_case": {
+          "paraphrase": {
+            "query_count": 5,
+            "hit_rate_at_k": 1.0,
+            "mrr": 1.0,
+            "source_hit_rate": 0.6,
+            "exact_chunk_hit_rate": 0.2,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.4
+          }
+        },
+        "contribution_analysis": {
+          "semantic_ranked_hits": 3,
+          "bm25_ranked_hits": 3,
+          "fused_ranked_hits": 3
+        },
+        "status": "degraded",
+        "query_count_scored": 57,
+        "metric_evaluations_total": 342,
+        "metric_evaluations_ok": 305,
+        "metric_evaluations_failed": 37,
+        "metric_error_rate": 0.10818713450292397,
+        "factual_accuracy": {
+          "mean": 0.9807017543859649,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "completeness": {
+          "mean": 0.6298245614035087,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "clinical_relevance": {
+          "mean": 0.9771929824561404,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "clarity": {
+          "mean": 0.9192982456140351,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "answer_relevancy": {
+          "mean": 0.9428611370092664,
+          "count": 43,
+          "error_count": 14,
+          "error_rate": 0.24561403508771928
+        },
+        "faithfulness": {
+          "mean": 0.9714427729133611,
+          "count": 34,
+          "error_count": 23,
+          "error_rate": 0.40350877192982454
+        }
+      },
+      "meets_target": false
+    },
+    {
+      "name": "query_understanding",
+      "run_dir": "data/evals_medical_semantic_chunking_exp/query_understanding/20260417T021944.449978Z_comprehensive_ablation_query_understanding",
+      "metrics": {
+        "query_count": 57,
+        "hit_rate_at_k": 0.7368421052631579,
+        "precision_at_k": 0.5298245614035088,
+        "recall_at_k": 0.7368421052631579,
+        "mrr": 0.6459064327485381,
+        "ndcg_at_k": 0.6596215032368163,
+        "source_hit_rate": 0.22807017543859648,
+        "dedup_hit_rate_at_k": 0.7368421052631579,
+        "dedup_precision_at_k": 0.5298245614035088,
+        "dedup_mrr": 0.6459064327485381,
+        "unique_source_hit_rate_at_k": 0.7368421052631579,
+        "unique_source_precision_at_k": 0.547953216374269,
+        "duplicate_source_ratio_mean": 0.24210526315789474,
+        "duplicate_doc_ratio_mean": 0.0,
+        "exact_chunk_hit_rate": 0.05263157894736842,
+        "evidence_hit_rate": 0.017543859649122806,
+        "latency_p50_ms": 225.0,
+        "latency_p95_ms": 295.4,
+        "query_embedding_latency_p50_ms": 0.0,
+        "query_embedding_latency_p95_ms": 0.0,
+        "hit_rate_at_k_high_conf": 0.7358490566037735,
+        "mrr_high_conf": 0.6380503144654088,
+        "exact_chunk_hit_rate_high_conf": 0.05660377358490566,
+        "evidence_hit_rate_high_conf": 0.018867924528301886,
+        "topic_false_positive_rate": 0.8350877192982457,
+        "hyde_enabled": false,
+        "hyde_queries_count": 0,
+        "hyde_hit_rate": null,
+        "hyde_mrr": null,
+        "hyde_source_hit_rate": null,
+        "medical_expansion_enabled": false,
+        "medical_expansion_queries_count": 0,
+        "medical_expansion_term_count_mean": 0.0,
+        "reranking_enabled": false,
+        "rerank_latency_p50_ms": 0.0,
+        "rerank_latency_p95_ms": 0.0,
+        "rerank_candidates_mean": 0.0,
+        "rerank_output_mean": 0.0,
+        "rerank_filtered_out_mean": 0.0,
+        "retrieval_options": {
+          "search_mode": "rrf_hybrid",
+          "enable_diversification": true,
+          "mmr_lambda": 0.75,
+          "overfetch_multiplier": 4,
+          "max_chunks_per_source_page": 2,
+          "max_chunks_per_source": 3,
+          "enable_hyde": false,
+          "hyde_max_length": 200,
+          "enable_hype": false,
+          "enable_reranking": false,
+          "reranking_mode": "cross_encoder",
+          "enable_query_understanding": true
+        },
+        "by_query_category": {
+          "adversarial": {
+            "query_count": 7,
+            "hit_rate_at_k": 0.8571428571428571,
+            "mrr": 0.8571428571428571,
+            "source_hit_rate": 0.0,
+            "exact_chunk_hit_rate": 0.0,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.4
+          },
+          "anchor": {
+            "query_count": 45,
+            "hit_rate_at_k": 0.6888888888888889,
+            "mrr": 0.5737037037037037,
+            "source_hit_rate": 0.2222222222222222,
+            "exact_chunk_hit_rate": 0.044444444444444446,
+            "evidence_hit_rate": 0.022222222222222223,
+            "duplicate_source_ratio_mean": 0.2
+          },
+          "paraphrase": {
+            "query_count": 5,
+            "hit_rate_at_k": 1.0,
+            "mrr": 1.0,
+            "source_hit_rate": 0.6,
+            "exact_chunk_hit_rate": 0.2,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.4
+          }
+        },
+        "by_task_type": {
+          "unspecified": {
+            "query_count": 57,
+            "hit_rate_at_k": 0.7368421052631579,
+            "mrr": 0.6459064327485381,
+            "source_hit_rate": 0.22807017543859648,
+            "exact_chunk_hit_rate": 0.05263157894736842,
+            "evidence_hit_rate": 0.017543859649122806,
+            "duplicate_source_ratio_mean": 0.24210526315789474
+          }
+        },
+        "by_expected_source_type": {
+          "unknown": {
+            "query_count": 57,
+            "hit_rate_at_k": 0.7368421052631579,
+            "mrr": 0.6459064327485381,
+            "source_hit_rate": 0.22807017543859648,
+            "exact_chunk_hit_rate": 0.05263157894736842,
+            "evidence_hit_rate": 0.017543859649122806,
+            "duplicate_source_ratio_mean": 0.24210526315789474
+          }
+        },
+        "by_difficulty": {
+          "easy": {
+            "query_count": 13,
+            "hit_rate_at_k": 0.6923076923076923,
+            "mrr": 0.5448717948717948,
+            "source_hit_rate": 0.38461538461538464,
+            "exact_chunk_hit_rate": 0.15384615384615385,
+            "evidence_hit_rate": 0.07692307692307693,
+            "duplicate_source_ratio_mean": 0.24615384615384617
+          },
+          "hard": {
+            "query_count": 17,
+            "hit_rate_at_k": 0.8235294117647058,
+            "mrr": 0.707843137254902,
+            "source_hit_rate": 0.0,
+            "exact_chunk_hit_rate": 0.0,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.27058823529411763
+          },
+          "medium": {
+            "query_count": 27,
+            "hit_rate_at_k": 0.7037037037037037,
+            "mrr": 0.6555555555555556,
+            "source_hit_rate": 0.2962962962962963,
+            "exact_chunk_hit_rate": 0.037037037037037035,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.2222222222222222
+          }
+        },
+        "by_semantic_case": {
+          "paraphrase": {
+            "query_count": 5,
+            "hit_rate_at_k": 1.0,
+            "mrr": 1.0,
+            "source_hit_rate": 0.6,
+            "exact_chunk_hit_rate": 0.2,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.4
+          }
+        },
+        "contribution_analysis": {
+          "semantic_ranked_hits": 3,
+          "bm25_ranked_hits": 3,
+          "fused_ranked_hits": 3
+        },
+        "status": "degraded",
+        "query_count_scored": 57,
+        "metric_evaluations_total": 342,
+        "metric_evaluations_ok": 315,
+        "metric_evaluations_failed": 27,
+        "metric_error_rate": 0.07894736842105263,
+        "factual_accuracy": {
+          "mean": 0.9982456140350877,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "completeness": {
+          "mean": 0.6350877192982457,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "clinical_relevance": {
+          "mean": 0.9842105263157895,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "clarity": {
+          "mean": 0.9157894736842106,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "answer_relevancy": {
+          "mean": 0.9123466485718631,
+          "count": 49,
+          "error_count": 8,
+          "error_rate": 0.14035087719298245
+        },
+        "faithfulness": {
+          "mean": 0.9896616541353382,
+          "count": 38,
+          "error_count": 19,
+          "error_rate": 0.3333333333333333
+        }
+      },
+      "meets_target": false
+    },
+    {
+      "name": "both_features",
+      "run_dir": "data/evals_medical_semantic_chunking_exp/both_features/20260417T023628.424595Z_comprehensive_ablation_both_features",
+      "metrics": {
+        "query_count": 57,
+        "hit_rate_at_k": 0.7368421052631579,
+        "precision_at_k": 0.5298245614035088,
+        "recall_at_k": 0.7368421052631579,
+        "mrr": 0.6459064327485381,
+        "ndcg_at_k": 0.6596215032368163,
+        "source_hit_rate": 0.22807017543859648,
+        "dedup_hit_rate_at_k": 0.7368421052631579,
+        "dedup_precision_at_k": 0.5298245614035088,
+        "dedup_mrr": 0.6459064327485381,
+        "unique_source_hit_rate_at_k": 0.7368421052631579,
+        "unique_source_precision_at_k": 0.547953216374269,
+        "duplicate_source_ratio_mean": 0.24210526315789474,
+        "duplicate_doc_ratio_mean": 0.0,
+        "exact_chunk_hit_rate": 0.05263157894736842,
+        "evidence_hit_rate": 0.017543859649122806,
+        "latency_p50_ms": 223.0,
+        "latency_p95_ms": 293.2,
+        "query_embedding_latency_p50_ms": 0.0,
+        "query_embedding_latency_p95_ms": 0.0,
+        "hit_rate_at_k_high_conf": 0.7358490566037735,
+        "mrr_high_conf": 0.6380503144654088,
+        "exact_chunk_hit_rate_high_conf": 0.05660377358490566,
+        "evidence_hit_rate_high_conf": 0.018867924528301886,
+        "topic_false_positive_rate": 0.8350877192982457,
+        "hyde_enabled": false,
+        "hyde_queries_count": 0,
+        "hyde_hit_rate": null,
+        "hyde_mrr": null,
+        "hyde_source_hit_rate": null,
+        "medical_expansion_enabled": false,
+        "medical_expansion_queries_count": 0,
+        "medical_expansion_term_count_mean": 0.0,
+        "reranking_enabled": false,
+        "rerank_latency_p50_ms": 0.0,
+        "rerank_latency_p95_ms": 0.0,
+        "rerank_candidates_mean": 0.0,
+        "rerank_output_mean": 0.0,
+        "rerank_filtered_out_mean": 0.0,
+        "retrieval_options": {
+          "search_mode": "rrf_hybrid",
+          "enable_diversification": true,
+          "mmr_lambda": 0.75,
+          "overfetch_multiplier": 4,
+          "max_chunks_per_source_page": 2,
+          "max_chunks_per_source": 3,
+          "enable_hyde": false,
+          "hyde_max_length": 200,
+          "enable_hype": false,
+          "enable_reranking": false,
+          "reranking_mode": "cross_encoder",
+          "enable_query_understanding": true
+        },
+        "by_query_category": {
+          "adversarial": {
+            "query_count": 7,
+            "hit_rate_at_k": 0.8571428571428571,
+            "mrr": 0.8571428571428571,
+            "source_hit_rate": 0.0,
+            "exact_chunk_hit_rate": 0.0,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.4
+          },
+          "anchor": {
+            "query_count": 45,
+            "hit_rate_at_k": 0.6888888888888889,
+            "mrr": 0.5737037037037037,
+            "source_hit_rate": 0.2222222222222222,
+            "exact_chunk_hit_rate": 0.044444444444444446,
+            "evidence_hit_rate": 0.022222222222222223,
+            "duplicate_source_ratio_mean": 0.2
+          },
+          "paraphrase": {
+            "query_count": 5,
+            "hit_rate_at_k": 1.0,
+            "mrr": 1.0,
+            "source_hit_rate": 0.6,
+            "exact_chunk_hit_rate": 0.2,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.4
+          }
+        },
+        "by_task_type": {
+          "unspecified": {
+            "query_count": 57,
+            "hit_rate_at_k": 0.7368421052631579,
+            "mrr": 0.6459064327485381,
+            "source_hit_rate": 0.22807017543859648,
+            "exact_chunk_hit_rate": 0.05263157894736842,
+            "evidence_hit_rate": 0.017543859649122806,
+            "duplicate_source_ratio_mean": 0.24210526315789474
+          }
+        },
+        "by_expected_source_type": {
+          "unknown": {
+            "query_count": 57,
+            "hit_rate_at_k": 0.7368421052631579,
+            "mrr": 0.6459064327485381,
+            "source_hit_rate": 0.22807017543859648,
+            "exact_chunk_hit_rate": 0.05263157894736842,
+            "evidence_hit_rate": 0.017543859649122806,
+            "duplicate_source_ratio_mean": 0.24210526315789474
+          }
+        },
+        "by_difficulty": {
+          "easy": {
+            "query_count": 13,
+            "hit_rate_at_k": 0.6923076923076923,
+            "mrr": 0.5448717948717948,
+            "source_hit_rate": 0.38461538461538464,
+            "exact_chunk_hit_rate": 0.15384615384615385,
+            "evidence_hit_rate": 0.07692307692307693,
+            "duplicate_source_ratio_mean": 0.24615384615384617
+          },
+          "hard": {
+            "query_count": 17,
+            "hit_rate_at_k": 0.8235294117647058,
+            "mrr": 0.707843137254902,
+            "source_hit_rate": 0.0,
+            "exact_chunk_hit_rate": 0.0,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.27058823529411763
+          },
+          "medium": {
+            "query_count": 27,
+            "hit_rate_at_k": 0.7037037037037037,
+            "mrr": 0.6555555555555556,
+            "source_hit_rate": 0.2962962962962963,
+            "exact_chunk_hit_rate": 0.037037037037037035,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.2222222222222222
+          }
+        },
+        "by_semantic_case": {
+          "paraphrase": {
+            "query_count": 5,
+            "hit_rate_at_k": 1.0,
+            "mrr": 1.0,
+            "source_hit_rate": 0.6,
+            "exact_chunk_hit_rate": 0.2,
+            "evidence_hit_rate": 0.0,
+            "duplicate_source_ratio_mean": 0.4
+          }
+        },
+        "contribution_analysis": {
+          "semantic_ranked_hits": 3,
+          "bm25_ranked_hits": 3,
+          "fused_ranked_hits": 3
+        },
+        "status": "degraded",
+        "query_count_scored": 57,
+        "metric_evaluations_total": 342,
+        "metric_evaluations_ok": 306,
+        "metric_evaluations_failed": 36,
+        "metric_error_rate": 0.10526315789473684,
+        "factual_accuracy": {
+          "mean": 0.9982456140350877,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "completeness": {
+          "mean": 0.6350877192982457,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "clinical_relevance": {
+          "mean": 0.9701754385964911,
+          "count": 57,
+          "error_count": 0,
+          "error_rate": 0.0
+        },
+        "clarity": {
+          "mean": 0.9464285714285714,
+          "count": 56,
+          "error_count": 1,
+          "error_rate": 0.017543859649122806
+        },
+        "answer_relevancy": {
+          "mean": 0.8736299266713626,
+          "count": 45,
+          "error_count": 12,
+          "error_rate": 0.21052631578947367
+        },
+        "faithfulness": {
+          "mean": 0.9962009803921568,
+          "count": 34,
+          "error_count": 23,
+          "error_rate": 0.40350877192982454
+        }
+      },
+      "meets_target": false
+    }
+  ],
+  "winner": {
+    "name": "baseline",
+    "run_dir": "data/evals_medical_semantic_chunking_exp/baseline/20260417T013359.499237Z_comprehensive_ablation_baseline",
+    "metrics": {
+      "query_count": 57,
+      "hit_rate_at_k": 0.7368421052631579,
+      "precision_at_k": 0.5298245614035088,
+      "recall_at_k": 0.7368421052631579,
+      "mrr": 0.6459064327485381,
+      "ndcg_at_k": 0.6596215032368163,
+      "source_hit_rate": 0.22807017543859648,
+      "dedup_hit_rate_at_k": 0.7368421052631579,
+      "dedup_precision_at_k": 0.5298245614035088,
+      "dedup_mrr": 0.6459064327485381,
+      "unique_source_hit_rate_at_k": 0.7368421052631579,
+      "unique_source_precision_at_k": 0.547953216374269,
+      "duplicate_source_ratio_mean": 0.24210526315789474,
+      "duplicate_doc_ratio_mean": 0.0,
+      "exact_chunk_hit_rate": 0.05263157894736842,
+      "evidence_hit_rate": 0.017543859649122806,
+      "latency_p50_ms": 563.0,
+      "latency_p95_ms": 800.0,
+      "query_embedding_latency_p50_ms": 154.0,
+      "query_embedding_latency_p95_ms": 205.59999999999994,
+      "hit_rate_at_k_high_conf": 0.7358490566037735,
+      "mrr_high_conf": 0.6380503144654088,
+      "exact_chunk_hit_rate_high_conf": 0.05660377358490566,
+      "evidence_hit_rate_high_conf": 0.018867924528301886,
+      "topic_false_positive_rate": 0.8350877192982457,
+      "hyde_enabled": false,
+      "hyde_queries_count": 0,
+      "hyde_hit_rate": null,
+      "hyde_mrr": null,
+      "hyde_source_hit_rate": null,
+      "medical_expansion_enabled": false,
+      "medical_expansion_queries_count": 0,
+      "medical_expansion_term_count_mean": 0.0,
+      "reranking_enabled": false,
+      "rerank_latency_p50_ms": 0.0,
+      "rerank_latency_p95_ms": 0.0,
+      "rerank_candidates_mean": 0.0,
+      "rerank_output_mean": 0.0,
+      "rerank_filtered_out_mean": 0.0,
+      "retrieval_options": {
+        "search_mode": "rrf_hybrid",
+        "enable_diversification": true,
+        "mmr_lambda": 0.75,
+        "overfetch_multiplier": 4,
+        "max_chunks_per_source_page": 2,
+        "max_chunks_per_source": 3,
+        "enable_hyde": false,
+        "hyde_max_length": 200,
+        "enable_hype": false,
+        "enable_reranking": false,
+        "reranking_mode": "cross_encoder",
+        "enable_query_understanding": false
+      },
+      "by_query_category": {
+        "adversarial": {
+          "query_count": 7,
+          "hit_rate_at_k": 0.8571428571428571,
+          "mrr": 0.8571428571428571,
+          "source_hit_rate": 0.0,
+          "exact_chunk_hit_rate": 0.0,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.4
+        },
+        "anchor": {
+          "query_count": 45,
+          "hit_rate_at_k": 0.6888888888888889,
+          "mrr": 0.5737037037037037,
+          "source_hit_rate": 0.2222222222222222,
+          "exact_chunk_hit_rate": 0.044444444444444446,
+          "evidence_hit_rate": 0.022222222222222223,
+          "duplicate_source_ratio_mean": 0.2
+        },
+        "paraphrase": {
+          "query_count": 5,
+          "hit_rate_at_k": 1.0,
+          "mrr": 1.0,
+          "source_hit_rate": 0.6,
+          "exact_chunk_hit_rate": 0.2,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.4
+        }
+      },
+      "by_task_type": {
+        "unspecified": {
+          "query_count": 57,
+          "hit_rate_at_k": 0.7368421052631579,
+          "mrr": 0.6459064327485381,
+          "source_hit_rate": 0.22807017543859648,
+          "exact_chunk_hit_rate": 0.05263157894736842,
+          "evidence_hit_rate": 0.017543859649122806,
+          "duplicate_source_ratio_mean": 0.24210526315789474
+        }
+      },
+      "by_expected_source_type": {
+        "unknown": {
+          "query_count": 57,
+          "hit_rate_at_k": 0.7368421052631579,
+          "mrr": 0.6459064327485381,
+          "source_hit_rate": 0.22807017543859648,
+          "exact_chunk_hit_rate": 0.05263157894736842,
+          "evidence_hit_rate": 0.017543859649122806,
+          "duplicate_source_ratio_mean": 0.24210526315789474
+        }
+      },
+      "by_difficulty": {
+        "easy": {
+          "query_count": 13,
+          "hit_rate_at_k": 0.6923076923076923,
+          "mrr": 0.5448717948717948,
+          "source_hit_rate": 0.38461538461538464,
+          "exact_chunk_hit_rate": 0.15384615384615385,
+          "evidence_hit_rate": 0.07692307692307693,
+          "duplicate_source_ratio_mean": 0.24615384615384617
+        },
+        "hard": {
+          "query_count": 17,
+          "hit_rate_at_k": 0.8235294117647058,
+          "mrr": 0.707843137254902,
+          "source_hit_rate": 0.0,
+          "exact_chunk_hit_rate": 0.0,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.27058823529411763
+        },
+        "medium": {
+          "query_count": 27,
+          "hit_rate_at_k": 0.7037037037037037,
+          "mrr": 0.6555555555555556,
+          "source_hit_rate": 0.2962962962962963,
+          "exact_chunk_hit_rate": 0.037037037037037035,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.2222222222222222
+        }
+      },
+      "by_semantic_case": {
+        "paraphrase": {
+          "query_count": 5,
+          "hit_rate_at_k": 1.0,
+          "mrr": 1.0,
+          "source_hit_rate": 0.6,
+          "exact_chunk_hit_rate": 0.2,
+          "evidence_hit_rate": 0.0,
+          "duplicate_source_ratio_mean": 0.4
+        }
+      },
+      "contribution_analysis": {
+        "semantic_ranked_hits": 3,
+        "bm25_ranked_hits": 3,
+        "fused_ranked_hits": 3
+      },
+      "status": "degraded",
+      "query_count_scored": 57,
+      "metric_evaluations_total": 342,
+      "metric_evaluations_ok": 268,
+      "metric_evaluations_failed": 74,
+      "metric_error_rate": 0.21637426900584794,
+      "factual_accuracy": {
+        "mean": 0.9964912280701754,
+        "count": 57,
+        "error_count": 0,
+        "error_rate": 0.0
+      },
+      "completeness": {
+        "mean": 0.7087719298245614,
+        "count": 57,
+        "error_count": 0,
+        "error_rate": 0.0
+      },
+      "clinical_relevance": {
+        "mean": 0.9771929824561404,
+        "count": 57,
+        "error_count": 0,
+        "error_rate": 0.0
+      },
+      "clarity": {
+        "mean": 0.9192982456140351,
+        "count": 57,
+        "error_count": 0,
+        "error_rate": 0.0
+      },
+      "answer_relevancy": {
+        "mean": 0.8594487734487735,
+        "count": 25,
+        "error_count": 32,
+        "error_rate": 0.5614035087719298
+      },
+      "faithfulness": {
+        "mean": 0.9798534798534798,
+        "count": 15,
+        "error_count": 42,
+        "error_rate": 0.7368421052631579
+      }
+    }
+  },
+  "primary_metric": "ndcg@5",
+  "target_improvement": 0.03,
+  "any_target_met": false
+}

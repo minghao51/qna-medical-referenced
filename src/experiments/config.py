@@ -486,6 +486,7 @@ def build_run_assessment_kwargs(experiment: dict[str, Any]) -> dict[str, Any]:
             "enable_hype": retrieval.get("enable_hype", False),
             "enable_reranking": retrieval.get("enable_reranking", False),
             "reranking_mode": retrieval.get("reranking_mode", "cross_encoder"),
+            "enable_query_understanding": retrieval.get("enable_query_understanding", False),
         },
         "run_retrieval_ablations": bool(evaluation.get("run_retrieval_ablations", False)),
         "run_hype_ablations": bool(evaluation.get("run_hype_ablations", False)),

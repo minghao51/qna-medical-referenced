@@ -1,0 +1,31 @@
+name: medical_semantic_chunking_exp
+description: Test medical semantic chunking and query understanding features
+
+baseline:
+  name: baseline
+  chunking_strategy: chonkie_semantic
+  query_understanding: false
+
+variants:
+  - name: medical_chunking
+    chunking_strategy: medical_semantic
+    query_understanding: false
+
+  - name: query_understanding
+    chunking_strategy: chonkie_semantic
+    query_understanding: true
+
+  - name: both_features
+    chunking_strategy: medical_semantic
+    query_understanding: true
+
+dataset_path: tests/fixtures/golden_queries_all.json
+dataset_split: ""
+
+metrics:
+  primary: ndcg@5
+  target_improvement: 0.03
+  secondary:
+    - mrr
+    - exact_chunk_hit_rate
+    - evidence_hit_rate

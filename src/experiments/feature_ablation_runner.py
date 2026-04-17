@@ -17,7 +17,6 @@ from src.evals.assessment.retrieval_eval import (
 )
 from src.experiments.config import build_run_assessment_kwargs, resolve_experiment_runs
 
-
 REFERENCE_CONFIG = "experiments/v1/comprehensive_ablation.yaml"
 REFERENCE_VARIANT = "pymupdf_semantic_hybrid"
 

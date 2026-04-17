@@ -115,6 +115,7 @@ class RetrievalDiversityConfig:
     reranking_mode: str = "cross_encoder"  # cross_encoder, mmr, or both
     enable_keyword_extraction: bool = False  # Use LLM-extracted keywords for BM25 boosting
     enable_chunk_summaries: bool = False  # Chunks have summaries prepended to content
+    enable_query_understanding: bool = False  # Enable query type classification and routing
 
 
 def get_runtime_retrieval_config() -> dict[str, Any]:
@@ -179,7 +180,54 @@ def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> Retrie
     cfg.enable_chunk_summaries = bool(cfg.enable_chunk_summaries) or bool(
         getattr(settings, "enable_chunk_summaries", False)
     )
+    cfg.enable_query_understanding = bool(cfg.enable_query_understanding) or bool(
+        getattr(settings, "enable_query_understanding", False)
+    )
     return cfg
+
+
+def _apply_query_understanding(
+    query: str,
+    retrieval_options: dict[str, Any] | None,
+    cfg: RetrievalDiversityConfig,
+) -> dict[str, Any]:
+    """Apply query understanding to adjust retrieval options.
+
+    Args:
+        query: The query text
+        retrieval_options: Original retrieval options
+        cfg: Current retrieval config
+
+    Returns:
+        Updated retrieval options with query understanding applied
+    """
+    if not cfg.enable_query_understanding:
+        return retrieval_options or {}
+
+    try:
+        from src.rag.query_understanding.classifier import classify_query
+        from src.rag.query_understanding.router import get_retrieval_params_for_query
+
+        # Classify query
+        classification = classify_query(query)
+
+        # Get retrieval params based on classification
+        query_params = get_retrieval_params_for_query(query, classification)
+
+        # Merge with existing options (query params take precedence)
+        merged = dict(retrieval_options or {})
+        merged.update(query_params)
+
+        logger.debug(
+            f"Query understanding applied: type={classification.query_type.value}, "
+            f"confidence={classification.confidence}"
+        )
+
+        return merged
+
+    except Exception as e:
+        logger.warning(f"Query understanding failed, using default options: {e}")
+        return retrieval_options or {}
 
 
 def _should_apply_diversification(cfg: RetrievalDiversityConfig) -> bool:
@@ -824,6 +872,9 @@ def retrieve_context(
     initialize_runtime_index()
     cfg = _resolve_retrieval_config(retrieval_options)
 
+    # Apply query understanding if enabled
+    retrieval_options = _apply_query_understanding(query, retrieval_options, cfg)
+
     vector_store = get_vector_store()
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
     expanded_queries, _ = _prepare_expanded_queries(
@@ -889,6 +940,9 @@ def retrieve_context_with_trace(
 
     total_start = time.time()
     cfg = _resolve_retrieval_config(retrieval_options)
+
+    # Apply query understanding if enabled
+    retrieval_options = _apply_query_understanding(query, retrieval_options, cfg)
 
     initialize_runtime_index()
     vector_store = get_vector_store()
@@ -1022,6 +1076,9 @@ async def retrieve_context_with_trace_async(
 
     total_start = time.time()
     cfg = _resolve_retrieval_config(retrieval_options)
+
+    # Apply query understanding if enabled
+    retrieval_options = _apply_query_understanding(query, retrieval_options, cfg)
 
     initialize_runtime_index()
     vector_store = get_vector_store()
