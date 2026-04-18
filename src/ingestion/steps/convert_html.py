@@ -25,10 +25,10 @@ from bs4 import BeautifulSoup
 
 from src.config import DATA_RAW_DIR
 from src.config.context import get_runtime_state
-
-logger = logging.getLogger(__name__)
 from src.ingestion.artifacts import SourceArtifact, persist_source_artifact
 from src.ingestion.steps.download_web import get_manifest_alias_filenames
+
+logger = logging.getLogger(__name__)
 
 trafilatura: Any = None
 html_to_markdown: Any = None

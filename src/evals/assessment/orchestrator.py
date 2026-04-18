@@ -9,8 +9,6 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, cast
 
-logger = logging.getLogger(__name__)
-
 from src.config import settings
 from src.config.paths import DATA_RAW_DIR
 from src.evals.artifacts import (
@@ -25,16 +23,18 @@ from src.evals.schemas import AssessmentConfig, AssessmentResult
 from src.experiments.wandb_tracking import log_assessment_to_wandb
 from src.rag.runtime import configure_runtime_for_experiment, initialize_runtime_index
 
-from .answer_eval import evaluate_answer_quality
-from .l6_contract import (
+logger = logging.getLogger(__name__)
+
+from .answer_eval import evaluate_answer_quality  # noqa: E402
+from .l6_contract import (  # noqa: E402
     L6_ANSWER_QUALITY_METRICS,
     L6_ANSWER_QUALITY_ROWS,
     SUMMARY_L6_ENABLED_KEY,
     SUMMARY_L6_METRICS_KEY,
     SUMMARY_L6_STATUS_KEY,
 )
-from .reporting import git_head, render_summary, sha256_file
-from .retrieval_eval import (
+from .reporting import git_head, render_summary, sha256_file  # noqa: E402
+from .retrieval_eval import (  # noqa: E402
     evaluate_retrieval,
     run_diversity_sweep,
     run_hype_ablations,
@@ -44,7 +44,7 @@ from .retrieval_eval import (
     run_reranking_ablations,
     run_retrieval_ablations,
 )
-from .thresholds import DEFAULT_THRESHOLDS, evaluate_thresholds
+from .thresholds import DEFAULT_THRESHOLDS, evaluate_thresholds  # noqa: E402
 
 __all__ = ["evaluate_answer_quality", "run_assessment"]
 
@@ -142,6 +142,7 @@ def run_assessment(
     run_reranking_ablations: bool = False,
     run_diversity_sweep: bool = False,
     diversity_sweep: dict[str, Any] | None = None,
+    skip_ingestion: bool = False,
     experiment_config: dict[str, Any] | None = None,
     audit_l0_download_fn: Callable[[], dict[str, Any]] | None = None,
     assess_l1_html_markdown_quality_fn: Callable[[], dict[str, Any]] | None = None,
@@ -236,6 +237,7 @@ def run_assessment(
         diversity_sweep=dict(diversity_sweep or {}),
         experiment_config=experiment_config,
         force_rerun=force_rerun,
+        skip_ingestion=skip_ingestion,
     )
     config_payload = asdict(config)
     git_revision = git_head_fn()
@@ -269,14 +271,17 @@ def run_assessment(
 
     experiment_runtime = configure_runtime_for_experiment_fn(config.experiment_config)
     index_preparation: dict[str, Any] = {"status": "not_requested"}
-    if not config.experiment_config:
+    if config.skip_ingestion:
+        logger.info("Skipping ingestion — reusing existing index")
+        index_preparation = {"status": "skipped", "reason": "skip_ingestion_requested"}
+    elif not config.experiment_config:
         set_page_classification_enabled(not disable_page_classification)
         set_index_only_classified_pages(not disable_page_classification)
         set_html_extractor_mode("auto")
         set_structured_chunking_enabled(not disable_structured_chunking)
         set_source_chunk_configs(None)
         set_vector_store_runtime_config(None)
-    if config.experiment_config:
+    else:
         embedding_index = config.experiment_config.get("embedding_index", {})
         vector_config = experiment_runtime.get("vector_store", {})
         vector_path = Path("data/vectors") / (

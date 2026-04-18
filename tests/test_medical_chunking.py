@@ -1,5 +1,9 @@
 from src.ingestion.steps.chunking.core import TextChunker
-from src.ingestion.steps.chunking.helpers import group_list_items, split_list_items, split_table_rows
+from src.ingestion.steps.chunking.helpers import (
+    group_list_items,
+    split_list_items,
+    split_table_rows,
+)
 
 
 def test_split_list_items_preserves_continuation_lines():

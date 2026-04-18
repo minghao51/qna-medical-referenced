@@ -1,0 +1,27 @@
+- generic [ref=e3]:
+  - navigation "Primary" [ref=e4]:
+    - generic [ref=e5]:
+      - link "Chat" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - link "Pipeline Eval" [ref=e7] [cursor=pointer]:
+        - /url: /eval
+      - link "Ablation Study" [ref=e8] [cursor=pointer]:
+        - /url: /eval/ablation
+      - link "Pipeline Docs" [ref=e9] [cursor=pointer]:
+        - /url: /docs/pipeline
+    - link "View on GitHub" [ref=e10] [cursor=pointer]:
+      - /url: https://github.com/anomalyco/qna_medical_referenced
+      - img [ref=e11]
+  - generic [ref=e14]:
+    - banner [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Health Screening Q&A" [level=1] [ref=e17]
+        - generic [ref=e18] [cursor=pointer]:
+          - checkbox "Show pipeline details" [checked] [ref=e19]
+          - generic [ref=e20]: Show pipeline details
+      - button "New Chat" [ref=e21] [cursor=pointer]
+    - generic [ref=e22]: Failed to fetch
+    - paragraph [ref=e25]: Ask me anything about your health screening results.
+    - generic [ref=e26]:
+      - textbox "Ask a question..." [ref=e27]
+      - button "Send" [disabled] [ref=e28]

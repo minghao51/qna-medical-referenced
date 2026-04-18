@@ -123,15 +123,11 @@ class CrossEncoderReranker:
         return all_scores
 
 
-_reranker_instance: CrossEncoderReranker | None = None
-
-
 def get_reranker(
     model_name: str | None = None,
     batch_size: int | None = None,
     device: str | None = None,
 ) -> CrossEncoderReranker:
-    global _reranker_instance
     from src.config import settings
     from src.config.context import get_runtime_state
 
@@ -147,13 +143,12 @@ def get_reranker(
         and cached.batch_size == resolved_batch
         and cached.device == resolved_device
     ):
-        _reranker_instance = cached
         return cached
 
-    _reranker_instance = CrossEncoderReranker(
+    instance = CrossEncoderReranker(
         model_name=resolved_model,
         batch_size=resolved_batch,
         device=resolved_device,
     )
-    state.reranker_instance = _reranker_instance
-    return _reranker_instance
+    state.reranker_instance = instance
+    return instance

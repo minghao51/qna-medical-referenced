@@ -1,0 +1,219 @@
+- generic [ref=e2]:
+  - generic [ref=e29]:
+    - navigation "Primary" [ref=e30]:
+      - generic [ref=e31]:
+        - link "Chat" [ref=e32] [cursor=pointer]:
+          - /url: /
+        - link "Pipeline Eval" [ref=e33] [cursor=pointer]:
+          - /url: /eval
+        - link "Ablation Study" [ref=e34] [cursor=pointer]:
+          - /url: /eval/ablation
+        - link "Pipeline Docs" [ref=e35] [cursor=pointer]:
+          - /url: /docs/pipeline
+      - link "View on GitHub" [ref=e36] [cursor=pointer]:
+        - /url: https://github.com/anomalyco/qna_medical_referenced
+        - img [ref=e37]
+    - generic [ref=e40]:
+      - generic [ref=e41]:
+        - generic [ref=e42]:
+          - paragraph [ref=e43]: Evaluation dashboard
+          - heading "Pipeline quality assessment" [level=1] [ref=e44]
+          - paragraph [ref=e45]: Focused on health, regression risk, and historical movement.
+        - generic [ref=e46]:
+          - generic [ref=e47]: "71"
+          - generic [ref=e48]: Health Score
+          - generic [ref=e49]: C
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - generic [ref=e52]: OK
+          - generic [ref=e53]:
+            - strong [ref=e54]: baseline
+            - paragraph [ref=e55]: 13 Apr 2026, 15:04:54 GMT+8
+        - generic [ref=e56]:
+          - generic [ref=e57]: Duration 167.67s
+          - generic [ref=e58]: 4 failed thresholds
+        - generic [ref=e59]:
+          - button "Export CSV" [ref=e60] [cursor=pointer]
+          - button "Export JSON" [ref=e61] [cursor=pointer]
+          - button "Export Charts" [ref=e62] [cursor=pointer]
+          - button "Refresh" [ref=e63] [cursor=pointer]
+      - tablist "Evaluation tabs" [ref=e65]:
+        - tab "Ingestion" [selected] [ref=e66] [cursor=pointer]:
+          - generic [ref=e67]: Ingestion
+        - tab "Retrieval" [ref=e68] [cursor=pointer]:
+          - generic [ref=e69]: Retrieval
+        - tab "Quality" [ref=e70] [cursor=pointer]:
+          - generic [ref=e71]: Quality
+        - tab "Trending" [ref=e72] [cursor=pointer]:
+          - generic [ref=e73]: Trending
+      - tabpanel "Ingestion" [ref=e74]:
+        - generic [ref=e75]:
+          - generic [ref=e76]:
+            - heading "Ingestion strategy" [level=3] [ref=e77]
+            - paragraph [ref=e78]: Selected defaults for this run.
+          - generic [ref=e79]:
+            - heading "Ingestion" [level=4] [ref=e80]
+            - generic [ref=e81]:
+              - generic [ref=e82]:
+                - term [ref=e83]: PDF extractor
+                - definition [ref=e84]: pypdf_pdfplumber
+              - generic [ref=e85]:
+                - term [ref=e86]: HTML extractor
+                - definition [ref=e87]: trafilatura_bs
+              - generic [ref=e88]:
+                - term [ref=e89]: Structured chunking
+                - definition [ref=e90]: Enabled
+              - generic [ref=e91]:
+                - term [ref=e92]: HyPE
+                - definition [ref=e93]: Disabled
+            - generic [ref=e94]:
+              - generic [ref=e95]:
+                - strong [ref=e96]: pdf
+                - generic [ref=e97]: 650 / 80 / 140 tokens
+              - generic [ref=e98]:
+                - strong [ref=e99]: markdown
+                - generic [ref=e100]: 600 / 80 / 80 tokens
+              - generic [ref=e101]:
+                - strong [ref=e102]: html
+                - generic [ref=e103]: 512 / 64 / 80 tokens
+              - generic [ref=e104]:
+                - strong [ref=e105]: default
+                - generic [ref=e106]: 512 / 64 / 100 tokens
+        - generic [ref=e107]:
+          - generic [ref=e109]:
+            - heading "Ingestion health" [level=3] [ref=e110]
+            - paragraph [ref=e111]: Stage health first, with details kept inside the cards below.
+          - generic [ref=e112]:
+            - generic [ref=e113]:
+              - generic [ref=e114]:
+                - generic [ref=e115]: Stages in view
+                - strong [ref=e116]: "5"
+              - generic [ref=e117]:
+                - generic [ref=e118]: Critical findings
+                - strong [ref=e119]: "2"
+              - generic [ref=e120]:
+                - generic [ref=e121]: Chunk stage
+                - strong [ref=e122]: Included
+            - generic [ref=e123]:
+              - textbox "Filter metrics" [ref=e124]
+              - generic [ref=e125]:
+                - button "L1" [ref=e126] [cursor=pointer]
+                - button "L2" [ref=e127] [cursor=pointer]
+                - button "L3" [ref=e128] [cursor=pointer]
+                - button "L4" [ref=e129] [cursor=pointer]
+                - button "L5" [ref=e130] [cursor=pointer]
+        - generic [ref=e131]:
+          - generic [ref=e132]:
+            - generic [ref=e134]:
+              - 'heading "L1: Content Cleaning" [level=3] [ref=e135]'
+              - paragraph [ref=e136]: No critical findings.
+            - generic [ref=e137]:
+              - generic [ref=e138]:
+                - generic [ref=e139]: Pairs Evaluated
+                - generic [ref=e140]: "55"
+              - generic [ref=e141]:
+                - generic [ref=e142]: Content Density
+                - generic [ref=e143]: 2.5%
+              - generic [ref=e144]:
+                - generic [ref=e145]: Boilerplate Ratio
+                - generic [ref=e146]: 0.0%
+              - generic [ref=e147]:
+                - generic [ref=e148]: Heading Preservation
+                - generic [ref=e149]: 95.6%
+              - generic [ref=e150]:
+                - generic [ref=e151]: Table Preservation
+                - generic [ref=e152]: 20.0%
+              - generic [ref=e153]:
+                - generic [ref=e154]: Page Types
+                - generic [ref=e155]:
+                  - generic [ref=e156]: "article: 36"
+                  - generic [ref=e157]: "faq: 17"
+                  - generic [ref=e158]: "navigation-heavy: 2"
+          - generic [ref=e159]:
+            - generic [ref=e161]:
+              - 'heading "L2: PDF Extraction" [level=3] [ref=e162]'
+              - paragraph [ref=e163]: No critical findings.
+            - generic [ref=e164]:
+              - generic [ref=e165]:
+                - generic [ref=e166]: PDF Files
+                - generic [ref=e167]: "10"
+              - generic [ref=e168]:
+                - generic [ref=e169]: Extractor Fallback Rate
+                - generic [ref=e170]: 0.7%
+              - generic [ref=e171]:
+                - generic [ref=e172]: Low Confidence Rate
+                - generic [ref=e173]: 4.7%
+              - generic [ref=e174]:
+                - generic [ref=e175]: OCR Required Rate
+                - generic [ref=e176]: 1.3%
+              - generic [ref=e177]:
+                - generic [ref=e178]: Coverage
+                - generic [ref=e179]: 98.7%
+          - generic [ref=e180]:
+            - generic [ref=e181]:
+              - generic [ref=e182]:
+                - 'heading "L3: Document Chunking" [level=3] [ref=e183]'
+                - paragraph [ref=e184]: 1 issue(s) flagged
+              - generic [ref=e185]: 1 issue(s)
+            - generic [ref=e186]:
+              - generic [ref=e187]:
+                - generic [ref=e188]: Documents
+                - generic [ref=e189]: "10"
+              - generic [ref=e190]:
+                - generic [ref=e191]: Chunks
+                - generic [ref=e192]: "1284"
+              - generic [ref=e193]:
+                - generic [ref=e194]: Section Integrity
+                - generic [ref=e195]: 40.9%
+              - generic [ref=e196]:
+                - generic [ref=e197]: Low Quality Filtered
+                - generic [ref=e198]: 0.0%
+              - generic [ref=e199]:
+                - generic [ref=e200]: Boundary Cut Rate
+                - generic [ref=e201]: 65.6%
+              - generic [ref=e203]: Quality Distribution
+              - generic [ref=e204]:
+                - generic [ref=e205]:
+                  - 'generic "High quality: 914 (71.2%)" [ref=e206]'
+                  - 'generic "Medium quality: 370 (28.8%)" [ref=e207]'
+                  - 'generic "Low quality: 0 (0.0%)"'
+                - generic [ref=e208]:
+                  - generic [ref=e209]: "High: 914"
+                  - generic [ref=e210]: "Med: 370"
+                  - generic [ref=e211]: "Low: 0"
+            - paragraph [ref=e213]: Duplicate chunk rate exceeds 5%
+          - generic [ref=e214]:
+            - generic [ref=e216]:
+              - 'heading "L4: Structured Data" [level=3] [ref=e217]'
+              - paragraph [ref=e218]: No critical findings.
+            - generic [ref=e219]:
+              - generic [ref=e220]:
+                - generic [ref=e221]: CSV Exists
+                - generic [ref=e222]: "Yes"
+              - generic [ref=e223]:
+                - generic [ref=e224]: Row Count
+                - generic [ref=e225]: "20"
+              - generic [ref=e226]:
+                - generic [ref=e227]: Completeness Rate
+                - generic [ref=e228]: 100.0%
+          - generic [ref=e229]:
+            - generic [ref=e230]:
+              - generic [ref=e231]:
+                - 'heading "L5: Vector Indexing" [level=3] [ref=e232]'
+                - paragraph [ref=e233]: 1 issue(s) flagged
+              - generic [ref=e234]: 1 issue(s)
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - generic [ref=e237]: Vector Count
+                - generic [ref=e238]: "0"
+              - generic [ref=e239]:
+                - generic [ref=e240]: Embedding Dim
+                - generic [ref=e241]: "0"
+              - generic [ref=e242]:
+                - generic [ref=e243]: Dims Consistent
+                - generic [ref=e244]: "No"
+              - generic [ref=e245]:
+                - generic [ref=e246]: Short Content Rate
+                - generic [ref=e247]: 0.0%
+            - paragraph [ref=e249]: Vector index file missing
+  - generic [ref=e28]: Pipeline Eval

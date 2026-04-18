@@ -43,22 +43,59 @@ class Settings(BaseSettings):
     """Comma-separated allowed CORS origins."""
 
     # LLM Configuration
+    llm_provider: str = "qwen"
+    """LLM provider to use for text generation.
+
+    Default: "qwen" (direct Dashscope/OpenAI-compatible endpoint)
+    Alternatives: "litellm" (LiteLLM with OpenRouter or any supported provider)
+
+    Environment variable: LLM_PROVIDER
+    """
+
     dashscope_api_key: str = ""
     """Alibaba Dashscope API key for Qwen models.
 
-    Required for all LLM operations. Obtain from:
+    Required when llm_provider="qwen". Obtain from:
     https://dashscope-us.aliyuncs.com/
 
     Environment variable: DASHSCOPE_API_KEY
     """
 
     model_name: str = "qwen3.5-flash"
-    """Qwen model to use for text generation.
+    """Qwen model to use for text generation (when llm_provider="qwen").
 
     Default: "qwen3.5-flash" (fast, cost-effective)
     Alternatives: "qwen3.5-plus", "qwen-plus", "qwen-max"
 
     Environment variable: MODEL_NAME
+    """
+
+    # LiteLLM / OpenRouter Configuration
+    openrouter_api_key: str = ""
+    """OpenRouter API key for LiteLLM provider.
+
+    Required when llm_provider="litellm". Obtain from:
+    https://openrouter.ai/settings/keys
+
+    Environment variable: OPENROUTER_API_KEY
+    """
+
+    openrouter_model: str = "google/gemma-4-31b-it"
+    """Default model for LiteLLM/OpenRouter text generation.
+
+    Default: "google/gemma-4-31b-it"
+    See available models at: https://openrouter.ai/models
+
+    Environment variable: OPENROUTER_MODEL
+    """
+
+    litellm_model: str = ""
+    """Generic LiteLLM model string (takes precedence over openrouter_model if set).
+
+    Format follows LiteLLM conventions, e.g. "openrouter/google/gemma-4-31b-it"
+    When empty, falls back to openrouter_model with openrouter/ prefix.
+
+    Environment variable: LITELLM_MODEL
     """
 
     embedding_model: str = "text-embedding-v4"
@@ -91,6 +128,12 @@ class Settings(BaseSettings):
 
     judge_model_heavy: str = "qwen3.5-flash"
     """Heavyweight model for complex Chain-of-Thought reasoning."""
+
+    judge_model_light_litellm: str = "google/gemma-4-31b-it"
+    """LiteLLM model for lightweight judge tasks (when llm_provider="litellm")."""
+
+    judge_model_heavy_litellm: str = "google/gemma-4-31b-it"
+    """LiteLLM model for heavyweight judge tasks (when llm_provider="litellm")."""
 
     judge_temperature: float = 0.0
     """Temperature for judge models (0 = deterministic, repeatable)."""

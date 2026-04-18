@@ -7,6 +7,7 @@ Uses existing manifest from download_web.py for tracking.
 
 import asyncio
 import hashlib
+import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,8 +19,6 @@ from src.ingestion.steps.download_web import _load_manifest as _load_web_manifes
 from src.ingestion.steps.download_web import _manifest_indexes as _manifest_indexes_web
 from src.ingestion.steps.download_web import _save_manifest as _save_web_manifest
 from src.ingestion.steps.download_web import normalize_url as normalize_url_web
-
-import logging
 
 logger = logging.getLogger(__name__)
 

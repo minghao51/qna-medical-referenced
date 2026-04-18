@@ -9,7 +9,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.experiments.feature_addition_runner import ExperimentSummary, _resolve_metric_key
+from src.experiments.feature_addition_runner import ExperimentSummary
+from src.experiments.metric_utils import resolve_metric_key
 
 
 def _format_metric_value(value: float | None) -> str:
@@ -111,7 +112,7 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
             key_metrics.append(metric)
 
     for metric in key_metrics:
-        baseline_value = _resolve_metric_key(baseline_metrics, metric)
+        baseline_value = resolve_metric_key(baseline_metrics, metric)
         baseline_formatted = _format_metric_value(baseline_value)
         lines.append(f"| {metric} | {baseline_formatted} |")
 
@@ -135,8 +136,8 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
         ])
 
         for metric in key_metrics:
-            baseline_value = _resolve_metric_key(baseline_metrics, metric)
-            variant_value = _resolve_metric_key(variant_result.metrics, metric)
+            baseline_value = resolve_metric_key(baseline_metrics, metric)
+            variant_value = resolve_metric_key(variant_result.metrics, metric)
 
             baseline_formatted = _format_metric_value(baseline_value)
             variant_formatted = _format_metric_value(variant_value)
@@ -167,8 +168,8 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
 
     if winner_name != "baseline":
         winner_metrics = winner_result.metrics
-        winner_value = _resolve_metric_key(winner_metrics, primary_metric)
-        baseline_value = _resolve_metric_key(baseline_metrics, primary_metric)
+        winner_value = resolve_metric_key(winner_metrics, primary_metric)
+        baseline_value = resolve_metric_key(baseline_metrics, primary_metric)
 
         if winner_value is not None and baseline_value is not None and baseline_value != 0:
             improvement = ((winner_value - baseline_value) / baseline_value) * 100

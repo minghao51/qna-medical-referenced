@@ -1,9 +1,11 @@
-"""Qwen model wrapper for DeepEval integration.
+"""DeepEval-compatible model wrappers for Qwen and LiteLLM providers.
 
-This module provides a DeepEval-compatible wrapper for Qwen models,
-enabling use of Alibaba's Qwen LLMs as judges in DeepEval's LLM-as-a-judge
-framework. Supports model tiering for cost optimization.
+Provides judge models for DeepEval's LLM-as-a-judge framework with
+provider selection based on the LLM_PROVIDER setting.
 """
+
+import os
+from typing import Any
 
 from deepeval.models import DeepEvalBaseLLM
 from openai import AsyncOpenAI, OpenAI
@@ -25,11 +27,6 @@ class QwenModel(DeepEvalBaseLLM):
     model: str
 
     def __init__(self, model: str):
-        """Initialize the Qwen model wrapper.
-
-        Args:
-            model: Model identifier string
-        """
         self.model = model
         self.model_name = model
         self.client = OpenAI(
@@ -46,22 +43,9 @@ class QwenModel(DeepEvalBaseLLM):
         )
 
     def load_model(self) -> "QwenModel":
-        """Load and return the model.
-
-        Returns:
-            Self as QwenModel instance
-        """
         return self
 
     def generate(self, prompt: str) -> str:
-        """Generate text synchronously.
-
-        Args:
-            prompt: Input prompt for the model
-
-        Returns:
-            Generated text response
-        """
         response = self.client.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
@@ -73,14 +57,6 @@ class QwenModel(DeepEvalBaseLLM):
         return ""
 
     async def a_generate(self, prompt: str) -> str:
-        """Generate text asynchronously.
-
-        Args:
-            prompt: Input prompt for the model
-
-        Returns:
-            Generated text response
-        """
         response = await self.async_client.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
@@ -92,11 +68,6 @@ class QwenModel(DeepEvalBaseLLM):
         return ""
 
     def get_model_name(self) -> str:
-        """Get the model name.
-
-        Returns:
-            Model identifier string
-        """
         return self.model_name
 
     def supports_json_mode(self) -> bool:
@@ -109,19 +80,76 @@ class QwenModel(DeepEvalBaseLLM):
         return True
 
 
-def get_light_model() -> QwenModel:
-    """Factory function for lightweight judge model.
+class LiteLLMJudgeModel(DeepEvalBaseLLM):
+    """LiteLLM/OpenRouter model wrapper for DeepEval.
 
-    Returns:
-        QwenModel instance configured with lightweight model (qwen3.5-35b-a3b)
+    Implements the DeepEvalBaseLLM interface using litellm.completion()
+    and litellm.acompletion() for provider-agnostic evaluation.
     """
+
+    model: str
+
+    def __init__(self, model: str):
+        self.model = model
+        self.model_name = model
+        if settings.openrouter_api_key and not os.environ.get("OPENROUTER_API_KEY"):
+            os.environ["OPENROUTER_API_KEY"] = settings.openrouter_api_key
+
+    def load_model(self) -> "LiteLLMJudgeModel":
+        return self
+
+    def generate(self, prompt: str) -> str:
+        import litellm
+
+        response: Any = litellm.completion(
+            model=self.model_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=settings.judge_temperature,
+            max_tokens=settings.judge_max_tokens,
+        )
+        if response.choices and response.choices[0].message.content:
+            return str(response.choices[0].message.content)
+        return ""
+
+    async def a_generate(self, prompt: str) -> str:
+        import litellm
+
+        response: Any = await litellm.acompletion(
+            model=self.model_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=settings.judge_temperature,
+            max_tokens=settings.judge_max_tokens,
+        )
+        if response.choices and response.choices[0].message.content:
+            return str(response.choices[0].message.content)
+        return ""
+
+    def get_model_name(self) -> str:
+        return self.model_name
+
+    def supports_json_mode(self) -> bool:
+        return False
+
+    def supports_structured_outputs(self) -> bool:
+        return False
+
+    def supports_temperature(self) -> bool:
+        return True
+
+
+def get_light_model() -> QwenModel | LiteLLMJudgeModel:
+    if settings.llm_provider == "litellm":
+        model_name = settings.judge_model_light_litellm
+        if not model_name.startswith("openrouter/"):
+            model_name = f"openrouter/{model_name}"
+        return LiteLLMJudgeModel(model_name)
     return QwenModel(settings.judge_model_light)
 
 
-def get_heavy_model() -> QwenModel:
-    """Factory function for heavyweight judge model.
-
-    Returns:
-        QwenModel instance configured with heavyweight model (qwen3.5-flash)
-    """
+def get_heavy_model() -> QwenModel | LiteLLMJudgeModel:
+    if settings.llm_provider == "litellm":
+        model_name = settings.judge_model_heavy_litellm
+        if not model_name.startswith("openrouter/"):
+            model_name = f"openrouter/{model_name}"
+        return LiteLLMJudgeModel(model_name)
     return QwenModel(settings.judge_model_heavy)

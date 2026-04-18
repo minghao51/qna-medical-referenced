@@ -81,7 +81,7 @@ def main() -> int:
         output_dir = Path(args.output_dir)
         markdown_path, json_path = write_comparison_reports(summary, output_dir)
 
-        logger.info(f"Experiment completed successfully!")
+        logger.info("Experiment completed successfully!")
         logger.info(f"Markdown report: {markdown_path}")
         logger.info(f"JSON report: {json_path}")
 

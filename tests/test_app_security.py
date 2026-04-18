@@ -32,7 +32,7 @@ def _build_client(
     rate_limit_bypass_roles: str = "",
 ):
     monkeypatch.setattr("src.app.factory.validate_security_configuration", lambda: None)
-    monkeypatch.setattr("src.app.factory.initialize_runtime_index", lambda: None)
+    monkeypatch.setattr("src.app.factory.initialize_runtime_index_async", lambda: None)
     monkeypatch.setattr("src.app.middleware.rate_limit.RATE_LIMIT_DB", tmp_path / "rate_limits.db")
     monkeypatch.setattr(settings, "api_keys", api_keys)
     monkeypatch.setattr(settings, "api_keys_json", None)

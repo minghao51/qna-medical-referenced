@@ -1,6 +1,5 @@
 """Unit tests for eval metrics utilities."""
 
-import math
 
 import pytest
 

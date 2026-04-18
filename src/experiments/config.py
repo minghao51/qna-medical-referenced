@@ -495,6 +495,7 @@ def build_run_assessment_kwargs(experiment: dict[str, Any]) -> dict[str, Any]:
         "run_diversity_sweep": bool(evaluation.get("run_diversity_sweep", False)),
         "diversity_sweep": dict(evaluation.get("diversity_sweep", {})),
         "experiment_config": experiment,
+        "skip_ingestion": experiment.get("skip_ingestion", False),
     }
 
 

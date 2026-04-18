@@ -61,19 +61,27 @@ def test_retrieve_context_applies_cross_encoder_without_mmr(monkeypatch):
     )
     monkeypatch.setattr(
         runtime,
-        "_retrieve_candidates",
-        lambda vector_store, query, fetch_k, search_mode, pre_expanded_queries: [
+        "_retrieve_candidates_with_trace",
+        lambda vector_store, query, fetch_k, search_mode, pre_expanded_queries: (
+            [
+                {
+                    "id": "a",
+                    "content": "doc",
+                    "source": "s1.pdf",
+                    "page": 1,
+                    "semantic_score": 1.0,
+                    "keyword_score": 0.0,
+                    "combined_score": 1.0,
+                    "rank": 1,
+                }
+            ],
             {
-                "id": "a",
-                "content": "doc",
-                "source": "s1.pdf",
-                "page": 1,
-                "semantic_score": 1.0,
-                "keyword_score": 0.0,
-                "combined_score": 1.0,
-                "rank": 1,
-            }
-        ],
+                "timing_ms": 0,
+                "expanded_queries": pre_expanded_queries,
+                "result_count": 1,
+                "score_weights": {},
+            },
+        ),
     )
 
     seen: dict[str, object] = {}

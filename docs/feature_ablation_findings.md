@@ -15,6 +15,7 @@ This note captures the most recent feature-focused ablation results for keyword 
 1. **Keyword enrichment did not improve retrieval quality** on the expanded set.
 2. **HyPE/HyDE did not improve retrieval quality** either, though `hype_10pct` was slightly faster than the disabled baseline.
 3. **Cross-encoder reranking produced the clearest quality gain** on the larger dataset, at a noticeable latency cost.
+4. **Query understanding improved nDCG@5 by +6.3%** (0.6596 → 0.7009), exceeding the 3% target. Medical semantic chunking alone had no measurable effect.
 
 The smaller regression-split run (7 queries) made baseline look dominant overall. The larger 54-query run changes that conclusion: baseline still wins the keyword family, but reranking becomes meaningfully helpful.
 
@@ -75,11 +76,36 @@ Reranking is where the larger dataset showed meaningful separation:
 
 **Interpretation**: reranking is the only tested technique that delivered a clear quality improvement on the larger retrieval benchmark, but it roughly doubles p50 latency.
 
+### Medical Semantic Chunking / Query Understanding
+
+**Date**: 2026-04-18  
+**Dataset**: `tests/fixtures/golden_queries_all.json`  
+**Query count**: 57  
+**Report**: `experiments/outputs/medical_semantic_chunking_exp_report.json`
+
+| Variant | NDCG@5 | MRR | Exact Chunk Hit | Evidence Hit | Latency p50 |
+|---|---:|---:|---:|---:|---:|
+| `baseline` | 0.6596 | 0.6459 | 0.0526 | 0.0175 | 494.0 ms |
+| `medical_chunking` | 0.6596 | 0.6459 | 0.0526 | 0.0175 | 231.0 ms |
+| `query_understanding` | 0.7009 | 0.6766 | 0.0526 | 0.0526 | 226.0 ms |
+| `both_features` | 0.7009 | 0.6766 | 0.0526 | 0.0526 | 225.0 ms |
+
+`query_understanding` versus `baseline`:
+
+- **NDCG@5**: +0.0413 (+6.3%)
+- **MRR**: +0.0307
+- **Evidence hit rate**: +0.0351 (3× improvement)
+- **Hit rate@K**: +0.0526 (0.7368 → 0.7895)
+- **Latency p50**: −268.0 ms (reused existing index)
+
+**Interpretation**: medical semantic chunking produced identical retrieval metrics to the baseline `chonkie_semantic` strategy — no measurable quality difference. Query understanding (rule-based query classification → retrieval parameter routing) delivered the only improvement, exceeding the 3% target. The `both_features` variant matched `query_understanding` exactly, confirming medical chunking adds nothing on top. Notably, query understanding variants were faster because they reused the existing vector store index rather than re-embedding.
+
 ## Recommendation
 
 - Keep `baseline` as the default for keyword/summaries.
 - Treat HyPE/HyDE as optional and not justified by current retrieval evidence.
 - Consider `cross_encoder_only` reranking when retrieval quality matters more than latency.
+- **Enable query understanding by default** — it improves nDCG@5 by +6.3% at no latency cost.
 
 ## Caveat
 

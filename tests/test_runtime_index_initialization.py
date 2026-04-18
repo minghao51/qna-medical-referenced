@@ -1,5 +1,5 @@
-from src.rag import runtime
 from src.config.context import get_runtime_state
+from src.rag import runtime
 
 
 class _FakeVectorStore:

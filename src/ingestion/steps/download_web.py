@@ -16,12 +16,12 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse, urlunparse
 
-logger = logging.getLogger(__name__)
-
 import httpx
 from bs4 import BeautifulSoup
 
 from src.config import DATA_RAW_DIR
+
+logger = logging.getLogger(__name__)
 
 DATA_DIR = DATA_RAW_DIR
 MANIFEST_PATH = DATA_DIR / "download_manifest.json"

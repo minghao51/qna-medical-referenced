@@ -1,8 +1,7 @@
 <script lang="ts">
 	import AppShell from '$lib/components/AppShell.svelte';
-	import DagFlowDiagram from '$lib/components/DagFlowDiagram.svelte';
+	import MermaidDiagram from '$lib/components/MermaidDiagram.svelte';
 	import TabNav from '$lib/components/TabNav.svelte';
-	import type { DagConnection, DagStage } from '$lib/components/DagFlowDiagram.svelte';
 
 	type TabId = 'overview' | 'ingestion' | 'query' | 'evaluation';
 
@@ -15,63 +14,105 @@
 
 	let activeTab: TabId = $state('overview');
 
-	const overviewStages: DagStage[] = [
-		{ id: 'ingest', title: 'Ingest', description: 'Download, parse, chunk, index' },
-		{ id: 'retrieve', title: 'Retrieve', description: 'Expand query, hybrid search, rerank' },
-		{ id: 'answer', title: 'Answer', description: 'Build context and generate response' },
-		{ id: 'evaluate', title: 'Evaluate', description: 'Track retrieval and answer quality' }
-	];
+	const overviewDiagram = `
+flowchart TB
+    subgraph Ingest[" "]
+        direction TB
+        I1["Ingest<br/><small>Download, parse, chunk, index</small>"]
+    end
 
-	const overviewConnections: DagConnection[] = [
-		{ from: 'ingest', to: 'retrieve' },
-		{ from: 'retrieve', to: 'answer' },
-		{ from: 'answer', to: 'evaluate' }
-	];
+    subgraph Retrieve[" "]
+        direction TB
+        R1["Retrieve<br/><small>Expand query, hybrid search, rerank</small>"]
+    end
 
-	const ingestionStages: DagStage[] = [
-		{ id: 'l0', title: 'Download', description: 'HTML and PDF sources' },
-		{ id: 'l1', title: 'Parse', description: 'HTML to markdown, PDF extraction' },
-		{ id: 'l3', title: 'Chunk', description: 'Structured chunking with quality scoring' },
-		{ id: 'l5', title: 'Index', description: 'Embeddings plus optional HyPE prompts' },
-		{ id: 'l6', title: 'Ready', description: 'Runtime retrieval index' }
-	];
+    subgraph Answer[" "]
+        direction TB
+        A1["Answer<br/><small>Build context and generate response</small>"]
+    end
 
-	const ingestionConnections: DagConnection[] = [
-		{ from: 'l0', to: 'l1' },
-		{ from: 'l1', to: 'l3' },
-		{ from: 'l3', to: 'l5' },
-		{ from: 'l5', to: 'l6' }
-	];
+    subgraph Evaluate[" "]
+        direction TB
+        E1["Evaluate<br/><small>Track retrieval and answer quality</small>"]
+    end
 
-	const queryStages: DagStage[] = [
-		{ id: 'query', title: 'User Query', description: 'Question plus session context' },
-		{ id: 'intake', title: 'Intake Check', description: 'Extract and fill health parameters' },
-		{ id: 'expand', title: 'Expansion', description: 'Optional HyDE and query enrichment' },
-		{ id: 'retrieve', title: 'Retrieval', description: 'Hybrid search plus MMR reranking' },
-		{ id: 'generate', title: 'Generation', description: 'Source-grounded answer' }
-	];
+    Ingest --> Retrieve
+    Retrieve --> Answer
+    Answer --> Evaluate
+    style Ingest fill:#e1f5fe
+    style Retrieve fill:#f3e5f5
+    style Answer fill:#e8f5e8
+    style Evaluate fill:#fff3e0
+`;
 
-	const queryConnections: DagConnection[] = [
-		{ from: 'query', to: 'intake' },
-		{ from: 'intake', to: 'expand' },
-		{ from: 'expand', to: 'retrieve' },
-		{ from: 'retrieve', to: 'generate' }
-	];
+	const ingestionDiagram = `
+flowchart TB
+    L0["L0: Download<br/><small>HTML and PDF sources</small>"]
+    L1["L1: Parse<br/><small>HTML to markdown, PDF extraction</small>"]
+    L2["L2: Classify<br/><small>Block classification<br/>(heading/paragraph/list/table)</small>"]
+    L3["L3: Chunk<br/><small>Structured chunking with quality scoring</small>"]
+    L4["L4: Reference<br/><small>Lab reference ranges enrichment</small>"]
+    L5["L5: Index<br/><small>Embeddings, BM25, optional HyPE prompts</small>"]
+    L6["L6: Ready<br/><small>Runtime retrieval index</small>"]
 
-	const evaluationStages: DagStage[] = [
-		{ id: 'dataset', title: 'Dataset', description: 'Golden queries and synthetic prompts' },
-		{ id: 'retrieval', title: 'Retrieval Eval', description: 'Hit rate, MRR, nDCG, latency' },
-		{ id: 'quality', title: 'Answer Eval', description: 'DeepEval answer judgment' },
-		{ id: 'thresholds', title: 'Thresholds', description: 'Check pass/fail gates' },
-		{ id: 'reporting', title: 'Reporting', description: 'Summary and tracking outputs' }
-	];
+    L0 --> L1
+    L1 --> L2
+    L2 --> L3
+    L3 --> L4
+    L4 --> L5
+    L5 --> L6
 
-	const evaluationConnections: DagConnection[] = [
-		{ from: 'dataset', to: 'retrieval' },
-		{ from: 'retrieval', to: 'quality' },
-		{ from: 'quality', to: 'thresholds' },
-		{ from: 'thresholds', to: 'reporting' }
-	];
+    style L0 fill:#e1f5fe
+    style L1 fill:#e1f5fe
+    style L2 fill:#bbdefb
+    style L3 fill:#c8e6c9
+    style L4 fill:#c8e6c9
+    style L5 fill:#f3e5f5
+    style L6 fill:#fff9c4
+`;
+
+	const queryDiagram = `
+flowchart TB
+    Q["Query<br/><small>User question + session context</small>"]
+    Intake["Intake Check<br/><small>Extract and fill health parameters</small>"]
+    Expand["Expansion<br/><small>Optional HyDE and query enrichment</small>"]
+    Search["Search<br/><small>Hybrid RRF + MMR diversification</small>"]
+    Rerank["Rerank<br/><small>Cross-encoder reranking (+NDCG)</small>"]
+    Gen["Generation<br/><small>Source-grounded answer</small>"]
+
+    Q --> Intake
+    Intake --> Expand
+    Expand --> Search
+    Search --> Rerank
+    Rerank --> Gen
+
+    style Q fill:#e3f2fd
+    style Intake fill:#e8f5e8
+    style Expand fill:#f3e5f5
+    style Search fill:#e1f5fe
+    style Rerank fill:#fff9c4
+    style Gen fill:#fce4ec
+`;
+
+	const evaluationDiagram = `
+flowchart TB
+    DS["Dataset<br/><small>Golden queries and synthetic prompts</small>"]
+    RET["Retrieval Eval<br/><small>Hit rate, MRR, nDCG, latency</small>"]
+    QUAL["Answer Eval<br/><small>DeepEval answer judgment</small>"]
+    THR["Thresholds<br/><small>Check pass/fail gates</small>"]
+    REP["Reporting<br/><small>Summary and tracking outputs</small>"]
+
+    DS --> RET
+    RET --> QUAL
+    QUAL --> THR
+    THR --> REP
+
+    style DS fill:#e1f5fe
+    style RET fill:#c8e6c9
+    style QUAL fill:#f3e5f5
+    style THR fill:#fff9c4
+    style REP fill:#fff3e0
+`;
 
 	const keyDefaults = [
 		['Chunk size', '512 tokens'],
@@ -82,21 +123,24 @@
 	];
 
 	const ingestionHighlights = [
-		'HTML and PDF ingestion converge into one structured chunking stage.',
+		'HTML and PDF ingestion converge at the Classify stage for structured block detection.',
 		'Chunk quality scoring removes obviously noisy or low-confidence content.',
-		'HyPE moves some query-like reasoning to ingest time by storing hypothetical questions per chunk.'
+		'HyPE moves query-like reasoning to ingest time by storing hypothetical questions per chunk.',
+		'Reference data (lab ranges) enriches chunks before indexing.'
 	];
 
 	const queryHighlights = [
 		'Medical intake extracts missing health parameters before answer generation.',
 		'HyDE operates at query time; HyPE operates at ingest time.',
-		'MMR limits redundancy so the answer sees a broader evidence set.'
+		'MMR limits redundancy so the answer sees a broader evidence set.',
+		'Cross-encoder reranking is the only feature that improved NDCG (+0.039) on the 54-query benchmark, at +248ms latency cost.'
 	];
 
 	const evaluationHighlights = [
 		'Retrieval metrics focus on whether the right evidence is surfaced.',
 		'DeepEval metrics focus on whether the final answer is faithful and useful.',
-		'Threshold checks turn metrics into simple pass/fail signals for regression tracking.'
+		'Threshold checks turn metrics into simple pass/fail signals for regression tracking.',
+		'Feature ablation: cross-encoder reranking is the only tested technique to show NDCG gain (+0.039) on 54-query benchmark.'
 	];
 </script>
 
@@ -123,7 +167,7 @@
 					<p>The app is a document pipeline first, a retrieval system second, and a medical answer UI on top.</p>
 				</div>
 			</div>
-			<DagFlowDiagram title="" stages={overviewStages} connections={overviewConnections} layout="vertical" />
+			<MermaidDiagram code={overviewDiagram} />
 			<div class="facts-grid">
 				{#each keyDefaults as [label, value]}
 					<div class="fact-card">
@@ -141,7 +185,7 @@
 					<p>Turn mixed-source medical content into an index that is consistent enough for retrieval and evaluation.</p>
 				</div>
 			</div>
-			<DagFlowDiagram title="" stages={ingestionStages} connections={ingestionConnections} />
+			<MermaidDiagram code={ingestionDiagram} />
 			<ul class="compact-list">
 				{#each ingestionHighlights as item}
 					<li>{item}</li>
@@ -151,6 +195,10 @@
 				<article>
 					<h3>PDF extraction</h3>
 					<p>Primary extraction is lightweight, with fallback extraction for complex layouts or low-confidence pages.</p>
+				</article>
+				<article>
+					<h3>Block classification</h3>
+					<p>Classifies content into heading, paragraph, list, and table blocks for structured chunking.</p>
 				</article>
 				<article>
 					<h3>Chunking</h3>
@@ -170,7 +218,7 @@
 					<p>The answer path prioritizes context gathering before generation.</p>
 				</div>
 			</div>
-			<DagFlowDiagram title="" stages={queryStages} connections={queryConnections} />
+			<MermaidDiagram code={queryDiagram} />
 			<ul class="compact-list">
 				{#each queryHighlights as item}
 					<li>{item}</li>
@@ -186,8 +234,12 @@
 					<p>The intake layer tracks missing or conflicting patient context before the assistant answers.</p>
 				</article>
 				<article>
-					<h3>Diversification</h3>
+					<h3>MMR Diversification</h3>
 					<p>MMR overfetches candidates, then reduces redundancy to avoid narrow source coverage.</p>
+				</article>
+				<article>
+					<h3>Cross-encoder Reranking</h3>
+					<p>Optional post-search step. Only feature with measurable NDCG gain (+0.039). Adds ~248ms latency. Enabled via <code>enable_reranking</code>.</p>
 				</article>
 			</div>
 		</div>
@@ -199,7 +251,7 @@
 					<p>Evaluation is the backstop that turns pipeline quality into visible regressions or passes.</p>
 				</div>
 			</div>
-			<DagFlowDiagram title="" stages={evaluationStages} connections={evaluationConnections} />
+			<MermaidDiagram code={evaluationDiagram} />
 			<ul class="compact-list">
 				{#each evaluationHighlights as item}
 					<li>{item}</li>
@@ -217,6 +269,10 @@
 				<article>
 					<h3>Thresholds</h3>
 					<p>Threshold checks are the fastest way to spot whether a run is healthy without reading every metric.</p>
+				</article>
+				<article>
+					<h3>Ablation studies</h3>
+					<p>Feature ablation runs (keyword, HyPE/HyDE, reranking) identify which techniques improve retrieval. See <code>scripts/run_feature_ablations.py</code>.</p>
 				</article>
 			</div>
 		</div>

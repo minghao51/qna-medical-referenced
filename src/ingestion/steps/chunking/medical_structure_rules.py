@@ -43,6 +43,45 @@ class MedicalStructureRules:
         "DISPOSITION",
     }
 
+    # Guideline section headers (common in clinical guideline documents)
+    GUIDELINE_SECTIONS = {
+        "KEY MESSAGES",
+        "RECOMMENDATIONS",
+        "BACKGROUND",
+        "INTRODUCTION",
+        "METHODS",
+        "RESULTS",
+        "DISCUSSION",
+        "CONCLUSION",
+        "TREATMENT",
+        "MANAGEMENT",
+        "MONITORING",
+        "FOLLOW-UP",
+        "FOLLOW UP",
+        "SCREENING",
+        "PREVENTION",
+        "DIAGNOSIS",
+        "REFERRAL",
+        "SPECIAL POPULATIONS",
+        "ADVERSE EFFECTS",
+        "CONTRAINDICATIONS",
+        "DRUG INTERACTIONS",
+        "DOSAGE",
+        "ADMINISTRATION",
+        "PATIENT EDUCATION",
+        "LIFESTYLE",
+        "PHARMACOLOGICAL",
+        "NON-PHARMACOLOGICAL",
+    }
+
+    # Regex patterns for section-like lines in guidelines
+    SECTION_HEADER_PATTERNS = [
+        re.compile(r"^#{1,4}\s+\w+", re.IGNORECASE),  # Markdown headers
+        re.compile(r"^\d+\.\s+[A-Z][A-Za-z\s]{3,}$"),  # Numbered sections: "1. Treatment"
+        re.compile(r"^[A-Z][A-Z\s]{3,}:$"),  # ALL CAPS WITH COLON:
+        re.compile(r"^Recommendation\s+\d+", re.I),  # "Recommendation 1"
+    ]
+
     # Drug dosing section patterns
     DOSING_PATTERNS = [
         r"(?:dosage|dose|administer|administration)\s*:?\s*",
@@ -68,21 +107,23 @@ class MedicalStructureRules:
         self._compiled_lab = [re.compile(p, re.IGNORECASE) for p in self.LAB_TABLE_PATTERNS]
 
     def is_clinical_section_header(self, line: str) -> bool:
-        """Check if line is a clinical section header.
+        """Check if line is a clinical or guideline section header."""
+        stripped = line.strip()
+        stripped_upper = stripped.upper()
 
-        Args:
-            line: Line to check
-
-        Returns:
-            True if line appears to be a clinical section header
-        """
-        stripped = line.strip().upper()
-        # Exact match
-        if stripped in self.CLINICAL_SECTIONS:
+        # Exact match on clinical or guideline sections
+        if stripped_upper in self.CLINICAL_SECTIONS or stripped_upper in self.GUIDELINE_SECTIONS:
             return True
-        # Contains key terms with colon
-        if any(term in stripped for term in ("HISTORY", "EXAM", "PLAN", "ASSESSMENT")):
-            return ":" in stripped
+
+        # Match guideline section patterns
+        for pattern in self.SECTION_HEADER_PATTERNS:
+            if pattern.match(stripped):
+                return True
+
+        # Contains key clinical terms with colon
+        if any(term in stripped_upper for term in ("HISTORY", "EXAM", "PLAN", "ASSESSMENT")):
+            return ":" in stripped_upper
+
         return False
 
     def contains_dosing_info(self, text: str) -> bool:

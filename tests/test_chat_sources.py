@@ -21,7 +21,7 @@ class DummyLLMClient:
 
 def _build_client(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("src.app.factory.validate_security_configuration", lambda: None)
-    monkeypatch.setattr("src.app.factory.initialize_runtime_index", lambda: None)
+    monkeypatch.setattr("src.app.factory.initialize_runtime_index_async", lambda: None)
     monkeypatch.setattr(settings, "api_keys", "")
     monkeypatch.setattr(settings, "api_keys_json", None)
     monkeypatch.setattr(settings, "chat_session_cookie_name", "chat_session_id")

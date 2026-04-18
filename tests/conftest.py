@@ -16,6 +16,7 @@ if "DASHSCOPE_API_KEY" not in os.environ or not os.environ.get("DASHSCOPE_API_KE
 
 
 LIVE_QWEN_ENABLED = os.environ.get("RUN_LIVE_QWEN_TESTS") == "1"
+LIVE_OPENROUTER_ENABLED = os.environ.get("RUN_LIVE_OPENROUTER_TESTS") == "1"
 
 
 @pytest.fixture
@@ -86,12 +87,21 @@ def pytest_collection_modifyitems(config, items):
             if "e2e_real_apis" in item.keywords:
                 item.add_marker(skip_real_api)
 
+    # Skip OpenRouter live tests unless explicitly enabled
+    if not LIVE_OPENROUTER_ENABLED:
+        skip_openrouter = pytest.mark.skip(
+            reason="Set RUN_LIVE_OPENROUTER_TESTS=1 to run live OpenRouter tests"
+        )
+        for item in items:
+            if "live_openrouter" in item.keywords:
+                item.add_marker(skip_openrouter)
+
 
 def pytest_runtest_setup(item):
-    if "live_api" not in item.keywords or not LIVE_QWEN_ENABLED:
-        return
-
-    _ensure_live_qwen_available()
+    if "live_api" in item.keywords and LIVE_QWEN_ENABLED:
+        _ensure_live_qwen_available()
+    if "live_openrouter" in item.keywords and LIVE_OPENROUTER_ENABLED:
+        _ensure_live_openrouter_available()
 
 
 def _ensure_live_qwen_available():
@@ -115,3 +125,33 @@ def _ensure_live_qwen_available():
         pytest.skip(_LIVE_QWEN_PRECHECK)
 
     _LIVE_QWEN_PRECHECK = "ok"
+
+
+_LIVE_OPENROUTER_PRECHECK: str | None = None
+
+
+def _ensure_live_openrouter_available():
+    global _LIVE_OPENROUTER_PRECHECK
+
+    if _LIVE_OPENROUTER_PRECHECK == "ok":
+        return
+    if _LIVE_OPENROUTER_PRECHECK:
+        pytest.skip(_LIVE_OPENROUTER_PRECHECK)
+
+    import litellm
+
+    from src.config import settings
+
+    try:
+        if settings.openrouter_api_key:
+            os.environ.setdefault("OPENROUTER_API_KEY", settings.openrouter_api_key)
+        litellm.completion(
+            model=f"openrouter/{settings.openrouter_model}",
+            messages=[{"role": "user", "content": "test"}],
+            max_tokens=1,
+        )
+    except Exception as exc:
+        _LIVE_OPENROUTER_PRECHECK = f"Live OpenRouter API unavailable: {type(exc).__name__}: {exc}"
+        pytest.skip(_LIVE_OPENROUTER_PRECHECK)
+
+    _LIVE_OPENROUTER_PRECHECK = "ok"

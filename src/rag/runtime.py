@@ -391,6 +391,10 @@ async def _expand_queries_async(
 
 
 def _build_index_from_sources(vector_store) -> dict[str, Any]:
+    return asyncio.run(_build_index_from_sources_async(vector_store))
+
+
+async def _build_index_from_sources_async(vector_store) -> dict[str, Any]:
     build_start = time.time()
     runtime_cfg = get_vector_store_runtime_config()
     indexing_features = dict(runtime_cfg.get("indexing_features", {}) or {})
@@ -405,20 +409,18 @@ def _build_index_from_sources(vector_store) -> dict[str, Any]:
         from src.infra.llm.qwen_client import get_client
         from src.ingestion.steps.hype import generate_hype_questions_for_chunks
 
-        hype_questions = asyncio.run(
-            generate_hype_questions_for_chunks(
-                chunks=chunked_docs,
-                client=get_client(),
-                sample_rate=float(
-                    indexing_features.get("hype_sample_rate", settings.hype_sample_rate)
-                ),
-                max_chunks=int(indexing_features.get("hype_max_chunks", settings.hype_max_chunks)),
-                questions_per_chunk=int(
-                    indexing_features.get(
-                        "hype_questions_per_chunk", settings.hype_questions_per_chunk
-                    )
-                ),
-            )
+        hype_questions = await generate_hype_questions_for_chunks(
+            chunks=chunked_docs,
+            client=get_client(),
+            sample_rate=float(
+                indexing_features.get("hype_sample_rate", settings.hype_sample_rate)
+            ),
+            max_chunks=int(indexing_features.get("hype_max_chunks", settings.hype_max_chunks)),
+            questions_per_chunk=int(
+                indexing_features.get(
+                    "hype_questions_per_chunk", settings.hype_questions_per_chunk
+                )
+            ),
         )
         hype_chunk_count = len(hype_questions)
         for doc in chunked_docs:
@@ -436,25 +438,23 @@ def _build_index_from_sources(vector_store) -> dict[str, Any]:
             enrich_chunks,
         )
 
-        enrichment_results = asyncio.run(
-            enrich_chunks(
-                chunks=chunked_docs,
-                client=get_client(),
-                enable_keywords=bool(indexing_features.get("enable_keyword_extraction")),
-                enable_summaries=bool(indexing_features.get("enable_chunk_summaries")),
-                sample_rate=float(
-                    indexing_features.get(
-                        "keyword_extraction_sample_rate",
-                        settings.keyword_extraction_sample_rate,
-                    )
-                ),
-                max_chunks=int(
-                    indexing_features.get(
-                        "keyword_extraction_max_chunks",
-                        settings.keyword_extraction_max_chunks,
-                    )
-                ),
-            )
+        enrichment_results = await enrich_chunks(
+            chunks=chunked_docs,
+            client=get_client(),
+            enable_keywords=bool(indexing_features.get("enable_keyword_extraction")),
+            enable_summaries=bool(indexing_features.get("enable_chunk_summaries")),
+            sample_rate=float(
+                indexing_features.get(
+                    "keyword_extraction_sample_rate",
+                    settings.keyword_extraction_sample_rate,
+                )
+            ),
+            max_chunks=int(
+                indexing_features.get(
+                    "keyword_extraction_max_chunks",
+                    settings.keyword_extraction_max_chunks,
+                )
+            ),
         )
         enriched_chunk_count = apply_enrichment_to_chunks(
             chunked_docs,
@@ -550,6 +550,65 @@ def initialize_vector_store(
     }
 
 
+async def initialize_vector_store_async(
+    rebuild: bool = False,
+    *,
+    materialize_html: bool = False,
+    force_html_reconvert: bool = False,
+):
+    state = get_runtime_state()
+    with state._lock:
+        runtime_signature = _vector_store_runtime_signature()
+        if state._vector_store_initialized_signature != runtime_signature:
+            state._vector_store_initialized = False
+
+    vector_store = get_vector_store()
+
+    if rebuild:
+        vector_store.clear()
+        with state._lock:
+            state._vector_store_initialized = False
+            state._vector_store_initialized_signature = None
+
+    if materialize_html:
+        convert_html_main(force=force_html_reconvert)
+
+    documents = vector_store.documents
+    if documents.get("contents"):
+        with state._lock:
+            if not state._vector_store_initialized:
+                state._vector_store_initialized = True
+                state._vector_store_initialized_signature = runtime_signature
+                logger.info(
+                    "Loaded existing vector store with %d documents",
+                    len(documents["contents"]),
+                )
+            else:
+                state._vector_store_initialized_signature = runtime_signature
+        return {
+            "status": "ready",
+            "reused_existing_index": True,
+            "vector_store_config": get_vector_store_runtime_config(),
+            "index_metadata": documents.get("index_metadata", {}),
+            "vector_document_count": len(documents.get("contents", [])),
+            "indexing_stats": vector_store.last_indexing_stats,
+        }
+
+    build_stats = await _build_index_from_sources_async(vector_store)
+    documents = vector_store.documents
+    with state._lock:
+        state._vector_store_initialized = True
+        state._vector_store_initialized_signature = runtime_signature
+    return {
+        "status": "built",
+        "reused_existing_index": False,
+        "vector_store_config": get_vector_store_runtime_config(),
+        "index_metadata": documents.get("index_metadata", {}),
+        "vector_document_count": len(documents.get("contents", [])),
+        "indexing_stats": build_stats,
+    }
+
+
 def initialize_runtime_index(
     rebuild: bool = False,
     *,
@@ -557,6 +616,19 @@ def initialize_runtime_index(
     force_html_reconvert: bool = False,
 ):
     return initialize_vector_store(
+        rebuild=rebuild,
+        materialize_html=materialize_html,
+        force_html_reconvert=force_html_reconvert,
+    )
+
+
+async def initialize_runtime_index_async(
+    rebuild: bool = False,
+    *,
+    materialize_html: bool = False,
+    force_html_reconvert: bool = False,
+):
+    return await initialize_vector_store_async(
         rebuild=rebuild,
         materialize_html=materialize_html,
         force_html_reconvert=force_html_reconvert,
@@ -864,52 +936,86 @@ def _apply_reranking(
 def retrieve_context(
     query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None
 ) -> tuple[str, list[ChatSource]]:
-    if not query or not query.strip():
-        return "", []
-    if len(query) > 4000:
-        logger.warning("Query truncated from %d to 4000 chars", len(query))
-        query = query[:4000]
-    initialize_runtime_index()
-    cfg = _resolve_retrieval_config(retrieval_options)
-
-    # Apply query understanding if enabled
-    retrieval_options = _apply_query_understanding(query, retrieval_options, cfg)
-
-    vector_store = get_vector_store()
-    fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
-    expanded_queries, _ = _prepare_expanded_queries(
-        query,
-        enable_medical_expansion=cfg.enable_medical_expansion,
-        medical_expansion_provider=cfg.medical_expansion_provider,
+    context, sources, _ = retrieve_context_with_trace(
+        query, top_k=top_k, retrieval_options=retrieval_options
     )
-    expanded_queries, _ = _extend_with_hype_questions(
-        vector_store,
-        query,
-        expanded_queries,
-        enable_hype=cfg.enable_hype,
-    )
-    results = _retrieve_candidates(
-        vector_store,
-        query,
-        fetch_k,
-        cfg.search_mode,
-        pre_expanded_queries=expanded_queries,
-    )
-    results, _, _ = _apply_reranking(query, results, fetch_k=fetch_k, cfg=cfg)
+    return context, sources
 
-    apply_diversification = _should_apply_diversification(cfg)
-    results = _diversify_results(
-        results,
+
+def _build_pipeline_trace(
+    *,
+    results: list[dict],
+    retrieval_trace: dict,
+    cfg,
+    medical_expansion_trace: list,
+    apply_diversification: bool,
+    rerank_info: dict,
+    original_length: int,
+    query: str,
+    top_k: int,
+    total_start: float,
+    steps: list | None = None,
+):
+    from src.rag.trace_models import (
+        ContextStage,
+        GenerationStage,
+        PipelineTrace,
+        RetrievalStage,
+    )
+
+    retrieved_docs = _build_retrieved_documents(results)
+
+    retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
+    retrieval_stage = RetrievalStage(
+        query=query,
+        query_original_length=original_length,
+        query_truncated=(original_length > 4000),
         top_k=top_k,
-        mmr_lambda=cfg.mmr_lambda,
-        overfetch_multiplier=cfg.overfetch_multiplier,
-        max_chunks_per_source_page=cfg.max_chunks_per_source_page,
-        max_chunks_per_source=cfg.max_chunks_per_source,
-        enable_diversification=apply_diversification,
+        documents=retrieved_docs,
+        score_weights={
+            **retrieval_trace.get("score_weights", {}),
+            "embedding_model": retrieval_trace.get("embedding_model"),
+            "query_embedding_timing_ms": retrieval_trace.get("query_embedding_timing_ms", 0),
+            "search_mode": cfg.search_mode,
+            "expanded_queries": retrieval_trace.get("expanded_queries", []),
+            "enable_medical_expansion": cfg.enable_medical_expansion,
+            "medical_expansion_provider": cfg.medical_expansion_provider,
+            "medical_expansion_terms": medical_expansion_trace,
+            "medical_expansion_term_count": len(medical_expansion_trace),
+            "enable_diversification": apply_diversification,
+            "mmr_lambda": cfg.mmr_lambda,
+            "overfetch_multiplier": cfg.overfetch_multiplier,
+            "max_chunks_per_source_page": cfg.max_chunks_per_source_page,
+            "max_chunks_per_source": cfg.max_chunks_per_source,
+            "enable_reranking": cfg.enable_reranking,
+            "reranking_mode": cfg.reranking_mode,
+            "retrieval_candidate_count": retrieval_trace.get("result_count", len(results)),
+            **rerank_info,
+            "returned_documents": len(results),
+        },
+        timing_ms=retrieval_timing_ms,
+        steps=steps or [],
     )
 
-    context, _, chat_sources = build_context_and_sources(results)
-    return context, chat_sources
+    context, source_labels, chat_sources = build_context_and_sources(results)
+    context_stage = ContextStage(
+        total_chunks=len(results),
+        total_chars=len(context),
+        sources=source_labels,
+        preview=context[:200] + "..." if len(context) > 200 else context,
+    )
+
+    generation_stage = GenerationStage(model=settings.model_name, timing_ms=0, tokens_estimate=None)
+
+    total_time_ms = int((time.time() - total_start) * 1000)
+    pipeline_trace = PipelineTrace(
+        retrieval=retrieval_stage,
+        context=context_stage,
+        generation=generation_stage,
+        total_time_ms=total_time_ms,
+    )
+
+    return context, chat_sources, pipeline_trace
 
 
 def retrieve_context_with_trace(
@@ -926,23 +1032,18 @@ def retrieve_context_with_trace(
     """
     if not query or not query.strip():
         return "", [], _empty_pipeline_trace("", top_k)
-    original_query = query
     original_length = len(query)
     if len(query) > 4000:
         logger.warning("Query truncated from %d to 4000 chars", len(query))
         query = query[:4000]
-    from src.rag.trace_models import (
-        ContextStage,
-        GenerationStage,
-        PipelineTrace,
-        RetrievalStage,
-    )
 
     total_start = time.time()
     cfg = _resolve_retrieval_config(retrieval_options)
 
     # Apply query understanding if enabled
     retrieval_options = _apply_query_understanding(query, retrieval_options, cfg)
+    if retrieval_options:
+        cfg = _resolve_retrieval_config(retrieval_options)
 
     initialize_runtime_index()
     vector_store = get_vector_store()
@@ -980,58 +1081,18 @@ def retrieve_context_with_trace(
         enable_diversification=apply_diversification,
     )
 
-    retrieved_docs = _build_retrieved_documents(results)
-
-    retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
-    retrieval_stage = RetrievalStage(
+    return _build_pipeline_trace(
+        results=results,
+        retrieval_trace=retrieval_trace,
+        cfg=cfg,
+        medical_expansion_trace=medical_expansion_trace,
+        apply_diversification=apply_diversification,
+        rerank_info=rerank_info,
+        original_length=original_length,
         query=query,
-        query_original_length=original_length,
-        query_truncated=(original_length > 4000),
         top_k=top_k,
-        documents=retrieved_docs,
-        score_weights={
-            **retrieval_trace.get("score_weights", {}),
-            "embedding_model": retrieval_trace.get("embedding_model"),
-            "query_embedding_timing_ms": retrieval_trace.get("query_embedding_timing_ms", 0),
-            "search_mode": cfg.search_mode,
-            "expanded_queries": retrieval_trace.get("expanded_queries", []),
-            "enable_medical_expansion": cfg.enable_medical_expansion,
-            "medical_expansion_provider": cfg.medical_expansion_provider,
-            "medical_expansion_terms": medical_expansion_trace,
-            "medical_expansion_term_count": len(medical_expansion_trace),
-            "enable_diversification": apply_diversification,
-            "mmr_lambda": cfg.mmr_lambda,
-            "overfetch_multiplier": cfg.overfetch_multiplier,
-            "max_chunks_per_source_page": cfg.max_chunks_per_source_page,
-            "max_chunks_per_source": cfg.max_chunks_per_source,
-            "enable_reranking": cfg.enable_reranking,
-            "reranking_mode": cfg.reranking_mode,
-            "retrieval_candidate_count": retrieval_trace.get("result_count", len(results)),
-            **rerank_info,
-            "returned_documents": len(results),
-        },
-        timing_ms=retrieval_timing_ms,
+        total_start=total_start,
     )
-
-    context, source_labels, chat_sources = build_context_and_sources(results)
-    context_stage = ContextStage(
-        total_chunks=len(results),
-        total_chars=len(context),
-        sources=source_labels,
-        preview=context[:200] + "..." if len(context) > 200 else context,
-    )
-
-    generation_stage = GenerationStage(model=settings.model_name, timing_ms=0, tokens_estimate=None)
-
-    total_time_ms = int((time.time() - total_start) * 1000)
-    pipeline_trace = PipelineTrace(
-        retrieval=retrieval_stage,
-        context=context_stage,
-        generation=generation_stage,
-        total_time_ms=total_time_ms,
-    )
-
-    return context, chat_sources, pipeline_trace
 
 
 async def retrieve_context_with_trace_async(
@@ -1059,26 +1120,21 @@ async def retrieve_context_with_trace_async(
             - pipeline_trace: Dictionary with detailed pipeline metadata
     """
     if not query or not query.strip():
-        from src.rag.trace_models import PipelineTrace as _PT
-        return "", [], _PT()
-    original_query = query
+        from src.rag.trace_models import PipelineTrace
+        return "", [], PipelineTrace()
     original_length = len(query)
     if len(query) > 4000:
         logger.warning("Query truncated from %d to 4000 chars", len(query))
         query = query[:4000]
-    from src.rag.trace_models import (
-        ContextStage,
-        GenerationStage,
-        PipelineTrace,
-        RetrievalStage,
-        RetrievalStep,
-    )
+    from src.rag.trace_models import RetrievalStep
 
     total_start = time.time()
     cfg = _resolve_retrieval_config(retrieval_options)
 
     # Apply query understanding if enabled
     retrieval_options = _apply_query_understanding(query, retrieval_options, cfg)
+    if retrieval_options:
+        cfg = _resolve_retrieval_config(retrieval_options)
 
     initialize_runtime_index()
     vector_store = get_vector_store()
@@ -1211,58 +1267,19 @@ async def retrieve_context_with_trace_async(
         )
     )
 
-    retrieved_docs = _build_retrieved_documents(results)
-
-    retrieval_timing_ms = retrieval_trace.get("timing_ms", 0)
-    retrieval_stage = RetrievalStage(
+    return _build_pipeline_trace(
+        results=results,
+        retrieval_trace=retrieval_trace,
+        cfg=cfg,
+        medical_expansion_trace=medical_expansion_trace,
+        apply_diversification=apply_diversification,
+        rerank_info=rerank_info,
+        original_length=original_length,
         query=query,
-        query_original_length=original_length,
-        query_truncated=(original_length > 4000),
         top_k=top_k,
-        documents=retrieved_docs,
-        score_weights={
-            **retrieval_trace.get("score_weights", {}),
-            "embedding_model": retrieval_trace.get("embedding_model"),
-            "query_embedding_timing_ms": retrieval_trace.get("query_embedding_timing_ms", 0),
-            "search_mode": cfg.search_mode,
-            "expanded_queries": retrieval_trace.get("expanded_queries", []),
-            "enable_medical_expansion": cfg.enable_medical_expansion,
-            "medical_expansion_provider": cfg.medical_expansion_provider,
-            "medical_expansion_terms": medical_expansion_trace,
-            "medical_expansion_term_count": len(medical_expansion_trace),
-            "enable_diversification": apply_diversification,
-            "mmr_lambda": cfg.mmr_lambda,
-            "overfetch_multiplier": cfg.overfetch_multiplier,
-            "max_chunks_per_source_page": cfg.max_chunks_per_source_page,
-            "max_chunks_per_source": cfg.max_chunks_per_source,
-            "enable_reranking": cfg.enable_reranking,
-            "reranking_mode": cfg.reranking_mode,
-            "retrieval_candidate_count": retrieval_trace.get("result_count", len(results)),
-            **rerank_info,
-            "returned_documents": len(results),
-        },
-        timing_ms=retrieval_timing_ms,
+        total_start=total_start,
+        steps=steps,
     )
-
-    context, source_labels, chat_sources = build_context_and_sources(results)
-    context_stage = ContextStage(
-        total_chunks=len(results),
-        total_chars=len(context),
-        sources=source_labels,
-        preview=context[:200] + "..." if len(context) > 200 else context,
-    )
-
-    generation_stage = GenerationStage(model=settings.model_name, timing_ms=0, tokens_estimate=None)
-
-    total_time_ms = int((time.time() - total_start) * 1000)
-    pipeline_trace = PipelineTrace(
-        retrieval=retrieval_stage,
-        context=context_stage,
-        generation=generation_stage,
-        total_time_ms=total_time_ms,
-    )
-
-    return context, chat_sources, pipeline_trace
 
 
 def get_full_context() -> str:
@@ -1352,20 +1369,7 @@ def _retrieve_candidates_with_trace(
     expanded_queries = (
         pre_expanded_queries if pre_expanded_queries is not None else _expand_queries(query)
     )
-    result_sets: list[list[dict]] = []
-    traces: list[dict] = []
-    for expanded_query in expanded_queries:
-        results, trace = vector_store.similarity_search_with_trace(
-            expanded_query, top_k=top_k, search_mode=search_mode
-        )
-        result_sets.append(results)
-        traces.append(trace)
-    merged_results = _merge_traced_result_sets(result_sets, top_k=top_k)
-    merged_trace = traces[0] if traces else {}
-    merged_trace["expanded_queries"] = expanded_queries
-    merged_trace["candidate_traces"] = traces
-    merged_trace["result_count"] = len(merged_results)
-    return merged_results, merged_trace
+    return _search_and_merge_traced(vector_store, expanded_queries, top_k, search_mode)
 
 
 async def _retrieve_candidates_with_trace_async(
@@ -1392,6 +1396,19 @@ async def _retrieve_candidates_with_trace_async(
         )
     else:
         expanded_queries = pre_expanded_queries
+    results, merged_trace = _search_and_merge_traced(
+        vector_store, expanded_queries, top_k, search_mode
+    )
+    merged_trace["hyde_enabled"] = enable_hyde
+    return results, merged_trace
+
+
+def _search_and_merge_traced(
+    vector_store,
+    expanded_queries: list[str],
+    top_k: int,
+    search_mode: str,
+) -> tuple[list[dict], dict]:
     result_sets: list[list[dict]] = []
     traces: list[dict] = []
     for expanded_query in expanded_queries:
@@ -1404,6 +1421,5 @@ async def _retrieve_candidates_with_trace_async(
     merged_trace = traces[0] if traces else {}
     merged_trace["expanded_queries"] = expanded_queries
     merged_trace["candidate_traces"] = traces
-    merged_trace["hyde_enabled"] = enable_hyde
     merged_trace["result_count"] = len(merged_results)
     return merged_results, merged_trace

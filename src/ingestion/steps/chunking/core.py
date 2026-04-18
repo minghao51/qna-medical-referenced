@@ -12,10 +12,10 @@ from src.ingestion.steps.chunking.helpers import (
     group_list_items,
     hash_content,
     quality_score_for_block,
-    split_list_items,
-    split_table_rows,
     source_kind,
+    split_list_items,
     split_markdown_sections,
+    split_table_rows,
 )
 from src.ingestion.steps.chunking.strategies import find_recursive_split
 
@@ -80,7 +80,7 @@ class TextChunker:
             return None
 
         if self._chonkie_adapter is None:
-            from src.ingestion.steps.chunking.chonkie_adapter import get_chonkie_chunker
+            from src.ingestion.steps.chunking import get_chonkie_chunker
 
             self._chonkie_adapter = get_chonkie_chunker(
                 strategy=self.strategy,

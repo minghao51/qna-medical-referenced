@@ -11,8 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-logger = logging.getLogger(__name__)
-
 from deepeval.metrics.indicator import safe_a_measure
 from deepeval.test_case import LLMTestCase
 
@@ -21,6 +19,8 @@ from src.evals.artifacts import to_serializable
 from src.evals.metrics import mean
 from src.evals.metrics import medical as medical_metrics
 from src.ingestion.indexing.vector_store import get_vector_store_runtime_config
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

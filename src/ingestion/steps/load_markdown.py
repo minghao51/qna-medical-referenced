@@ -20,6 +20,7 @@ from src.source_metadata import (
     normalize_source_class,
 )
 
+
 def _is_index_only_classified_pages() -> bool:
     return get_runtime_state().index_only_classified_pages
 

@@ -12,8 +12,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from pypdf import PdfReader
 
 from src.config import DATA_RAW_DIR
@@ -21,6 +19,8 @@ from src.config.context import get_runtime_state
 from src.ingestion.artifacts import SourceArtifact, persist_source_artifact
 from src.ingestion.steps.download_web import get_manifest_record_by_filename
 from src.source_metadata import canonical_source_label, infer_domain, infer_domain_type
+
+logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional dependency
     pdfplumber: Any = importlib.import_module("pdfplumber")

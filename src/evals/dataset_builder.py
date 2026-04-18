@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from src.config import settings
-
-logger = logging.getLogger(__name__)
 from src.ingestion.steps.chunk_text import chunk_documents
 from src.ingestion.steps.load_markdown import get_markdown_documents
 from src.ingestion.steps.load_pdfs import get_documents
+
+logger = logging.getLogger(__name__)
 
 _SPLIT_ORDER = {"dev": 0, "test": 1, "regression": 2}
 _CONFIDENCE_ORDER = {"low": 0, "medium": 1, "high": 2}

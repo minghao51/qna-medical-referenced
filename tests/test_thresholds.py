@@ -1,6 +1,5 @@
 """Unit tests for threshold evaluation."""
 
-import pytest
 
 from src.evals.assessment.thresholds import (
     DEFAULT_THRESHOLDS,

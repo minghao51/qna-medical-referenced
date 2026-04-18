@@ -182,14 +182,13 @@ async def stream_chat_message(
     chat_start = time.time()
     client = llm_client or get_client()
 
-    if include_pipeline:
-        context, sources, pipeline_trace = await retrieve_context_with_trace_async(
-            message,
-            top_k=top_k,
-            hyde_client=client,
-        )
-    else:
-        context, sources = retrieve_context(message, top_k=top_k)
+    context, sources, pipeline_trace = await retrieve_context_with_trace_async(
+        message,
+        top_k=top_k,
+        hyde_client=client,
+    )
+    if not include_pipeline:
+        pipeline_trace = None
 
     full_context = _compose_full_context(history_context, context)
 
@@ -238,6 +237,6 @@ async def stream_chat_message(
                     "error_code": "chat_stream_failed",
                 },
             )
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to yield error event for session %s", resolved_session_id)
         raise UpstreamServiceError("An error occurred processing your request") from exc

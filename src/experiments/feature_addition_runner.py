@@ -9,35 +9,16 @@ from __future__ import annotations
 import copy
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from src.evals import run_assessment
 from src.experiments.config import build_run_assessment_kwargs, resolve_experiment_runs
 from src.experiments.experiment_config import ExperimentConfig, ExperimentVariant
+from src.experiments.metric_utils import resolve_metric_key
 
 logger = logging.getLogger(__name__)
-
-# Metrics in YAML config use @K notation but the assessment pipeline uses _at_k.
-_METRIC_ALIASES: dict[str, str] = {
-    "ndcg@5": "ndcg_at_k",
-    "ndcg@10": "ndcg_at_k",
-    "ndcg@3": "ndcg_at_k",
-    "hit_rate@5": "hit_rate_at_k",
-    "precision@5": "precision_at_k",
-    "recall@5": "recall_at_k",
-}
-
-
-def _resolve_metric_key(metrics: dict[str, Any], name: str) -> Any:
-    """Look up a metric by name, falling back to known aliases."""
-    if name in metrics:
-        return metrics[name]
-    alias = _METRIC_ALIASES.get(name)
-    if alias and alias in metrics:
-        return metrics[alias]
-    return None
 
 
 @dataclass
@@ -74,7 +55,7 @@ class ExperimentSummary:
         primary_metric = self.config.metrics.primary if self.config.metrics else "ndcg@5"
 
         def get_metric_value(metrics: dict[str, Any]) -> float:
-            value = _resolve_metric_key(metrics, primary_metric)
+            value = resolve_metric_key(metrics, primary_metric)
             return float(value) if isinstance(value, (int, float)) else 0.0
 
         winner_name, winner_result = max(all_results, key=lambda x: get_metric_value(x[1].metrics))
@@ -115,7 +96,7 @@ class ExperimentSummary:
         Returns:
             Metric value as float
         """
-        value = _resolve_metric_key(metrics, metric_name)
+        value = resolve_metric_key(metrics, metric_name)
         return float(value) if isinstance(value, (int, float)) else 0.0
 
 
@@ -123,6 +104,7 @@ def _build_experiment_for_variant(
     base_experiment: dict[str, Any],
     variant: ExperimentVariant,
     artifact_dir: str,
+    collection_name_override: str | None = None,
 ) -> dict[str, Any]:
     """Build experiment configuration for a variant.
 
@@ -141,11 +123,15 @@ def _build_experiment_for_variant(
 
     # Isolate variant in its own vector store collection
     embedding_index = experiment.setdefault("embedding_index", {})
-    current_collection = str(embedding_index.get("collection_name", ""))
-    if current_collection:
-        embedding_index["collection_name"] = f"{current_collection}_{variant.name}"
-    current_suffix = str(embedding_index.get("collection_name_suffix") or "").strip()
-    embedding_index["collection_name_suffix"] = f"{current_suffix}_{variant.name}" if current_suffix else variant.name
+    if collection_name_override:
+        embedding_index["collection_name"] = collection_name_override
+        embedding_index["collection_name_suffix"] = ""
+    else:
+        current_collection = str(embedding_index.get("collection_name", ""))
+        if current_collection:
+            embedding_index["collection_name"] = f"{current_collection}_{variant.name}"
+        current_suffix = str(embedding_index.get("collection_name_suffix") or "").strip()
+        embedding_index["collection_name_suffix"] = f"{current_suffix}_{variant.name}" if current_suffix else variant.name
 
     # Update ingestion config
     if variant.chunking_strategy:
@@ -184,6 +170,8 @@ def run_variant(
     variant: ExperimentVariant,
     artifact_dir: str,
     run_assessment_fn=run_assessment,
+    skip_ingestion: bool = False,
+    collection_name_override: str | None = None,
 ) -> VariantResult:
     """Run a single variant experiment.
 
@@ -199,7 +187,10 @@ def run_variant(
     logger.info(f"Running variant: {variant.name}")
 
     # Build variant-specific experiment config
-    variant_experiment = _build_experiment_for_variant(experiment_config, variant, artifact_dir)
+    variant_experiment = _build_experiment_for_variant(
+        experiment_config, variant, artifact_dir,
+        collection_name_override=collection_name_override,
+    )
 
     # Build kwargs for assessment
     kwargs = build_run_assessment_kwargs(variant_experiment)
@@ -210,6 +201,7 @@ def run_variant(
             "artifact_dir": artifact_dir,
             "name": variant_experiment["metadata"]["name"],
             "force_rerun": True,
+            "skip_ingestion": skip_ingestion,
             "run_retrieval_ablations": False,
             "run_hype_ablations": False,
             "run_keyword_ablations": False,
@@ -221,7 +213,7 @@ def run_variant(
     result = run_assessment_fn(**kwargs)
 
     # Extract metrics
-    metrics = {}
+    metrics: dict[str, Any] = {}
     if hasattr(result, "summary"):
         # Try to get retrieval metrics
         for key in ["retrieval_metrics", "metrics"]:
@@ -237,8 +229,17 @@ def run_variant(
         run_dir=str(result.run_dir),
         metrics=metrics,
         config=variant_experiment,
-        timestamp=datetime.now().isoformat() + "Z",
+        timestamp=datetime.now(timezone.utc).isoformat(),
     )
+
+
+def _chunking_key(experiment: dict[str, Any]) -> str:
+    """Extract a hashable key from the chunking config."""
+    configs = experiment.get("ingestion", {}).get("source_chunk_configs", {})
+    strategies = tuple(sorted(
+        (k, v.get("strategy", "")) for k, v in (configs or {}).items()
+    ))
+    return str(strategies)
 
 
 def run_feature_addition_experiment(
@@ -280,36 +281,75 @@ def run_feature_addition_experiment(
     base_artifact_dir = Path(f"data/evals_{config.name}")
     base_artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    # Run baseline
-    logger.info(f"Running baseline for experiment: {config.name}")
-    baseline_result = run_variant(
-        base_experiment,
-        config.baseline,
-        str(base_artifact_dir / "baseline"),
-        run_assessment_fn,
+    # Group variants by chunking strategy to avoid redundant ingestion
+    baseline_exp = _build_experiment_for_variant(
+        base_experiment, config.baseline, str(base_artifact_dir / "baseline"),
     )
+    baseline_key = _chunking_key(baseline_exp)
 
-    # Run variants
-    variant_results = []
+    # Build ordered list: (variant, needs_ingestion, group_key)
+    all_variants: list[tuple[ExperimentVariant, bool, str]] = [
+        (config.baseline, True, baseline_key),
+    ]
     for variant in config.variants or []:
         if variant is None:
             continue
+        v_exp = _build_experiment_for_variant(
+            base_experiment, variant, str(base_artifact_dir / variant.name),
+        )
+        v_key = _chunking_key(v_exp)
+        needs_ingestion = v_key not in {key for _, _, key in all_variants}
+        all_variants.append((variant, needs_ingestion, v_key))
+
+    # Run variants: first per chunking group ingests, others reuse collection
+    collection_map: dict[str, str] = {}
+    results_map: dict[str, VariantResult] = {}
+
+    for variant, needs_ingestion, group_key in all_variants:
         try:
-            result = run_variant(
-                base_experiment,
-                variant,
-                str(base_artifact_dir / variant.name),
-                run_assessment_fn,
-            )
-            variant_results.append(result)
+            if needs_ingestion:
+                logger.info(f"Running variant {variant.name}: full ingestion + retrieval")
+                result = run_variant(
+                    base_experiment,
+                    variant,
+                    str(base_artifact_dir / variant.name),
+                    run_assessment_fn,
+                    skip_ingestion=False,
+                )
+                # Record collection name for group reuse
+                v_exp = _build_experiment_for_variant(
+                    base_experiment, variant, str(base_artifact_dir / variant.name),
+                )
+                collection_map[group_key] = v_exp["embedding_index"]["collection_name"]
+            else:
+                logger.info(f"Running variant {variant.name}: skipping ingestion, reusing collection {collection_map[group_key]}")
+                result = run_variant(
+                    base_experiment,
+                    variant,
+                    str(base_artifact_dir / variant.name),
+                    run_assessment_fn,
+                    skip_ingestion=True,
+                    collection_name_override=collection_map[group_key],
+                )
+            results_map[variant.name] = result
         except Exception as e:
-            logger.error(f"Variant {variant.name} failed: {e}")
+            logger.exception(f"Variant {variant.name} failed: {e}")
+
+    baseline_result = results_map.get(config.baseline.name)
+    if baseline_result is None:
+        raise RuntimeError(f"Baseline variant '{config.baseline.name}' failed to produce results")
+
+    variant_results = [
+        results_map[v.name]
+        for v in (config.variants or [])
+        if v is not None and v.name in results_map
+    ]
 
     return ExperimentSummary(
         experiment_name=config.name,
         baseline_result=baseline_result,
         variant_results=variant_results,
-        timestamp=datetime.now().isoformat() + "Z",
+        timestamp=datetime.now(timezone.utc).isoformat(),
         config=config,
     )
 

@@ -8,12 +8,12 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from bs4 import BeautifulSoup
 
 from src.config import DATA_RAW_DIR
 from src.ingestion.steps.download_web import _load_manifest, get_manifest_alias_filenames
+
+logger = logging.getLogger(__name__)
 
 
 def audit_l0_download(data_raw_dir: Path | None = None) -> dict[str, Any]:

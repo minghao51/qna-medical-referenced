@@ -2361,6 +2361,7 @@ dependencies = [
     { name = "chromadb" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "litellm" },
     { name = "markdownify" },
     { name = "nltk" },
     { name = "openai" },
@@ -2389,7 +2390,6 @@ evaluation = [
     { name = "langchain-community" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
-    { name = "litellm" },
 ]
 extraction = [
     { name = "camelot-py" },
@@ -2403,7 +2403,6 @@ test = [
     { name = "langchain-community" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
-    { name = "litellm" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -2435,7 +2434,7 @@ requires-dist = [
     { name = "langchain-community", marker = "extra == 'evaluation'", specifier = "<1" },
     { name = "langchain-core", marker = "extra == 'evaluation'", specifier = "<1" },
     { name = "langchain-openai", marker = "extra == 'evaluation'", specifier = "<1" },
-    { name = "litellm", marker = "extra == 'evaluation'", specifier = ">=1.0.0" },
+    { name = "litellm", specifier = ">=1.0.0" },
     { name = "markdownify", specifier = ">=0.14.0" },
     { name = "nltk", specifier = ">=3.9.2" },
     { name = "openai", specifier = ">=1.0.0" },

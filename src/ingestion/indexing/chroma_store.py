@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import logging
 import time
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -46,9 +45,17 @@ def _get_cached_query_embedding(query: str, model: str) -> list[float]:
     return result
 
 
-from src.ingestion.indexing.search import cosine_similarity, rank_documents, reciprocal_rank_fusion
-from src.ingestion.indexing.text_utils import content_hash, sanitize_text, tokenize_text
-from src.source_metadata import (
+from src.ingestion.indexing.search import (  # noqa: E402
+    cosine_similarity,
+    rank_documents,
+    reciprocal_rank_fusion,
+)
+from src.ingestion.indexing.text_utils import (  # noqa: E402
+    content_hash,
+    sanitize_text,
+    tokenize_text,
+)
+from src.source_metadata import (  # noqa: E402
     canonical_source_label,
     display_source_label,
     infer_domain,

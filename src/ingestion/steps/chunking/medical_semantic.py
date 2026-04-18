@@ -6,14 +6,12 @@ chonkie_semantic to preserve medical document structure.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import re
+from typing import Any
 
 from src.ingestion.steps.chunking.chonkie_adapter import ChonkieChunkerAdapter
 from src.ingestion.steps.chunking.medical_entity_detector import get_medical_entity_detector
 from src.ingestion.steps.chunking.medical_structure_rules import get_medical_structure_rules
-
-if TYPE_CHECKING:
-    pass
 
 
 class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
@@ -86,7 +84,7 @@ class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
         Returns:
             Tuple of (preprocessed_text, metadata)
         """
-        metadata = {
+        metadata: dict[str, Any] = {
             "clinical_sections": [],
             "lab_tables": [],
             "dosing_sections": [],
@@ -157,8 +155,8 @@ class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
         # Check if chunk1 ends with incomplete dosing info
         if self.structure_rules.contains_dosing_info(content1):
             # If chunk1 has dosage but no frequency, and chunk2 might complete it
-            has_dosage_1 = bool(__import__("re").search(r"\d+\s*(?:mg|mcg|g|ml|units?)", content1))
-            has_frequency_1 = bool(__import__("re").search(r"(?:daily|bid|tid|qid|prn)", content1))
+            has_dosage_1 = bool(re.search(r"\d+\s*(?:mg|mcg|g|ml|units?)", content1))
+            has_frequency_1 = bool(re.search(r"(?:daily|bid|tid|qid|prn)", content1))
             if has_dosage_1 and not has_frequency_1:
                 return True
 
@@ -242,6 +240,10 @@ class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
     ) -> list[dict[str, Any]]:
         """Chunk text with medical-aware preprocessing.
 
+        Pre-splits text at detected medical section boundaries,
+        then chunks each section separately with chonkie_semantic,
+        then post-merges chunks that shouldn't be split.
+
         Args:
             text: Text to chunk
             source: Source document name
@@ -254,8 +256,36 @@ class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
         # Apply medical preprocessing
         preprocessed_text, metadata = self._apply_medical_preprocessing(text)
 
-        # Get base chunks from chonkie semantic
-        base_chunks = super().chunk_text(preprocessed_text, source, doc_id, page)
+        # Pre-split at section boundaries
+        split_positions = self.structure_rules.get_split_positions(preprocessed_text)
+        if split_positions:
+            all_chunks = []
+            prev_pos = 0
+            chunk_offset = 0
+            for pos in split_positions:
+                section_text = preprocessed_text[prev_pos:pos].strip()
+                if section_text:
+                    section_chunks = super().chunk_text(section_text, source, doc_id, page)
+                    # Re-index chunks to maintain global ordering
+                    for chunk in section_chunks:
+                        chunk["chunk_index"] = chunk_offset
+                        chunk["id"] = chunk["id"].rsplit("_", 1)[0] + f"_{chunk_offset}"
+                        chunk_offset += 1
+                    all_chunks.extend(section_chunks)
+                prev_pos = pos
+            # Handle remaining text after last split
+            remaining = preprocessed_text[prev_pos:].strip()
+            if remaining:
+                section_chunks = super().chunk_text(remaining, source, doc_id, page)
+                for chunk in section_chunks:
+                    chunk["chunk_index"] = chunk_offset
+                    chunk["id"] = chunk["id"].rsplit("_", 1)[0] + f"_{chunk_offset}"
+                    chunk_offset += 1
+                all_chunks.extend(section_chunks)
+            base_chunks = all_chunks
+        else:
+            # No section boundaries detected — fall back to standard chunking
+            base_chunks = super().chunk_text(preprocessed_text, source, doc_id, page)
 
         # Post-process to preserve medical structure
         chunks = self._post_process_chunks(base_chunks, metadata, text)

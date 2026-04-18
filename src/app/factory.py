@@ -39,7 +39,7 @@ from src.app.security import validate_security_configuration
 from src.config import settings
 from src.infra.di import get_container, reset_container
 from src.infra.storage import FileChatHistoryStore
-from src.rag import initialize_runtime_index
+from src.rag import initialize_runtime_index_async
 
 configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ async def lifespan(app: FastAPI):
     if profile_name:
         if apply_production_profile(profile_name):
             logger.info(f"Production profile applied: {profile_name}")
-    initialize_runtime_index()
+    await initialize_runtime_index_async()
     logger.info("Application startup complete")
 
     yield

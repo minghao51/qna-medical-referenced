@@ -21,7 +21,6 @@ Example:
         curl http://localhost:8000/evaluation/steps/l2
 """
 
-import asyncio
 import logging
 import re
 from pathlib import Path
@@ -480,7 +479,7 @@ def get_answer_quality_details(run_dir: str) -> dict[str, Any]:
     summary="Evaluate a single answer",
     description="Evaluate one query-answer-context pair using DeepEval metrics (for debugging)",
 )
-def evaluate_single_answer(query: str, answer: str, context: str) -> dict[str, Any]:
+async def evaluate_single_answer(query: str, answer: str, context: str) -> dict[str, Any]:
     """Evaluate a single query-answer-context pair.
 
     Useful for debugging and testing specific responses. Runs all 6 DeepEval
@@ -524,14 +523,12 @@ def evaluate_single_answer(query: str, answer: str, context: str) -> dict[str, A
     results = {}
     for spec, metric in zip(METRIC_SPECS, create_medical_metrics(), strict=True):
         try:
-            asyncio.run(
-                safe_a_measure(
+            await safe_a_measure(
                     metric,
                     test_case,
                     ignore_errors=False,
                     skip_on_missing_params=False,
                 )
-            )
             results[spec.key] = {
                 "score": metric.score if metric.score is not None else 0.0,
                 "reason": metric.reason if hasattr(metric, "reason") else None,

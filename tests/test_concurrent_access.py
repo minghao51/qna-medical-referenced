@@ -6,9 +6,6 @@ mutations work correctly under concurrent access.
 
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-import pytest
 
 
 class TestRuntimeContextConcurrency:
@@ -83,8 +80,6 @@ class TestVectorStoreInitConcurrency:
 
         # Patch _build_index_from_sources to count invocations
         import src.rag.runtime as runtime_mod
-
-        original_build = runtime_mod._build_index_from_sources
 
         def counting_build(vs):
             with lock:

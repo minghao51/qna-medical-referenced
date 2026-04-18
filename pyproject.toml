@@ -21,6 +21,7 @@ dependencies = [
     "wandb>=0.23.0",
     "chromadb>=0.4.0",
     "bcrypt>=4.0.0",
+    "litellm>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -34,7 +35,6 @@ evaluation = [
     "langchain-community<1",
     "langchain-core<1",
     "langchain-openai<1",
-    "litellm>=1.0.0",
 ]
 chunkers = [
     "chonkie[semantic]>=1.0.0",
@@ -57,6 +57,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
     "live_api: requires live Qwen API access",
+    "live_openrouter: requires live OpenRouter API access",
     "deepeval: marks tests as DeepEval integration tests (slow, requires API)",
     "e2e_real_apis: marks tests as end-to-end tests with real API integrations (requires ENABLE_REAL_API_TESTS=1)",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')"

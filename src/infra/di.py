@@ -16,6 +16,7 @@ Example:
 """
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -128,6 +129,7 @@ class ServiceContainer:
 
 # Global container instance
 _container: ServiceContainer | None = None
+_container_lock = threading.Lock()
 
 
 def get_container() -> ServiceContainer:
@@ -137,9 +139,10 @@ def get_container() -> ServiceContainer:
         ServiceContainer instance
     """
     global _container
-    if _container is None:
-        _container = ServiceContainer()
-    return _container
+    with _container_lock:
+        if _container is None:
+            _container = ServiceContainer()
+        return _container
 
 
 def reset_container():
@@ -149,9 +152,10 @@ def reset_container():
     between test cases.
     """
     global _container
-    if _container:
-        _container.reset()
-    _container = None
+    with _container_lock:
+        if _container:
+            _container.reset()
+        _container = None
 
 
 # Convenience accessor

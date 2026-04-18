@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import AppShell from '$lib/components/AppShell.svelte';
 	import MetricChart from '$lib/components/MetricChart.svelte';
 	import MetricTile from '$lib/components/MetricTile.svelte';
 	import EvalSection from '$lib/components/EvalSection.svelte';
@@ -27,6 +28,20 @@
 	let showFindings = true;
 
 	const latestFeatureFindings: FeatureFinding[] = [
+		{
+			family: 'Medical Semantic / Query Understanding',
+			winner: 'query_understanding',
+			dataset: 'golden_queries_all.json',
+			queryCount: 57,
+			metrics: [
+				'NDCG@5 0.7009',
+				'MRR 0.6766',
+				'Evidence hit 0.0526',
+				'+6.3% over baseline',
+				'Target met (3%)'
+			],
+			verdict: 'Query understanding improved nDCG@5 by +6.3%, exceeding the 3% target. Medical semantic chunking alone had no measurable effect.'
+		},
 		{
 			family: 'Keyword / Summaries',
 			winner: 'baseline',
@@ -131,6 +146,7 @@
 	});
 </script>
 
+<AppShell current="/eval">
 <div class="ablation-page">
 	{#if loading}
 		<EvalSection title="Ablation Study Results" description="Loading comprehensive ablation data...">
@@ -153,7 +169,7 @@
 
 		<EvalSection
 			title="Latest Feature Benchmark"
-			description="Expanded 54-query feature-family snapshot from 2026-04-15"
+			description="Feature-family snapshot updated 2026-04-18"
 		>
 			<div class="feature-findings-grid">
 				{#each latestFeatureFindings as finding}
@@ -288,6 +304,7 @@
 		</EvalSection>
 	{/if}
 </div>
+</AppShell>
 
 <style>
 	.ablation-page {
