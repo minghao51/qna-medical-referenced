@@ -37,7 +37,7 @@ async def test_dashscope_api_timeout_retry():
         ]
 
         try:
-            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+            results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # If it succeeds, verify results
             if len(results) > 0:
@@ -95,7 +95,7 @@ async def test_partial_results_on_some_failures():
 
     with patch("src.evals.assessment.answer_eval.safe_a_measure", side_effect=mock_safe_measure):
         try:
-            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+            results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Should return results even with some failures
             if len(results) > 0:
@@ -128,7 +128,7 @@ async def test_none_query_in_dataset():
 
     # Should handle None query
     try:
-        results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+        results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
         # Should return results or handle gracefully
         assert isinstance(results, list)
@@ -146,7 +146,7 @@ async def test_empty_string_query():
 
     # Should handle empty query
     try:
-        results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+        results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
         # Should return results or handle gracefully
         assert isinstance(results, list)
@@ -165,7 +165,7 @@ async def test_negative_top_k():
     with patch("src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Test answer"):
         # Should handle negative top_k
         try:
-            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=-1)
+            results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=-1)
 
             # Should clamp to valid range or return empty
             assert isinstance(results, list)
@@ -183,7 +183,7 @@ async def test_zero_top_k():
 
     with patch("src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Test answer"):
         # Should handle zero top_k
-        results, aggregate = await evaluate_answer_quality_async(dataset, top_k=0)
+        results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=0)
 
         # Should return results with no context
         assert isinstance(results, list)
@@ -295,7 +295,7 @@ async def test_metric_calculation_with_invalid_context():
         mock_retrieve.return_value = ("", [], {"retrieval": {}, "context": {}, "generation": {}, "total_time_ms": 0})
 
         try:
-            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+            results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Should still generate results
             if len(results) > 0:
@@ -337,7 +337,7 @@ async def test_metric_timeout_handling():
                 "src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Timeout test answer"
             ):
                 try:
-                    results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+                    results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
                     # Should handle timeout
                     if len(results) > 0:
@@ -350,7 +350,7 @@ async def test_metric_timeout_handling():
 
                         assert len(metrics) > 0
                         assert error_metrics
-                except (asyncio.TimeoutError, Exception) as e:
+                except (TimeoutError, Exception) as e:
                     # Expected if timeout occurs
                     assert "timeout" in str(e).lower() or "time" in str(e).lower()
 
@@ -374,7 +374,7 @@ async def test_very_long_response_handling():
         mock_gen.return_value = long_response
 
         try:
-            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+            results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Should handle long response
             if len(results) > 0:
@@ -402,7 +402,7 @@ async def test_unicode_in_query_and_response():
         mock_gen.return_value = "The recommended target is < 1.8 mmol/L. 价值观测试"
 
         try:
-            results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+            results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
             # Should handle Unicode
             if len(results) > 0:

@@ -119,10 +119,10 @@ def assess_l2_pdf_quality(data_raw_dir: Path | None = None) -> dict[str, Any]:
         if records
         else 0.0,
         "pdf_extractor_strategy": (
-            list(set(r.get("pdf_extractor_strategy", "pypdf_pdfplumber") for r in records))
+            list({r.get("pdf_extractor_strategy", "pypdf_pdfplumber") for r in records})
         ),
         "pdf_table_extractor": list(
-            set(r.get("pdf_table_extractor", "heuristic") for r in records)
+            {r.get("pdf_table_extractor", "heuristic") for r in records}
         ),
         "camelot_total_table_pages": sum(int(r.get("camelot_table_pages", 0)) for r in records),
         "camelot_total_rows": sum(int(r.get("camelot_total_rows", 0)) for r in records),

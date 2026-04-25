@@ -11,7 +11,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -241,7 +241,7 @@ class ChromaVectorStore:
 
     def _load_content_hashes(self) -> None:
         all_data = self._collection.get(include=["metadatas"])
-        for doc_id, meta in zip(all_data.get("ids", []), all_data.get("metadatas", [])):
+        for doc_id, meta in zip(all_data.get("ids", []), all_data.get("metadatas", []), strict=False):
             self._id_set.add(doc_id)
             if meta and "content_hash" in meta:
                 self.content_hashes.add(meta["content_hash"])
@@ -456,7 +456,7 @@ class ChromaVectorStore:
 
             # Incrementally update keyword index for new documents
             for doc_id, text, meta, embedding in zip(
-                to_upsert_ids, to_upsert_documents, to_upsert_metadatas, to_upsert_embeddings
+                to_upsert_ids, to_upsert_documents, to_upsert_metadatas, to_upsert_embeddings, strict=False
             ):
                 self._doc_ids.append(doc_id)
                 self._doc_contents.append(text)
@@ -778,7 +778,7 @@ class ChromaVectorStore:
 
         scored: list[tuple[float, str]] = []
         self._rebuild_index_if_needed()
-        for i, meta in enumerate(self._doc_metadatas):
+        for _i, meta in enumerate(self._doc_metadatas):
             if not meta:
                 continue
             quality_score = float(meta.get("quality_score", 1.0))
@@ -825,9 +825,9 @@ class ChromaVectorStore:
 
 
 class ChromaVectorStoreFactory:
-    _instance: ChromaVectorStore | None = None
-    _runtime_config: dict[str, Any] = {}
-    _runtime_signature_value: tuple[tuple[str, Any], ...] | None = None
+    _instance: ClassVar[ChromaVectorStore | None] = None
+    _runtime_config: ClassVar[dict[str, Any]] = {}
+    _runtime_signature_value: ClassVar[tuple[tuple[str, Any], ...] | None] = None
 
     @classmethod
     def _normalize_runtime_config(cls, config: dict[str, Any] | None = None) -> dict[str, Any]:

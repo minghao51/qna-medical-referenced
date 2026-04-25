@@ -247,7 +247,7 @@ def test_validate_hyde_config_clamps_max_length():
     assert max_length == 500  # Maximum
 
     # Just right
-    enable, max_length = validate_hyde_config(True, 300)
+    _enable, max_length = validate_hyde_config(True, 300)
     assert max_length == 300
 
 

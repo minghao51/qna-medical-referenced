@@ -104,7 +104,7 @@ def group_list_items(items: list[str], max_chars: int) -> list[str]:
     limit = max(1, max_chars)
 
     for item in items:
-        candidate = "\n".join(current + [item]).strip()
+        candidate = "\n".join([*current, item]).strip()
         if current and len(candidate) > limit:
             groups.append("\n".join(current).strip())
             current = [item]
@@ -135,11 +135,11 @@ def split_table_rows(
     current_rows: list[str] = []
 
     def build_group(rows_for_group: list[str], header_repeated: bool) -> dict[str, object]:
-        lines = [header] + rows_for_group if header_repeated else rows_for_group
+        lines = [header, *rows_for_group] if header_repeated else rows_for_group
         return {"text": "\n".join(lines).strip(), "header_repeated": header_repeated}
 
     for row in data_rows:
-        candidate_rows = current_rows + [row]
+        candidate_rows = [*current_rows, row]
         candidate_group = build_group(candidate_rows, repeat_header)
         if current_rows and len(str(candidate_group["text"])) > max_chars:
             groups.append(build_group(current_rows, repeat_header))

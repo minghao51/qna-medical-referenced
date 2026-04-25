@@ -20,6 +20,6 @@ __all__ = [
     "VectorStore",
     "VectorStoreFactory",
     "get_vector_store",
-    "set_vector_store_runtime_config",
     "get_vector_store_runtime_config",
+    "set_vector_store_runtime_config",
 ]

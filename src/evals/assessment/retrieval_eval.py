@@ -39,7 +39,7 @@ def source_type_from_name(name: str) -> str:
         return "pdf"
     if lowered.endswith(".csv"):
         return "csv"
-    if lowered.endswith(".html") or lowered.endswith(".md"):
+    if lowered.endswith((".html", ".md")):
         return "html"
     return "other"
 

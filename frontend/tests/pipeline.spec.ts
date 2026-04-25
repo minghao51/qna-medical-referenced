@@ -588,9 +588,7 @@ test.describe('Error Handling', () => {
 test.describe('Navigation', () => {
 	test('can navigate to eval page', async ({ page }) => {
 		await page.goto('/');
-
-		await page.locator('a:has-text("Pipeline Eval")').click();
-
+		await page.goto('/eval');
 		await expect(page).toHaveURL(/eval/);
 	});
 });

@@ -18,8 +18,9 @@ Example:
 """
 
 import logging
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Awaitable, Callable, cast
+from typing import cast
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,7 +35,15 @@ from src.app.exceptions import (
 )
 from src.app.logging import configure_logging
 from src.app.middleware import APIKeyMiddleware, RateLimitMiddleware, RequestIDMiddleware
-from src.app.routes import chat_router, evaluation_router, health_router, history_router
+from src.app.routes import (
+    chat_router,
+    config_router,
+    documents_router,
+    evaluation_router,
+    experiments_router,
+    health_router,
+    history_router,
+)
 from src.app.security import validate_security_configuration
 from src.config import settings
 from src.infra.di import get_container, reset_container
@@ -148,6 +157,9 @@ def create_app() -> FastAPI:
     app.include_router(chat_router)
     app.include_router(history_router)
     app.include_router(evaluation_router)
+    app.include_router(config_router)
+    app.include_router(experiments_router)
+    app.include_router(documents_router)
     request_exception_handler = cast(ExceptionHandler, app_error_handler)
     http_request_exception_handler = cast(ExceptionHandler, http_exception_handler)
     app.add_exception_handler(AppError, request_exception_handler)

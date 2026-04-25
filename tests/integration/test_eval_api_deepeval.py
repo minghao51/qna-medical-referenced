@@ -40,7 +40,6 @@ def test_answer_quality_endpoint_loads_results(client, tmp_path):
 def test_evaluate_single_endpoint(client):
     """Test single answer evaluation endpoint."""
     # This test requires actual DeepEval metrics which need API keys
-    pass
 
 
 def test_l6_is_valid_stage():

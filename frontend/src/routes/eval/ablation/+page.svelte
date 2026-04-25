@@ -6,7 +6,7 @@
 	import EvalSection from '$lib/components/EvalSection.svelte';
 	import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
-	import { getApiBaseUrl } from '$lib/utils/api';
+	import { getFullAblationResults } from '$lib/utils/api';
 	import type { FullAblationResponse, FullAblationRun } from '$lib/types';
 
 	type DimensionKey = 'all' | 'pdf_extraction' | 'html_extraction' | 'chunking_strategy' | 'chunk_size' | 'retrieval' | 'combined';
@@ -18,8 +18,6 @@
 		metrics: string[];
 		verdict: string;
 	};
-
-	const API_URL = getApiBaseUrl();
 
 	let data: FullAblationResponse | null = null;
 	let loading = true;
@@ -134,12 +132,9 @@
 
 	onMount(async () => {
 		try {
-			const res = await fetch(`${API_URL}/evaluation/ablation/full`);
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			data = await res.json();
+			data = await getFullAblationResults<FullAblationResponse>();
 		} catch (e: unknown) {
-			const msg = e instanceof Error ? e.message : 'Failed to load ablation data';
-			error = msg;
+			error = e instanceof Error ? e.message : 'Failed to load ablation data';
 		} finally {
 			loading = false;
 		}

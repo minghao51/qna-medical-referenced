@@ -11,9 +11,9 @@ import json
 import logging
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 import httpx
@@ -138,7 +138,7 @@ def migrate_existing_html_duplicates(
                 "status": "inventory_canonical",
                 "duplicate_of": None,
                 "record_type": "file_inventory",
-                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "timestamp_utc": datetime.now(UTC).isoformat(),
             }
         )
         for alias in files_sorted[1:]:
@@ -169,7 +169,7 @@ def migrate_existing_html_duplicates(
                     "status": status,
                     "duplicate_of": canonical.name,
                     "record_type": "file_inventory",
-                    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                    "timestamp_utc": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -214,7 +214,7 @@ def _register_manifest_record(
             "content_hash": content_hash,
             "status": status,
             "duplicate_of": duplicate_of,
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.now(UTC).isoformat(),
         }
     )
 
@@ -262,7 +262,7 @@ def file_exists(url: str, extension: str = "html") -> bool:
     return file_path.exists()
 
 
-async def download_url(url: str, timeout: int = 30) -> Optional[str]:
+async def download_url(url: str, timeout: int = 30) -> str | None:
     """Download content from URL."""
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         try:
@@ -277,7 +277,7 @@ async def download_url(url: str, timeout: int = 30) -> Optional[str]:
             return None
 
 
-async def download_binary(url: str, timeout: int = 60) -> Optional[bytes]:
+async def download_binary(url: str, timeout: int = 60) -> bytes | None:
     """Download binary content (PDF) from URL."""
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         try:
@@ -292,7 +292,7 @@ async def download_binary(url: str, timeout: int = 60) -> Optional[bytes]:
             return None
 
 
-async def _download_and_save_html(url: str, logical_name: str, timeout: int = 30) -> Optional[str]:
+async def _download_and_save_html(url: str, logical_name: str, timeout: int = 30) -> str | None:
     normalized_url = normalize_url(url)
     manifest = _load_manifest()
     by_url, by_hash = _manifest_indexes(manifest)

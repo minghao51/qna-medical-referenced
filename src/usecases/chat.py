@@ -28,7 +28,8 @@ Example:
 
 import logging
 import time
-from typing import Any, AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from src.app.exceptions import UpstreamServiceError
 from src.infra.llm import get_client
@@ -74,7 +75,7 @@ def process_chat_message(
     llm_client: Any,
     history_store: ChatHistoryStore,
     message: str,
-    session_id: Optional[str],
+    session_id: str | None,
     include_pipeline: bool = False,
     top_k: int = 5,
 ) -> dict[str, Any]:
@@ -150,7 +151,7 @@ async def stream_chat_message(
     llm_client: Any,
     history_store: ChatHistoryStore,
     message: str,
-    session_id: Optional[str],
+    session_id: str | None,
     include_pipeline: bool = False,
     top_k: int = 5,
 ) -> AsyncGenerator[tuple[str, dict[str, Any]], None]:

@@ -54,7 +54,7 @@ class _FakeWandb:
         self.inits.append(kwargs)
         return self.run
 
-    def Artifact(self, name: str, type: str, metadata: dict | None = None):  # noqa: N802
+    def Artifact(self, name: str, type: str, metadata: dict | None = None):
         return _FakeArtifact(name=name, type=type, metadata=metadata)
 
 

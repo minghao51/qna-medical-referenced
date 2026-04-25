@@ -10,7 +10,14 @@
 	import RetrievalTab from '$lib/components/RetrievalTab.svelte';
 	import TabNav from '$lib/components/TabNav.svelte';
 	import TrendingTab from '$lib/components/TrendingTab.svelte';
-	import { fetchHealthStatus, getApiBaseUrl, parseApiError } from '$lib/utils/api';
+	import AdvancedTab from '$lib/components/AdvancedTab.svelte';
+	import {
+		fetchHealthStatus,
+		getLatestEvaluation,
+		getEvaluationHistory,
+		getEvaluationRun,
+		getAblationResults
+	} from '$lib/utils/api';
 	import { exportCharts, exportToCSV, exportToJSON } from '$lib/utils/export';
 	import { calculateHealthScore, getHealthGrade } from '$lib/utils/health-score';
 	import {
@@ -31,12 +38,11 @@
 		HealthResponse
 	} from '$lib/types';
 
-	const API_URL = getApiBaseUrl();
-
 	const tabs: Array<{ id: EvalTabId; label: string }> = [
 		{ id: 'ingestion', label: 'Ingestion' },
 		{ id: 'retrieval', label: 'Retrieval' },
 		{ id: 'quality', label: 'Quality' },
+		{ id: 'advanced', label: 'Advanced' },
 		{ id: 'trending', label: 'Trending' }
 	];
 
@@ -85,9 +91,7 @@
 
 	async function loadData() {
 		try {
-			const response = await fetch(`${API_URL}/evaluation/latest`);
-			if (!response.ok) throw new Error(await parseApiError(response));
-			const payload = (await response.json()) as EvaluationResponse;
+			const payload = await getLatestEvaluation<EvaluationResponse>();
 			latestData = payload;
 			if (!selectedRunKey || selectedRunKey === selectionKey(payload) || !data) {
 				selectedRunKey = selectionKey(payload);
@@ -105,7 +109,7 @@
 
 	async function loadHealth() {
 		try {
-			healthStatus = await fetchHealthStatus(API_URL);
+			healthStatus = await fetchHealthStatus();
 			operationalNotice =
 				healthStatus.vector_store && healthStatus.vector_store.initialized === false
 					? 'Backend is up, but the runtime index is not ready yet.'
@@ -117,10 +121,7 @@
 
 	async function loadHistory() {
 		try {
-			const response = await fetch(`${API_URL}/evaluation/history?limit=20`);
-			if (response.ok) {
-				historyData = (await response.json()) as EvaluationHistoryResponse;
-			}
+			historyData = await getEvaluationHistory<EvaluationHistoryResponse>(20);
 		} catch (err) {
 			console.error('Failed to load history:', err);
 		} finally {
@@ -131,10 +132,7 @@
 	async function loadAblationResults() {
 		try {
 			ablationLoading = true;
-			const response = await fetch(`${API_URL}/evaluation/ablation`);
-			if (response.ok) {
-				ablationData = (await response.json()) as AblationResponse;
-			}
+			ablationData = await getAblationResults<AblationResponse>();
 		} catch (err) {
 			console.error('Failed to load ablation results:', err);
 		} finally {
@@ -142,17 +140,12 @@
 		}
 	}
 
-	function runDetailUrl(run: EvaluationHistoryRun): string {
-		return `${API_URL}/evaluation/run/${encodeURIComponent(run.run_dir)}`;
-	}
-
 	async function loadRun(runKey: string): Promise<EvaluationResponse | null> {
 		if (latestData && selectionKey(latestData) === runKey) return latestData;
 		const run = (historyData?.runs ?? []).find((item) => selectionKey(item) === runKey);
 		if (!run) return null;
 		try {
-			const response = await fetch(runDetailUrl(run));
-			if (response.ok) return (await response.json()) as EvaluationResponse;
+			return await getEvaluationRun<EvaluationResponse>(run.run_dir);
 		} catch (err) {
 			console.error('Failed to load run:', err);
 		}
@@ -278,6 +271,8 @@
 				<RetrievalTab {data} onDrillDown={showMetricDrillDown} />
 			{:else if activeTab === 'quality'}
 				<QualityTab {data} onDrillDown={showMetricDrillDown} />
+			{:else if activeTab === 'advanced'}
+				<AdvancedTab {data} />
 			{:else}
 				<TrendingTab
 					{historyData}

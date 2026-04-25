@@ -10,4 +10,4 @@ def get_client():
     return _qwen_get_client()
 
 
-__all__ = ["QwenClient", "LiteLLMClient", "get_client"]
+__all__ = ["LiteLLMClient", "QwenClient", "get_client"]

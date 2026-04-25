@@ -7,7 +7,7 @@ maintaining compatibility with the existing pipeline.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, ClassVar
 
 from chonkie import LateChunker, Pipeline, SemanticChunker
 
@@ -24,12 +24,12 @@ class ChonkieChunkerAdapter:
     chunking strategies.
     """
 
-    SUPPORTED_STRATEGIES = {
+    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = frozenset({
         "chonkie_recursive",
         "chonkie_semantic",
         "chonkie_late",
         "medical_semantic",
-    }
+    })
 
     def __init__(
         self,
@@ -37,7 +37,7 @@ class ChonkieChunkerAdapter:
         chunk_size: int = 512,
         chunk_overlap: int = 64,
         min_chunk_size: int = 100,
-        embedding_model: Optional[str] = None,
+        embedding_model: str | None = None,
     ):
         """Initialize the chonkie chunker adapter.
 

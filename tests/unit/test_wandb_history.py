@@ -44,7 +44,7 @@ class _FakeWandb:
     def __init__(self, runs):
         self.api = _FakeApi(runs)
 
-    def Api(self):  # noqa: N802
+    def Api(self):
         return self.api
 
 

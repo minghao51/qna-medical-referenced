@@ -17,15 +17,15 @@ class TestIsThresholdPass:
         assert val == 0.7
 
     def test_min_fail(self):
-        passed, op, val = is_threshold_pass(0.5, {"op": "min", "value": 0.7})
+        passed, _op, _val = is_threshold_pass(0.5, {"op": "min", "value": 0.7})
         assert passed is False
 
     def test_max_pass(self):
-        passed, op, val = is_threshold_pass(0.05, {"op": "max", "value": 0.10})
+        passed, _op, _val = is_threshold_pass(0.05, {"op": "max", "value": 0.10})
         assert passed is True
 
     def test_max_fail(self):
-        passed, op, val = is_threshold_pass(0.15, {"op": "max", "value": 0.10})
+        passed, _op, _val = is_threshold_pass(0.15, {"op": "max", "value": 0.10})
         assert passed is False
 
     def test_exact_match_min(self):
@@ -45,7 +45,7 @@ class TestIsThresholdPass:
         assert passed is False
 
     def test_scalar_threshold(self):
-        passed, op, val = is_threshold_pass(0.8, 0.7)
+        passed, op, _val = is_threshold_pass(0.8, 0.7)
         assert passed is True
         assert op == "min"
 

@@ -391,4 +391,164 @@ export type DrillDownRecord = Record<string, unknown>;
 
 export type EvalTrendMetric = 'hit_rate' | 'mrr' | 'latency';
 
-export type EvalTabId = 'ingestion' | 'retrieval' | 'quality' | 'trending';
+export type EvalTabId = 'ingestion' | 'retrieval' | 'quality' | 'trending' | 'advanced';
+
+export interface RuntimeRetrievalConfig {
+	search_mode: string;
+	enable_diversification: boolean;
+	mmr_lambda: number;
+	overfetch_multiplier: number;
+	max_chunks_per_source_page: number;
+	max_chunks_per_source: number;
+	top_k: number;
+	enable_hyde: boolean;
+	hyde_max_length: number;
+	enable_hype: boolean;
+	enable_reranking: boolean;
+	reranking_mode: string;
+	enable_medical_expansion: boolean;
+	medical_expansion_provider: string;
+	enable_query_understanding: boolean;
+}
+
+export interface RuntimeIngestionConfig {
+	structured_chunking_enabled: boolean;
+	page_classification_enabled: boolean;
+	html_extractor_strategy: string;
+	pdf_extractor_strategy: string;
+}
+
+export interface RuntimeEnrichmentConfig {
+	enable_keyword_extraction: boolean;
+	enable_chunk_summaries: boolean;
+}
+
+export interface RuntimeLlmConfig {
+	provider: string;
+	model_name: string;
+	embedding_model: string;
+}
+
+export interface RuntimeConfig {
+	retrieval: RuntimeRetrievalConfig;
+	ingestion: RuntimeIngestionConfig;
+	enrichment: RuntimeEnrichmentConfig;
+	llm: RuntimeLlmConfig;
+	production_profile: string | null;
+}
+
+export interface ExperimentConfigSummary {
+	file: string;
+	experiment_id: string;
+	name: string;
+	description: string;
+	variant_count: number;
+	primary_metric: string;
+	has_results: boolean;
+}
+
+export interface ExperimentReportSummary {
+	file: string;
+	experiment_name: string;
+	timestamp: string;
+	winner: string | null;
+	any_target_met: boolean | null;
+}
+
+export interface ExperimentListResponse {
+	configs: ExperimentConfigSummary[];
+	reports: ExperimentReportSummary[];
+}
+
+export interface ExperimentVariantResult {
+	name: string;
+	run_dir: string;
+	metrics: Record<string, unknown>;
+	meets_target?: boolean;
+}
+
+export interface ExperimentReport {
+	experiment_name: string;
+	timestamp: string;
+	config: Record<string, unknown>;
+	baseline: ExperimentVariantResult;
+	variants: ExperimentVariantResult[];
+	winner: ExperimentVariantResult | null;
+	primary_metric: string;
+	target_improvement: number;
+	any_target_met: boolean;
+}
+
+export interface ParsedExperimentConfig {
+	schema_version: number;
+	metadata: { name: string; description: string; tags: string[] };
+	ingestion: Record<string, unknown>;
+	retrieval: Record<string, unknown>;
+	embedding_index: Record<string, unknown>;
+	dataset: Record<string, unknown>;
+	evaluation: Record<string, unknown>;
+	variants: Array<{ name: string; overrides?: Record<string, unknown> }>;
+	experiment_file: string;
+}
+
+export interface DocumentListItem {
+	id: string;
+	source: string;
+	page: number | null;
+	source_type: string;
+	source_class: string;
+	content_type: string;
+	content_preview: string;
+	content_length: number;
+}
+
+export interface DocumentListResponse {
+	total: number;
+	offset: number;
+	limit: number;
+	items: DocumentListItem[];
+	source_type_counts: Record<string, number>;
+	index_metadata?: Record<string, unknown>;
+}
+
+export interface DocumentDetailResponse {
+	id: string;
+	content: string;
+	metadata: Record<string, unknown>;
+	content_length: number;
+}
+
+export interface EvaluationRunSummary {
+	run_dir: string;
+	status: string;
+	duration_s: number;
+	failed_thresholds_count: number;
+}
+
+export interface StepRecordsResponse {
+	stage: string;
+	records: Array<Record<string, unknown>>;
+	total_count: number;
+}
+
+export interface L6RecordsResponse {
+	records: Array<Record<string, unknown>>;
+	total_count: number;
+}
+
+export interface AnswerQualityMetric {
+	score: number;
+	reason: string | null;
+}
+
+export interface AnswerQualityRecord {
+	query_id: string;
+	query: string;
+	answer: string;
+	metrics: Record<string, AnswerQualityMetric>;
+}
+
+export interface AnswerQualityResponse {
+	run_dir: string;
+	results: AnswerQualityRecord[];
+}

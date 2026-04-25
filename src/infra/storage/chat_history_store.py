@@ -9,9 +9,9 @@ save_message = chat_history_store.save_message
 clear_history = chat_history_store.clear_history
 
 __all__ = [
+    "FileChatHistoryStore",
     "chat_history_store",
+    "clear_history",
     "get_history",
     "save_message",
-    "clear_history",
-    "FileChatHistoryStore",
 ]

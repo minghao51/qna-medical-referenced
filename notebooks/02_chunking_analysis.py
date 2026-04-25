@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Chunking analysis notebook.
 
 Analyze different chunking strategies and their effects on chunk quality.
@@ -11,8 +10,9 @@ Analyze different chunking strategies and their effects on chunk quality.
 # ## Setup
 
 # %%
-import polars as pl
 from pathlib import Path
+
+import polars as pl
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"

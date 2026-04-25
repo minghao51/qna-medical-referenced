@@ -156,7 +156,7 @@ def _parse_enrich_result(response: str) -> dict[str, Any]:
 
 async def _enrich_chunk_batch(
     chunks_batch: list[dict],
-    client: "QwenClient",
+    client: QwenClient,
     enable_keywords: bool,
     enable_summaries: bool,
 ) -> dict[str, dict[str, Any]]:
@@ -178,23 +178,24 @@ async def _enrich_chunk_batch(
     tasks = []
     for chunk in chunks_batch:
         prompt = ENRICH_PROMPT_TEMPLATE.format(chunk=chunk["content"])
+        chunk_id = chunk["id"]
 
-        async def generate_with_timeout() -> str:
+        async def generate_with_timeout(prompt=prompt, chunk_id=chunk_id) -> str:
             try:
                 async with asyncio.timeout(30):  # 30s timeout per chunk
                     return await loop.run_in_executor(None, client.generate, prompt, "")
-            except asyncio.TimeoutError:
-                logger.warning("Enrichment timeout for chunk %s", chunk["id"])
+            except TimeoutError:
+                logger.warning("Enrichment timeout for chunk %s", chunk_id)
                 return ""
             except Exception as e:
-                logger.exception("Enrichment failed for chunk %s: %s", chunk["id"], e)
+                logger.exception("Enrichment failed for chunk %s: %s", chunk_id, e)
                 return ""
 
         tasks.append((chunk["id"], generate_with_timeout()))
 
     gathered = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
 
-    for (chunk_id, _), response in zip(tasks, gathered):
+    for (chunk_id, _), response in zip(tasks, gathered, strict=False):
         if isinstance(response, Exception):
             logger.warning("Enrichment failed for chunk %s: %s", chunk_id, response)
             continue
@@ -216,7 +217,7 @@ async def _enrich_chunk_batch(
 
 async def enrich_chunks(
     chunks: list[dict],
-    client: "QwenClient",
+    client: QwenClient,
     *,
     enable_keywords: bool = True,
     enable_summaries: bool = True,

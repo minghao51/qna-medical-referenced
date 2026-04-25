@@ -40,7 +40,7 @@ async def chat_stream_generator(
     sent_terminal_event = False
     try:
         session_id = (
-            getattr(request.state, "chat_session_id") or get_chat_session_id(request) or "default"
+            request.state.chat_session_id or get_chat_session_id(request) or "default"
         )
         llm_client = getattr(request.app.state, "llm_client", None)
         history_store = request.app.state.chat_history_store

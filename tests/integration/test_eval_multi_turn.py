@@ -248,7 +248,7 @@ class TestMultiTurnDatasetSplit:
 
     def test_all_difficulties_present(self, golden_conversations_fixture, multi_turn_difficulties):
         """Verify all difficulty levels are represented."""
-        difficulties = set(c["difficulty"] for c in golden_conversations_fixture)
+        difficulties = {c["difficulty"] for c in golden_conversations_fixture}
         assert difficulties == set(multi_turn_difficulties)
 
 

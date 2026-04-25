@@ -169,9 +169,7 @@ class TestTextChunker:
         for chunk in chunks:
             content = chunk["content"]
             assert (
-                content.startswith("First")
-                or content.startswith("Second")
-                or content.startswith("Third")
+                content.startswith(("First", "Second", "Third"))
             )
 
     def test_chunk_documents_function(self):

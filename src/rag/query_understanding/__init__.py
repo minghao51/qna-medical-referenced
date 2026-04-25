@@ -20,7 +20,7 @@ __all__ = [
     "QueryType",
     "classify_query",
     "get_query_classifier",
+    "get_query_strategy",
     "get_retrieval_params_for_query",
     "route_retrieval",
-    "get_query_strategy",
 ]

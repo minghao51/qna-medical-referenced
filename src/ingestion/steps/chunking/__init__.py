@@ -1,7 +1,5 @@
 """Structured chunking package."""
 
-from typing import Optional
-
 from src.ingestion.steps.chunking.config import (
     DEFAULT_SOURCE_CHUNK_CONFIGS,
     get_source_chunk_configs,
@@ -28,8 +26,8 @@ def get_chonkie_chunker(
     chunk_size: int = 512,
     chunk_overlap: int = 64,
     min_chunk_size: int = 100,
-    embedding_model: Optional[str] = None,
-    medical_model: Optional[str] = None,
+    embedding_model: str | None = None,
+    medical_model: str | None = None,
 ):
     from src.ingestion.steps.chunking.chonkie_adapter import ChonkieChunkerAdapter
 
@@ -40,7 +38,7 @@ def get_chonkie_chunker(
             raise ImportError(
                 "The 'medical_semantic' chunking strategy requires the 'spacy' package. "
                 "Install it with: uv pip install -e '.[medical]'"
-            )
+            ) from None
 
         from src.ingestion.steps.chunking.medical_semantic import MedicalSemanticChunkerAdapter
 

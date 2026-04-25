@@ -9,6 +9,7 @@ This folder is organized by purpose, not by chronology.
 - `configuration.md` — Full environment variable and deployment settings reference
 - `dependencies.md` — Dependency management, extras, and troubleshooting
 - `wandb-metrics-verbosity.md` — Weights & Biases metrics logging levels
+- `20260416-feature-flags.md` — Feature flags for retrieval and indexing (reranking, HyDE, HyPE, keyword extraction)
 
 ## Architecture
 
@@ -38,24 +39,37 @@ This folder is organized by purpose, not by chronology.
 
 ## Plans
 
-Active design documents worth keeping around:
+Active design documents:
 
-- `plans/2026-03-20-medical-intake-agent.md` — Health parameter extraction from conversation
-- `plans/2026-03-20-code-review-remediation.md` — Code review issue remediation plan
-- `plans/technical-roadmap.md` — Strategic roadmap and enhancement proposal
+- `plans/20260416-medical-copilot-design.md` — Multi-modal medical AI co-pilot design
+- `plans/20260416-phase1-exploration-design.md` — Phase 1 exploration design
+
+**Archived plans** (completed or superseded):
+- `archive/plans/` — Historical design documents (technical roadmap, code review remediation, medical intake agent)
 
 ## Historical Reports
 
-Dated implementation notes, summaries, and historical snapshots:
+Dated implementation notes, summaries, and historical snapshots are now in `archive/`:
 
-- `reports/2025-02/` — Early documentation improvements
-- `reports/2025-03/` — Frontend dashboard implementation phases
-- `reports/2026-02/` — Pipeline visualization, Playwright testing, verification summaries
-- `reports/2026-03/` — RAG pipeline reports, tracing improvements, completed plans, operational how-tos
-- `reports/2026-04/` — Ablation study handoff notes
+- `archive/reports/2025-02/` — Early documentation improvements
+- `archive/reports/2025-03/` — Frontend dashboard implementation phases
+- `archive/reports/2026-02/` — Pipeline visualization, Playwright testing, verification summaries
+- `archive/reports/2026-03/` — RAG pipeline reports, tracing improvements, completed plans, operational how-tos
+- `archive/handoffs/` — Historical handoff documents (feature ablation, phase 2 followups, ablation study)
+
+## Archive Structure
+
+Historical documentation organized by type:
+
+- `archive/reports/2025-02/` — Early documentation improvements
+- `archive/reports/2025-03/` — Frontend dashboard implementation phases
+- `archive/reports/2026-02/` — Pipeline visualization, Playwright testing, verification summaries
+- `archive/reports/2026-03/` — RAG pipeline reports, tracing improvements, completed plans
+- `archive/handoffs/` — Historical handoff documents (feature ablation, phase 2 followups, ablation study)
+- `archive/plans/` — Historical design documents (technical roadmap, code review remediation, medical intake agent)
 
 ## Conventions
 
 - Keep current reference material in the top-level sections above.
-- Move completed, dated writeups into `reports/YYYY-MM/`.
+- Move completed, dated writeups into `archive/` by type.
 - Remove or relocate one-off verification notes instead of leaving them at repo root.

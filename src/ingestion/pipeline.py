@@ -126,22 +126,6 @@ def visualize_pipeline(
     """
     import graphviz
 
-    dag_structure = {
-        "download": ["download_web_content", "download_pdf_files"],
-        "parse": ["all_pdf_documents", "all_markdown_documents", "write_silver_documents"],
-        "chunk": ["chunk_silver_documents", "all_chunks", "write_gold_chunks"],
-        "enrich": [
-            "generate_hype_for_chunks",
-            "apply_hype_questions",
-            "extract_keywords_for_chunks",
-            "apply_keyword_extractions",
-            "generate_summaries_for_chunks",
-            "apply_summaries",
-            "write_enriched_chunks",
-        ],
-        "reference": ["load_reference_data", "write_reference_data"],
-        "embed": ["embed_chunks", "write_embedding_stats"],
-    }
 
     dot = graphviz.Digraph(comment="RAG Ingestion Pipeline DAG")
     dot.attr(rankdir="TB")

@@ -1,19 +1,18 @@
 """API request/response schemas."""
 
-from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         None,
         min_length=1,
         max_length=128,
         description="Deprecated. Session ownership is determined by a server-issued cookie.",
     )
-    user_context: Optional[str] = None
+    user_context: str | None = None
 
     @field_validator("message", mode="before")
     @classmethod
@@ -33,16 +32,16 @@ class ChatRequest(BaseModel):
 class ChatSource(BaseModel):
     canonical_label: str
     display_label: str
-    source_url: Optional[str] = None
+    source_url: str | None = None
     source_type: str = "other"
     source_class: str = "unknown"
-    domain: Optional[str] = None
+    domain: str | None = None
     domain_type: str = "unknown"
     label: str
     source: str
-    url: Optional[str] = None
-    page: Optional[int] = None
-    content_type: Optional[str] = None
+    url: str | None = None
+    page: int | None = None
+    content_type: str | None = None
 
 
 class ChatResponse(BaseModel):

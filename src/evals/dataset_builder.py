@@ -245,7 +245,7 @@ def _source_type(source: str) -> str:
         return "pdf"
     if s.endswith(".csv"):
         return "csv"
-    if s.endswith(".md") or s.endswith(".html"):
+    if s.endswith((".md", ".html")):
         return "html"
     return "other"
 

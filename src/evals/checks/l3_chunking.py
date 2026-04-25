@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 from collections import Counter, defaultdict
 from typing import Any
 
@@ -53,7 +54,7 @@ def assess_l3_chunking_quality(
         )
 
     for _, group in groups.items():
-        for first, second in zip(group, group[1:]):
+        for first, second in itertools.pairwise(group):
             a = first.get("content", "")
             b = second.get("content", "")
             overlap_values.append(longest_suffix_prefix_overlap(a, b, chunk_overlap))

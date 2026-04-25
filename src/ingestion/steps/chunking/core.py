@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, ClassVar
 
 from src.ingestion.steps.chunking import config
 from src.ingestion.steps.chunking.helpers import (
@@ -34,14 +34,14 @@ class TextChunker:
         - chonkie_late: Chonkie's LateChunker using Qwen embeddings
     """
 
-    SUPPORTED_STRATEGIES = {
+    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = frozenset({
         "recursive",
         "custom_recursive",
         "chonkie_recursive",
         "chonkie_semantic",
         "chonkie_late",
         "medical_semantic",
-    }
+    })
 
     def __init__(
         self,
@@ -71,10 +71,10 @@ class TextChunker:
         self.strategy = strategy
         self.min_chunk_size = min_chunk_size
         self.embedding_model = embedding_model or "text-embedding-v4"
-        self._chonkie_adapter: "ChonkieChunkerAdapter | None" = None
+        self._chonkie_adapter: ChonkieChunkerAdapter | None = None
 
     @property
-    def chonkie_adapter(self) -> "ChonkieChunkerAdapter | None":
+    def chonkie_adapter(self) -> ChonkieChunkerAdapter | None:
         """Lazy-load chonkie adapter for chonkie strategies."""
         if self.strategy in ("recursive", "custom_recursive"):
             return None
@@ -93,7 +93,7 @@ class TextChunker:
 
     def chunk_text(
         self, text: str, source: str = "unknown", doc_id: str = "doc", page: int = 1
-    ) -> List[dict]:
+    ) -> list[dict]:
         # For chonkie strategies, delegate to adapter
         if self.chonkie_adapter is not None:
             return self.chonkie_adapter.chunk_text(text, source, doc_id, page)
@@ -118,7 +118,7 @@ class TextChunker:
         parent_block_ids: list[str] | None = None,
         extractor: str | None = None,
         doc_metadata: dict | None = None,
-    ) -> List[dict]:
+    ) -> list[dict]:
         chunks: list[dict] = []
         start = 0
         text_length = len(text)
@@ -180,7 +180,7 @@ class TextChunker:
         page: int = 1,
         start_chunk_index: int = 0,
         doc_metadata: dict | None = None,
-    ) -> List[dict]:
+    ) -> list[dict]:
         chunks: list[dict] = []
         chunk_index = start_chunk_index
         for section_offset, section_text in split_markdown_sections(text):
@@ -206,7 +206,7 @@ class TextChunker:
         default_page: int = 1,
         start_chunk_index: int = 0,
         doc_metadata: dict | None = None,
-    ) -> List[dict]:
+    ) -> list[dict]:
         chunks: list[dict] = []
         chunk_index = start_chunk_index
         block_group_limit = max(900, self.chunk_size)
@@ -337,14 +337,14 @@ class TextChunker:
             chunk["section_sibling_rank"] = idx
         return filtered
 
-    def chunk_documents(self, documents: List[dict]) -> List[dict]:
+    def chunk_documents(self, documents: list[dict]) -> list[dict]:
         return self.chunk_documents_with_configs(documents, source_chunk_configs=None)
 
     def chunk_documents_with_configs(
         self,
-        documents: List[dict],
+        documents: list[dict],
         source_chunk_configs: dict | None = None,
-    ) -> List[dict]:
+    ) -> list[dict]:
         all_chunks = []
         cfg_map = copy.deepcopy(config.DEFAULT_SOURCE_CHUNK_CONFIGS)
         if source_chunk_configs:
@@ -458,7 +458,7 @@ class TextChunker:
         return source_kind(source)
 
 
-def chunk_documents(documents: List[dict], source_chunk_configs: dict | None = None) -> List[dict]:
+def chunk_documents(documents: list[dict], source_chunk_configs: dict | None = None) -> list[dict]:
     chunker = TextChunker()
     effective_configs = source_chunk_configs
     if effective_configs is None:

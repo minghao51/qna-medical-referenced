@@ -15,16 +15,16 @@ from src.evals.metrics._utils import (
 from src.evals.metrics.medical import METRIC_SPECS, MetricSpec, create_medical_metrics
 
 __all__ = [
+    "METRIC_SPECS",
+    # Medical metrics
+    "MetricSpec",
+    "create_medical_metrics",
+    "hit_rate_at_k",
     # Utility functions
     "mean",
+    "ndcg_at_k",
     "percentile",
-    "hit_rate_at_k",
     "precision_at_k",
     "recall_at_k",
     "reciprocal_rank",
-    "ndcg_at_k",
-    # Medical metrics
-    "MetricSpec",
-    "METRIC_SPECS",
-    "create_medical_metrics",
 ]

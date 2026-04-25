@@ -80,7 +80,7 @@ def build_context_and_sources(results: list[dict]) -> tuple[str, list[str], list
     source_labels: list[str] = []
     chat_sources = build_chat_sources(results)
 
-    for result, chat_source in zip(results, chat_sources):
+    for result, chat_source in zip(results, chat_sources, strict=False):
         source_name = chat_source.display_label
         source_labels.append(source_name)
         context_parts.append(f"[Source: {source_name}]\n{result['content']}")

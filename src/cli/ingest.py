@@ -260,7 +260,7 @@ def main() -> None:
         )
         return
 
-    run_hamilton_pipeline(
+    run_pipeline(
         skip_download=args.skip_download,
         force_rebuild=args.force,
         force_html_convert=args.force_html,

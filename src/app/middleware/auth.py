@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import ClassVar
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -18,9 +19,9 @@ EXEMPT_PATHS = {"/", "/health", "/docs", "/openapi.json"}
 class APIKeyConfig:
     """Validated API key configuration cached in memory."""
 
-    _records: list = []
-    _record_map: dict[str, object] = {}
-    _loaded = False
+    _records: ClassVar[list] = []
+    _record_map: ClassVar[dict[str, object]] = {}
+    _loaded: ClassVar[bool] = False
 
     @classmethod
     def get_records(cls) -> list:

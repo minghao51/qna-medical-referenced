@@ -104,6 +104,7 @@ class RetrievalDiversityConfig:
     mmr_lambda: float = 0.75
     enable_diversification: bool = True
     search_mode: str = "rrf_hybrid"
+    top_k: int = 5
     enable_hyde: bool = False
     hyde_max_length: int = 200  # Maximum length for HyDE hypothetical answers
     enable_hype: bool = False  # Use pre-stored HyPE questions at retrieval time
@@ -119,7 +120,7 @@ class RetrievalDiversityConfig:
 
 
 def get_runtime_retrieval_config() -> dict[str, Any]:
-    return asdict(RetrievalDiversityConfig())
+    return asdict(_resolve_retrieval_config())
 
 
 def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> RetrievalDiversityConfig:
@@ -1054,7 +1055,7 @@ def retrieve_context_with_trace(
         enable_medical_expansion=cfg.enable_medical_expansion,
         medical_expansion_provider=cfg.medical_expansion_provider,
     )
-    expanded_queries, selected_hype_questions = _extend_with_hype_questions(
+    expanded_queries, _selected_hype_questions = _extend_with_hype_questions(
         vector_store,
         query,
         expanded_queries,
@@ -1068,7 +1069,7 @@ def retrieve_context_with_trace(
         pre_expanded_queries=expanded_queries,
     )
 
-    results, rerank_result, rerank_info = _apply_reranking(query, results, fetch_k=fetch_k, cfg=cfg)
+    results, _rerank_result, rerank_info = _apply_reranking(query, results, fetch_k=fetch_k, cfg=cfg)
 
     apply_diversification = _should_apply_diversification(cfg)
     results = _diversify_results(

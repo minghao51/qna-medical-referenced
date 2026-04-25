@@ -6,7 +6,7 @@ Maps query types to retrieval parameters for optimized retrieval.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 from src.rag.query_understanding.classifier import QueryClassification, QueryType
 
@@ -42,7 +42,7 @@ class RetrievalRouter:
     DEFAULT_PARAMS = RetrievalParams()
 
     # Query type specific parameters
-    TYPE_PARAMS: dict[QueryType, RetrievalParams] = {
+    TYPE_PARAMS: ClassVar[dict[QueryType, RetrievalParams]] = {
         # Definition: High similarity threshold, top-3 only
         QueryType.DEFINITION: RetrievalParams(
             overfetch_multiplier=2,

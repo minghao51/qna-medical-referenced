@@ -11,6 +11,7 @@ services:
       - "8000:8000"
     environment:
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - QWEN_BASE_URL=${QWEN_BASE_URL:-https://dashscope-us.aliyuncs.com/compatible-mode/v1}
       - MODEL_NAME=${MODEL_NAME:-qwen3.5-flash}
       - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
       - ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE=${ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE:-12}

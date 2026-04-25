@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import type { ChatSource, Message, SourceDomainType } from '$lib/types';
+	import type { ChatSource, Message, SourceDomainType, PipelineTrace as PipelineTraceType } from '$lib/types';
 	import AppShell from '$lib/components/AppShell.svelte';
 	import PipelinePanel from '$lib/components/PipelinePanel.svelte';
 	import ConfidenceBadge from '$lib/components/ConfidenceBadge.svelte';
@@ -8,12 +8,19 @@
 	import SourceDistributionChart from '$lib/components/SourceDistributionChart.svelte';
 	import MarkdownRenderer from '$lib/components/MarkdownRenderer.svelte';
 	import { calculateConfidence, getDomainType } from '$lib/confidenceCalculator';
-	import { fetchHealthStatus, getApiBaseUrl, parseApiError } from '$lib/utils/api';
+	import {
+		fetchHealthStatus,
+		getHistory,
+		clearHistory,
+		chatStreamUrl,
+		chatFetchRequest,
+		parseApiError
+	} from '$lib/utils/api';
 	import { getSafeExternalUrl } from '$lib/utils/url';
 	import type { HealthResponse } from '$lib/types';
 	import '../lib/styles/markdown.css';
 
-	const API_URL = getApiBaseUrl();
+	const MAX_MESSAGE_LENGTH = 2000;
 
 	let messages: Message[] = $state([]);
 	let input = $state('');
@@ -43,15 +50,10 @@
 
 	async function loadHistory() {
 		try {
-			const res = await fetch(`${API_URL}/history`, {
-				credentials: 'include'
-			});
-			if (res.ok) {
-				const data = await res.json();
-				messages = data.history;
-				await tick();
-				scrollToBottom();
-			}
+			const data = await getHistory();
+			messages = data.history as Message[];
+			await tick();
+			scrollToBottom();
 		} catch (e) {
 			console.error('Failed to load history:', e);
 		}
@@ -59,7 +61,7 @@
 
 	async function loadHealth() {
 		try {
-			healthStatus = await fetchHealthStatus(API_URL);
+			healthStatus = await fetchHealthStatus();
 			if (healthStatus.vector_store && healthStatus.vector_store.initialized === false) {
 				operationalNotice = 'Backend is reachable, but the runtime index is not ready yet.';
 			} else {
@@ -80,6 +82,10 @@
 		if (!input.trim() || loading) return;
 
 		const userMessage = input.trim();
+		if (userMessage.length > MAX_MESSAGE_LENGTH) {
+			error = `Message too long (${userMessage.length}/${MAX_MESSAGE_LENGTH} characters).`;
+			return;
+		}
 		input = '';
 		loading = true;
 		error = '';
@@ -96,22 +102,8 @@
 		messages = [...messages, assistantMessage];
 
 		try {
-			const url = new URL(`${API_URL}/chat`);
-			if (includePipelineForSession) {
-				url.searchParams.append('include_pipeline', 'true');
-			}
-
-			const res = await fetch(url.toString(), {
-				method: 'POST',
-				credentials: 'include',
-				headers: {
-					'Content-Type': 'application/json',
-					Accept: 'text/event-stream'
-				},
-				body: JSON.stringify({
-					message: userMessage
-				})
-			});
+			const url = chatStreamUrl(includePipelineForSession);
+			const res = await fetch(url, chatFetchRequest(userMessage, url));
 
 			if (!res.ok) {
 				throw new Error(await parseApiError(res));
@@ -138,11 +130,9 @@
 					const dataStr = line.slice(6);
 					try {
 						const data = JSON.parse(dataStr);
-						// Always update content, even if empty (for final event)
 						if (data.content !== undefined) {
 							assistantMessage.content += data.content;
 						}
-						// Check if stream is done
 						if (data.done) {
 							if (data.sources) {
 								assistantMessage.sources = data.sources;
@@ -152,10 +142,11 @@
 								showPipeline = true;
 							}
 							if (data.error) {
-								error = data.request_id ? `${data.error} (request ${data.request_id})` : data.error;
+								const code = data.error_code ? `[${data.error_code}] ` : '';
+								const req = data.request_id ? ` (request ${data.request_id})` : '';
+								error = `${code}${data.error}${req}`;
 							}
 						}
-						// Update messages after processing each event
 						messages = [...messages.slice(0, -1), { ...assistantMessage }];
 						await tick();
 						scrollToBottom();
@@ -179,11 +170,15 @@
 		}
 	}
 
-	function clearChat() {
+	async function clearChat() {
 		messages = [];
 		loading = false;
 		showPipeline = false;
-		fetch(`${API_URL}/history`, { method: 'DELETE', credentials: 'include' });
+		try {
+			await clearHistory();
+		} catch (e) {
+			console.error('Failed to clear history on server:', e);
+		}
 	}
 
 	async function copyMessage(content: string, index: number) {
@@ -203,6 +198,16 @@
 
 	function hasPipeline(message: Message): boolean {
 		return message.role === 'assistant' && message.pipeline !== undefined;
+	}
+
+	function extractRetrievalConfig(pipeline: PipelineTraceType): Record<string, unknown> | null {
+		const steps = pipeline.retrieval?.steps ?? [];
+		for (const step of steps) {
+			if (step.details?.search_mode !== undefined) {
+				return step.details as Record<string, unknown>;
+			}
+		}
+		return null;
 	}
 
 	function formatTitleCase(value: string): string {
@@ -320,7 +325,7 @@
 	}
 </script>
 
-<AppShell current="/" wide={true}>
+<AppShell current="/">
 <div class="chat-container">
 	<header>
 		<div class="header-left">
@@ -459,6 +464,26 @@
 					>
 						{showPipeline ? 'Hide' : 'Show'} Pipeline Details
 					</button>
+					{@const retrievalCfg = extractRetrievalConfig(msg.pipeline!)}
+					{#if retrievalCfg}
+						<div class="config-chips">
+							{#if typeof retrievalCfg.search_mode === 'string'}
+								<span class="chip">{retrievalCfg.search_mode.replace(/_/g, ' ')}</span>
+							{/if}
+							{#if retrievalCfg.enable_diversification === true}
+								<span class="chip">diversified</span>
+							{/if}
+							{#if retrievalCfg.enable_hyde === true}
+								<span class="chip accent">HyDE</span>
+							{/if}
+							{#if retrievalCfg.enable_reranking === true}
+								<span class="chip accent">reranked</span>
+							{/if}
+							{#if typeof retrievalCfg.top_k === 'number'}
+								<span class="chip">top-{retrievalCfg.top_k}</span>
+							{/if}
+						</div>
+					{/if}
 				{/if}
 			</div>
 		{/each}
@@ -484,9 +509,10 @@
 			onkeydown={handleKeydown}
 			placeholder="Ask a question..."
 			rows="2"
+			maxlength={MAX_MESSAGE_LENGTH}
 			disabled={loading}
 		></textarea>
-		<button onclick={sendMessage} disabled={loading || !input.trim()}>
+		<button onclick={sendMessage} disabled={loading || !input.trim() || input.trim().length > MAX_MESSAGE_LENGTH}>
 			Send
 		</button>
 	</div>
@@ -854,6 +880,27 @@
 		background: #1976d2;
 		color: white;
 		border-color: #1565c0;
+	}
+
+	.config-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		margin-top: 0.5rem;
+	}
+
+	.chip {
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+		font-size: 0.7rem;
+		font-weight: 600;
+		background: #e8edf2;
+		color: #475569;
+	}
+
+	.chip.accent {
+		background: #dbeafe;
+		color: #1d4ed8;
 	}
 
 	.error {

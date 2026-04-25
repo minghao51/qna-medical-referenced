@@ -15,7 +15,6 @@ Usage:
 """
 
 import argparse
-import json
 import logging
 import shutil
 import sys
@@ -24,9 +23,9 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.config import DATA_RAW_DIR, DATA_PROCESSED_DIR, CHROMA_PERSIST_DIRECTORY, settings
-from src.experiments.config import resolve_experiment_runs, build_run_assessment_kwargs
+from src.config import CHROMA_PERSIST_DIRECTORY, DATA_PROCESSED_DIR, DATA_RAW_DIR, settings
 from src.evals import run_assessment
+from src.experiments.config import build_run_assessment_kwargs, resolve_experiment_runs
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +108,7 @@ def run_variant_clean(
     embedding_index = experiment_config.get("embedding_index", {})
     collection_name = embedding_index.get("collection_name", settings.collection_name)
 
-    print(f"\n1. Cleaning state...")
+    print("\n1. Cleaning state...")
     print(f"   Collection: {collection_name}")
 
     # Step 1: Reset global state FIRST (before any imports touch it)
@@ -121,7 +120,7 @@ def run_variant_clean(
     # Step 3: Clean HTML artifacts and .md files
     clean_html_artifacts()
 
-    print(f"\n2. Configuring runtime...")
+    print("\n2. Configuring runtime...")
 
     # Step 4: Configure runtime for experiment
     from src.rag.runtime import configure_runtime_for_experiment
@@ -132,7 +131,7 @@ def run_variant_clean(
     print(f"   HTML strategy: {get_html_processor_config().extractor_strategy}")
     print(f"   PDF strategy: {experiment_config.get('ingestion', {}).get('pdf_extractor_strategy')}")
 
-    print(f"\n3. Running assessment...")
+    print("\n3. Running assessment...")
 
     # Step 5: Build kwargs and run
     kwargs = build_run_assessment_kwargs(experiment_config)
@@ -142,7 +141,7 @@ def run_variant_clean(
 
     result = run_assessment(**kwargs)
 
-    print(f"\n4. Results:")
+    print("\n4. Results:")
     print(f"   Status: {result.status}")
     print(f"   Run dir: {result.run_dir}")
 

@@ -51,7 +51,7 @@ class ExperimentConfig:
     dataset_split: str | None = None
 
     @classmethod
-    def from_yaml(cls, yaml_path: str | Path) -> "ExperimentConfig":
+    def from_yaml(cls, yaml_path: str | Path) -> ExperimentConfig:
         """Load experiment config from YAML file.
 
         Args:
@@ -67,7 +67,7 @@ class ExperimentConfig:
         return cls.from_dict(data)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExperimentConfig":
+    def from_dict(cls, data: dict[str, Any]) -> ExperimentConfig:
         """Create ExperimentConfig from dictionary.
 
         Args:

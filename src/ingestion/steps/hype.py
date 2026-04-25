@@ -58,7 +58,7 @@ def _weighted_sample_chunks(
 
 async def generate_hype_questions_for_chunks(
     chunks: list[dict],
-    client: "QwenClient",
+    client: QwenClient,
     sample_rate: float,
     max_chunks: int,
     questions_per_chunk: int,
@@ -96,7 +96,7 @@ async def generate_hype_questions_for_chunks(
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for chunk, result in zip(batch, results):
+        for chunk, result in zip(batch, results, strict=False):
             if isinstance(result, Exception):
                 logger.warning(f"HyPE generation failed for chunk {chunk['id']}: {result}")
                 errors += 1

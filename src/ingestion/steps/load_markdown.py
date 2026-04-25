@@ -4,7 +4,6 @@ Load Markdown documents from data/raw for indexing.
 """
 
 from pathlib import Path
-from typing import List
 
 from src.config import DATA_RAW_DIR
 from src.config.context import get_runtime_state
@@ -33,8 +32,8 @@ class MarkdownLoader:
     def __init__(self, data_dir: str | Path | None = None):
         self.data_dir = Path(data_dir) if data_dir is not None else DATA_RAW_DIR
 
-    def load_all_markdown(self) -> List[dict]:
-        documents: List[dict] = []
+    def load_all_markdown(self) -> list[dict]:
+        documents: list[dict] = []
         for md_file in sorted(self.data_dir.glob("*.md")):
             text = md_file.read_text(encoding="utf-8", errors="ignore").strip()
             if not text:
@@ -90,7 +89,7 @@ class MarkdownLoader:
         return documents
 
 
-def get_markdown_documents() -> List[dict]:
+def get_markdown_documents() -> list[dict]:
     loader = MarkdownLoader()
     return loader.load_all_markdown()
 

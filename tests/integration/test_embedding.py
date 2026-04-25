@@ -21,7 +21,8 @@ class TestEmbedding:
         store.clear()
 
     def _embedding_dim(self, embeddings: list[list[float]]) -> int:
-        assert embeddings and embeddings[0]
+        assert embeddings
+        assert embeddings[0]
         return len(embeddings[0])
 
     @requires_live_api
@@ -50,7 +51,7 @@ class TestEmbedding:
         emb2 = vector_store._embed([text])[0]
 
         assert len(emb1) == len(emb2)
-        cosine_numerator = sum(a * b for a, b in zip(emb1, emb2))
+        cosine_numerator = sum(a * b for a, b in zip(emb1, emb2, strict=False))
         emb1_norm = sum(a * a for a in emb1) ** 0.5
         emb2_norm = sum(b * b for b in emb2) ** 0.5
         similarity = cosine_numerator / (emb1_norm * emb2_norm)

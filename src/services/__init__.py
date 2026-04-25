@@ -19,7 +19,7 @@ from src.services.rag_service import RAGService
 from src.services.vector_store_service import VectorStoreService
 
 __all__ = [
-    "RAGService",
     "EvaluationService",
+    "RAGService",
     "VectorStoreService",
 ]

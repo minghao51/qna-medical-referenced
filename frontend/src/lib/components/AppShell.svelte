@@ -3,14 +3,13 @@
 
 	type Props = {
 		current: string;
-		wide?: boolean;
 		children: import('svelte').Snippet;
 	};
 
-	let { current, wide = false, children }: Props = $props();
+	let { current, children }: Props = $props();
 </script>
 
-<div class:wide class="app-shell">
+<div class="app-shell">
 	<AppNav {current} />
 	<div class="app-body">
 		{@render children()}
@@ -19,13 +18,9 @@
 
 <style>
 	.app-shell {
-		max-width: 1100px;
+		max-width: 1380px;
 		margin: 0 auto;
 		padding: 1rem;
-	}
-
-	.app-shell.wide {
-		max-width: 1380px;
 	}
 
 	.app-body {

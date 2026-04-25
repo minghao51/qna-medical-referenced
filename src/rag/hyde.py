@@ -43,7 +43,7 @@ Be specific and include relevant medical terminology."""
 
 async def generate_hypothetical_answer(
     query: str,
-    client: "QwenClient",
+    client: QwenClient,
     max_length: int = HYPOTHETICAL_ANSWER_MAX_LENGTH,
 ) -> str:
     """Generate a hypothetical answer to use for query expansion.
@@ -132,7 +132,7 @@ def expand_query_with_hyde(
 
 async def expand_query_with_hyde_async(
     query: str,
-    client: "QwenClient",
+    client: QwenClient,
     enable_hyde: bool = True,
     max_length: int = HYPOTHETICAL_ANSWER_MAX_LENGTH,
 ) -> list[str]:
@@ -263,7 +263,7 @@ Generate {count} question(s), each on its own line. Be specific and use medical 
 
 async def generate_hypothetical_questions(
     chunk: str,
-    client: "QwenClient",
+    client: QwenClient,
     count: int = 2,
 ) -> list[str]:
     """Generate hypothetical questions that a chunk could answer.

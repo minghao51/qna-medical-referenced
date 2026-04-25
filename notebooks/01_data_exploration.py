@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Data exploration notebook for medical Q&A documents.
 
 This notebook provides exploratory analysis of the ingested documents
@@ -12,8 +11,9 @@ and chunks in the medallion data pipeline.
 # ## Setup
 
 # %%
-import polars as pl
 from pathlib import Path
+
+import polars as pl
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
@@ -72,7 +72,7 @@ def analyze_chunk_quality(chunks_df: pl.DataFrame) -> None:
     print(f"Total chunks: {len(chunks_df)}")
 
     if "quality_score" in chunks_df.columns:
-        print(f"\nQuality score distribution:")
+        print("\nQuality score distribution:")
         print(chunks_df.select("quality_score").describe())
 
     if "content" in chunks_df.columns:

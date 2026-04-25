@@ -72,7 +72,7 @@ def normalize_source_type(source: str | None, explicit_type: str | None = None) 
         return "pdf"
     if lowered.endswith(".csv"):
         return "reference_csv"
-    if lowered.endswith(".md") or lowered.endswith(".html"):
+    if lowered.endswith((".md", ".html")):
         return "html"
     return "other"
 

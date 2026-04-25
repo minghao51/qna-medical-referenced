@@ -3,7 +3,6 @@
 import time
 from collections import OrderedDict
 from threading import Lock
-from typing import List
 
 from openai import OpenAI
 
@@ -11,7 +10,7 @@ from src.config import settings
 
 EMBEDDING_MODEL = settings.llm.embedding_model
 _EMBEDDING_CACHE_MAX_ENTRIES = 512
-_embedding_cache: OrderedDict[tuple[str, str], List[float]] = OrderedDict()
+_embedding_cache: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
 _embedding_cache_lock = Lock()
 
 
@@ -24,7 +23,7 @@ def get_embedding_client() -> OpenAI:
     return OpenAI(api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url)
 
 
-def _cache_get(model_name: str, text: str) -> List[float] | None:
+def _cache_get(model_name: str, text: str) -> list[float] | None:
     key = (model_name, text)
     with _embedding_cache_lock:
         value = _embedding_cache.get(key)
@@ -34,7 +33,7 @@ def _cache_get(model_name: str, text: str) -> List[float] | None:
         return list(value)
 
 
-def _cache_put(model_name: str, text: str, embedding: List[float]) -> None:
+def _cache_put(model_name: str, text: str, embedding: list[float]) -> None:
     key = (model_name, text)
     with _embedding_cache_lock:
         _embedding_cache[key] = list(embedding)
@@ -44,8 +43,8 @@ def _cache_put(model_name: str, text: str, embedding: List[float]) -> None:
 
 
 def embed_texts_with_stats(
-    texts: List[str], batch_size: int = 10, model: str | None = None
-) -> tuple[List[List[float]], dict]:
+    texts: list[str], batch_size: int = 10, model: str | None = None
+) -> tuple[list[list[float]], dict]:
     """Generate embeddings for a list of texts using Qwen.
 
     Args:
@@ -67,7 +66,7 @@ def embed_texts_with_stats(
 
     start_time = time.time()
     model_name = model or EMBEDDING_MODEL
-    all_embeddings: List[List[float] | None] = [None] * len(texts)
+    all_embeddings: list[list[float] | None] = [None] * len(texts)
     uncached_items: list[tuple[int, str]] = []
     cache_hits = 0
 
@@ -107,7 +106,7 @@ def embed_texts_with_stats(
 
 
 def embed_texts(
-    texts: List[str], batch_size: int = 10, model: str | None = None
-) -> List[List[float]]:
+    texts: list[str], batch_size: int = 10, model: str | None = None
+) -> list[list[float]]:
     embeddings, _ = embed_texts_with_stats(texts, batch_size=batch_size, model=model)
     return embeddings

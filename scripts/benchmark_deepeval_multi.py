@@ -250,7 +250,7 @@ async def benchmark_multi_query(
                 ]
 
                 # Run evaluation
-                results, aggregate = await evaluate_answer_quality_async(
+                results, _aggregate = await evaluate_answer_quality_async(
                     dataset,
                     top_k=top_k,
                     cache_dir=cache_dir,

@@ -7,7 +7,7 @@ that should inform chunking boundaries (drugs, conditions, procedures).
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 
 class MedicalEntityDetector:
@@ -20,7 +20,7 @@ class MedicalEntityDetector:
     """
 
     # Medical entity categories we care about for chunking
-    RELEVANT_ENTITY_LABELS = {
+    RELEVANT_ENTITY_LABELS: ClassVar[frozenset[str]] = frozenset({
         "DRUG",
         "CHEMICAL",
         "DISEASE",
@@ -28,15 +28,14 @@ class MedicalEntityDetector:
         "SYMPTOM",
         "PROCEDURE",
         "TREATMENT",
-    }
+    })
 
-    # Fallback regex patterns for when spaCy models unavailable
-    DRUG_PATTERNS = [
+    DRUG_PATTERNS: ClassVar[list[str]] = [
         r"\b(?:[A-Z][a-z]*\s+)+(?:\d+\s*(?:mg|mcg|g|ml|units?)[^.]*)(?:\s+(?:oral|IV|IM|SC|topical|inhaled)[^.]*)?",
         r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+\d+\s*(?:mg|mcg|g|ml|units?)",
     ]
 
-    CONDITION_PATTERNS = [
+    CONDITION_PATTERNS: ClassVar[list[str]] = [
         r"\b(?:hypertension|diabetes|hyperlipidemia|anemia|pneumonia|bronchitis|asthma|COPD|CHF|CKD|ESRD|HIV|AIDS)\b",
         r"\b(?:Type\s+[12]\s+diabetes)\b",
     ]

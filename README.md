@@ -52,7 +52,7 @@ uv run python scripts/download_nltk_data.py
 
 # Run with dotenvx to decrypt .env
 dotenvx run -- uv run python -m src.cli.serve
-dotenvx run -- uv run python -m src.cli.ingest  # Hamilton DAG pipeline
+dotenvx run -- uv run python -m src.cli.ingest  # Standard pipeline (use --parallel for Hamilton DAG)
 dotenvx run -- uv run python -m src.cli.eval_pipeline
 
 uv run pytest
@@ -63,16 +63,18 @@ bash scripts/check_docs_consistency.sh
 
 ### Hamilton Pipeline Usage
 
-The ingestion pipeline now uses a **Hamilton DAG** for parallel, efficient execution:
+The ingestion CLI supports a **Hamilton DAG** mode for parallel, efficient execution:
 
 ```bash
-# Full pipeline (Bronze → Silver → Gold → Platinum)
+# Full pipeline (standard mode)
 dotenvx run -- uv run python -m src.cli.ingest
 
-# With specific features
+# Hamilton DAG mode (parallel execution)
+dotenvx run -- uv run python -m src.cli.ingest --parallel 4
+
+# Additional feature flags
 dotenvx run -- uv run python -m src.cli.ingest --enable-hype
 dotenvx run -- uv run python -m src.cli.ingest --enable-keyword-extraction
-dotenvx run -- uv run python -m src.cli.ingest --parallel 4
 ```
 
 **Pipeline Stages:**
@@ -188,4 +190,4 @@ The default served runtime now uses `baseline_cross_encoder`, which keeps baseli
 - `docs/evaluation/` contains current evaluation-specific documentation
 - `docs/testing/` contains operational test guides
 - `docs/plans/` contains design docs that still matter
-- `docs/reports/` contains dated historical writeups
+- `docs/archive/` contains dated historical writeups organized by type (reports, handoffs, plans)

@@ -22,7 +22,7 @@ def empty_documents() -> dict[str, Any]:
 
 def load_documents(path: Path) -> dict[str, Any]:
     if path.exists():
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             loaded = cast(dict[str, Any], json.load(f))
             if "index_metadata" not in loaded:
                 loaded["index_metadata"] = {}

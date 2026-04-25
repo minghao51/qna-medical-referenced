@@ -10,7 +10,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +41,15 @@ class QueryClassification:
 class QueryClassifier:
     """Classifies queries using rule-based patterns with LLM fallback."""
 
-    # Rule-based patterns for each query type
-    DEFINITION_PATTERNS = [
+    DEFINITION_PATTERNS: ClassVar[list[str]] = [
         r"^what\s+is\s+",
         r"^define\s+",
         r"^explain\s+",
         r"^meaning\s+of\s+",
-        r"\?+$",  # Ends with question mark (simple definition)
+        r"\?+$",
     ]
 
-    COMPARISON_PATTERNS = [
+    COMPARISON_PATTERNS: ClassVar[list[str]] = [
         r"\s+vs\s+",
         r"\s+versus\s+",
         r"\s+compared?\s+to\s+",
@@ -58,14 +57,14 @@ class QueryClassifier:
         r"^compare\s+",
     ]
 
-    REFERENCE_RANGE_PATTERNS = [
+    REFERENCE_RANGE_PATTERNS: ClassVar[list[str]] = [
         r"\bnormal\b.*\b(?:range|value|level|limit)s?\b",
         r"\breference\b.*\b(?:range|value|level)s?\b",
         r"\b(?:target|goal)\b.*\b(?:range|value|level)\b",
         r"\b(?:high|low|elevated|reduced)\b.*\b(?:normal|range)\b",
     ]
 
-    SYMPTOM_PATTERNS = [
+    SYMPTOM_PATTERNS: ClassVar[list[str]] = [
         r"\bsymptom",
         r"\bsigns?\s+of\s+",
         r"\bclinical\s+presentation\b",
@@ -73,7 +72,7 @@ class QueryClassifier:
         r"\bappear(?:s|ance)?\s+of\s+",
     ]
 
-    TREATMENT_PATTERNS = [
+    TREATMENT_PATTERNS: ClassVar[list[str]] = [
         r"\btreat(?:ment|ing|s)?\b",
         r"\bmanage(?:ment)?\b",
         r"\btherapy\b",
@@ -82,7 +81,7 @@ class QueryClassifier:
         r"\bintervention\b",
     ]
 
-    RISK_FACTOR_PATTERNS = [
+    RISK_FACTOR_PATTERNS: ClassVar[list[str]] = [
         r"\brisk\b.*\bfactor",
         r"\bcause",
         r"\betiology\b",
@@ -91,7 +90,7 @@ class QueryClassifier:
         r"\bcontribut(?:e|ing|ors?)\b",
     ]
 
-    FOLLOW_UP_PATTERNS = [
+    FOLLOW_UP_PATTERNS: ClassVar[list[str]] = [
         r"^(?:what|how|why|when|where|who)\b",
         r"^(?:is|are|do|does|can|could|should|would)\b",
         r"^(?:tell|explain|describe)\b",

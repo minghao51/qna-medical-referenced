@@ -16,9 +16,10 @@ import hashlib
 import logging
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup

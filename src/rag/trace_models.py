@@ -1,6 +1,6 @@
 """Data models for the health screening interpreter chatbot."""
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -10,16 +10,16 @@ class ChatSource(BaseModel):
 
     canonical_label: str
     display_label: str
-    source_url: Optional[str] = None
+    source_url: str | None = None
     source_type: str = "other"
     source_class: str = "unknown"
-    domain: Optional[str] = None
+    domain: str | None = None
     domain_type: str = "unknown"
     label: str
     source: str
-    url: Optional[str] = None
-    page: Optional[int] = None
-    content_type: Optional[str] = None
+    url: str | None = None
+    page: int | None = None
+    content_type: str | None = None
 
 
 class RetrievedDocument(BaseModel):
@@ -28,28 +28,28 @@ class RetrievedDocument(BaseModel):
     id: str
     content: str
     source: str
-    page: Optional[int] = None
+    page: int | None = None
     semantic_score: float
     keyword_score: float
     source_prior: float
-    source_boost: Optional[float] = None
+    source_boost: float | None = None
     combined_score: float
     rank: int
-    semantic_rank: Optional[int] = None
-    bm25_rank: Optional[int] = None
-    fused_rank: Optional[int] = None
-    fused_score: Optional[float] = None
-    chunk_quality_score: Optional[float] = None
-    content_type: Optional[str] = None
+    semantic_rank: int | None = None
+    bm25_rank: int | None = None
+    fused_rank: int | None = None
+    fused_score: float | None = None
+    chunk_quality_score: float | None = None
+    content_type: str | None = None
     section_path: list[str] = Field(default_factory=list)
-    canonical_label: Optional[str] = None
-    display_label: Optional[str] = None
-    logical_name: Optional[str] = None
-    source_url: Optional[str] = None
-    source_type: Optional[str] = None
-    source_class: Optional[str] = None
-    domain: Optional[str] = None
-    domain_type: Optional[str] = None
+    canonical_label: str | None = None
+    display_label: str | None = None
+    logical_name: str | None = None
+    source_url: str | None = None
+    source_type: str | None = None
+    source_class: str | None = None
+    domain: str | None = None
+    domain_type: str | None = None
 
 
 class RetrievalStep(BaseModel):
@@ -88,7 +88,7 @@ class GenerationStage(BaseModel):
 
     model: str
     timing_ms: int
-    tokens_estimate: Optional[int] = None
+    tokens_estimate: int | None = None
 
 
 class PipelineTrace(BaseModel):
@@ -105,4 +105,4 @@ class ChatResponseWithPipeline(BaseModel):
 
     response: str
     sources: list[ChatSource]
-    pipeline: Optional[PipelineTrace] = None
+    pipeline: PipelineTrace | None = None

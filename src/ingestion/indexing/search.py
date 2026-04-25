@@ -6,7 +6,7 @@ from typing import Any
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
-    dot_product = sum(x * y for x, y in zip(a, b))
+    dot_product = sum(x * y for x, y in zip(a, b, strict=False))
     magnitude_a = sum(x * x for x in a) ** 0.5
     magnitude_b = sum(y * y for y in b) ** 0.5
     return dot_product / (magnitude_a * magnitude_b) if magnitude_a * magnitude_b > 0 else 0.0

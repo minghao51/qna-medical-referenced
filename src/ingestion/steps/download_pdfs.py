@@ -9,7 +9,7 @@ import asyncio
 import hashlib
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -71,7 +71,7 @@ def _register_manifest_record(
             "content_hash": content_hash,
             "status": status,
             "record_type": "pdf_download",
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.now(UTC).isoformat(),
         }
     )
 

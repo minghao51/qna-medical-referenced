@@ -30,7 +30,7 @@ def assess_l4_reference_quality(data_raw_dir: Path | None = None) -> dict[str, A
     parseable_ranges = 0
     findings = []
 
-    with open(csv_path, "r", encoding="utf-8", errors="ignore") as handle:
+    with open(csv_path, encoding="utf-8", errors="ignore") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []
         missing_cols = sorted(REQUIRED_CSV_COLUMNS - set(fieldnames))

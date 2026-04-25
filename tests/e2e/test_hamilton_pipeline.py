@@ -1,9 +1,7 @@
 """Test that Hamilton DAG integration works end-to-end."""
 
-import asyncio
 import pytest
 
-from src.config import settings
 from src.ingestion.pipeline import build_ingestion_pipeline, execute_pipeline
 from src.rag.runtime import initialize_runtime_index
 

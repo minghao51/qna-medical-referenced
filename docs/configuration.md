@@ -451,4 +451,5 @@ Before deploying to production, ensure:
 - See `docs/architecture/overview.md` for system structure
 - See `docs/architecture/rag-system.md` for ingestion and retrieval flow
 - See `docs/testing/backend-tests.md` and `docs/testing/playwright.md` for test workflows
+- See `docs/20260416-feature-flags.md` for feature flag configuration
 - See `README.md` for the repo-level entrypoints

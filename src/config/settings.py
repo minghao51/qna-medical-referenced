@@ -11,8 +11,9 @@ variables take precedence for overrides and sensitive values.
 
 import os
 from pathlib import Path
+from typing import ClassVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -135,7 +136,83 @@ class ProductionConfig(BaseModel):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         extra="ignore",
+        env_prefix="APP__",
+        env_nested_delimiter="__",
     )
+
+    _LEGACY_FIELD_MAP: ClassVar[dict[str, tuple[str, str]]] = {
+        "app_environment": ("app", "environment"),
+        "log_level": ("app", "log_level"),
+        "max_message_length": ("api", "max_message_length"),
+        "api_keys": ("api", "api_keys"),
+        "api_keys_json": ("api", "api_keys_json"),
+        "rate_limit_per_minute": ("api", "rate_limit_per_minute"),
+        "anonymous_chat_rate_limit_per_minute": ("api", "anonymous_chat_rate_limit_per_minute"),
+        "rate_limit_bypass_key_ids": ("api", "rate_limit_bypass_key_ids"),
+        "rate_limit_bypass_roles": ("api", "rate_limit_bypass_roles"),
+        "anonymous_browser_cookie_name": ("api", "anonymous_browser_cookie_name"),
+        "chat_session_cookie_name": ("api", "chat_session_cookie_name"),
+        "chat_session_cookie_max_age_seconds": ("api", "chat_session_cookie_max_age_seconds"),
+        "chat_history_ttl_seconds": ("api", "chat_history_ttl_seconds"),
+        "trust_proxy_headers": ("api", "trust_proxy_headers"),
+        "llm_provider": ("llm", "provider"),
+        "model_name": ("llm", "model_name"),
+        "dashscope_api_key": ("llm", "dashscope_api_key"),
+        "qwen_base_url": ("llm", "qwen_base_url"),
+        "embedding_model": ("llm", "embedding_model"),
+        "embedding_batch_size": ("llm", "embedding_batch_size"),
+        "openrouter_api_key": ("llm", "openrouter_api_key"),
+        "openrouter_model": ("llm", "openrouter_model"),
+        "litellm_model": ("llm", "litellm_model"),
+        "judge_model_light": ("llm", "judge_model_light"),
+        "judge_model_heavy": ("llm", "judge_model_heavy"),
+        "judge_model_light_litellm": ("llm", "judge_model_light_litellm"),
+        "judge_model_heavy_litellm": ("llm", "judge_model_heavy_litellm"),
+        "judge_temperature": ("llm", "judge_temperature"),
+        "judge_max_tokens": ("llm", "judge_max_tokens"),
+        "collection_name": ("storage", "collection_name"),
+        "data_dir": ("storage", "data_dir"),
+        "chroma_persist_directory": ("storage", "chroma_persist_directory"),
+        "chroma_server_host": ("storage", "chroma_server_host"),
+        "chroma_server_port": ("storage", "chroma_server_port"),
+        "retrieval_overfetch_multiplier": ("retrieval", "retrieval_overfetch_multiplier"),
+        "max_chunks_per_source_page": ("retrieval", "max_chunks_per_source_page"),
+        "max_chunks_per_source": ("retrieval", "max_chunks_per_source"),
+        "mmr_lambda": ("retrieval", "mmr_lambda"),
+        "rrf_search_mode": ("retrieval", "rrf_search_mode"),
+        "enable_reranking": ("retrieval", "enable_reranking"),
+        "reranker_model": ("retrieval", "reranker_model"),
+        "reranker_batch_size": ("retrieval", "reranker_batch_size"),
+        "reranker_device": ("retrieval", "reranker_device"),
+        "rerank_top_k": ("retrieval", "rerank_top_k"),
+        "rerank_score_threshold": ("retrieval", "rerank_score_threshold"),
+        "reranking_mode": ("retrieval", "reranking_mode"),
+        "medical_expansion_enabled": ("retrieval", "medical_expansion_enabled"),
+        "medical_expansion_provider": ("retrieval", "medical_expansion_provider"),
+        "hyde_enabled": ("hyde", "hyde_enabled"),
+        "hyde_max_length": ("hyde", "hyde_max_length"),
+        "hype_enabled": ("hyde", "hype_enabled"),
+        "hype_sample_rate": ("hyde", "hype_sample_rate"),
+        "hype_max_chunks": ("hyde", "hype_max_chunks"),
+        "hype_questions_per_chunk": ("hyde", "hype_questions_per_chunk"),
+        "enable_keyword_extraction": ("enrichment", "enable_keyword_extraction"),
+        "enable_chunk_summaries": ("enrichment", "enable_chunk_summaries"),
+        "keyword_extraction_sample_rate": ("enrichment", "keyword_extraction_sample_rate"),
+        "keyword_extraction_max_chunks": ("enrichment", "keyword_extraction_max_chunks"),
+        "max_retries": ("retry", "max_retries"),
+        "retry_delay": ("retry", "retry_delay"),
+        "deepeval_query_concurrency": ("deepeval", "deepeval_query_concurrency"),
+        "deepeval_metric_concurrency": ("deepeval", "deepeval_metric_concurrency"),
+        "deepeval_metric_timeout_seconds": ("deepeval", "deepeval_metric_timeout_seconds"),
+        "deepeval_answer_cache_enabled": ("deepeval", "deepeval_answer_cache_enabled"),
+        "deepeval_metric_cache_enabled": ("deepeval", "deepeval_metric_cache_enabled"),
+        "deepeval_cache_dir": ("deepeval", "deepeval_cache_dir"),
+        "deepeval_cache_schema_version": ("deepeval", "deepeval_cache_schema_version"),
+        "deepeval_faithfulness_truths_limit": ("deepeval", "deepeval_faithfulness_truths_limit"),
+        "wandb_api_key": ("wandb", "wandb_api_key"),
+        "wandb_cache_ttl_seconds": ("wandb", "wandb_cache_ttl_seconds"),
+        "production_profile": ("production", "production_profile"),
+    }
 
     app: AppConfig = Field(default_factory=AppConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
@@ -148,6 +225,31 @@ class Settings(BaseSettings):
     deepeval: DeepEvalConfig = Field(default_factory=DeepEvalConfig)
     wandb: WandbConfig = Field(default_factory=WandbConfig)
     production: ProductionConfig = Field(default_factory=ProductionConfig)
+
+    @classmethod
+    def _coerce_legacy_flat_fields(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+
+        migrated = dict(data)
+        for legacy_name, (section_name, field_name) in cls._LEGACY_FIELD_MAP.items():
+            if legacy_name not in migrated:
+                continue
+            value = migrated.pop(legacy_name)
+            section_payload = migrated.get(section_name)
+            if not isinstance(section_payload, dict):
+                section_payload = {}
+            section_payload.setdefault(field_name, value)
+            migrated[section_name] = section_payload
+        return migrated
+
+    def __init__(self, **values):
+        super().__init__(**self._coerce_legacy_flat_fields(values))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_flat_fields(cls, data: object) -> object:
+        return cls._coerce_legacy_flat_fields(data)
 
     @classmethod
     def settings_customise_sources(
@@ -172,6 +274,11 @@ class Settings(BaseSettings):
     @property
     def vector_dir(self) -> str:
         return self.storage.chroma_persist_directory
+
+    def _get_nested_attr(self, name: str):
+        section_name, field_name = self._LEGACY_FIELD_MAP[name]
+        section = getattr(self, section_name)
+        return getattr(section, field_name)
 
     def __getattr__(self, name: str):
         """Delegate attribute access to nested config models for backward compatibility."""

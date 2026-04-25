@@ -412,7 +412,7 @@ async def test_e2e_complete_pipeline(skip_without_real_apis, tmp_path):
 
     # L6: Generate and evaluate answer
     dataset = [{"query": query, "query_id": "e2e_pipeline_001"}]
-    eval_results, aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+    eval_results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
     assert len(eval_results) == 1, "L6: No evaluation results"
     assert "answer" in eval_results[0], "L6: No answer generated"

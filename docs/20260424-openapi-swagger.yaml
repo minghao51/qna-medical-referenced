@@ -1,0 +1,1094 @@
+openapi: 3.1.0
+info:
+  title: Health Screening Interpreter Chatbot
+  description: >
+    An intelligent chatbot API to help understand health screening results.
+    Uses Retrieval-Augmented Generation (RAG) with vector-based document retrieval
+    and LLM-powered answer generation.
+  version: 0.1.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+security:
+  - ApiKeyAuth: []
+  - {}
+
+tags:
+  - name: Health
+    description: Health check and root endpoints
+  - name: Chat
+    description: RAG-based chat with streaming responses
+  - name: History
+    description: Chat history management (session-bound)
+  - name: Documents
+    description: Indexed document chunk browsing
+  - name: Evaluation
+    description: Evaluation runs, metrics, and ablation results
+  - name: Experiments
+    description: Experiment configs and result reports
+  - name: Config
+    description: Runtime configuration (read-only)
+
+paths:
+  /:
+    get:
+      operationId: root
+      tags: [Health]
+      summary: API root
+      description: Returns a message confirming the API is running.
+      security: []
+      responses:
+        "200":
+          description: API is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Health Screening Interpreter API is running"
+
+  /health:
+    get:
+      operationId: healthCheck
+      tags: [Health]
+      summary: Health check
+      description: Returns health status, runtime info, and rate-limit backend details.
+      security: []
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /chat:
+    post:
+      operationId: chat
+      tags: [Chat]
+      summary: Process chat message with RAG (streaming)
+      description: >
+        Process a user message using retrieval-augmented generation.
+        Returns a Server-Sent Events (SSE) stream with incremental content chunks
+        and a terminal event containing sources and optional pipeline trace.
+      parameters:
+        - name: include_pipeline
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include detailed pipeline trace with timing information for debugging
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: SSE stream of chat response chunks
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/SSEvent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /config:
+    get:
+      operationId: getConfig
+      tags: [Config]
+      summary: Get current runtime configuration
+      description: Read-only snapshot of the active runtime configuration including retrieval, ingestion, enrichment, and LLM settings.
+      responses:
+        "200":
+          description: Current configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigResponse"
+
+  /documents:
+    get:
+      operationId: listDocuments
+      tags: [Documents]
+      summary: List indexed documents
+      description: Get a paginated summary of all indexed document chunks from ChromaDB.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+          description: Maximum number of items to return
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of items to skip
+        - name: source_type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by source type (e.g., pdf, html)
+      responses:
+        "200":
+          description: Paginated list of document chunks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentListResponse"
+        "503":
+          description: Vector store not initialized
+
+  /documents/{doc_id}:
+    get:
+      operationId: getDocument
+      tags: [Documents]
+      summary: Get a single document chunk
+      description: Retrieve full content and metadata for a specific chunk.
+      parameters:
+        - name: doc_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Document chunk ID
+      responses:
+        "200":
+          description: Document chunk details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentDetailResponse"
+        "404":
+          description: Document not found
+        "503":
+          description: Vector store not initialized
+
+  /history:
+    get:
+      operationId: getHistory
+      tags: [History]
+      summary: Get chat history
+      description: Retrieve all messages in the conversation history for the current chat session (cookie-bound).
+      responses:
+        "200":
+          description: Chat history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistoryResponse"
+
+    delete:
+      operationId: clearHistory
+      tags: [History]
+      summary: Clear chat history
+      description: Delete all messages in the conversation history and rotate the session cookie.
+      responses:
+        "200":
+          description: History cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "cleared"
+
+  /history/{session_id}:
+    get:
+      operationId: getHistoryLegacy
+      tags: [History]
+      summary: Get chat history (legacy)
+      deprecated: true
+      description: "Deprecated. Returns history for the current cookie-bound chat session. The session_id path parameter is ignored."
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chat history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistoryResponse"
+
+    delete:
+      operationId: clearHistoryLegacy
+      tags: [History]
+      summary: Clear chat history (legacy)
+      deprecated: true
+      description: "Deprecated. Clears history for the current cookie-bound chat session. The session_id path parameter is ignored."
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: History cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "cleared"
+
+  /evaluation/latest:
+    get:
+      operationId: getLatestEvaluation
+      tags: [Evaluation]
+      summary: Get latest evaluation results
+      description: Retrieve all metrics and results from the most recent evaluation run.
+      responses:
+        "200":
+          description: Latest evaluation results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationRunResponse"
+        "404":
+          description: No evaluation runs exist
+
+  /evaluation/runs:
+    get:
+      operationId: getEvaluationRuns
+      tags: [Evaluation]
+      summary: List all evaluation runs
+      description: Get a list of all evaluation runs with basic metadata.
+      responses:
+        "200":
+          description: List of evaluation runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EvaluationRunSummary"
+
+  /evaluation/history:
+    get:
+      operationId: getEvaluationHistory
+      tags: [Evaluation]
+      summary: Get evaluation trending metrics
+      description: Get historical evaluation metrics for trending analysis and performance monitoring.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Maximum number of recent runs to include
+      responses:
+        "200":
+          description: Historical trending data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationHistoryResponse"
+
+  /evaluation/run/{run_dir}:
+    get:
+      operationId: getEvaluationRun
+      tags: [Evaluation]
+      summary: Get specific evaluation run
+      description: Get all metrics and results from a specific evaluation run.
+      parameters:
+        - name: run_dir
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Evaluation run directory name
+      responses:
+        "200":
+          description: Evaluation run results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationRunResponse"
+        "400":
+          description: Invalid run directory identifier
+        "404":
+          description: Run directory not found
+
+  /evaluation/ablation:
+    get:
+      operationId: getAblationResults
+      tags: [Evaluation]
+      summary: Get ablation study results
+      description: Get retrieval strategy comparison from ablation study.
+      responses:
+        "200":
+          description: Ablation study results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AblationResponse"
+        "404":
+          description: No evaluation runs or ablation data exists
+
+  /evaluation/ablation/full:
+    get:
+      operationId: getFullAblationResults
+      tags: [Evaluation]
+      summary: Get comprehensive ablation study results
+      description: Get all variant results from the focused ablation study with clean-state isolation.
+      responses:
+        "200":
+          description: Comprehensive ablation results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FullAblationResponse"
+
+  /evaluation/steps/{stage}:
+    get:
+      operationId: getStepMetrics
+      tags: [Evaluation]
+      summary: Get pipeline stage metrics
+      description: Get detailed metrics for a specific pipeline stage (L0-L5).
+      parameters:
+        - name: stage
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [l0, l1, l2, l3, l4, l5]
+          description: Pipeline stage identifier
+      responses:
+        "200":
+          description: Stage metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          description: Invalid stage name
+        "404":
+          description: No evaluation runs or step metrics not found
+
+  /evaluation/steps/{stage}/records:
+    get:
+      operationId: getStepRecords
+      tags: [Evaluation]
+      summary: Get detailed records for a stage
+      description: Get detailed records for debugging and drill-down for a specific pipeline stage.
+      parameters:
+        - name: stage
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [l0, l1, l2, l3, l4, l5, l6]
+          description: Pipeline stage identifier
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          description: Maximum number of records to return
+      responses:
+        "200":
+          description: Stage records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stage:
+                    type: string
+                  records:
+                    type: array
+                    items:
+                      type: object
+                  total_count:
+                    type: integer
+        "400":
+          description: Invalid stage name
+        "404":
+          description: No evaluation runs exist
+
+  /evaluation/l6/records:
+    get:
+      operationId: getL6Records
+      tags: [Evaluation]
+      summary: Get L6 answer quality per-query records
+      description: Get detailed per-query records for L6 answer quality drill-down.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          description: Maximum number of records to return
+      responses:
+        "200":
+          description: L6 records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items:
+                      type: object
+                  total_count:
+                    type: integer
+        "404":
+          description: No evaluation runs or L6 records not found
+
+  /evaluation/answer-quality/{run_dir}:
+    get:
+      operationId: getAnswerQuality
+      tags: [Evaluation]
+      summary: Get DeepEval answer quality results
+      description: Get detailed LLM-judged answer quality metrics for a specific evaluation run.
+      parameters:
+        - name: run_dir
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Evaluation run directory name
+      responses:
+        "200":
+          description: Answer quality results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_dir:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        query_id:
+                          type: string
+                        query:
+                          type: string
+                        answer:
+                          type: string
+                        metrics:
+                          type: object
+                          additionalProperties:
+                            type: object
+                            properties:
+                              score:
+                                type: number
+                              reason:
+                                type: string
+                                nullable: true
+        "400":
+          description: Invalid run directory identifier
+        "404":
+          description: Run directory or results not found
+
+  /evaluation/evaluate-single:
+    post:
+      operationId: evaluateSingleAnswer
+      tags: [Evaluation]
+      summary: Evaluate a single answer
+      description: Evaluate one query-answer-context pair using DeepEval metrics (for debugging).
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The question or query text
+        - name: answer
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The generated answer to evaluate
+        - name: context
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The retrieved context used to generate the answer
+      responses:
+        "200":
+          description: Evaluation metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  answer:
+                    type: string
+                  metrics:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        score:
+                          type: number
+                        reason:
+                          type: string
+                          nullable: true
+                        error:
+                          type: string
+                          nullable: true
+        "500":
+          description: Evaluation failed
+
+  /experiments:
+    get:
+      operationId: listExperiments
+      tags: [Experiments]
+      summary: List experiment configs and output reports
+      description: Browse experiment YAML configs and their JSON output reports stored under experiments/.
+      responses:
+        "200":
+          description: Experiment list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentListResponse"
+
+  /experiments/{experiment_name}/results:
+    get:
+      operationId: getExperimentResults
+      tags: [Experiments]
+      summary: Get experiment results
+      description: Get the full JSON report for a specific experiment.
+      parameters:
+        - name: experiment_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Experiment name (matches YAML config filename stem)
+      responses:
+        "200":
+          description: Experiment results report
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "404":
+          description: Report not found
+
+  /experiments/{experiment_name}/config:
+    get:
+      operationId: getExperimentConfig
+      tags: [Experiments]
+      summary: Get parsed experiment config
+      description: Get the parsed YAML configuration for a specific experiment.
+      parameters:
+        - name: experiment_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Experiment name (matches YAML config filename stem)
+      responses:
+        "200":
+          description: Parsed experiment config
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "404":
+          description: Experiment config not found
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: >
+        API key for authentication. Required on all endpoints except `/`, `/health`, `/docs`, `/openapi.json`.
+        Keys are configured via `API_KEYS_JSON` or `API_KEYS` environment variables.
+
+  schemas:
+    ChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: The user's chat message
+        session_id:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 128
+          deprecated: true
+          description: "Deprecated. Session ownership is determined by a server-issued cookie."
+        user_context:
+          type: string
+          nullable: true
+          description: Optional user-provided context
+
+    ChatSource:
+      type: object
+      properties:
+        canonical_label:
+          type: string
+        display_label:
+          type: string
+        source_url:
+          type: string
+          nullable: true
+        source_type:
+          type: string
+          default: "other"
+        source_class:
+          type: string
+          default: "unknown"
+        domain:
+          type: string
+          nullable: true
+        domain_type:
+          type: string
+          default: "unknown"
+        label:
+          type: string
+        source:
+          type: string
+        url:
+          type: string
+          nullable: true
+        page:
+          type: integer
+          nullable: true
+        content_type:
+          type: string
+          nullable: true
+
+    SSEvent:
+      type: object
+      description: Server-Sent Event payload (each SSE `data:` line contains one JSON object)
+      properties:
+        content:
+          type: string
+          description: Incremental text chunk (empty on terminal event)
+        done:
+          type: boolean
+          description: Whether this is the terminal event
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatSource"
+          description: Present on terminal event only
+        pipeline:
+          type: object
+          nullable: true
+          description: Pipeline trace (only when include_pipeline=true)
+        error:
+          type: string
+          nullable: true
+        error_code:
+          type: string
+          nullable: true
+        request_id:
+          type: string
+          nullable: true
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "healthy"
+        runtime:
+          type: object
+          additionalProperties: true
+        vector_store:
+          type: object
+          additionalProperties: true
+        rate_limit:
+          type: object
+          properties:
+            backend:
+              type: string
+              example: "SQLiteRateLimitBackend"
+            window_seconds:
+              type: integer
+              nullable: true
+
+    ConfigResponse:
+      type: object
+      properties:
+        retrieval:
+          type: object
+          properties:
+            search_mode:
+              type: string
+            enable_diversification:
+              type: boolean
+            mmr_lambda:
+              type: number
+            overfetch_multiplier:
+              type: number
+            max_chunks_per_source_page:
+              type: integer
+            max_chunks_per_source:
+              type: integer
+            top_k:
+              type: integer
+            enable_hyde:
+              type: boolean
+            hyde_max_length:
+              type: integer
+            enable_hype:
+              type: boolean
+            enable_reranking:
+              type: boolean
+            reranking_mode:
+              type: string
+            enable_medical_expansion:
+              type: boolean
+            medical_expansion_provider:
+              type: string
+            enable_query_understanding:
+              type: boolean
+        ingestion:
+          type: object
+          properties:
+            structured_chunking_enabled:
+              type: boolean
+            page_classification_enabled:
+              type: boolean
+            html_extractor_strategy:
+              type: string
+            pdf_extractor_strategy:
+              type: string
+        enrichment:
+          type: object
+          properties:
+            enable_keyword_extraction:
+              type: boolean
+            enable_chunk_summaries:
+              type: boolean
+        llm:
+          type: object
+          properties:
+            provider:
+              type: string
+            model_name:
+              type: string
+            embedding_model:
+              type: string
+        production_profile:
+          type: string
+          nullable: true
+
+    DocumentListItem:
+      type: object
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        page:
+          type: integer
+          nullable: true
+        source_type:
+          type: string
+        source_class:
+          type: string
+        content_type:
+          type: string
+        content_preview:
+          type: string
+          description: First 200 characters of the chunk content
+        content_length:
+          type: integer
+
+    DocumentListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentListItem"
+        source_type_counts:
+          type: object
+          additionalProperties:
+            type: integer
+        index_metadata:
+          type: object
+          additionalProperties: true
+
+    DocumentDetailResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        content:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        content_length:
+          type: integer
+
+    HistoryResponse:
+      type: object
+      properties:
+        history:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    EvaluationRunSummary:
+      type: object
+      properties:
+        run_dir:
+          type: string
+        status:
+          type: string
+          enum: [passed, failed, error]
+        duration_s:
+          type: number
+        failed_thresholds_count:
+          type: integer
+
+    EvaluationRunResponse:
+      type: object
+      properties:
+        run_dir:
+          type: string
+        summary:
+          type: object
+          nullable: true
+          properties:
+            status:
+              type: string
+            duration_s:
+              type: number
+            failed_thresholds_count:
+              type: integer
+        step_metrics:
+          type: object
+          nullable: true
+          additionalProperties: true
+        retrieval_metrics:
+          type: object
+          nullable: true
+          properties:
+            hit_rate_at_k:
+              type: number
+            mrr:
+              type: number
+            ndcg_at_k:
+              type: number
+        manifest:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    EvaluationHistoryResponse:
+      type: object
+      properties:
+        runs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        summary:
+          type: object
+          properties:
+            total_runs:
+              type: integer
+            avg_hit_rate:
+              type: number
+            avg_mrr:
+              type: number
+            avg_latency_p50:
+              type: number
+        sources:
+          type: object
+          properties:
+            mode:
+              type: string
+              example: "local"
+
+    AblationResponse:
+      type: object
+      properties:
+        ablation_runs:
+          type: array
+          items:
+            type: object
+            properties:
+              strategy:
+                type: string
+              hit_rate_at_k:
+                type: number
+              mrr:
+                type: number
+              ndcg_at_k:
+                type: number
+              latency_p50_ms:
+                type: number
+              is_baseline:
+                type: boolean
+                default: false
+
+    FullAblationResponse:
+      type: object
+      properties:
+        runs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        dimensions:
+          type: object
+          additionalProperties: true
+        findings:
+          type: object
+          additionalProperties: true
+        caching_bug_note:
+          type: string
+
+    ExperimentListResponse:
+      type: object
+      properties:
+        configs:
+          type: array
+          items:
+            type: object
+            properties:
+              file:
+                type: string
+              experiment_id:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              variant_count:
+                type: integer
+              primary_metric:
+                type: string
+              has_results:
+                type: boolean
+        reports:
+          type: array
+          items:
+            type: object
+            properties:
+              file:
+                type: string
+              experiment_name:
+                type: string
+              timestamp:
+                type: string
+              winner:
+                type: object
+                nullable: true
+              any_target_met:
+                type: boolean
+                nullable: true
+
+    ErrorPayload:
+      type: object
+      properties:
+        detail:
+          type: string
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            status_code:
+              type: integer
+            request_id:
+              type: string
+              nullable: true
+            extra:
+              type: object
+              nullable: true
+              additionalProperties: true
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid X-API-Key header
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorPayload"
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until the rate limit resets
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Maximum requests per window
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests in the current window
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Seconds until the rate limit resets
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorPayload"

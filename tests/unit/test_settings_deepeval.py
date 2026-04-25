@@ -29,8 +29,12 @@ def test_deepeval_settings_environment_overrides():
             del os.environ[var]
 
     try:
+        for var in env_vars:
+            os.environ.pop(var, None)
+
         # Test with custom values using Settings constructor (like test_settings.py)
         custom_settings = Settings(
+            _env_file=None,
             dashscope_api_key="test-key",
             judge_model_light="custom-light",
             judge_model_heavy="custom-heavy",

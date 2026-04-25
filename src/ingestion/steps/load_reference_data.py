@@ -6,7 +6,6 @@ L4: Reference Data Loader - Load CSV reference ranges data.
 import csv
 import logging
 from pathlib import Path
-from typing import List
 
 from src.config import DATA_RAW_DIR
 from src.source_metadata import canonical_source_label
@@ -37,7 +36,7 @@ class ReferenceDataLoader:
             return ""
 
         lines = []
-        with open(csv_path, "r") as f:
+        with open(csv_path) as f:
             reader = csv.DictReader(f)
             if not self._validate_csv_columns(reader, csv_path):
                 return ""
@@ -47,14 +46,14 @@ class ReferenceDataLoader:
 
         return "Reference Ranges:\n" + "\n".join(lines)
 
-    def load_reference_ranges_as_docs(self) -> List[dict]:
+    def load_reference_ranges_as_docs(self) -> list[dict]:
         csv_path = self.data_dir / "LabQAR" / "reference_ranges.csv"
         if not csv_path.exists():
             logger.warning(f"Reference ranges CSV not found: {csv_path}")
             return []
 
         docs = []
-        with open(csv_path, "r") as f:
+        with open(csv_path) as f:
             reader = csv.DictReader(f)
             if not self._validate_csv_columns(reader, csv_path):
                 return []

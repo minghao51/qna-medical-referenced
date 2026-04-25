@@ -3,13 +3,15 @@
 	import MermaidDiagram from '$lib/components/MermaidDiagram.svelte';
 	import TabNav from '$lib/components/TabNav.svelte';
 
-	type TabId = 'overview' | 'ingestion' | 'query' | 'evaluation';
+	type TabId = 'overview' | 'ingestion' | 'query' | 'evaluation' | 'features' | 'troubleshooting';
 
 	const tabs: Array<{ id: TabId; label: string }> = [
 		{ id: 'overview', label: 'Overview' },
 		{ id: 'ingestion', label: 'Ingestion' },
 		{ id: 'query', label: 'Query / RAG' },
-		{ id: 'evaluation', label: 'Evaluation' }
+		{ id: 'evaluation', label: 'Evaluation' },
+		{ id: 'features', label: 'Features' },
+		{ id: 'troubleshooting', label: 'Troubleshooting' }
 	];
 
 	let activeTab: TabId = $state('overview');
@@ -243,7 +245,7 @@ flowchart TB
 				</article>
 			</div>
 		</div>
-	{:else}
+	{:else if activeTab === 'evaluation'}
 		<div class="panel" id="panel-evaluation" role="tabpanel" aria-labelledby="tab-evaluation">
 			<div class="panel-head">
 				<div>
@@ -275,6 +277,65 @@ flowchart TB
 					<p>Feature ablation runs (keyword, HyPE/HyDE, reranking) identify which techniques improve retrieval. See <code>scripts/run_feature_ablations.py</code>.</p>
 				</article>
 			</div>
+		</div>
+	{:else if activeTab === 'features'}
+		<div class="panel" id="panel-features" role="tabpanel" aria-labelledby="tab-features">
+			<div class="panel-head">
+				<div>
+					<h2>Feature Toggles</h2>
+					<p>Each feature can be enabled independently. The Settings page shows which are currently active.</p>
+				</div>
+			</div>
+			<div class="note-grid">
+				<article>
+					<h3>Retrieval Strategy</h3>
+					<p><strong>rrf_hybrid</strong> (default) combines semantic and BM25 keyword search via Reciprocal Rank Fusion. <strong>semantic_only</strong> uses embedding similarity alone. <strong>bm25_only</strong> uses traditional keyword matching.</p>
+				</article>
+				<article>
+					<h3>Reranking (Cross-Encoder)</h3>
+					<p>Post-retrieval step that re-scores candidates with a cross-encoder model (BAAI/bge-reranker-base). The only tested feature with a measurable NDCG gain (+0.039) on the 54-query benchmark, at ~248ms latency cost. Controlled by <code>enable_reranking</code>.</p>
+				</article>
+				<article>
+					<h3>MMR Diversification</h3>
+					<p>Over-fetches candidates then selects a diverse subset using Maximal Marginal Relevance. Reduces redundant chunks from the same source. Controlled by <code>enable_diversification</code> and tuned with <code>mmr_lambda</code>.</p>
+				</article>
+				<article>
+					<h3>HyDE (Hypothetical Document Embeddings)</h3>
+					<p>Query-time technique: the LLM generates a hypothetical answer, which is embedded and used as the search query. Can improve recall for short or ambiguous queries. Controlled by <code>enable_hyde</code>.</p>
+				</article>
+				<article>
+					<h3>HyPE (Hypothetical Prompt Embeddings)</h3>
+					<p>Ingest-time technique: for each chunk, the LLM generates hypothetical questions a user might ask. These questions are embedded alongside the chunk, so some recall gains happen before a query arrives. Controlled by <code>enable_hype</code> and <code>hype_sample_rate</code>.</p>
+				</article>
+				<article>
+					<h3>Query Understanding</h3>
+					<p>Classifies the query type and routes it through specialized processing. The winning variant in ablation testing: improved NDCG@5 by +6.3% over baseline. Controlled by <code>enable_query_understanding</code>.</p>
+				</article>
+				<article>
+					<h3>Medical Expansion</h3>
+					<p>Expands queries with medical terminology synonyms and acronyms before retrieval. Requires a configured provider (currently noop by default). Controlled by <code>medical_expansion_enabled</code>.</p>
+				</article>
+				<article>
+					<h3>Keyword Extraction &amp; Summaries</h3>
+					<p>At ingest time, LLM-extracted keywords and chunk summaries can be stored to improve BM25 matching and context previews. Controlled by <code>enable_keyword_extraction</code> and <code>enable_chunk_summaries</code>.</p>
+				</article>
+			</div>
+		</div>
+	{:else}
+		<div class="panel" id="panel-troubleshooting" role="tabpanel" aria-labelledby="tab-troubleshooting">
+			<div class="panel-head">
+				<div>
+					<h2>Troubleshooting</h2>
+					<p>Common issues and their resolution paths.</p>
+				</div>
+			</div>
+			<ul class="compact-list">
+				<li><strong>Backend is reachable, but the runtime index is not ready yet.</strong> — The vector store has not finished loading embeddings into memory. Wait a minute and refresh, or check that <code>data/chroma/</code> exists.</li>
+				<li><strong>Answer quality is low.</strong> — Check the evaluation dashboard for retrieval metrics. If hit_rate_at_k is below 0.6, the retrieval layer may need tuning (chunk size, top_k, or search mode). Review the L6 quality tab for per-metric DeepEval scores.</li>
+				<li><strong>Latency is high.</strong> — Reranking adds ~248ms. HyDE adds an LLM call per query. Check the pipeline trace in the chat interface for per-step timing breakdowns.</li>
+				<li><strong>Sources are duplicated.</strong> — Enable diversification (<code>enable_diversification</code>) and tune <code>mmr_lambda</code>. Check the Advanced tab for duplicate_source_ratio_mean.</li>
+				<li><strong>Evaluation shows "degraded" status.</strong> — Some DeepEval metric evaluations failed (check metric_error_rate). This is often a timeout or API rate limit issue, not a pipeline bug.</li>
+			</ul>
 		</div>
 	{/if}
 </AppShell>

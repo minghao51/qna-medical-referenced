@@ -8,7 +8,7 @@ import json
 import logging
 import re
 from dataclasses import asdict, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -193,7 +193,7 @@ class ArtifactStore:
     def __init__(self, base_dir: Path, run_name: str | None = None):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
         suffix = _slugify(run_name or "pipeline-quality-assessment")
         self.run_dir = self.base_dir / f"{timestamp}_{suffix}"
         self.run_dir.mkdir(parents=True, exist_ok=False)

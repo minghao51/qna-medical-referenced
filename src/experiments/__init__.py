@@ -17,9 +17,9 @@ __all__ = [
     "build_run_assessment_kwargs",
     "compute_retrieval_delta",
     "load_experiment_file",
+    "log_assessment_to_wandb",
     "render_feature_ablation_summary",
     "resolve_experiment_runs",
     "run_feature_ablation_studies",
     "write_feature_ablation_outputs",
-    "log_assessment_to_wandb",
 ]

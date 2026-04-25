@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -229,7 +229,7 @@ def run_variant(
         run_dir=str(result.run_dir),
         metrics=metrics,
         config=variant_experiment,
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
     )
 
 
@@ -349,7 +349,7 @@ def run_feature_addition_experiment(
         experiment_name=config.name,
         baseline_result=baseline_result,
         variant_results=variant_results,
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         config=config,
     )
 

@@ -7,7 +7,7 @@ during chunking: lab value tables, drug dosing sections, clinical note headers.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -18,12 +18,11 @@ class MedicalStructureRules:
 
     Identifies and protects:
     - Lab value tables (reference ranges, units)
-    - Drug dosing sections (dosage + administration)
+    - Drug dosing sections
     - Clinical note headers (SOAP, history sections)
     """
 
-    # Clinical section headers that should start new chunks
-    CLINICAL_SECTIONS = {
+    CLINICAL_SECTIONS: ClassVar[frozenset[str]] = frozenset({
         "CHIEF COMPLAINT",
         "HISTORY OF PRESENT ILLNESS",
         "PAST MEDICAL HISTORY",
@@ -41,10 +40,9 @@ class MedicalStructureRules:
         "RADIOLOGY",
         "DIAGNOSIS",
         "DISPOSITION",
-    }
+    })
 
-    # Guideline section headers (common in clinical guideline documents)
-    GUIDELINE_SECTIONS = {
+    GUIDELINE_SECTIONS: ClassVar[frozenset[str]] = frozenset({
         "KEY MESSAGES",
         "RECOMMENDATIONS",
         "BACKGROUND",
@@ -72,25 +70,22 @@ class MedicalStructureRules:
         "LIFESTYLE",
         "PHARMACOLOGICAL",
         "NON-PHARMACOLOGICAL",
-    }
+    })
 
-    # Regex patterns for section-like lines in guidelines
-    SECTION_HEADER_PATTERNS = [
-        re.compile(r"^#{1,4}\s+\w+", re.IGNORECASE),  # Markdown headers
-        re.compile(r"^\d+\.\s+[A-Z][A-Za-z\s]{3,}$"),  # Numbered sections: "1. Treatment"
-        re.compile(r"^[A-Z][A-Z\s]{3,}:$"),  # ALL CAPS WITH COLON:
-        re.compile(r"^Recommendation\s+\d+", re.I),  # "Recommendation 1"
+    SECTION_HEADER_PATTERNS: ClassVar[list[re.Pattern[str]]] = [
+        re.compile(r"^#{1,4}\s+\w+", re.IGNORECASE),
+        re.compile(r"^\d+\.\s+[A-Z][A-Za-z\s]{3,}$"),
+        re.compile(r"^[A-Z][A-Z\s]{3,}:$"),
+        re.compile(r"^Recommendation\s+\d+", re.I),
     ]
 
-    # Drug dosing section patterns
-    DOSING_PATTERNS = [
+    DOSING_PATTERNS: ClassVar[list[str]] = [
         r"(?:dosage|dose|administer|administration)\s*:?\s*",
         r"(?:take|takes?|taking)\s+.+?\s+(?:daily|twice daily|bid|tid|qid|prn)",
         r"\d+\s*(?:mg|mcg|g|ml|units?)\s*(?:daily|twice daily|bid|tid|qid|prn|every \d+ hours?)",
     ]
 
-    # Lab table patterns
-    LAB_TABLE_PATTERNS = [
+    LAB_TABLE_PATTERNS: ClassVar[list[str]] = [
         r"(?:test|lab|laboratory|value|reference|range|unit)s?\s*\|\s*",
         r"\|\s*(?:normal|abnormal|high|low|result)\s*\|",
         r"(?:hemoglobin|hematocrit|wbc|rbc|platelet|glucose|creatinine|bun|sodium|potassium)\s*\|",
