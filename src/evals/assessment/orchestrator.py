@@ -285,7 +285,7 @@ def run_assessment(
         embedding_index = config.experiment_config.get("embedding_index", {})
         vector_config = experiment_runtime.get("vector_store", {})
         vector_path = Path("data/vectors") / (
-            f"{vector_config.get('collection_name', settings.collection_name)}.json"
+            f"{vector_config.get('collection_name', settings.storage.collection_name)}.json"
         )
         existing_index_hash = None
         if vector_path.exists():
@@ -534,7 +534,7 @@ def run_assessment(
             logger.debug("Failed to load index metadata from %s: %s", vector_path, e)
             index_metadata = {}
     manifest["index_provenance"] = {
-        "collection_name": index_metadata.get("collection_name", settings.collection_name),
+        "collection_name": index_metadata.get("collection_name", settings.storage.collection_name),
         "vector_path": vector_path,
         "vector_file_mtime_epoch_s": Path(vector_path).stat().st_mtime
         if vector_path and Path(vector_path).exists()

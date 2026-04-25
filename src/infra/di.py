@@ -100,11 +100,11 @@ class ServiceContainer:
         """
         if not self.retrieval_config:
             self.retrieval_config = {
-                "overfetch_multiplier": settings.retrieval_overfetch_multiplier,
-                "max_chunks_per_source_page": settings.max_chunks_per_source_page,
-                "max_chunks_per_source": settings.max_chunks_per_source,
-                "mmr_lambda": settings.mmr_lambda,
-                "search_mode": settings.rrf_search_mode,
+                "overfetch_multiplier": settings.retrieval.retrieval_overfetch_multiplier,
+                "max_chunks_per_source_page": settings.retrieval.max_chunks_per_source_page,
+                "max_chunks_per_source": settings.retrieval.max_chunks_per_source,
+                "mmr_lambda": settings.retrieval.mmr_lambda,
+                "search_mode": settings.retrieval.rrf_search_mode,
             }
         return self.retrieval_config
 

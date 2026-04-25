@@ -105,13 +105,13 @@ class QwenClient:
 
         Args:
             model: Model identifier (e.g., "qwen3.5-flash", "qwen3.5-plus")
-                   If None, uses the model from settings.model_name
+                   If None, uses the model from settings.llm.model_name
         """
-        self.client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url)
+        self.client = OpenAI(api_key=settings.llm.dashscope_api_key, base_url=settings.llm.qwen_base_url)
         self.async_client = AsyncOpenAI(
-            api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url
+            api_key=settings.llm.dashscope_api_key, base_url=settings.llm.qwen_base_url
         )
-        self.model = model or settings.model_name
+        self.model = model or settings.llm.model_name
 
     @retry_with_backoff
     def generate(self, prompt: str, context: str = "") -> str:

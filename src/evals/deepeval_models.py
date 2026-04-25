@@ -30,15 +30,15 @@ class QwenModel(DeepEvalBaseLLM):
         self.model = model
         self.model_name = model
         self.client = OpenAI(
-            api_key=settings.dashscope_api_key,
-            base_url=settings.qwen_base_url,
-            timeout=settings.deepeval_metric_timeout_seconds,
+            api_key=settings.llm.dashscope_api_key,
+            base_url=settings.llm.qwen_base_url,
+            timeout=settings.deepeval.deepeval_metric_timeout_seconds,
             max_retries=2,
         )
         self.async_client = AsyncOpenAI(
-            api_key=settings.dashscope_api_key,
-            base_url=settings.qwen_base_url,
-            timeout=settings.deepeval_metric_timeout_seconds,
+            api_key=settings.llm.dashscope_api_key,
+            base_url=settings.llm.qwen_base_url,
+            timeout=settings.deepeval.deepeval_metric_timeout_seconds,
             max_retries=2,
         )
 
@@ -49,8 +49,8 @@ class QwenModel(DeepEvalBaseLLM):
         response = self.client.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
-            temperature=settings.judge_temperature,
-            max_tokens=settings.judge_max_tokens,
+            temperature=settings.llm.judge_temperature,
+            max_tokens=settings.llm.judge_max_tokens,
         )
         if response.choices and response.choices[0].message.content:
             return str(response.choices[0].message.content)
@@ -60,8 +60,8 @@ class QwenModel(DeepEvalBaseLLM):
         response = await self.async_client.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
-            temperature=settings.judge_temperature,
-            max_tokens=settings.judge_max_tokens,
+            temperature=settings.llm.judge_temperature,
+            max_tokens=settings.llm.judge_max_tokens,
         )
         if response.choices and response.choices[0].message.content:
             return str(response.choices[0].message.content)
@@ -92,8 +92,8 @@ class LiteLLMJudgeModel(DeepEvalBaseLLM):
     def __init__(self, model: str):
         self.model = model
         self.model_name = model
-        if settings.openrouter_api_key and not os.environ.get("OPENROUTER_API_KEY"):
-            os.environ["OPENROUTER_API_KEY"] = settings.openrouter_api_key
+        if settings.llm.openrouter_api_key and not os.environ.get("OPENROUTER_API_KEY"):
+            os.environ["OPENROUTER_API_KEY"] = settings.llm.openrouter_api_key
 
     def load_model(self) -> "LiteLLMJudgeModel":
         return self
@@ -104,8 +104,8 @@ class LiteLLMJudgeModel(DeepEvalBaseLLM):
         response: Any = litellm.completion(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
-            temperature=settings.judge_temperature,
-            max_tokens=settings.judge_max_tokens,
+            temperature=settings.llm.judge_temperature,
+            max_tokens=settings.llm.judge_max_tokens,
         )
         if response.choices and response.choices[0].message.content:
             return str(response.choices[0].message.content)
@@ -117,8 +117,8 @@ class LiteLLMJudgeModel(DeepEvalBaseLLM):
         response: Any = await litellm.acompletion(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
-            temperature=settings.judge_temperature,
-            max_tokens=settings.judge_max_tokens,
+            temperature=settings.llm.judge_temperature,
+            max_tokens=settings.llm.judge_max_tokens,
         )
         if response.choices and response.choices[0].message.content:
             return str(response.choices[0].message.content)
@@ -138,17 +138,17 @@ class LiteLLMJudgeModel(DeepEvalBaseLLM):
 
 
 def get_light_model() -> QwenModel | LiteLLMJudgeModel:
-    if settings.llm_provider == "litellm":
-        model_name = settings.judge_model_light_litellm
+    if settings.llm.provider == "litellm":
+        model_name = settings.llm.judge_model_light_litellm
         if not model_name.startswith("openrouter/"):
             model_name = f"openrouter/{model_name}"
         return LiteLLMJudgeModel(model_name)
-    return QwenModel(settings.judge_model_light)
+    return QwenModel(settings.llm.judge_model_light)
 
 
 def get_heavy_model() -> QwenModel | LiteLLMJudgeModel:
-    if settings.llm_provider == "litellm":
-        model_name = settings.judge_model_heavy_litellm
+    if settings.llm.provider == "litellm":
+        model_name = settings.llm.judge_model_heavy_litellm
         if not model_name.startswith("openrouter/"):
             model_name = f"openrouter/{model_name}"
         return LiteLLMJudgeModel(model_name)

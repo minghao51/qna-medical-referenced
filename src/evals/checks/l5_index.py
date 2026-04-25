@@ -15,7 +15,7 @@ def assess_l5_index_quality(
     collection_name: str | None = None,
 ) -> dict[str, Any]:
     vdir = Path(vector_dir or VECTOR_DIR)
-    coll = collection_name or settings.collection_name
+    coll = collection_name or settings.storage.collection_name
     vector_path = vdir / f"{coll}.json"
     if not vector_path.exists():
         return {

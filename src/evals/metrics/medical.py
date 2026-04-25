@@ -144,7 +144,7 @@ def _build_faithfulness() -> FaithfulnessMetric:
         model=get_heavy_model(),
         async_mode=True,
         include_reason=False,
-        truths_extraction_limit=settings.deepeval_faithfulness_truths_limit,
+        truths_extraction_limit=settings.deepeval.deepeval_faithfulness_truths_limit,
     )
 
 

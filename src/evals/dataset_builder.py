@@ -367,7 +367,7 @@ def _try_generate_synthetic_questions(
     attempts: list[dict[str, Any]] = []
     accepted: list[dict[str, Any]] = []
 
-    if not settings.dashscope_api_key or settings.dashscope_api_key == "test-api-key":
+    if not settings.llm.dashscope_api_key or settings.llm.dashscope_api_key == "test-api-key":
         return accepted, [{"status": "skipped", "reason": "missing_dashscope_api_key"}]
 
     try:
@@ -379,7 +379,7 @@ def _try_generate_synthetic_questions(
     if not candidates:
         return accepted, [{"status": "skipped", "reason": "no_candidate_docs"}]
 
-    client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url)
+    client = OpenAI(api_key=settings.llm.dashscope_api_key, base_url=settings.llm.qwen_base_url)
     chunk_map = {str(item.get("id")): item for item in candidates}
     for idx, doc in enumerate(candidates[:max_synthetic_questions], start=1):
         seed_context = _build_seed_context(doc, chunk_map)
@@ -399,7 +399,7 @@ def _try_generate_synthetic_questions(
         }
         try:
             response = client.chat.completions.create(
-                model=settings.model_name,
+                model=settings.llm.model_name,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
             )

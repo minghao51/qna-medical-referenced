@@ -8,11 +8,11 @@ SvelteKit frontend for:
 ## Commands
 
 ```bash
-npm install
-npm run dev
-npm run build
-npm run preview
-npm run test
+bun install
+bun run dev
+bun run build
+bun run preview
+bun run test
 ```
 
 ## Dependencies

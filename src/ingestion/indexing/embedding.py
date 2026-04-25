@@ -9,7 +9,7 @@ from openai import OpenAI
 
 from src.config import settings
 
-EMBEDDING_MODEL = settings.embedding_model
+EMBEDDING_MODEL = settings.llm.embedding_model
 _EMBEDDING_CACHE_MAX_ENTRIES = 512
 _embedding_cache: OrderedDict[tuple[str, str], List[float]] = OrderedDict()
 _embedding_cache_lock = Lock()

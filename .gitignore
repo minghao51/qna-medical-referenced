@@ -24,6 +24,7 @@ venv*/
 
 # Data and logs
 data/
+.cache/
 *.log
 logs/
 .pytest_cache/
@@ -34,6 +35,7 @@ wandb/
 .coverage
 htmlcov/
 .hypothesis/
+.playwright-mcp/
 
 # IDE
 .idea/
@@ -61,3 +63,4 @@ qwen-code-export-*.md
 node_modules/
 .svelte-kit/
 *.tsbuildinfo
+frontend/package-lock.json

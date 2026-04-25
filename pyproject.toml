@@ -3,14 +3,13 @@ name = "qna-medical-referenced"
 version = "0.1.0"
 description = "Medical Q&A chatbot with RAG pipeline for health screening interpretation"
 requires-python = ">=3.12,<3.13"
-dependencies = [
+ dependencies = [
     "fastapi>=0.129.0",
     "openai>=1.0.0",
     "pypdf>=4.0,<6.0",
     "pdfplumber>=0.11.4",
     "pymupdf>=1.24.0",
     "readability-lxml>=0.8.0",
-    "python-dotenv>=1.2.1",
     "pydantic-settings>=2.6.0",
     "uvicorn>=0.40.0",
     "nltk>=3.9.2",
@@ -22,20 +21,29 @@ dependencies = [
     "chromadb>=0.4.0",
     "bcrypt>=4.0.0",
     "litellm>=1.0.0",
+    "requests>=2.32.0",
+    "urllib3>=2.0.0,<3.0.0",
+    "polars>=1.0.0",
+    "sf-hamilton[visualization]>=1.0.0",
+    "duckdb>=1.0.0",
+    "pyyaml>=6.0.0",
+    "deepeval>=3.9.0,<4.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.8.0",
+    "pre-commit>=3.0.0",
+    "bandit>=1.7.0",
 ]
-evaluation = [
-    "deepeval>=2.0.0,<2.1.0",
+ evaluation = [
+    "deepeval>=3.9.0,<4.0.0",
     "langchain<1",
     "langchain-community<1",
     "langchain-core<1",
     "langchain-openai<1",
-]
+    ]
 chunkers = [
     "chonkie[semantic]>=1.0.0",
 ]
@@ -52,15 +60,23 @@ test = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["--strict-markers", "-ra", "--durations=10"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
+    "unit: fast isolated tests (no I/O, no external deps)",
+    "integration: tests with DB, filesystem, or service stack",
+    "e2e: full end-to-end workflow tests",
+    "slow: >1s tests",
     "live_api: requires live Qwen API access",
     "live_openrouter: requires live OpenRouter API access",
-    "deepeval: marks tests as DeepEval integration tests (slow, requires API)",
-    "e2e_real_apis: marks tests as end-to-end tests with real API integrations (requires ENABLE_REAL_API_TESTS=1)",
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    "deepeval: DeepEval integration tests (slow, requires API)",
+    "e2e_real_apis: end-to-end tests with real APIs (requires ENABLE_REAL_API_TESTS=1)",
+    "network: needs internet access",
+    "smoke: critical path tests",
+    "serial: cannot run in parallel",
 ]
 
 [tool.ruff]
@@ -68,7 +84,10 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W"]
+select = [
+    "E", "F", "I", "UP", "B", "C4", "DTZ", "T10",
+    "ISC", "PIE", "PT", "RUF",
+]
 ignore = ["E501"]
 
 [dependency-groups]
@@ -103,6 +122,10 @@ exclude = [
 disable_error_code = [
     "import-untyped",
 ]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "venv"]
+skips = ["B101", "B601"]  # Skip assert_used and paramiko_calls
 
 [[tool.mypy.overrides]]
 module = [

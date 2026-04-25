@@ -112,24 +112,24 @@ class ChromaVectorStore:
         embedding_batch_size: int | None = None,
         index_metadata: dict[str, Any] | None = None,
     ):
-        self.collection_name = collection_name or settings.collection_name
+        self.collection_name = collection_name or settings.storage.collection_name
         self.semantic_weight = semantic_weight
         self.keyword_weight = keyword_weight
         self.boost_weight = boost_weight
-        self.embedding_model = embedding_model or settings.embedding_model
-        self.embedding_batch_size = int(embedding_batch_size or settings.embedding_batch_size)
+        self.embedding_model = embedding_model or settings.llm.embedding_model
+        self.embedding_batch_size = int(embedding_batch_size or settings.llm.embedding_batch_size)
 
         self._embeddings_file: Path | None = None
 
-        chroma_host = settings.chroma_server_host.strip()
+        chroma_host = settings.storage.chroma_server_host.strip()
         if chroma_host:
-            logger.info("Connecting to ChromaDB server at %s:%d", chroma_host, settings.chroma_server_port)
+            logger.info("Connecting to ChromaDB server at %s:%d", chroma_host, settings.storage.chroma_server_port)
             self._client = chromadb.HttpClient(
                 host=chroma_host,
-                port=settings.chroma_server_port,
+                port=settings.storage.chroma_server_port,
             )
         else:
-            persist_dir = str(settings.chroma_persist_directory)
+            persist_dir = str(settings.storage.chroma_persist_directory)
             self._client = chromadb.PersistentClient(
                 path=persist_dir,
                 settings=ChromaSettings(allow_reset=True),
@@ -833,13 +833,13 @@ class ChromaVectorStoreFactory:
     def _normalize_runtime_config(cls, config: dict[str, Any] | None = None) -> dict[str, Any]:
         resolved = dict(config or cls._runtime_config or {})
         return {
-            "collection_name": resolved.get("collection_name", settings.collection_name),
+            "collection_name": resolved.get("collection_name", settings.storage.collection_name),
             "semantic_weight": float(resolved.get("semantic_weight", 0.6)),
             "keyword_weight": float(resolved.get("keyword_weight", 0.2)),
             "boost_weight": float(resolved.get("boost_weight", 0.2)),
-            "embedding_model": resolved.get("embedding_model", settings.embedding_model),
+            "embedding_model": resolved.get("embedding_model", settings.llm.embedding_model),
             "embedding_batch_size": int(
-                resolved.get("embedding_batch_size", settings.embedding_batch_size)
+                resolved.get("embedding_batch_size", settings.llm.embedding_batch_size)
             ),
             "index_metadata": dict(resolved.get("index_metadata", {})),
         }

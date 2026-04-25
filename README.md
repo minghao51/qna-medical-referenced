@@ -52,7 +52,7 @@ uv run python scripts/download_nltk_data.py
 
 # Run with dotenvx to decrypt .env
 dotenvx run -- uv run python -m src.cli.serve
-dotenvx run -- uv run python -m src.cli.ingest
+dotenvx run -- uv run python -m src.cli.ingest  # Hamilton DAG pipeline
 dotenvx run -- uv run python -m src.cli.eval_pipeline
 
 uv run pytest
@@ -60,6 +60,33 @@ uv run ruff check .
 
 bash scripts/check_docs_consistency.sh
 ```
+
+### Hamilton Pipeline Usage
+
+The ingestion pipeline now uses a **Hamilton DAG** for parallel, efficient execution:
+
+```bash
+# Full pipeline (Bronze → Silver → Gold → Platinum)
+dotenvx run -- uv run python -m src.cli.ingest
+
+# With specific features
+dotenvx run -- uv run python -m src.cli.ingest --enable-hype
+dotenvx run -- uv run python -m src.cli.ingest --enable-keyword-extraction
+dotenvx run -- uv run python -m src.cli.ingest --parallel 4
+```
+
+**Pipeline Stages:**
+- **L0**: Download web content and PDFs (Bronze layer)
+- **L1-L2**: Parse and convert documents (Bronze→Silver layer)
+- **L3**: Chunk documents (Silver→Gold layer)
+- **L4**: Enrich with HyPE/keywords (Gold layer)
+- **L5-L6**: Generate embeddings and store vectors (Platinum layer)
+
+**Features:**
+- Parallel execution with configurable cores
+- Idempotent operations (safe to re-run)
+- DAG visualization with `--visualize` flag
+- Incremental updates (skip completed stages)
 
 **Note**: Use `uv sync --extra test` to install all test dependencies, including:
 - `pytest-asyncio` for async test support

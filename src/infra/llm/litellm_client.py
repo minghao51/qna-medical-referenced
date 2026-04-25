@@ -32,14 +32,14 @@ Instructions:
 
 
 def _resolve_model() -> str:
-    if settings.litellm_model:
-        return settings.litellm_model
-    return f"openrouter/{settings.openrouter_model}"
+    if settings.llm.litellm_model:
+        return settings.llm.litellm_model
+    return f"openrouter/{settings.llm.openrouter_model}"
 
 
 def _ensure_api_key() -> None:
-    if settings.openrouter_api_key and not os.environ.get("OPENROUTER_API_KEY"):
-        os.environ["OPENROUTER_API_KEY"] = settings.openrouter_api_key
+    if settings.llm.openrouter_api_key and not os.environ.get("OPENROUTER_API_KEY"):
+        os.environ["OPENROUTER_API_KEY"] = settings.llm.openrouter_api_key
 
 
 def _build_messages(prompt: str, context: str = "") -> list[dict[str, str]]:

@@ -40,14 +40,30 @@ def rank_documents(
     max_kw_score = max(keyword_scores.values()) if keyword_scores else 1.0
     ranked: list[dict[str, Any]] = []
 
-    for i, emb in enumerate(documents["embeddings"]):
+    ids = documents.get("ids", [])
+    contents = documents.get("contents", [])
+    embeddings = documents.get("embeddings", [])
+    metadatas = list(documents.get("metadatas", []))
+    doc_count = max(len(ids), len(contents), len(metadatas))
+
+    if len(ids) not in (0, doc_count):
+        raise ValueError("Document ids length does not match ranking inputs")
+    if len(contents) not in (0, doc_count):
+        raise ValueError("Document contents length does not match ranking inputs")
+    if len(metadatas) < doc_count:
+        metadatas.extend([None] * (doc_count - len(metadatas)))
+    if use_semantic and len(embeddings) != doc_count:
+        raise ValueError("Embedding count does not match documents for semantic ranking")
+
+    for i in range(doc_count):
+        emb = embeddings[i] if use_semantic else None
         semantic_score = (
             cosine_similarity(query_embedding, emb)
             if (use_semantic and query_embedding is not None)
             else 0.0
         )
-        metadata = documents["metadatas"][i]
-        source_class = metadata.get("source_class", "unknown")
+        metadata = metadatas[i]
+        source_class = metadata.get("source_class", "unknown") if metadata else "unknown"
         source_prior = source_prior_for(source_class)
         normalized_keyword = keyword_scores.get(i, 0.0) / max_kw_score if max_kw_score > 0 else 0.0
 

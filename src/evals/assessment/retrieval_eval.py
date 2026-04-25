@@ -486,7 +486,7 @@ def run_hype_ablations_with_reingest(
         dataset: Evaluation dataset
         top_k: Retrieval top-k
         base_options: Base retrieval options
-        base_collection_name: Base name for ChromaDB collections (default: settings.collection_name)
+        base_collection_name: Base name for ChromaDB collections (default: settings.storage.collection_name)
         reconfigure_and_rebuild_fn: Callback that accepts hype_config dict and rebuilds the index.
             The hype_config dict contains: enable_hype, hype_sample_rate, hype_questions_per_chunk
 
@@ -495,7 +495,7 @@ def run_hype_ablations_with_reingest(
     """
     from src.config import settings
 
-    collection_base = base_collection_name or settings.collection_name
+    collection_base = base_collection_name or settings.storage.collection_name
     outputs: dict[str, Any] = {}
     configs = hype_ablation_configs(base_options)
 
@@ -602,7 +602,7 @@ def run_keyword_ablations_with_reingest(
     """Run keyword/summaries ablation with automatic re-ingestion for each variant."""
     from src.config import settings
 
-    collection_base = base_collection_name or settings.collection_name
+    collection_base = base_collection_name or settings.storage.collection_name
     outputs: dict[str, Any] = {}
 
     for name, options in keyword_ablation_configs(base_options):

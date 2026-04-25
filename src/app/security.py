@@ -145,7 +145,7 @@ def _normalize_record(raw: dict[str, object], index: int) -> APIKeyRecord | None
 
 def load_api_key_records() -> list[APIKeyRecord]:
     records: list[APIKeyRecord] = []
-    if settings.api_keys_json:
+    if settings.api.api_keys_json:
         try:
             payload = json.loads(settings.api_keys_json)
         except json.JSONDecodeError:
@@ -156,8 +156,8 @@ def load_api_key_records() -> list[APIKeyRecord]:
                     record = _normalize_record(raw, idx)
                     if record:
                         records.append(record)
-    elif settings.api_keys:
-        for idx, value in enumerate(settings.api_keys.split(",")):
+    elif settings.api.api_keys:
+        for idx, value in enumerate(settings.api.api_keys.split(",")):
             key = value.strip()
             if not key:
                 continue

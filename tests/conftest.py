@@ -1,13 +1,9 @@
 import json
 import os
-import sys
 from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
-
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 load_dotenv()
 
@@ -70,6 +66,14 @@ REAL_API_TESTS_ENABLED = os.environ.get("ENABLE_REAL_API_TESTS") == "1"
 
 
 def pytest_collection_modifyitems(config, items):
+    for item in items:
+        if "/unit/" in item.nodeid:
+            item.add_marker(pytest.mark.unit)
+        elif "/integration/" in item.nodeid:
+            item.add_marker(pytest.mark.integration)
+        elif "/e2e/" in item.nodeid:
+            item.add_marker(pytest.mark.e2e)
+
     if LIVE_QWEN_ENABLED:
         return
 
@@ -78,7 +82,6 @@ def pytest_collection_modifyitems(config, items):
         if "live_api" in item.keywords:
             item.add_marker(skip_live)
 
-    # Skip real API E2E tests unless explicitly enabled
     if not REAL_API_TESTS_ENABLED:
         skip_real_api = pytest.mark.skip(
             reason="Set ENABLE_REAL_API_TESTS=1 to run real API E2E tests"
@@ -87,7 +90,6 @@ def pytest_collection_modifyitems(config, items):
             if "e2e_real_apis" in item.keywords:
                 item.add_marker(skip_real_api)
 
-    # Skip OpenRouter live tests unless explicitly enabled
     if not LIVE_OPENROUTER_ENABLED:
         skip_openrouter = pytest.mark.skip(
             reason="Set RUN_LIVE_OPENROUTER_TESTS=1 to run live OpenRouter tests"

@@ -1,0 +1,97 @@
+app:
+  environment: development
+  log_level: INFO
+
+api:
+  cors_allowed_origins: "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000"
+  max_message_length: 2000
+  api_keys: null
+  api_keys_json: null
+  rate_limit_per_minute: 60
+  anonymous_chat_rate_limit_per_minute: 12
+  rate_limit_bypass_key_ids: ""
+  rate_limit_bypass_roles: ""
+  anonymous_browser_cookie_name: "anon_browser_id"
+  chat_session_cookie_name: "chat_session_id"
+  chat_session_cookie_max_age_seconds: 2592000
+  chat_history_ttl_seconds: 2592000
+  trust_proxy_headers: false
+
+llm:
+  provider: qwen
+  model_name: qwen3.5-flash
+  dashscope_api_key: ""
+  qwen_base_url: "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
+  embedding_model: text-embedding-v4
+  embedding_batch_size: 10
+  openrouter_api_key: ""
+  openrouter_model: google/gemma-4-31b-it
+  litellm_model: ""
+  judge_model_light: qwen3.5-35b-a3b
+  judge_model_heavy: qwen3.5-flash
+  judge_model_light_litellm: google/gemma-4-31b-it
+  judge_model_heavy_litellm: google/gemma-4-31b-it
+  judge_temperature: 0.0
+  judge_max_tokens: 1024
+
+storage:
+  collection_name: medical_docs
+  data_dir: data/raw
+  chroma_persist_directory: data/chroma
+  chroma_server_host: ""
+  chroma_server_port: 8000
+
+retrieval:
+  retrieval_overfetch_multiplier: 4
+  max_chunks_per_source_page: 2
+  max_chunks_per_source: 3
+  mmr_lambda: 0.75
+  rrf_search_mode: rrf_hybrid
+  enable_reranking: false
+  reranker_model: BAAI/bge-reranker-base
+  reranker_batch_size: 16
+  reranker_device: cpu
+  rerank_top_k: null
+  rerank_score_threshold: null
+  reranking_mode: cross_encoder
+  medical_expansion_enabled: false
+  medical_expansion_provider: noop
+
+hyde:
+  hyde_enabled: false
+  hyde_max_length: 200
+  hype_enabled: false
+  hype_sample_rate: 0.1
+  hype_max_chunks: 500
+  hype_questions_per_chunk: 2
+
+enrichment:
+  enable_keyword_extraction: false
+  enable_chunk_summaries: false
+  keyword_extraction_sample_rate: 1.0
+  keyword_extraction_max_chunks: 500
+
+retry:
+  max_retries: 3
+  retry_delay: 1.0
+
+deepeval:
+  judge_model_light: qwen3.5-35b-a3b
+  judge_model_heavy: qwen3.5-flash
+  judge_model_light_litellm: google/gemma-4-31b-it
+  judge_model_heavy_litellm: google/gemma-4-31b-it
+  deepeval_query_concurrency: 2
+  deepeval_metric_concurrency: 3
+  deepeval_metric_timeout_seconds: 90
+  deepeval_answer_cache_enabled: true
+  deepeval_metric_cache_enabled: true
+  deepeval_cache_dir: data/evals/cache
+  deepeval_cache_schema_version: 2
+  deepeval_faithfulness_truths_limit: 8
+
+wandb:
+  wandb_api_key: ""
+  wandb_cache_ttl_seconds: 60
+
+production:
+  production_profile: baseline_cross_encoder

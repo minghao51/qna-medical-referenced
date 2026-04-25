@@ -48,18 +48,18 @@ def _runtime_signature(
     cache_namespace: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
-        "schema_version": int(getattr(settings, "deepeval_cache_schema_version", 1)),
+        "schema_version": int(getattr(settings.deepeval, "deepeval_cache_schema_version", 1)),
         "top_k": top_k,
-        "model_name": settings.model_name,
-        "judge_model_light": settings.judge_model_light,
-        "judge_model_heavy": settings.judge_model_heavy,
-        "collection_name": settings.collection_name,
+        "model_name": settings.llm.model_name,
+        "judge_model_light": settings.llm.judge_model_light,
+        "judge_model_heavy": settings.llm.judge_model_heavy,
+        "collection_name": settings.storage.collection_name,
         "retrieval_options": retrieval_options or {},
         "cache_namespace": {
             **(cache_namespace or {}),
             "vector_store_runtime": get_vector_store_runtime_config(),
         },
-        "faithfulness_truths_limit": settings.deepeval_faithfulness_truths_limit,
+        "faithfulness_truths_limit": settings.deepeval.deepeval_faithfulness_truths_limit,
     }
 
 
@@ -78,7 +78,7 @@ def _load_cache_entries(cache_path: Path | None) -> dict[str, Any]:
         return {}
     if not isinstance(payload, dict):
         return {}
-    version = int(getattr(settings, "deepeval_cache_schema_version", 1))
+    version = int(getattr(settings.deepeval, "deepeval_cache_schema_version", 1))
     if int(payload.get("schema_version", version)) != version:
         return {}
     entries = payload.get("entries", {})
@@ -90,7 +90,7 @@ def _write_cache_entries(cache_path: Path | None, cache_data: dict[str, Any]) ->
         return
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "schema_version": int(getattr(settings, "deepeval_cache_schema_version", 1)),
+        "schema_version": int(getattr(settings.deepeval, "deepeval_cache_schema_version", 1)),
         "entries": to_serializable(cache_data),
     }
     cache_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -178,7 +178,7 @@ async def _prepare_answer_case(
             {
                 "query": query,
                 "context": context,
-                "generator_model": settings.model_name,
+                "generator_model": settings.llm.model_name,
                 **runtime_signature,
             }
         )

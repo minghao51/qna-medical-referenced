@@ -14,6 +14,8 @@ class BaseService:
 
     def __init__(self) -> None:
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    @property
     def logger(self) -> logging.Logger:
         """Return logger for this service."""
         return self._logger

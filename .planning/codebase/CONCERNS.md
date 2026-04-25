@@ -1,367 +1,218 @@
-# Codebase Concerns Report
+# Codebase Concerns
 
-Generated: 2026-04-18
+**Analysis Date:** 2026-04-19
 
----
+## Tech Debt
 
-## 1. Technical Debt
+**God Module: `src/rag/runtime.py` (1425 lines):**
+- Issue: Single file with 6+ distinct responsibilities (index init, experiment config, retrieval orchestration, MMR reranking, query expansion, candidate retrieval)
+- Files: `src/rag/runtime.py`
+- Impact: Hard to test, maintain, or add features without risking regressions
+- Fix approach: Split into focused modules (`src/rag/indexing.py`, `src/rag/diversification.py`, `src/rag/query_expansion.py`, `src/rag/retrieval.py`, `src/rag/experiment_config.py`)
 
-### 1.1 God Module: `src/rag/runtime.py` (1417 lines)
+**Massive Code Duplication in Sync/Async Retrieval:**
+- Issue: `retrieve_context_with_trace` and `retrieve_context_with_trace_async` share ~80% identical logic
+- Files: `src/rag/runtime.py:919-1273`
+- Impact: Bug fixes must be applied in two places; easy to introduce inconsistencies
+- Fix approach: Extract shared trace-building logic into a helper
 
-This is the single largest and most complex file in the codebase. It conflates at least 6 distinct responsibilities:
+**Mutable Module-Level Global State:**
+- Issue: Multiple modules use `set_*()` functions mutating globals for runtime configuration
+- Files: `src/ingestion/steps/convert_html.py`, `src/ingestion/steps/load_pdfs.py`, `src/ingestion/steps/load_markdown.py`, `src/ingestion/steps/chunk_text.py`, `src/rag/reranker.py:134`, `src/infra/di.py:131`, `src/config/settings.py:588-589`
+- Impact: Breaks thread safety, creates hidden coupling, fragile testing
+- Fix approach: Consolidate runtime config into a `RuntimeConfig` dataclass passed explicitly
 
-| Responsibility | Lines | Functions |
-|---|---|---|
-| Index initialization & lifecycle | 393-583 | `initialize_vector_store`, `initialize_runtime_index`, `_build_index_from_sources` |
-| Experiment configuration | 586-663 | `configure_runtime_for_experiment` |
-| Retrieval orchestration (sync + async) | 864-1041, 1043-1273 | `retrieve_context`, `retrieve_context_with_trace`, `retrieve_context_with_trace_async` |
-| MMR diversification & scoring | 666-790 | `_mmr_rerank`, `_diversify_results`, `_content_similarity` |
-| Query expansion & HyPE/HyDE integration | 249-390 | `_expand_queries`, `_expand_queries_async`, `_prepare_expanded_queries` |
-| Candidate retrieval & merging | 1308-1417 | `_retrieve_candidates`, `_merge_result_sets` |
+**Import-Time Side Effects:**
+- Issue: Modules trigger side effects on import (Settings instantiation, env var mutations, app creation)
+- Files: `src/config/__init__.py`, `src/config/settings.py:588-589`, `src/app/factory.py:159`, `src/evals/deepeval_models.py:95-96`, `src/infra/llm/litellm_client.py:41-42`
+- Impact: Importing transitively causes env var leaks; complicates testing
+- Fix approach: Lazy initialization or explicit dependency injection
 
-**Recommendation:** Split into `src/rag/indexing.py`, `src/rag/diversification.py`, `src/rag/query_expansion.py`, `src/rag/retrieval.py`, `src/rag/experiment_config.py`.
+**Circular Import in Chunking Module:**
+- Issue: `chonkie_adapter` ↔ `medical_semantic` may create circular import
+- Files: `src/ingestion/steps/chunking/chonkie_adapter.py`, `src/ingestion/steps/chunking/medical_semantic.py`
+- Impact: Works via lazy imports but fragile
+- Fix approach: Break cycle by moving shared types to a third module
 
-### 1.2 Massive Code Duplication in Retrieval Functions
-
-`retrieve_context_with_trace` (lines 919-1040) and `retrieve_context_with_trace_async` (lines 1043-1273) share ~80% identical logic for building pipeline traces, applying reranking, and diversification. The async version adds HyDE support but otherwise mirrors the sync version field-by-field.
-
-**Impact:** Any bug fix or feature addition must be applied in two places.
-
-**Recommendation:** Extract shared trace-building logic into a helper, with sync/async only differing in the retrieval step.
-
-### 1.3 Deprecated Security Code Still Active
-
-`src/app/security.py:64-77` - Legacy unsalted SHA256 hashing is still supported for backward compatibility. The `_hash_secret_legacy` function and legacy verification path in `_verify_secret` (lines 103-108) remain active.
-
-```
-DEPRECATED: Unsalted SHA256 is cryptographically insecure. This function exists
-only to verify existing legacy hashes. All new keys must use bcrypt.
-```
-
-**Recommendation:** Set a removal deadline, add migration logging metrics, and plan removal.
-
-### 1.4 Mutable Module-Level Global State
-
-Multiple modules use `set_*()` functions that mutate module-level globals for runtime configuration:
-
-| File | Globals |
-|---|---|
-| `src/ingestion/steps/convert_html.py` | `_extractor_strategy`, `_extractor_mode`, `_page_classification_enabled` |
-| `src/ingestion/steps/load_pdfs.py` | `_pdf_extractor_strategy`, `_pdf_table_extractor` |
-| `src/ingestion/steps/load_markdown.py` | `_index_only_classified_pages` |
-| `src/ingestion/steps/chunk_text.py` | `_structured_chunking_enabled`, `_source_chunk_configs`, `_auto_select_strategy` |
-| `src/rag/reranker.py:134` | `_reranker_instance` (global singleton) |
-| `src/infra/di.py:139,151` | `_container` (global singleton) |
-| `src/config/settings.py:588-589` | Mutates `os.environ` at import time |
-
-This pattern makes testing fragile, breaks thread safety, and creates hidden coupling.
-
-**Recommendation:** Consolidate runtime configuration into a single `RuntimeConfig` dataclass passed explicitly through the call chain.
-
-### 1.5 Import-Time Side Effects
-
-- `src/config/__init__.py` - Importing this module triggers `Settings()` instantiation (reads `.env`, validates all settings)
-- `src/config/settings.py:588-589` - Sets `os.environ["WANDB_API_KEY"]` at module import time
-- `src/app/factory.py:159` - `app = create_app()` at module level creates the entire FastAPI app on import
-- `src/evals/deepeval_models.py:95-96` - Mutates `os.environ["OPENROUTER_API_KEY"]` at import time
-- `src/infra/llm/litellm_client.py:41-42` - Same pattern for `OPENROUTER_API_KEY`
-
-**Impact:** Importing any module that transitively imports `src.config` has side effects. This complicates testing and can leak environment variables.
-
-### 1.6 Circular Import Detected
-
-```
-src.ingestion.steps.chunking.chonkie_adapter
-  -> src.ingestion.steps.chunking.medical_semantic
-  -> src.ingestion.steps.chunking.chonkie_adapter
-```
-
-`medical_semantic.py` imports `ChonkieChunkerAdapter` from `chonkie_adapter.py`, and `chonkie_adapter.py` may conditionally import `medical_semantic` at runtime (or the cycle exists through re-exports). Currently works due to lazy imports but is fragile.
-
-### 1.7 Broad Exception Handling (63+ instances)
-
-The codebase has 63+ `except Exception` blocks. Notable concentrations:
-
-| File | Count | Concern |
-|---|---|---|
-| `src/rag/runtime.py` | 2 | Swallows errors in retrieval pipeline |
-| `src/infra/llm/qwen_client.py` | 3 | LLM errors silently retried |
-| `src/infra/llm/litellm_client.py` | 3 | Same pattern |
-| `src/evals/assessment/orchestrator.py` | 3 | Evaluation errors swallowed |
-| `src/ingestion/steps/convert_html.py` | 5 | Optional import handling (acceptable) |
-| `src/ingestion/steps/load_pdfs.py` | 5 | Optional import handling (acceptable) |
-| `src/experiments/wandb_history.py` | 4 | W&B failures silently caught |
-
-One bare `except: pass` at `src/evals/dataset_builder.py:351`.
-
-**Recommendation:** Narrow exception types where possible. Add structured error categorization.
-
-### 1.8 Unused Variable
-
-`src/app/routes/chat.py:83` - Variable `e` assigned but never used:
-```python
-except Exception as e:
-    logger.exception("Failed to serialize SSE event")
-```
+**Broad Exception Handling (72+ instances):**
+- Issue: 72 `except Exception as` blocks across codebase; one bare `except: pass` at `src/evals/dataset_builder.py:375`
+- Files: See grep output - concentrated in `src/evals/`, `src/infra/llm/`, `src/rag/runtime.py`, `src/usecases/`
+- Impact: Errors swallowed silently, hard to debug
+- Fix approach: Narrow exception types; add structured error categorization
 
 ---
 
-## 2. Security Concerns
+## Known Bugs
 
-### 2.1 Legacy Unsalted SHA256 for API Key Verification
+**Sync Retrieval Called in Async Context:**
+- Symptoms: `asyncio.run()` called inside potentially async event loops
+- Files: `src/rag/runtime.py:394`, `src/usecases/pipeline.py:66,72,107,140`
+- Trigger: Calling `initialize_runtime_index` from FastAPI lifespan or async route handlers
+- Workaround: Ensure async routes use async variants
 
-`src/app/security.py:64-108` - The `_hash_secret_legacy` function uses `hashlib.sha256` without salt. The verification path at line 103-108 still accepts these hashes. While `hmac.compare_digest` is used (timing-safe comparison), the underlying hash is vulnerable to rainbow table attacks.
-
-**Severity:** Medium (requires attacker to obtain hash database)
-**Recommendation:** Add telemetry for legacy hash usage, set migration deadline.
-
-### 2.2 Environment Variable Leakage Risk
-
-- `src/config/settings.py:588-589`: Copies `wandb_api_key` from settings to `os.environ`
-- `src/evals/deepeval_models.py:95-96`: Copies `openrouter_api_key` to `os.environ`
-- `src/infra/llm/litellm_client.py:41-42`: Same pattern
-
-This makes secrets accessible to any library that reads environment variables, including potentially untrusted dependencies.
-
-**Severity:** Low-Medium
-**Recommendation:** Pass API keys explicitly to clients rather than setting global environment variables.
-
-### 2.3 `.env` File Committed to Repository
-
-The `.env` file is committed (encrypted via dotenvx) with a public key visible in the file header. While encryption mitigates risk, the `.env.keys` file exists with private decryption keys. If `.env.keys` were accidentally committed (it's in `.gitignore` but the pattern exists), all secrets would be exposed.
-
-**Severity:** Low (current state is encrypted, but defense-in-depth concern)
-
-### 2.4 CORS Configuration
-
-`src/app/factory.py:132-138`:
-```python
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-
-Default origins include only localhost, but `allow_methods=["*"]` and `allow_headers=["*"]` are overly broad for production.
-
-**Severity:** Low (defaults are dev-only)
-**Recommendation:** Restrict methods and headers for non-development environments.
-
-### 2.5 Subprocess Call in Evaluation
-
-`src/evals/assessment/reporting.py:17-23` uses `subprocess.run(["git", "rev-parse", "HEAD"])` with `check=True`. While the command is hardcoded and safe, subprocess usage should be flagged for audit.
-
-**Severity:** Informational
-
-### 2.6 No Input Validation on Chat Message Content
-
-`src/app/routes/chat.py` accepts a `ChatRequest` but validation of message content depends on the schema. The `max_message_length` setting (2000 chars) truncates at the RAG layer (`src/rag/runtime.py:869-871`) rather than rejecting at the API boundary.
-
-**Recommendation:** Validate and reject oversized messages at the request schema level.
+**Unused Variable in Chat Route:**
+- Symptoms: Variable `e` assigned but never used
+- Files: `src/app/routes/chat.py:83`
+- Workaround: Run `ruff check --fix`
 
 ---
 
-## 3. Performance Concerns
+## Security Considerations
 
-### 3.1 O(n^2) MMR Diversification
+**Legacy Unsalted SHA256 for API Key Verification:**
+- Risk: `src/app/security.py:64-108` uses SHA256 without salt; vulnerable to rainbow table attacks
+- Files: `src/app/security.py`
+- Current mitigation: `hmac.compare_digest` provides timing-safe comparison
+- Recommendations: Add telemetry for legacy hash usage; set migration deadline
 
-`src/rag/runtime.py:689-713` - `_mmr_rerank` iterates over all remaining candidates and computes `_content_similarity` against every already-selected item. For each similarity check, both strings are tokenized from scratch.
+**Environment Variable Leakage:**
+- Risk: API keys set to `os.environ` accessible to any library that reads env vars
+- Files: `src/config/settings.py:588-589`, `src/evals/deepeval_models.py:95-96`, `src/infra/llm/litellm_client.py:41-42`
+- Recommendations: Pass API keys explicitly to clients
 
-Worst case: O(top_k * len(results) * avg_content_length) per query.
+**.env File Tracking:**
+- Risk: `.env` committed with encryption; `.env.keys` (private keys) in `.gitignore`
+- Recommendations: Defense-in-depth; ensure `.env.keys` never committed
 
-**Recommendation:** Pre-compute token sets once, cache similarity scores, or use approximate methods for large candidate sets.
+**CORS Overly Permissive:**
+- Risk: `allow_methods=["*"]` and `allow_headers=["*"]` in production
+- Files: `src/app/factory.py:132-138`
+- Recommendations: Restrict methods/headers for non-dev environments
 
-### 3.2 Synchronous Retrieval in Async Context
-
-`src/usecases/chat.py:192`:
-```python
-context, sources = retrieve_context(message, top_k=top_k)
-```
-
-This is called inside `stream_chat_message` (an async function) but uses the synchronous `retrieve_context`, blocking the event loop during retrieval.
-
-**Severity:** High (blocks async event loop during vector search)
-**Recommendation:** Always use `retrieve_context_with_trace_async` in async handlers.
-
-### 3.3 `asyncio.run()` Inside Potentially Async Contexts
-
-- `src/rag/runtime.py:408,439` - `_build_index_from_sources` calls `asyncio.run()` for HyPE generation and chunk enrichment. This is called from `initialize_runtime_index` which may be invoked during FastAPI lifespan (async context).
-- `src/app/routes/evaluation.py:527` - `asyncio.run()` in route handler
-- `src/usecases/pipeline.py:66,72,107,140` - Multiple `asyncio.run()` calls
-
-Calling `asyncio.run()` inside an already-running event loop will raise `RuntimeError`.
-
-**Severity:** Medium-High (will crash if called from async context)
-**Recommendation:** Use `await` consistently or check for running loop with `asyncio.get_running_loop()`.
-
-### 3.4 Sequential Similarity Search Across Expanded Queries
-
-`src/rag/runtime.py:1345-1349`:
-```python
-result_sets = [
-    vector_store.similarity_search(expanded_query, top_k=top_k, search_mode=search_mode)
-    for expanded_query in expanded_queries
-]
-```
-
-Each expanded query triggers a separate vector store search, executed sequentially. With HyDE + lexical expansion, this can be 5-10 sequential searches.
-
-**Recommendation:** Use `asyncio.gather` for parallel searches, or batch queries at the vector store level.
-
-### 3.5 No Caching for Tokenization
-
-`src/rag/runtime.py:671-678` - `_content_similarity` tokenizes strings on every call. During MMR reranking, the same documents are tokenized repeatedly.
-
-**Recommendation:** Pre-compute token sets once per retrieval request.
+**Subprocess Call in Evaluation:**
+- Risk: `subprocess.run(["git", "rev-parse", "HEAD"])` at `src/evals/assessment/reporting.py:17-23`
+- Current mitigation: Hardcoded command, safe
+- Recommendations: Flag for audit
 
 ---
 
-## 4. Code Quality Issues
+## Performance Bottlenecks
 
-### 4.1 DI Container Uses `Any` Types
+**O(n²) MMR Diversification:**
+- Problem: `_mmr_rerank` iterates over all candidates, computing similarity against every selected item; strings tokenized from scratch each time
+- Files: `src/rag/runtime.py:689-713`
+- Cause: No caching of token sets or similarity scores
+- Improvement path: Pre-compute tokens once; cache similarity scores; use approximate methods for large sets
 
-`src/infra/di.py:42-43`:
-```python
-vector_store: Any = None
-llm_client: Any = None
-```
+**Sequential Vector Searches:**
+- Problem: Each expanded query triggers separate sequential search
+- Files: `src/rag/runtime.py:1345-1349`
+- Improvement path: Use `asyncio.gather` for parallel searches
 
-The service container discards type information, negating the benefits of the DI pattern.
-
-**Recommendation:** Define protocol interfaces and use them as type annotations.
-
-### 4.2 Inconsistent Architecture Boundaries
-
-The codebase has three overlapping layers:
-- `src/app/routes/` - HTTP handlers
-- `src/usecases/` - Business logic
-- `src/services/` - Another service layer
-
-Routes call usecases directly (`src/app/routes/chat.py:28` imports from `src/usecases/chat.py`), but evaluation routes (`src/app/routes/evaluation.py`) call `src/services/evaluation_service.py`. The boundary between `usecases` and `services` is unclear.
-
-**Recommendation:** Pick one pattern. Either routes -> usecases -> domain, or routes -> services -> domain.
-
-### 4.3 Settings Object as God Configuration
-
-`src/config/settings.py` (589 lines) contains 60+ configuration fields spanning LLM, embedding, retrieval, reranking, rate limiting, HyDE, HyPE, chunking, evaluation, and W&B. All settings are loaded at import time.
-
-**Recommendation:** Group settings into namespaced configuration objects (e.g., `LLMConfig`, `RetrievalConfig`, `SecurityConfig`).
-
-### 4.4 Lint Issues
-
-Ruff detects:
-- `E501` (line too long): 4 violations in `src/app/middleware/auth.py:78`, `src/app/routes/chat.py:125`, `src/app/routes/evaluation.py:155,298`
-- `F841` (unused variable): `src/app/routes/chat.py:83`
-
-**Recommendation:** Run `ruff check --fix` to resolve.
-
-### 4.5 Mixed Sync/Async Patterns
-
-The retrieval layer provides both sync and async versions of nearly every function:
-- `retrieve_context` vs `retrieve_context_with_trace_async`
-- `_expand_queries` vs `_expand_queries_async`
-- `_retrieve_candidates` vs `_retrieve_candidates_with_trace` vs `_retrieve_candidates_with_trace_async`
-
-This creates confusion about which to use and leads to bugs (sync called from async context).
-
-**Recommendation:** Standardize on async for the web layer. Keep sync only for CLI/offline tools.
-
-### 4.6 No Structured Logging
-
-Logging uses f-strings throughout (e.g., `src/rag/runtime.py:229,383`):
-```python
-logger.warning(f"Query understanding failed, using default options: {e}")
-```
-
-This bypasses lazy formatting and doesn't support structured log aggregation.
-
-**Recommendation:** Use `logger.warning("Query understanding failed: %s", e)` style or structured logging.
+**No Tokenization Caching:**
+- Problem: `_content_similarity` tokenizes strings on every call during MMR
+- Files: `src/rag/runtime.py:671-678`
+- Improvement path: Pre-compute token sets once per retrieval request
 
 ---
 
-## 5. Missing Features / Incomplete Implementations
+## Fragile Areas
 
-### 5.1 Medical Expansion Provider is No-Op
+**Mixed Sync/Async Patterns:**
+- Why fragile: Both sync and async versions of nearly every function; sync called from async context causes event loop blocking
+- Safe modification: Standardize on async for web layer; keep sync only for CLI/offline tools
+- Files: `src/rag/runtime.py`, `src/usecases/chat.py`
 
-`src/config/settings.py:486-493`:
-```python
-medical_expansion_provider: str = "noop"
-"""Supported values currently: noop"""
-```
+**Large Files with Many Responsibilities:**
+- Why fragile: `runtime.py` (1425L), `chroma_store.py` (902L), `retrieval_eval.py` (768L), `orchestrator.py` (643L)
+- Safe modification: Extract specific responsibilities before adding features
+- Files: `src/rag/runtime.py`, `src/ingestion/indexing/chroma_store.py`, `src/evals/assessment/retrieval_eval.py`, `src/evals/assessment/orchestrator.py`
 
-The entire medical expansion pipeline exists in code but has no real provider.
-
-### 5.2 No Rate Limiting Persistence
-
-`src/app/middleware/rate_limit.py` uses in-memory rate limiting. On restart, all limits reset. For multi-instance deployments, rate limiting is per-process.
-
-### 5.3 No Health Check for Vector Store
-
-`src/app/routes/health.py` checks application health but doesn't verify vector store connectivity or index status.
-
-### 5.4 No API Versioning
-
-All routes are unversioned (`/chat`, `/health`, `/evaluation`). API changes will break clients.
-
-### 5.5 Chat History Cleanup Not Implemented
-
-`src/config/settings.py:346-352` defines `chat_history_ttl_seconds` (30 days) but no background task cleans up expired sessions.
-
-### 5.6 No Graceful Shutdown for Streaming
-
-`src/app/routes/chat.py` - SSE streaming has no mechanism to detect client disconnect mid-stream. The LLM continues generating even if the client is gone.
+**Settings God Object:**
+- Why fragile: 589-line `settings.py` with 60+ fields spanning all subsystems
+- Safe modification: Group into namespaced configs (`LLMConfig`, `RetrievalConfig`, `SecurityConfig`)
 
 ---
 
-## 6. Dependency Concerns
+## Scaling Limits
 
-### 6.1 Broad Version Ranges
+**In-Memory Rate Limiting:**
+- Current capacity: Per-process limits reset on restart
+- Limit: Multi-instance deployments have independent limits
+- Scaling path: Redis-backed rate limiting for distributed deployments
 
-| Dependency | Constraint | Risk |
-|---|---|---|
-| `chromadb>=0.4.0` | Unbounded upper | Breaking changes likely |
-| `litellm>=1.0.0` | Unbounded upper | Breaking changes likely |
-| `openai>=1.0.0` | Unbounded upper | Breaking changes likely |
-| `wandb>=0.23.0` | Unbounded upper | Breaking changes likely |
-| `bcrypt>=4.0.0` | Unbounded upper | Moderate risk |
-
-### 6.2 Optional Dependencies Are Heavy
-
-- `evaluation` extras pull in `langchain<1`, `langchain-community<1`, `langchain-core<1`, `langchain-openai<1` (4 LangChain packages)
-- `chunkers` extras pull in `chonkie[semantic]`
-- `reranking` extras pull in `sentence-transformers>=3.0.0` (large, pulls PyTorch)
-- `extraction` extras pull in `camelot-py>=0.12.0` (requires Ghostscript)
-
-### 6.3 Frontend Dependencies
-
-`frontend/package.json`:
-- `marked` pinned to major version `4` (current is v14+). Missing security patches.
-- `highlight.js` pinned to exact `11.9.0` (outdated, current is 11.11+)
-- `svelte-markdown` at `0.4.1` - may not be compatible with Svelte 5
+**No Vector Store Health Checks:**
+- Current capacity: Health endpoint doesn't verify vector store connectivity
+- Limit: Index failures not detected until queries fail
+- Scaling path: Add vector store ping to health endpoint
 
 ---
 
-## 7. Recommendations Summary
+## Dependencies at Risk
+
+**Unbounded Upper Version Constraints:**
+- Risk: `chromadb>=0.4.0`, `litellm>=1.0.0`, `openai>=1.0.0`, `wandb>=0.23.0` have no upper bounds
+- Impact: Breaking changes in minor releases could slip through
+- Migration plan: Pin upper bounds with `~` or `^` constraints
+
+**Heavy Optional Dependencies:**
+- `evaluation` extras: 4 LangChain packages
+- `reranking` extras: `sentence-transformers>=3.0.0` (pulls PyTorch)
+- `extraction` extras: `camelot-py>=0.12.0` (requires Ghostscript)
+
+**Outdated Frontend Dependencies:**
+- `marked` at v4 (current is v14+)
+- `highlight.js` at exact `11.9.0` (current is 11.11+)
+- Files: `frontend/package.json`
+
+---
+
+## Missing Critical Features
+
+**Medical Expansion Provider is No-Op:**
+- Problem: `medical_expansion_provider: str = "noop"` - pipeline exists but no real provider
+- Blocks: Medical-specific query expansion
+- Files: `src/config/settings.py:486-493`
+
+**Chat History TTL Cleanup Not Implemented:**
+- Problem: `chat_history_ttl_seconds` defined but no background task cleans expired sessions
+- Blocks: Storage growth over time
+- Files: `src/config/settings.py:346-352`
+
+**No API Versioning:**
+- Problem: All routes unversioned (`/chat`, `/health`, `/evaluation`)
+- Blocks: API changes break existing clients
+
+**No Graceful Shutdown for SSE Streaming:**
+- Problem: LLM continues generating if client disconnects mid-stream
+- Files: `src/app/routes/chat.py`
+
+---
+
+## Test Coverage Gaps
+
+**Async Event Loop Handling:**
+- What's not tested: `asyncio.run()` inside async contexts behavior
+- Files: `src/rag/runtime.py`, `src/usecases/pipeline.py`
+- Risk: High - will crash in production under certain call patterns
+- Priority: High
+
+**Rate Limiting Under Load:**
+- What's not tested: In-memory rate limiting across concurrent requests
+- Files: `src/app/middleware/rate_limit.py`
+- Risk: Medium - limits reset on restart
+- Priority: Medium
+
+---
+
+## Recommendations Summary
 
 | Priority | Issue | Effort |
 |---|---|---|
-| P0 | Fix sync retrieval in async chat handler (3.2) | Small |
-| P0 | Fix `asyncio.run()` in potentially async contexts (3.3) | Medium |
-| P1 | Split `src/rag/runtime.py` into focused modules (1.1) | Large |
-| P1 | Deduplicate sync/async retrieval functions (1.2) | Medium |
-| P1 | Replace module-level globals with explicit config (1.4) | Large |
-| P1 | Resolve circular import in chunking module (1.6) | Small |
-| P2 | Add input validation at API boundary (2.6) | Small |
-| P2 | Narrow exception types (1.7) | Medium |
-| P2 | Fix DI container type annotations (4.1) | Medium |
-| P2 | Standardize on async for web layer (4.5) | Medium |
-| P2 | Pin upper bounds on critical dependencies (6.1) | Small |
-| P2 | Update `marked` and `highlight.js` in frontend (6.3) | Small |
-| P3 | Remove legacy SHA256 support (1.3) | Small |
-| P3 | Add API versioning (5.4) | Medium |
-| P3 | Implement chat history TTL cleanup (5.5) | Small |
-| P3 | Add vector store health checks (5.3) | Small |
-| P3 | Use structured logging (4.6) | Medium |
+| P0 | Fix `asyncio.run()` in potentially async contexts | Medium |
+| P0 | Fix sync retrieval in async chat handler | Small |
+| P1 | Split `src/rag/runtime.py` into focused modules | Large |
+| P1 | Deduplicate sync/async retrieval functions | Medium |
+| P1 | Replace module-level globals with explicit config | Large |
+| P2 | Add vector store health checks | Small |
+| P2 | Narrow exception types | Medium |
+| P2 | Update `marked` and `highlight.js` in frontend | Small |
+| P2 | Pin upper bounds on critical dependencies | Small |
+| P3 | Remove legacy SHA256 support | Small |
+| P3 | Add API versioning | Medium |
+| P3 | Implement chat history TTL cleanup | Small |
+| P3 | Use structured logging | Medium |
+
+---
+
+*Concerns audit: 2026-04-19*

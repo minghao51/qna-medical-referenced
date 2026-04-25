@@ -24,7 +24,7 @@ class FileChatHistoryStore:
     ):
         self.path = Path(path)
         self._lock = threading.RLock()
-        self.ttl_seconds = settings.chat_history_ttl_seconds if ttl_seconds is None else ttl_seconds
+        self.ttl_seconds = settings.api.chat_history_ttl_seconds if ttl_seconds is None else ttl_seconds
 
     def _load_history_unlocked(self) -> dict[str, dict[str, Any]]:
         if not self.path.exists():
