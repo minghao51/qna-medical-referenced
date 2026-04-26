@@ -74,3 +74,14 @@ def test_file_chat_history_store_migrates_legacy_format(tmp_path, monkeypatch):
     assert history == legacy_payload["legacy-session"]
     assert payload["legacy-session"]["version"] == 2
     assert len(payload["legacy-session"]["messages"]) == 3
+
+
+def test_file_chat_history_store_truncates_messages_per_session(tmp_path):
+    store = FileChatHistoryStore(tmp_path / "history.json", max_messages_per_session=3)
+    for index in range(5):
+        store.save_message("session-1", "user", f"message-{index}")
+
+    history = store.get_history("session-1")
+
+    assert len(history) == 3
+    assert [item["content"] for item in history] == ["message-2", "message-3", "message-4"]

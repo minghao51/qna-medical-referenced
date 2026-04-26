@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -372,3 +373,110 @@ def test_clear_history_rotates_chat_session_cookie(monkeypatch, tmp_path: Path):
     assert original_cookie
     assert rotated_cookie
     assert rotated_cookie != original_cookie
+
+
+def test_evaluate_single_requires_authenticated_request(monkeypatch, tmp_path: Path):
+    client = _build_client(monkeypatch, tmp_path, api_keys=None, rate_limit=50)
+
+    response = client.post(
+        "/evaluation/evaluate-single",
+        json={"query": "q", "answer": "a", "context": "c"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Missing X-API-Key header"
+
+
+def test_evaluate_single_validates_payload_shape(monkeypatch, tmp_path: Path):
+    client = _build_client(monkeypatch, tmp_path, api_keys="secret-key", rate_limit=50)
+
+    response = client.post(
+        "/evaluation/evaluate-single",
+        headers={"X-API-Key": "secret-key"},
+        json={"query": "", "answer": "a", "context": "c"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_evaluate_single_accepts_json_payload_with_api_key(monkeypatch, tmp_path: Path):
+    async def _fake_measure(metric, test_case, ignore_errors=False, skip_on_missing_params=False):
+        del test_case, ignore_errors, skip_on_missing_params
+        metric.score = 0.9
+        metric.reason = "ok"
+
+    class _FakeMetric:
+        def __init__(self):
+            self.score = None
+            self.reason = None
+
+    monkeypatch.setattr(
+        "deepeval.metrics.indicator.safe_a_measure",
+        _fake_measure,
+    )
+    monkeypatch.setattr(
+        "src.evals.metrics.medical.METRIC_SPECS",
+        [SimpleNamespace(key="factual_accuracy")],
+    )
+    monkeypatch.setattr(
+        "src.evals.metrics.medical.create_medical_metrics",
+        lambda: [_FakeMetric()],
+    )
+    client = _build_client(monkeypatch, tmp_path, api_keys="secret-key", rate_limit=50)
+
+    response = client.post(
+        "/evaluation/evaluate-single",
+        headers={"X-API-Key": "secret-key"},
+        json={"query": "What is LDL?", "answer": "LDL is cholesterol.", "context": "Guideline text"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["query"] == "What is LDL?"
+    assert payload["answer"] == "LDL is cholesterol."
+    assert payload["metrics"]["factual_accuracy"]["score"] == 0.9
+
+
+def test_documents_endpoint_uses_paginated_store_contract(monkeypatch, tmp_path: Path):
+    class _FakeStore:
+        def list_documents_paginated(self, *, limit, offset, source_type=None):
+            assert limit == 10
+            assert offset == 0
+            assert source_type == "pdf"
+            return {
+                "total": 3,
+                "items": [
+                    {
+                        "id": "doc-1",
+                        "source": "ref.pdf",
+                        "page": 1,
+                        "source_type": "pdf",
+                        "source_class": "guideline_pdf",
+                        "content_type": "paragraph",
+                        "content_preview": "preview",
+                        "content_length": 7,
+                    }
+                ],
+                "source_type_counts": {"pdf": 3},
+                "index_metadata": {"index": "v1"},
+            }
+
+        def get_document_by_id(self, doc_id):
+            del doc_id
+            return None
+
+    client = _build_client(monkeypatch, tmp_path, api_keys="secret-key", rate_limit=50)
+    from src.config.context import get_runtime_state
+
+    get_runtime_state().vector_store_initialized = True
+    monkeypatch.setattr("src.app.routes.documents.get_vector_store", lambda: _FakeStore())
+
+    response = client.get("/documents?limit=10&offset=0&source_type=pdf", headers={"X-API-Key": "secret-key"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 3
+    assert payload["offset"] == 0
+    assert payload["limit"] == 10
+    assert payload["items"][0]["id"] == "doc-1"
+    assert payload["source_type_counts"] == {"pdf": 3}

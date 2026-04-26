@@ -3,8 +3,16 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from src.app.routes import config, documents, experiments
+
+
+def _make_request() -> Request:
+    scope = {"type": "http", "method": "GET", "path": "/documents", "headers": []}
+    request = Request(scope)
+    request.state.request_id = "test-request-id"
+    return request
 
 
 class TestGetConfig:
@@ -70,7 +78,7 @@ class TestDocuments:
 
         get_runtime_state().reset_vector_store_state()
         with pytest.raises(HTTPException) as exc_info:
-            documents.list_documents(limit=10, offset=0)
+            documents.list_documents(request=_make_request(), limit=10, offset=0)
         assert exc_info.value.status_code == 503
         assert "not initialized" in exc_info.value.detail
 
@@ -88,9 +96,9 @@ class TestDocuments:
         monkeypatch.setattr(documents, "get_vector_store", lambda: BrokenStore())
 
         with pytest.raises(HTTPException) as exc_info:
-            documents.list_documents(limit=10, offset=0)
+            documents.list_documents(request=_make_request(), limit=10, offset=0)
         assert exc_info.value.status_code == 500
-        assert exc_info.value.detail == "chroma not available"
+        assert exc_info.value.detail == "Failed to load documents"
 
     def test_get_document_404_when_not_found(self, monkeypatch):
         from src.config.context import get_runtime_state
@@ -99,12 +107,48 @@ class TestDocuments:
         get_runtime_state()._vector_store_initialized = True
 
         mock_store = MagicMock()
-        mock_store._collection.get.return_value = {"ids": [], "documents": [], "metadatas": []}
+        mock_store.get_document_by_id.return_value = None
         monkeypatch.setattr(documents, "get_vector_store", lambda: mock_store)
 
         with pytest.raises(HTTPException) as exc_info:
-            documents.get_document("nonexistent-id")
+            documents.get_document("nonexistent-id", _make_request())
         assert exc_info.value.status_code == 404
+
+    def test_list_documents_returns_compatible_response_shape(self, monkeypatch):
+        from src.config.context import get_runtime_state
+
+        get_runtime_state().reset_vector_store_state()
+        get_runtime_state()._vector_store_initialized = True
+
+        mock_store = MagicMock()
+        mock_store.list_documents_paginated.return_value = {
+            "total": 2,
+            "items": [
+                {
+                    "id": "doc-1",
+                    "source": "a.pdf",
+                    "page": 1,
+                    "source_type": "pdf",
+                    "source_class": "guideline_pdf",
+                    "content_type": "paragraph",
+                    "content_preview": "preview",
+                    "content_length": 7,
+                }
+            ],
+            "source_type_counts": {"pdf": 2},
+            "index_metadata": {"version": "v1"},
+        }
+        monkeypatch.setattr(documents, "get_vector_store", lambda: mock_store)
+
+        result = documents.list_documents(request=_make_request(), limit=50, offset=0, source_type="pdf")
+
+        assert result["total"] == 2
+        assert result["offset"] == 0
+        assert result["limit"] == 50
+        assert isinstance(result["items"], list)
+        assert result["items"][0]["id"] == "doc-1"
+        assert result["source_type_counts"] == {"pdf": 2}
+        assert result["index_metadata"] == {"version": "v1"}
 
 
 class TestExperiments:

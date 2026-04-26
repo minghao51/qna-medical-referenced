@@ -20,6 +20,7 @@ def test_settings_defaults():
     assert api_defaults.chat_session_cookie_name == "chat_session_id"
     assert api_defaults.chat_session_cookie_max_age_seconds == 60 * 60 * 24 * 30
     assert api_defaults.chat_history_ttl_seconds == 60 * 60 * 24 * 30
+    assert api_defaults.chat_history_max_messages_per_session == 100
     assert api_defaults.trust_proxy_headers is False
 
 
