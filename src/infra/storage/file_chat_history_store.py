@@ -21,10 +21,16 @@ class FileChatHistoryStore:
         path: Path = CHAT_HISTORY_FILE,
         *,
         ttl_seconds: int | None = None,
+        max_messages_per_session: int | None = None,
     ):
         self.path = Path(path)
         self._lock = threading.RLock()
         self.ttl_seconds = settings.api.chat_history_ttl_seconds if ttl_seconds is None else ttl_seconds
+        configured_max = settings.api.chat_history_max_messages_per_session
+        if max_messages_per_session is None:
+            self.max_messages_per_session = max(1, int(configured_max))
+        else:
+            self.max_messages_per_session = max(1, int(max_messages_per_session))
 
     def _load_history_unlocked(self) -> dict[str, dict[str, Any]]:
         if not self.path.exists():
@@ -77,6 +83,7 @@ class FileChatHistoryStore:
             session.setdefault("messages", []).append(
                 {"role": role, "content": content, "timestamp": now * 1000}
             )
+            self._truncate_session_messages(session)
             self._save_history_unlocked(history)
 
     def clear_history(self, session_id: str) -> None:
@@ -154,3 +161,12 @@ class FileChatHistoryStore:
             if int(session.get("updated_at", now)) >= cutoff
         }
         return pruned, len(pruned) != len(history)
+
+    def _truncate_session_messages(self, session: dict[str, Any]) -> None:
+        messages = session.get("messages")
+        if not isinstance(messages, list):
+            session["messages"] = []
+            return
+        if len(messages) <= self.max_messages_per_session:
+            return
+        session["messages"] = messages[-self.max_messages_per_session :]
