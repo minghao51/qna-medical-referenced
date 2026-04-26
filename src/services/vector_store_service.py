@@ -62,7 +62,7 @@ class VectorStoreService(BaseService):
 
         state = get_runtime_state()
         status = state.get_vector_store_status()
-        return status["initialized"]
+        return bool(status["initialized"])
 
     def clear_index(self) -> None:
         """Clear the vector store index."""

@@ -99,7 +99,7 @@ def get_experiment_results(experiment_name: str) -> dict[str, Any]:
     if not report_path.is_file():
         raise HTTPException(status_code=404, detail="Report not found")
     try:
-        return json.loads(report_path.read_text(encoding="utf-8"))
+        return json.loads(report_path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

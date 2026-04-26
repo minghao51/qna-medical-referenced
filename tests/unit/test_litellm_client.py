@@ -15,14 +15,18 @@ def _stream_chunk(text: str):
 
 
 def test_litellm_client_resolve_model_from_settings(monkeypatch):
-    monkeypatch.setattr("src.infra.llm.litellm_client.settings.litellm_model", "openrouter/foo/bar")
+    from src.infra.llm.litellm_client import settings as _settings
+
+    monkeypatch.setattr(_settings.llm, "litellm_model", "openrouter/foo/bar")
     client = LiteLLMClient()
     assert client.model == "openrouter/foo/bar"
 
 
 def test_litellm_client_resolve_model_from_openrouter_model(monkeypatch):
-    monkeypatch.setattr("src.infra.llm.litellm_client.settings.litellm_model", "")
-    monkeypatch.setattr("src.infra.llm.litellm_client.settings.openrouter_model", "google/gemma-4-31b-it")
+    from src.infra.llm.litellm_client import settings as _settings
+
+    monkeypatch.setattr(_settings.llm, "litellm_model", "")
+    monkeypatch.setattr(_settings.llm, "openrouter_model", "google/gemma-4-31b-it")
     client = LiteLLMClient()
     assert client.model == "openrouter/google/gemma-4-31b-it"
 
@@ -120,8 +124,10 @@ def test_litellm_client_generate_empty_response_raises(monkeypatch):
 
 
 def test_get_client_returns_litellm_when_configured(monkeypatch):
-    monkeypatch.setattr("src.infra.llm.settings.llm_provider", "litellm")
-    monkeypatch.setattr("src.infra.llm.settings.litellm_model", "openrouter/test-model")
+    from src.infra.llm import settings as _settings
+
+    monkeypatch.setattr(_settings.llm, "provider", "litellm")
+    monkeypatch.setattr(_settings.llm, "litellm_model", "openrouter/test-model")
 
     from src.infra.llm import get_client
 

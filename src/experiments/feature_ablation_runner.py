@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -256,7 +256,7 @@ def run_feature_ablation_studies(
         "reference_variant": variant_name,
         "dataset_path": experiment.get("dataset", {}).get("path"),
         "dataset_split": experiment.get("dataset", {}).get("split"),
-        "generated_at": datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+        "generated_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
         "studies": studies,
     }
     return summary

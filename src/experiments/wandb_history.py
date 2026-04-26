@@ -28,7 +28,7 @@ def _get_metric(summary: dict[str, Any], key: str, default: Any = 0) -> Any:
 
 
 def _cache_ttl_seconds() -> int:
-    return max(0, int(getattr(settings, "wandb_cache_ttl_seconds", 60)))
+    return max(0, int(settings.wandb.wandb_cache_ttl_seconds))
 
 
 def _cache_get(key: tuple[Any, ...]) -> dict[str, Any] | None:

@@ -132,7 +132,7 @@ class RateLimiter:
         return self.backend.check(key=key, limit=self.requests_per_minute)
 
 
-rate_limiter = RateLimiter(requests_per_minute=settings.rate_limit_per_minute)
+rate_limiter = RateLimiter(requests_per_minute=settings.api.rate_limit_per_minute)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -195,14 +195,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _is_bypass_auth(auth) -> bool:
         if not auth:
             return False
+        bypass_key_ids = {v.strip() for v in settings.api.rate_limit_bypass_key_ids.split(",") if v.strip()}
+        bypass_roles = {v.strip() for v in settings.api.rate_limit_bypass_roles.split(",") if v.strip()}
         return (
-            auth.key_id in settings.rate_limit_bypass_key_id_set
-            or bool(auth.role and auth.role in settings.rate_limit_bypass_role_set)
+            auth.key_id in bypass_key_ids
+            or bool(auth.role and auth.role in bypass_roles)
         )
 
     @staticmethod
     def _get_client_ip(request: Request) -> str:
-        if settings.trust_proxy_headers:
+        if settings.api.trust_proxy_headers:
             forwarded_for = request.headers.get("X-Forwarded-For")
             if forwarded_for:
                 first_hop = forwarded_for.split(",")[0].strip()
@@ -216,7 +218,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _get_or_create_browser_id(request: Request) -> str:
-        cookie_name = settings.anonymous_browser_cookie_name
+        cookie_name = settings.api.anonymous_browser_cookie_name
         browser_id = request.cookies.get(cookie_name)
         if browser_id:
             return browser_id
@@ -235,7 +237,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return
 
         response.set_cookie(
-            key=settings.anonymous_browser_cookie_name,
+            key=settings.api.anonymous_browser_cookie_name,
             value=browser_id,
             max_age=60 * 60 * 24 * 365,
             httponly=True,

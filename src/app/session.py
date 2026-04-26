@@ -10,7 +10,7 @@ from src.config import settings
 
 
 def get_chat_session_id(request: Request) -> str | None:
-    session_id = request.cookies.get(settings.chat_session_cookie_name)
+    session_id = request.cookies.get(settings.api.chat_session_cookie_name)
     if not session_id:
         return None
     return session_id.strip() or None
@@ -40,9 +40,9 @@ def _generate_session_id() -> str:
 
 def _set_chat_session_cookie(response: Response, session_id: str) -> None:
     response.set_cookie(
-        key=settings.chat_session_cookie_name,
+        key=settings.api.chat_session_cookie_name,
         value=session_id,
-        max_age=settings.chat_session_cookie_max_age_seconds,
+        max_age=settings.api.chat_session_cookie_max_age_seconds,
         httponly=True,
         samesite="lax",
         secure=not settings.is_development,

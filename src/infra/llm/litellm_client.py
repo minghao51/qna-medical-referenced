@@ -67,7 +67,7 @@ class LiteLLMClient:
                 content = response.choices[0].message.content
                 if content is None:
                     raise ValueError("Empty response from LiteLLM")
-                return content
+                return str(content)
             except Exception as e:
                 last_exception = e
                 if attempt < MAX_RETRIES - 1:
@@ -93,7 +93,7 @@ class LiteLLMClient:
                 content = response.choices[0].message.content
                 if content is None:
                     raise ValueError("Empty response from LiteLLM")
-                return content
+                return str(content)
             except Exception as e:
                 last_exception = e
                 if attempt < MAX_RETRIES - 1:

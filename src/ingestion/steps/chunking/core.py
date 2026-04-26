@@ -364,10 +364,10 @@ class TextChunker:
                 self
                 if self._matches_self_config(active_cfg)
                 else TextChunker(
-                    chunk_size=int(active_cfg.get("chunk_size", self.chunk_size)),
-                    chunk_overlap=int(active_cfg.get("chunk_overlap", self.chunk_overlap)),
+                    chunk_size=int(active_cfg.get("chunk_size", self.chunk_size)),  # type: ignore[call-overload]
+                    chunk_overlap=int(active_cfg.get("chunk_overlap", self.chunk_overlap)),  # type: ignore[call-overload]
                     strategy=str(active_cfg.get("strategy", self.strategy)),
-                    min_chunk_size=int(active_cfg.get("min_chunk_size", self.min_chunk_size)),
+                    min_chunk_size=int(active_cfg.get("min_chunk_size", self.min_chunk_size)),  # type: ignore[call-overload]
                     embedding_model=str(active_cfg.get("embedding_model", self.embedding_model)),
                 )
             )

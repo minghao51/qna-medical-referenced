@@ -151,8 +151,10 @@ async def test_evaluate_answer_quality_async_marks_timeouts_as_metric_errors(mon
             _FakeMetric("FaithfulnessMetric", 0.4),
         ],
     )
+    from src.evals.assessment.answer_eval import settings as _settings
+
     monkeypatch.setattr(
-        "src.evals.assessment.answer_eval.settings.deepeval_metric_timeout_seconds", 0
+        _settings.deepeval, "deepeval_metric_timeout_seconds", 0
     )
 
     results, aggregate = await evaluate_answer_quality_async(

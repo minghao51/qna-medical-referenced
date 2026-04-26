@@ -50,7 +50,7 @@ from src.infra.di import get_container, reset_container
 from src.infra.storage import FileChatHistoryStore
 from src.rag import initialize_runtime_index_async
 
-configure_logging(settings.log_level)
+configure_logging(settings.app.log_level)
 logger = logging.getLogger(__name__)
 
 ExceptionHandler = Callable[[Request, Exception], Response | Awaitable[Response]]
@@ -90,7 +90,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize vector store
     from src.rag.production_profile import apply_production_profile
-    profile_name = getattr(settings, "production_profile", None)
+    profile_name = settings.production.production_profile
     if profile_name:
         if apply_production_profile(profile_name):
             logger.info(f"Production profile applied: {profile_name}")
@@ -140,7 +140,7 @@ def create_app() -> FastAPI:
     # For production, update allow_origins with actual frontend domain
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=[o.strip() for o in settings.api.cors_allowed_origins.split(",") if o.strip()],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

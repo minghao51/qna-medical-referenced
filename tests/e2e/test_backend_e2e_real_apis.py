@@ -75,8 +75,8 @@ def temp_vector_store():
                 "semantic_weight": 0.6,
                 "keyword_weight": 0.2,
                 "boost_weight": 0.2,
-                "embedding_model": settings.embedding_model,
-                "embedding_batch_size": settings.embedding_batch_size,
+                "embedding_model": settings.llm.embedding_model,
+                "embedding_batch_size": settings.llm.embedding_batch_size,
                 "index_metadata": {"test": True},
             }
             set_vector_store_runtime_config(test_config)

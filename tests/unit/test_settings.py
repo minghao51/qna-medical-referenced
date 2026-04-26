@@ -32,18 +32,16 @@ def test_settings_custom_values(monkeypatch):
         max_message_length=5000,
     )
 
-    assert settings.model_name == "qwen-plus"
-    assert settings.max_message_length == 5000
-    assert settings.llm.dashscope_api_key == "test-key"
     assert settings.llm.model_name == "qwen-plus"
     assert settings.api.max_message_length == 5000
+    assert settings.llm.dashscope_api_key == "test-key"
 
 
-def test_settings_flat_attribute_fallback(monkeypatch):
+def test_settings_nested_attribute_access(monkeypatch):
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     settings = Settings(_env_file=None, llm={"dashscope_api_key": "nested-test-key"})
 
-    assert settings.dashscope_api_key == "nested-test-key"
+    assert settings.llm.dashscope_api_key == "nested-test-key"
 
 
 def test_settings_supports_nested_app_env_overrides(monkeypatch):
@@ -54,6 +52,4 @@ def test_settings_supports_nested_app_env_overrides(monkeypatch):
     settings = Settings(_env_file=None)
 
     assert settings.llm.model_name == "env-override-model"
-    assert settings.model_name == "env-override-model"
     assert settings.api.max_message_length == 4321
-    assert settings.max_message_length == 4321

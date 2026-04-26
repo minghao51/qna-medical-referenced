@@ -102,7 +102,7 @@ async def chat_stream_generator(
             "chat_failed",
             request_id=getattr(request.state, "request_id", None),
             session_id=getattr(request.state, "chat_session_id", None)
-            or request.cookies.get(settings.chat_session_cookie_name),
+            or request.cookies.get(settings.api.chat_session_cookie_name),
             include_pipeline=include_pipeline,
             auth_key_id=getattr(getattr(request.state, "auth", None), "key_id", None),
         )

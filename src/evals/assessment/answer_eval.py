@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -235,7 +236,7 @@ async def _evaluate_metric(
         error = None
         status = "ok"
         max_retries = 2
-        timeout_seconds = max(1, int(getattr(settings, "deepeval_metric_timeout_seconds", 90)))
+        timeout_seconds = max(1, int(settings.deepeval.deepeval_metric_timeout_seconds))
 
         for attempt in range(max_retries):
             try:
@@ -385,17 +386,18 @@ async def evaluate_answer_quality_async(
     retrieval_options: dict[str, Any] | None = None,
     cache_namespace: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    if not settings.dashscope_api_key or settings.dashscope_api_key == "test-api-key":
+    _api_key = settings.llm.dashscope_api_key or os.environ.get("DASHSCOPE_API_KEY", "")
+    if not _api_key or _api_key == "test-api-key":
         return [], {"status": "skipped", "reason": "missing_dashscope_api_key"}
 
     top_k = max(0, int(top_k))
 
-    query_concurrency = max(1, int(getattr(settings, "deepeval_query_concurrency", 2)))
-    metric_concurrency = max(1, int(getattr(settings, "deepeval_metric_concurrency", 3)))
-    cache_enabled = bool(getattr(settings, "deepeval_answer_cache_enabled", True))
-    metric_cache_enabled = bool(getattr(settings, "deepeval_metric_cache_enabled", True))
+    query_concurrency = max(1, int(settings.deepeval.deepeval_query_concurrency))
+    metric_concurrency = max(1, int(settings.deepeval.deepeval_metric_concurrency))
+    cache_enabled = bool(settings.deepeval.deepeval_answer_cache_enabled)
+    metric_cache_enabled = bool(settings.deepeval.deepeval_metric_cache_enabled)
     resolved_cache_dir = cache_dir or Path(
-        getattr(settings, "deepeval_cache_dir", "data/evals/cache")
+        settings.deepeval.deepeval_cache_dir
     )
     retrieval_cache_path, generation_cache_path, _ = _resolve_cache_paths(
         resolved_cache_dir if cache_enabled else None

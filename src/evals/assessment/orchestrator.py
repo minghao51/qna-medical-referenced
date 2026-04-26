@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from src.config import settings
 from src.config.paths import DATA_RAW_DIR
@@ -195,8 +196,9 @@ def run_assessment(
     if thresholds_file:
         thresholds.update(json.loads(Path(thresholds_file).read_text(encoding="utf-8")))
 
+    _api_key = settings.llm.dashscope_api_key or os.environ.get("DASHSCOPE_API_KEY", "")
     key_available = (
-        bool(settings.dashscope_api_key) and settings.dashscope_api_key != "test-api-key"
+        bool(_api_key) and _api_key != "test-api-key"
     )
     resolved_include_answer_eval = (
         bool(include_answer_eval) if include_answer_eval is not None else key_available
@@ -343,12 +345,12 @@ def run_assessment(
         or assess_l5_index_quality_fn is None
     ):
         raise ValueError("Assessment stage functions must be provided")
-    audit_l0 = cast(Callable[[], dict[str, Any]], audit_l0_download_fn)
-    assess_l1 = cast(Callable[[], dict[str, Any]], assess_l1_html_markdown_quality_fn)
-    assess_l2 = cast(Callable[[], dict[str, Any]], assess_l2_pdf_quality_fn)
-    assess_l3 = cast(Callable[[], dict[str, Any]], assess_l3_chunking_quality_fn)
-    assess_l4 = cast(Callable[[], dict[str, Any]], assess_l4_reference_quality_fn)
-    assess_l5 = cast(Callable[..., dict[str, Any]], assess_l5_index_quality_fn)
+    audit_l0 = audit_l0_download_fn
+    assess_l1 = assess_l1_html_markdown_quality_fn
+    assess_l2 = assess_l2_pdf_quality_fn
+    assess_l3 = assess_l3_chunking_quality_fn
+    assess_l4 = assess_l4_reference_quality_fn
+    assess_l5 = assess_l5_index_quality_fn
     step_metrics = {
         "l0": audit_l0(),
         "l1": assess_l1(),
@@ -479,7 +481,7 @@ def run_assessment(
         l6_answer_quality_rows, l6_answer_quality_metrics = evaluate_answers_fn(
             dataset,
             config.top_k,
-            cache_dir=Path(getattr(settings, "deepeval_cache_dir", "data/evals/cache")),
+            cache_dir=Path(settings.deepeval.deepeval_cache_dir),
             retrieval_options=config.retrieval_options,
             cache_namespace={
                 "retrieval_mode": config.retrieval_mode,

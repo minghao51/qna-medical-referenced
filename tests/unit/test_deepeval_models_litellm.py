@@ -50,10 +50,11 @@ async def test_litellm_judge_model_a_generate(monkeypatch):
 
 
 def test_get_light_model_returns_litellm_when_configured(monkeypatch):
-    monkeypatch.setattr("src.evals.deepeval_models.settings.llm_provider", "litellm")
+    from src.evals.deepeval_models import settings as _settings
+
+    monkeypatch.setattr(_settings.llm, "provider", "litellm")
     monkeypatch.setattr(
-        "src.evals.deepeval_models.settings.judge_model_light_litellm",
-        "google/gemma-4-31b-it",
+        _settings.deepeval, "judge_model_light_litellm", "google/gemma-4-31b-it"
     )
 
     model = get_light_model()
@@ -62,10 +63,11 @@ def test_get_light_model_returns_litellm_when_configured(monkeypatch):
 
 
 def test_get_heavy_model_returns_litellm_when_configured(monkeypatch):
-    monkeypatch.setattr("src.evals.deepeval_models.settings.llm_provider", "litellm")
+    from src.evals.deepeval_models import settings as _settings
+
+    monkeypatch.setattr(_settings.llm, "provider", "litellm")
     monkeypatch.setattr(
-        "src.evals.deepeval_models.settings.judge_model_heavy_litellm",
-        "google/gemma-4-31b-it",
+        _settings.deepeval, "judge_model_heavy_litellm", "google/gemma-4-31b-it"
     )
 
     model = get_heavy_model()
@@ -88,10 +90,11 @@ def test_get_heavy_model_returns_qwen_by_default():
 
 
 def test_litellm_judge_model_preserves_openrouter_prefix(monkeypatch):
-    monkeypatch.setattr("src.evals.deepeval_models.settings.llm_provider", "litellm")
+    from src.evals.deepeval_models import settings as _settings
+
+    monkeypatch.setattr(_settings.llm, "provider", "litellm")
     monkeypatch.setattr(
-        "src.evals.deepeval_models.settings.judge_model_light_litellm",
-        "openrouter/google/gemma-4-31b-it",
+        _settings.deepeval, "judge_model_light_litellm", "openrouter/google/gemma-4-31b-it"
     )
 
     model = get_light_model()

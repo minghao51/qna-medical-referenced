@@ -35,12 +35,12 @@ trafilatura: Any = None
 html_to_markdown: Any = None
 
 try:  # pragma: no cover - optional dependency
-    import trafilatura  # type: ignore[assignment]
+    import trafilatura
 except Exception:  # pragma: no cover - optional dependency
     logger.debug("trafilatura not available")
 
 try:  # pragma: no cover - optional dependency
-    import html_to_markdown  # type: ignore[assignment]
+    import html_to_markdown  # type: ignore[no-redef]
 except Exception:  # pragma: no cover - optional dependency
     logger.debug("html_to_markdown not available")
 

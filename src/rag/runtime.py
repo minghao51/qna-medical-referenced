@@ -64,7 +64,7 @@ def _empty_pipeline_trace(query: str, top_k: int):
             steps=[],
         ),
         context=ContextStage(total_chunks=0, total_chars=0, sources=[], preview=""),
-        generation=GenerationStage(model=settings.model_name, timing_ms=0, tokens_estimate=0),
+        generation=GenerationStage(model=settings.llm.model_name, timing_ms=0, tokens_estimate=0),
         total_time_ms=0,
     )
 
@@ -87,12 +87,12 @@ class RuntimeRetrievalConfig:
     def from_settings(cls) -> "RuntimeRetrievalConfig":
         """Create configuration from settings."""
         return cls(
-            overfetch_multiplier=settings.retrieval_overfetch_multiplier,
-            max_chunks_per_source_page=settings.max_chunks_per_source_page,
-            max_chunks_per_source=settings.max_chunks_per_source,
-            mmr_lambda=settings.mmr_lambda,
-            search_mode=settings.rrf_search_mode,
-            enable_hype=settings.hype_enabled,
+            overfetch_multiplier=settings.retrieval.retrieval_overfetch_multiplier,
+            max_chunks_per_source_page=settings.retrieval.max_chunks_per_source_page,
+            max_chunks_per_source=settings.retrieval.max_chunks_per_source,
+            mmr_lambda=settings.retrieval.mmr_lambda,
+            search_mode=settings.retrieval.rrf_search_mode,
+            enable_hype=settings.hyde.hype_enabled,
         )
 
 
@@ -125,11 +125,11 @@ def get_runtime_retrieval_config() -> dict[str, Any]:
 
 def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> RetrievalDiversityConfig:
     cfg = RetrievalDiversityConfig(
-        overfetch_multiplier=settings.retrieval_overfetch_multiplier,
-        max_chunks_per_source_page=settings.max_chunks_per_source_page,
-        max_chunks_per_source=settings.max_chunks_per_source,
-        mmr_lambda=settings.mmr_lambda,
-        search_mode=settings.rrf_search_mode,
+        overfetch_multiplier=settings.retrieval.retrieval_overfetch_multiplier,
+        max_chunks_per_source_page=settings.retrieval.max_chunks_per_source_page,
+        max_chunks_per_source=settings.retrieval.max_chunks_per_source,
+        mmr_lambda=settings.retrieval.mmr_lambda,
+        search_mode=settings.retrieval.rrf_search_mode,
     )
     if overrides:
         for key, value in overrides.items():
@@ -137,49 +137,49 @@ def _resolve_retrieval_config(overrides: dict[str, Any] | None = None) -> Retrie
                 continue
             setattr(cfg, key, value)
     cfg.overfetch_multiplier = max(
-        1, int(cfg.overfetch_multiplier or settings.retrieval_overfetch_multiplier)
+        1, int(cfg.overfetch_multiplier or settings.retrieval.retrieval_overfetch_multiplier)
     )
     cfg.max_chunks_per_source_page = max(
-        1, int(cfg.max_chunks_per_source_page or settings.max_chunks_per_source_page)
+        1, int(cfg.max_chunks_per_source_page or settings.retrieval.max_chunks_per_source_page)
     )
     cfg.max_chunks_per_source = max(
-        1, int(cfg.max_chunks_per_source or settings.max_chunks_per_source)
+        1, int(cfg.max_chunks_per_source or settings.retrieval.max_chunks_per_source)
     )
-    cfg.mmr_lambda = max(0.0, min(1.0, float(cfg.mmr_lambda or settings.mmr_lambda)))
-    cfg.search_mode = str(cfg.search_mode or settings.rrf_search_mode).lower()
+    cfg.mmr_lambda = max(0.0, min(1.0, float(cfg.mmr_lambda or settings.retrieval.mmr_lambda)))
+    cfg.search_mode = str(cfg.search_mode or settings.retrieval.rrf_search_mode).lower()
     if cfg.search_mode not in _VALID_SEARCH_MODES:
-        cfg.search_mode = settings.rrf_search_mode
+        cfg.search_mode = settings.retrieval.rrf_search_mode
     # Validate HyDE configuration
     cfg.enable_hyde = bool(cfg.enable_hyde)
     cfg.hyde_max_length = max(50, min(500, int(cfg.hyde_max_length)))
-    cfg.enable_hype = bool(cfg.enable_hype) or bool(getattr(settings, "hype_enabled", False))
+    cfg.enable_hype = bool(cfg.enable_hype) or bool(settings.hyde.hype_enabled)
     cfg.enable_medical_expansion = bool(cfg.enable_medical_expansion) or bool(
-        getattr(settings, "medical_expansion_enabled", False)
+        settings.retrieval.medical_expansion_enabled
     )
     cfg.medical_expansion_provider = str(
-        cfg.medical_expansion_provider or getattr(settings, "medical_expansion_provider", "noop")
+        cfg.medical_expansion_provider or settings.retrieval.medical_expansion_provider
     ).lower()
     cfg.enable_reranking = bool(cfg.enable_reranking) or bool(
-        getattr(settings, "enable_reranking", False)
+        settings.retrieval.enable_reranking
     )
     if cfg.rerank_top_k is None:
-        cfg.rerank_top_k = getattr(settings, "rerank_top_k", None)
+        cfg.rerank_top_k = settings.retrieval.rerank_top_k
     elif cfg.rerank_top_k is not None:
         cfg.rerank_top_k = max(1, int(cfg.rerank_top_k))
     if cfg.rerank_score_threshold is None:
-        cfg.rerank_score_threshold = getattr(settings, "rerank_score_threshold", None)
+        cfg.rerank_score_threshold = settings.retrieval.rerank_score_threshold
     elif cfg.rerank_score_threshold is not None:
         cfg.rerank_score_threshold = float(cfg.rerank_score_threshold)
     cfg.reranking_mode = str(
-        cfg.reranking_mode or getattr(settings, "reranking_mode", "cross_encoder")
+        cfg.reranking_mode or settings.retrieval.reranking_mode
     ).lower()
     if cfg.reranking_mode not in {"cross_encoder", "mmr", "both"}:
         cfg.reranking_mode = "cross_encoder"
     cfg.enable_keyword_extraction = bool(cfg.enable_keyword_extraction) or bool(
-        getattr(settings, "enable_keyword_extraction", False)
+        settings.enrichment.enable_keyword_extraction
     )
     cfg.enable_chunk_summaries = bool(cfg.enable_chunk_summaries) or bool(
-        getattr(settings, "enable_chunk_summaries", False)
+        settings.enrichment.enable_chunk_summaries
     )
     cfg.enable_query_understanding = bool(cfg.enable_query_understanding) or bool(
         getattr(settings, "enable_query_understanding", False)
@@ -392,7 +392,7 @@ async def _expand_queries_async(
 
 
 def _build_index_from_sources(vector_store) -> dict[str, Any]:
-    return asyncio.run(_build_index_from_sources_async(vector_store))
+    return dict(asyncio.run(_build_index_from_sources_async(vector_store)))
 
 
 async def _build_index_from_sources_async(vector_store) -> dict[str, Any]:
@@ -414,12 +414,12 @@ async def _build_index_from_sources_async(vector_store) -> dict[str, Any]:
             chunks=chunked_docs,
             client=get_client(),
             sample_rate=float(
-                indexing_features.get("hype_sample_rate", settings.hype_sample_rate)
+                indexing_features.get("hype_sample_rate", settings.hyde.hype_sample_rate)
             ),
-            max_chunks=int(indexing_features.get("hype_max_chunks", settings.hype_max_chunks)),
+            max_chunks=int(indexing_features.get("hype_max_chunks", settings.hyde.hype_max_chunks)),
             questions_per_chunk=int(
                 indexing_features.get(
-                    "hype_questions_per_chunk", settings.hype_questions_per_chunk
+                    "hype_questions_per_chunk", settings.hyde.hype_questions_per_chunk
                 )
             ),
         )
@@ -447,13 +447,13 @@ async def _build_index_from_sources_async(vector_store) -> dict[str, Any]:
             sample_rate=float(
                 indexing_features.get(
                     "keyword_extraction_sample_rate",
-                    settings.keyword_extraction_sample_rate,
+                    settings.enrichment.keyword_extraction_sample_rate,
                 )
             ),
             max_chunks=int(
                 indexing_features.get(
                     "keyword_extraction_max_chunks",
-                    settings.keyword_extraction_max_chunks,
+                    settings.enrichment.keyword_extraction_max_chunks,
                 )
             ),
         )
@@ -466,7 +466,7 @@ async def _build_index_from_sources_async(vector_store) -> dict[str, Any]:
 
     ref_docs = loader.load_reference_ranges_as_docs()
     chunked_docs.extend(ref_docs)
-    stats = vector_store.add_documents(chunked_docs)
+    stats: dict[str, Any] = vector_store.add_documents(chunked_docs)
     stats["build_elapsed_ms"] = int((time.time() - build_start) * 1000)
     stats["pdf_document_count"] = len(pdf_docs)
     stats["markdown_document_count"] = len(markdown_docs)
@@ -672,35 +672,35 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
     set_source_chunk_configs(ingestion.get("source_chunk_configs"))
     set_auto_select_strategy(ingestion.get("auto_select_chunk_strategy", False))
     indexing_features = {
-        "enable_hype": bool(ingestion.get("enable_hype", settings.hype_enabled)),
-        "hype_sample_rate": float(ingestion.get("hype_sample_rate", settings.hype_sample_rate)),
-        "hype_max_chunks": int(ingestion.get("hype_max_chunks", settings.hype_max_chunks)),
+        "enable_hype": bool(ingestion.get("enable_hype", settings.hyde.hype_enabled)),
+        "hype_sample_rate": float(ingestion.get("hype_sample_rate", settings.hyde.hype_sample_rate)),
+        "hype_max_chunks": int(ingestion.get("hype_max_chunks", settings.hyde.hype_max_chunks)),
         "hype_questions_per_chunk": int(
-            ingestion.get("hype_questions_per_chunk", settings.hype_questions_per_chunk)
+            ingestion.get("hype_questions_per_chunk", settings.hyde.hype_questions_per_chunk)
         ),
         "enable_keyword_extraction": bool(
-            ingestion.get("enable_keyword_extraction", settings.enable_keyword_extraction)
+            ingestion.get("enable_keyword_extraction", settings.enrichment.enable_keyword_extraction)
         ),
         "enable_chunk_summaries": bool(
-            ingestion.get("enable_chunk_summaries", settings.enable_chunk_summaries)
+            ingestion.get("enable_chunk_summaries", settings.enrichment.enable_chunk_summaries)
         ),
         "keyword_extraction_sample_rate": float(
             ingestion.get(
-                "keyword_extraction_sample_rate", settings.keyword_extraction_sample_rate
+                "keyword_extraction_sample_rate", settings.enrichment.keyword_extraction_sample_rate
             )
         ),
         "keyword_extraction_max_chunks": int(
-            ingestion.get("keyword_extraction_max_chunks", settings.keyword_extraction_max_chunks)
+            ingestion.get("keyword_extraction_max_chunks", settings.enrichment.keyword_extraction_max_chunks)
         ),
     }
     vector_config = {
-        "collection_name": embedding_index.get("collection_name", settings.collection_name),
+        "collection_name": embedding_index.get("collection_name", settings.storage.collection_name),
         "semantic_weight": embedding_index.get("semantic_weight", 0.6),
         "keyword_weight": embedding_index.get("keyword_weight", 0.2),
         "boost_weight": embedding_index.get("boost_weight", 0.2),
-        "embedding_model": embedding_index.get("embedding_model", settings.embedding_model),
+        "embedding_model": embedding_index.get("embedding_model", settings.llm.embedding_model),
         "embedding_batch_size": embedding_index.get(
-            "embedding_batch_size", settings.embedding_batch_size
+            "embedding_batch_size", settings.llm.embedding_batch_size
         ),
         "indexing_features": indexing_features,
         "index_metadata": {
@@ -708,10 +708,10 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
             "experiment_file": experiment.get("experiment_file"),
             "experiment_config_hash": experiment.get("experiment_config_hash"),
             "index_config_hash": experiment.get("index_config_hash"),
-            "collection_name": embedding_index.get("collection_name", settings.collection_name),
-            "embedding_model": embedding_index.get("embedding_model", settings.embedding_model),
+            "collection_name": embedding_index.get("collection_name", settings.storage.collection_name),
+            "embedding_model": embedding_index.get("embedding_model", settings.llm.embedding_model),
             "embedding_batch_size": embedding_index.get(
-                "embedding_batch_size", settings.embedding_batch_size
+                "embedding_batch_size", settings.llm.embedding_batch_size
             ),
             "semantic_weight": embedding_index.get("semantic_weight", 0.6),
             "keyword_weight": embedding_index.get("keyword_weight", 0.2),
@@ -1006,7 +1006,7 @@ def _build_pipeline_trace(
         preview=context[:200] + "..." if len(context) > 200 else context,
     )
 
-    generation_stage = GenerationStage(model=settings.model_name, timing_ms=0, tokens_estimate=None)
+    generation_stage = GenerationStage(model=settings.llm.model_name, timing_ms=0, tokens_estimate=None)
 
     total_time_ms = int((time.time() - total_start) * 1000)
     pipeline_trace = PipelineTrace(
@@ -1121,8 +1121,19 @@ async def retrieve_context_with_trace_async(
             - pipeline_trace: Dictionary with detailed pipeline metadata
     """
     if not query or not query.strip():
-        from src.rag.trace_models import PipelineTrace
-        return "", [], PipelineTrace()
+        from src.rag.trace_models import (
+            ContextStage,
+            GenerationStage,
+            PipelineTrace,
+            RetrievalStage,
+        )
+
+        return "", [], PipelineTrace(
+            retrieval=RetrievalStage(query="", top_k=0, documents=[], score_weights={}, timing_ms=0),
+            context=ContextStage(total_chunks=0, total_chars=0, sources=[], preview=""),
+            generation=GenerationStage(model="", timing_ms=0),
+            total_time_ms=0,
+        )
     original_length = len(query)
     if len(query) > 4000:
         logger.warning("Query truncated from %d to 4000 chars", len(query))

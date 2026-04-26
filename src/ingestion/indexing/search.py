@@ -58,8 +58,7 @@ def rank_documents(
     for i in range(doc_count):
         emb = embeddings[i] if use_semantic else None
         semantic_score = (
-            cosine_similarity(query_embedding, emb)
-            if (use_semantic and query_embedding is not None)
+            cosine_similarity(query_embedding, emb) if (use_semantic and query_embedding is not None and emb is not None)
             else 0.0
         )
         metadata = metadatas[i]

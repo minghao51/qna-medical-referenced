@@ -147,7 +147,7 @@ def load_api_key_records() -> list[APIKeyRecord]:
     records: list[APIKeyRecord] = []
     if settings.api.api_keys_json:
         try:
-            payload = json.loads(settings.api_keys_json)
+            payload = json.loads(settings.api.api_keys_json)
         except json.JSONDecodeError:
             payload = []
         if isinstance(payload, list):

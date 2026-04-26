@@ -115,7 +115,7 @@ class CrossEncoderReranker:
         all_scores: list[float] = []
         for i in range(0, len(pairs), self.batch_size):
             batch = pairs[i : i + self.batch_size]
-            batch_scores = self._model.predict(batch)
+            batch_scores = self._model.predict(batch)  # type: ignore[attr-defined]
             if hasattr(batch_scores, "tolist"):
                 all_scores.extend(batch_scores.tolist())
             else:
@@ -131,9 +131,9 @@ def get_reranker(
     from src.config import settings
     from src.config.context import get_runtime_state
 
-    resolved_model = model_name or settings.reranker_model
-    resolved_batch = batch_size or settings.reranker_batch_size
-    resolved_device = device or settings.reranker_device
+    resolved_model = model_name or settings.retrieval.reranker_model
+    resolved_batch = batch_size or settings.retrieval.reranker_batch_size
+    resolved_device = device or settings.retrieval.reranker_device
 
     state = get_runtime_state()
     cached = state.reranker_instance
@@ -143,7 +143,7 @@ def get_reranker(
         and cached.batch_size == resolved_batch
         and cached.device == resolved_device
     ):
-        return cached
+        return cached  # type: ignore[no-any-return]
 
     instance = CrossEncoderReranker(
         model_name=resolved_model,

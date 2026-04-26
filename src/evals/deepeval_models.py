@@ -24,7 +24,7 @@ class QwenModel(DeepEvalBaseLLM):
         client: OpenAI-compatible client pointing to Dashscope API
     """
 
-    model: str
+    model: str  # type: ignore[assignment]
 
     def __init__(self, model: str):
         self.model = model
@@ -87,7 +87,7 @@ class LiteLLMJudgeModel(DeepEvalBaseLLM):
     and litellm.acompletion() for provider-agnostic evaluation.
     """
 
-    model: str
+    model: str  # type: ignore[assignment]
 
     def __init__(self, model: str):
         self.model = model
@@ -152,4 +152,4 @@ def get_heavy_model() -> QwenModel | LiteLLMJudgeModel:
         if not model_name.startswith("openrouter/"):
             model_name = f"openrouter/{model_name}"
         return LiteLLMJudgeModel(model_name)
-    return QwenModel(settings.judge_model_heavy)
+    return QwenModel(settings.llm.judge_model_heavy)

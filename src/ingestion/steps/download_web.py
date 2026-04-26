@@ -51,7 +51,7 @@ def normalize_url(url: str) -> str:
 def _load_manifest() -> dict[str, Any]:
     if MANIFEST_PATH.exists():
         try:
-            return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+            return dict(json.loads(MANIFEST_PATH.read_text(encoding="utf-8")))
         except Exception as e:
             logger.debug("Failed to load manifest: %s", e)
             return {"records": []}
@@ -236,7 +236,7 @@ def get_manifest_record_by_filename(filename: str) -> dict[str, Any] | None:
     manifest = _load_manifest()
     for record in manifest.get("records", []):
         if record.get("filename") == filename:
-            return record
+            return dict(record)
     return None
 
 
@@ -245,7 +245,7 @@ def get_manifest_record_by_logical_name(logical_name: str) -> dict[str, Any] | N
     manifest = _load_manifest()
     for record in manifest.get("records", []):
         if record.get("logical_name") == logical_name:
-            return record
+            return dict(record)
     return None
 
 

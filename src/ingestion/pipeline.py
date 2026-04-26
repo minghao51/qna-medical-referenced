@@ -62,7 +62,7 @@ def build_ingestion_pipeline(
         },
     }
 
-    resolved_project_root = config["project_root"]
+    resolved_project_root = Path(str(config["project_root"]))
 
     dr = (
         driver.Builder()
@@ -109,7 +109,7 @@ def execute_pipeline(
         ]
 
     results = dr.execute(final_vars=final_vars)
-    return results
+    return dict(results)
 
 
 def visualize_pipeline(

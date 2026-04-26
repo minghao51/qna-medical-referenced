@@ -245,11 +245,9 @@ def test_api_key_error_messages():
     """Test that missing API keys produce clear errors."""
     from src.config import settings
 
-    # If API key is missing, should have clear default
-    assert hasattr(settings, "dashscope_api_key")
+    assert hasattr(settings.llm, "dashscope_api_key")
 
-    # Should be empty string or test key if not set
-    assert isinstance(settings.dashscope_api_key, str)
+    assert isinstance(settings.llm.dashscope_api_key, str)
 
 
 # =============================================================================

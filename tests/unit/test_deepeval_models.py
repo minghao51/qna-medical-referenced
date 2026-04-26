@@ -34,7 +34,7 @@ def test_qwen_model_implements_required_methods():
 
 
 def test_qwen_model_generate_uses_sync_client(monkeypatch):
-    model = QwenModel(settings.judge_model_light)
+    model = QwenModel(settings.llm.judge_model_light)
     captured = {}
 
     def fake_create(**kwargs):
@@ -49,12 +49,12 @@ def test_qwen_model_generate_uses_sync_client(monkeypatch):
 
     response = model.generate("Say 'test successful'")
     assert response == "test successful"
-    assert captured["max_tokens"] == settings.judge_max_tokens
+    assert captured["max_tokens"] == settings.llm.judge_max_tokens
 
 
 @pytest.mark.asyncio
 async def test_qwen_model_a_generate_uses_async_client(monkeypatch):
-    model = QwenModel(settings.judge_model_light)
+    model = QwenModel(settings.llm.judge_model_light)
     captured = {}
 
     async def fake_create(**kwargs):
@@ -65,16 +65,16 @@ async def test_qwen_model_a_generate_uses_async_client(monkeypatch):
 
     response = await model.a_generate("Say async success")
     assert response == "async success"
-    assert captured["max_tokens"] == settings.judge_max_tokens
+    assert captured["max_tokens"] == settings.llm.judge_max_tokens
 
 
 def test_get_light_model_returns_light_model():
     model = get_light_model()
-    assert model.model == settings.judge_model_light
+    assert model.model == settings.llm.judge_model_light
     assert model.model == "qwen3.5-35b-a3b"
 
 
 def test_get_heavy_model_returns_heavy_model():
     model = get_heavy_model()
-    assert model.model == settings.judge_model_heavy
+    assert model.model == settings.llm.judge_model_heavy
     assert model.model == "qwen3.5-flash"

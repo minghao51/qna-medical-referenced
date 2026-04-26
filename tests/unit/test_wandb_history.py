@@ -51,7 +51,7 @@ class _FakeWandb:
 def test_fetch_wandb_runs_uses_cache(monkeypatch):
     fake_wandb = _FakeWandb([_FakeRemoteRun(run_id="run-1", name="baseline")])
     monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
-    monkeypatch.setattr(wandb_history.settings, "wandb_cache_ttl_seconds", 60)
+    monkeypatch.setattr(wandb_history.settings.wandb, "wandb_cache_ttl_seconds", 60)
     wandb_history.clear_wandb_cache()
 
     first = wandb_history.fetch_wandb_runs(project="demo", entity="team", limit=10)
@@ -66,7 +66,7 @@ def test_fetch_wandb_run_cache_expires(monkeypatch):
     fake_wandb = _FakeWandb([_FakeRemoteRun(run_id="run-1", name="baseline")])
     now = {"value": 100.0}
     monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
-    monkeypatch.setattr(wandb_history.settings, "wandb_cache_ttl_seconds", 5)
+    monkeypatch.setattr(wandb_history.settings.wandb, "wandb_cache_ttl_seconds", 5)
     monkeypatch.setattr(wandb_history.time, "time", lambda: now["value"])
     wandb_history.clear_wandb_cache()
 

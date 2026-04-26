@@ -119,7 +119,7 @@ def _ensure_live_qwen_available():
     from src.config import settings
 
     try:
-        client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url)
+        client = OpenAI(api_key=settings.llm.dashscope_api_key, base_url=settings.llm.qwen_base_url)
         # Simple test call to verify API is accessible
         client.embeddings.create(model="text-embedding-v4", input="test")
     except Exception as exc:

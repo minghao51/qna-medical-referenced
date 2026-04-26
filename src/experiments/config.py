@@ -203,7 +203,7 @@ def _normalize_embedding_index(raw: dict[str, Any]) -> dict[str, Any]:
     """
     embedding_index = dict(raw)
     suffix = embedding_index.get("collection_name_suffix")
-    raw_collection = str(embedding_index.get("collection_name", settings.collection_name))
+    raw_collection = str(embedding_index.get("collection_name", settings.storage.collection_name))
 
     # Recover the original base name: if the collection_name already ends with
     # "_<suffix>", strip it off so we can re-derive cleanly.
@@ -214,7 +214,7 @@ def _normalize_embedding_index(raw: dict[str, Any]) -> dict[str, Any]:
 
     embedding_index["collection_name"] = _derive_collection_name(base_name, suffix)
     embedding_index["embedding_batch_size"] = int(
-        embedding_index.get("embedding_batch_size", getattr(settings, "embedding_batch_size", 10))
+        embedding_index.get("embedding_batch_size", getattr(settings.llm, "embedding_batch_size", 10))
     )
     return embedding_index
 
@@ -241,10 +241,10 @@ def _base_defaults() -> dict[str, Any]:
             "source_chunk_configs": deepcopy(DEFAULT_SOURCE_CHUNK_CONFIGS),
         },
         "embedding_index": {
-            "collection_name": settings.collection_name,
+            "collection_name": settings.storage.collection_name,
             "collection_name_suffix": None,
-            "embedding_model": settings.embedding_model,
-            "embedding_batch_size": getattr(settings, "embedding_batch_size", 10),
+            "embedding_model": settings.llm.embedding_model,
+            "embedding_batch_size": getattr(settings.llm, "embedding_batch_size", 10),
             "semantic_weight": 0.6,
             "keyword_weight": 0.2,
             "boost_weight": 0.2,

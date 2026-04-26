@@ -46,11 +46,11 @@ def get_config() -> dict:
         "ingestion": {
             "structured_chunking_enabled": True,
             "page_classification_enabled": True,
-            "html_extractor_strategy": settings.html_extractor_strategy
-            if hasattr(settings, "html_extractor_strategy")
+            "html_extractor_strategy": getattr(settings.ingestion, "html_extractor_strategy", "trafilatura_bs")
+            if hasattr(settings, "ingestion")
             else "trafilatura_bs",
-            "pdf_extractor_strategy": settings.pdf_extractor_strategy
-            if hasattr(settings, "pdf_extractor_strategy")
+            "pdf_extractor_strategy": getattr(settings.ingestion, "pdf_extractor_strategy", "pypdf_pdfplumber")
+            if hasattr(settings, "ingestion")
             else "pypdf_pdfplumber",
         },
         "enrichment": {
@@ -62,5 +62,5 @@ def get_config() -> dict:
             "model_name": settings.llm.model_name,
             "embedding_model": settings.llm.embedding_model,
         },
-        "production_profile": getattr(settings, "production_profile", None),
+        "production_profile": settings.production.production_profile,
     }

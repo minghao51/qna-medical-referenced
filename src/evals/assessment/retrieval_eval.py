@@ -502,9 +502,9 @@ def run_hype_ablations_with_reingest(
     for name, options in configs:
         hype_config = {
             "enable_hype": options.get("enable_hype", False),
-            "hype_sample_rate": options.get("hype_sample_rate", settings.hype_sample_rate),
+            "hype_sample_rate": options.get("hype_sample_rate", settings.hyde.hype_sample_rate),
             "hype_questions_per_chunk": options.get(
-                "hype_questions_per_chunk", settings.hype_questions_per_chunk
+                "hype_questions_per_chunk", settings.hyde.hype_questions_per_chunk
             ),
         }
         variant_collection = f"{collection_base}_{name}"
@@ -610,10 +610,10 @@ def run_keyword_ablations_with_reingest(
             "enable_keyword_extraction": bool(options.get("enable_keyword_extraction", False)),
             "enable_chunk_summaries": bool(options.get("enable_chunk_summaries", False)),
             "keyword_extraction_sample_rate": options.get(
-                "keyword_extraction_sample_rate", settings.keyword_extraction_sample_rate
+                "keyword_extraction_sample_rate", settings.enrichment.keyword_extraction_sample_rate
             ),
             "keyword_extraction_max_chunks": options.get(
-                "keyword_extraction_max_chunks", settings.keyword_extraction_max_chunks
+                "keyword_extraction_max_chunks", settings.enrichment.keyword_extraction_max_chunks
             ),
         }
         variant_collection = f"{collection_base}_{name}"

@@ -98,11 +98,12 @@ class RAGService(BaseService):
         # Build context and sources
         from src.rag.formatting import build_context_and_sources
 
-        context, sources = build_context_and_sources(retrieved_docs)
+        context, sources, chat_sources = build_context_and_sources(retrieved_docs)  # type: ignore[arg-type]
 
         return {
             "context": context,
             "sources": sources,
+            "chat_sources": chat_sources,
             "retrieved_documents": retrieved_docs,
             "trace": {
                 "expanded_queries": expanded_queries,

@@ -42,7 +42,7 @@ def migrate(
     Returns:
         Migration report with counts.
     """
-    chroma_dir = chroma_dir or settings.chroma_persist_directory
+    chroma_dir = chroma_dir or settings.storage.chroma_persist_directory
     json_file = Path(vector_dir) / f"{collection_name}.json"
 
     if not json_file.exists():
@@ -161,7 +161,7 @@ def main() -> None:
         "--collection",
         type=str,
         default=None,
-        help="Collection name (defaults to settings.collection_name).",
+        help="Collection name (defaults to settings.storage.collection_name).",
     )
     parser.add_argument(
         "--vector-dir",
@@ -177,7 +177,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    collection_name = args.collection or settings.collection_name
+    collection_name = args.collection or settings.storage.collection_name
     migrate(
         collection_name=collection_name,
         vector_dir=args.vector_dir,

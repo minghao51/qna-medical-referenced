@@ -20,7 +20,7 @@ def get_embedding_client() -> OpenAI:
     Returns:
         OpenAI client configured for Dashscope API
     """
-    return OpenAI(api_key=settings.dashscope_api_key, base_url=settings.qwen_base_url)
+    return OpenAI(api_key=settings.llm.dashscope_api_key, base_url=settings.llm.qwen_base_url)
 
 
 def _cache_get(model_name: str, text: str) -> list[float] | None:

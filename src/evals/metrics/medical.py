@@ -22,7 +22,7 @@ class MetricSpec:
     factory: Any
 
     def create(self) -> MetricFactory:
-        return self.factory()
+        return self.factory()  # type: ignore[no-any-return]
 
 
 def _build_factual_accuracy() -> GEval:

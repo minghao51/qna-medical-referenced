@@ -108,9 +108,9 @@ def run_pipeline(
             generate_hype_questions_for_chunks(
                 chunks=chunks,
                 client=hype_client,
-                sample_rate=settings.hype_sample_rate,
-                max_chunks=settings.hype_max_chunks,
-                questions_per_chunk=settings.hype_questions_per_chunk,
+                sample_rate=settings.hyde.hype_sample_rate,
+                max_chunks=settings.hyde.hype_max_chunks,
+                questions_per_chunk=settings.hyde.hype_questions_per_chunk,
             )
         )
         print(f"  HyPE questions generated for {len(hype_questions)} chunks")
@@ -143,8 +143,8 @@ def run_pipeline(
                 client=enrich_client,
                 enable_keywords=enable_keyword_extraction,
                 enable_summaries=enable_chunk_summaries,
-                sample_rate=settings.keyword_extraction_sample_rate,
-                max_chunks=settings.keyword_extraction_max_chunks,
+                sample_rate=settings.enrichment.keyword_extraction_sample_rate,
+                max_chunks=settings.enrichment.keyword_extraction_max_chunks,
             )
         )
         enriched_count = apply_enrichment_to_chunks(
