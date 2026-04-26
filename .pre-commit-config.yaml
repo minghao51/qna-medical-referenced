@@ -1,15 +1,11 @@
-# Pre-commit hooks configuration
-# See https://pre-commit.com for more information
-# See https://pre-commit.com/hooks.html for more hooks
-
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^(.md$)
+        exclude: \.md$
       - id: end-of-file-fixer
-        exclude: ^(.md$)
+        exclude: \.md$
       - id: check-yaml
       - id: check-json
       - id: check-toml
@@ -18,20 +14,18 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=1000']
       - id: debug-statements
+      - id: name-tests-test
+        args: ['--pytest']
 
-  # Ruff - Fast Python linter and formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.0
+    rev: v0.12.1
     hooks:
-      # Run the linter
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
-      # Run the formatter
       - id: ruff-format
 
-  # Type checking with mypy
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v1.18.0
     hooks:
       - id: mypy
         additional_dependencies:
@@ -40,10 +34,15 @@ repos:
         args: [--config-file=pyproject.toml]
         exclude: ^(tests/|frontend/|scripts/)
 
-  # General security checks
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.6
+    rev: 1.10.0
     hooks:
       - id: bandit
         args: ['-c', 'pyproject.toml']
         exclude: ^tests/
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.2.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]

@@ -9,43 +9,36 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Install backend dependencies
-        run: uv sync --frozen --dev
+      - name: Install dependencies
+        run: uv sync --dev --frozen
 
       - name: Run Ruff
-        run: uv run ruff check
+        run: uv run ruff check .
+
+      - name: Run Ruff format check
+        run: uv run ruff format --check .
 
   unit-tests:
     runs-on: ubuntu-latest
     needs: lint
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Install backend dependencies
-        run: uv sync --frozen --dev
+      - name: Install dependencies
+        run: uv sync --dev --frozen
 
       - name: Run unit tests
         run: uv run pytest tests/unit/ -m "not slow" --maxfail=3 -n auto -q
@@ -53,59 +46,49 @@ jobs:
   integration-tests:
     runs-on: ubuntu-latest
     needs: lint
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Install backend dependencies
-        run: uv sync --frozen --dev
+      - name: Install dependencies
+        run: uv sync --dev --frozen
 
       - name: Run integration tests
-        run: uv run pytest tests/integration/ --maxfail=2 -q
+        run: >
+          uv run pytest tests/integration/
+          -m "not slow and not live_api and not live_openrouter and not deepeval and not e2e_real_apis and not network"
+          --maxfail=2 -q
 
-  backend-smoke:
+  smoke-tests:
     runs-on: ubuntu-latest
     needs: [lint, unit-tests, integration-tests]
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --dev --frozen
 
-      - name: Install backend dependencies
-        run: uv sync --frozen --dev
-
-      - name: Run backend smoke tests
-        run: uv run pytest tests/unit/test_pipeline_assessment_smoke.py -m smoke --maxfail=1 -q
+      - name: Run smoke tests
+        run: uv run pytest -m smoke --maxfail=1 -q
 
   frontend:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.2.5
 
@@ -123,10 +106,9 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Build backend image
         run: docker build -f Dockerfile .

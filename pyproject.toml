@@ -61,7 +61,8 @@ test = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = ["--strict-markers", "-ra", "--durations=10"]
+minversion = "9.0"
+addopts = ["--strict-markers", "-ra", "--durations=10", "--import-mode=importlib"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -89,6 +90,10 @@ select = [
     "ISC", "PIE", "PT", "RUF",
 ]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["E402", "PT011", "PT012", "PT017", "B017", "RUF012", "RUF059"]
+"scripts/**/*.py" = ["DTZ005", "DTZ007"]
 
 [dependency-groups]
 dev = [
