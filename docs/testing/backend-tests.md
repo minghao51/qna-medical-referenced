@@ -23,21 +23,44 @@ uv run pytest
 ## Targeted Runs
 
 ```bash
-uv run pytest tests/test_settings.py
-uv run pytest tests/test_retrieval.py -k hit_rate
-uv run pytest tests/test_evaluation_routes.py
+uv run pytest tests/unit/test_settings.py
+uv run pytest tests/integration/test_retrieval.py -k hit_rate
+uv run pytest tests/integration/test_evaluation_routes.py
 ```
 
 ## Test Areas
 
-- `tests/test_settings.py` covers config loading and defaults.
-- `tests/test_chunker.py` covers chunk sizing, overlap, and metadata propagation.
-- `tests/test_download_*.py` covers ingestion manifests and source downloads.
-- `tests/test_pdf_loader.py` covers PDF extraction structure and metadata.
-- `tests/test_keyword_index.py`, `tests/test_embedding.py`, and `tests/test_retrieval.py` cover indexing and retrieval behavior.
-- `tests/test_eval_*.py`, `tests/test_pipeline_assessment_smoke.py`, and `tests/test_pipeline_quality_upgrades.py` cover evaluation artifacts and metrics.
-- `tests/test_evaluation_routes.py` covers the API surface for evaluation results.
-- `tests/test_app_security.py` and `tests/test_storage_history.py` cover API security and persistence behavior.
+- `tests/unit/test_settings.py` covers config loading and defaults.
+- `tests/unit/test_chunker.py` covers chunk sizing, overlap, and metadata propagation.
+- `tests/unit/test_download_*.py` covers ingestion manifests and source downloads.
+- `tests/unit/test_pdf_loader.py` covers PDF extraction structure and metadata.
+- `tests/unit/test_keyword_index.py`, `tests/unit/test_embedding.py`, and `tests/integration/test_retrieval.py` cover indexing and retrieval behavior.
+- `tests/unit/test_eval_*.py`, `tests/integration/test_pipeline_assessment_smoke.py`, and `tests/integration/test_pipeline_quality_upgrades.py` cover evaluation artifacts and metrics.
+- `tests/integration/test_evaluation_routes.py` covers the API surface for evaluation results.
+- `tests/integration/test_app_security.py` and `tests/unit/test_storage_history.py` cover API security and persistence behavior.
+
+## Test Organization
+
+Tests are organized into three tiers:
+- `tests/unit/` — Fast isolated tests (no I/O, no external deps)
+- `tests/integration/` — Tests with DB, filesystem, or service stack
+- `tests/e2e/` — Full end-to-end workflow tests
+
+## Markers
+
+| Marker | Meaning |
+|--------|---------|
+| `unit` | Fast isolated tests |
+| `integration` | Tests with DB/filesystem/services |
+| `e2e` | Full workflow tests |
+| `slow` | >1s tests |
+| `live_api` | Requires live Qwen API access |
+| `live_openrouter` | Requires live OpenRouter API access |
+| `deepeval` | DeepEval integration tests (slow, requires API) |
+| `e2e_real_apis` | End-to-end tests with real APIs |
+| `network` | Needs internet access |
+| `smoke` | Critical path tests |
+| `serial` | Cannot run in parallel |
 
 ## Environment Notes
 

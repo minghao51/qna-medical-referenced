@@ -49,7 +49,7 @@ docs/           Project documentation
 
 ## 6. Testing
 
-- **Backend:** `uv run python -m pytest` — 431 tests. Markers: `live_api`, `deepeval`, `e2e_real_apis`, `slow`.
+- **Backend:** `uv run python -m pytest` — ~495 tests. Markers: `live_api`, `deepeval`, `e2e_real_apis`, `slow`.
 - **Frontend:** `cd frontend && npm run check` (type check) + `npm test` (Playwright).
 - **Linting:** `uv run ruff check` (line-length 100, target py312).
 

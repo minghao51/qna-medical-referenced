@@ -165,7 +165,7 @@ def _sample_filtered_records(
 ) -> tuple[list[dict[str, Any]], bool]:
     if max_queries is None or max_queries <= 0 or len(records) <= max_queries:
         return records, False
-    rng = random.Random(sample_seed)
+    rng = random.Random(sample_seed)  # nosec B311
     chosen_indices = sorted(rng.sample(range(len(records)), max_queries))
     return [records[idx] for idx in chosen_indices], True
 
@@ -267,7 +267,7 @@ def _load_candidate_chunks() -> list[dict[str, Any]]:
 
 
 def _sample_candidate_docs(sample_docs_per_source_type: int, seed: int) -> list[dict[str, Any]]:
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # nosec B311
     docs = _load_candidate_chunks()
     buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for doc in docs:
