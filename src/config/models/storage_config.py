@@ -1,11 +1,5 @@
-"""Storage configuration."""
+"""Compatibility export for storage configuration model."""
 
-from pydantic import BaseModel
+from src.config.settings import StorageConfig
 
-
-class StorageConfig(BaseModel):
-    collection_name: str = "medical_docs"
-    data_dir: str = "data/raw"
-    chroma_persist_directory: str = "data/chroma"
-    chroma_server_host: str = ""
-    chroma_server_port: int = 8000
+__all__ = ["StorageConfig"]

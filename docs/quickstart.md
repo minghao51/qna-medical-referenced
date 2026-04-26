@@ -4,7 +4,7 @@ Prerequisites and first-time setup. For daily commands, see `docs/local-workflow
 
 ## Prerequisites
 
-- Python 3.13+
+- Python 3.12.x
 - `uv`
 - Node.js and `npm` for the frontend
 - A DashScope API key for Qwen (`DASHSCOPE_API_KEY`)

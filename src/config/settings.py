@@ -42,6 +42,7 @@ class ApiConfig(BaseModel):
     chat_session_cookie_name: str = "chat_session_id"
     chat_session_cookie_max_age_seconds: int = 2592000
     chat_history_ttl_seconds: int = 2592000
+    chat_history_max_messages_per_session: int = 100
     trust_proxy_headers: bool = False
 
 
@@ -154,6 +155,7 @@ class Settings(BaseSettings):
         "chat_session_cookie_name": ("api", "chat_session_cookie_name"),
         "chat_session_cookie_max_age_seconds": ("api", "chat_session_cookie_max_age_seconds"),
         "chat_history_ttl_seconds": ("api", "chat_history_ttl_seconds"),
+        "chat_history_max_messages_per_session": ("api", "chat_history_max_messages_per_session"),
         "trust_proxy_headers": ("api", "trust_proxy_headers"),
         "llm_provider": ("llm", "provider"),
         "model_name": ("llm", "model_name"),
