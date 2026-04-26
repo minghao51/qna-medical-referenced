@@ -26,6 +26,7 @@ Example:
         print(result["response"])
 """
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncGenerator
@@ -176,7 +177,7 @@ async def stream_chat_message(
     On error after partial output, yields with error key set.
     """
     resolved_session_id = session_id or "default"
-    history = history_store.get_history(resolved_session_id)
+    history = await asyncio.to_thread(history_store.get_history, resolved_session_id)
     history_context = _build_history_context(history)
 
     pipeline_trace = None
@@ -206,8 +207,10 @@ async def stream_chat_message(
             pipeline_trace.generation.timing_ms = gen_timing_ms
             pipeline_trace.total_time_ms = int((time.time() - chat_start) * 1000)
 
-        history_store.save_message(resolved_session_id, "user", message)
-        history_store.save_message(resolved_session_id, "assistant", accumulated_response)
+        await asyncio.to_thread(history_store.save_message, resolved_session_id, "user", message)
+        await asyncio.to_thread(
+            history_store.save_message, resolved_session_id, "assistant", accumulated_response
+        )
 
         yield (
             "",
@@ -218,12 +221,22 @@ async def stream_chat_message(
             },
         )
 
+    except asyncio.CancelledError:
+        raise
+    except GeneratorExit:
+        raise
     except Exception as exc:
         logger.exception("Error during stream for session %s", resolved_session_id)
         try:
-            history_store.save_message(resolved_session_id, "user", message)
+            await asyncio.to_thread(history_store.save_message, resolved_session_id, "user", message)
             if accumulated_response:
-                history_store.save_message(resolved_session_id, "assistant", accumulated_response)
+                await asyncio.to_thread(
+                    history_store.save_message, resolved_session_id, "assistant", accumulated_response
+                )
+        except asyncio.CancelledError:
+            raise
+        except GeneratorExit:
+            raise
         except Exception:
             logger.warning("Failed to save partial error message to history for session %s", resolved_session_id)
 
@@ -238,6 +251,10 @@ async def stream_chat_message(
                     "error_code": "chat_stream_failed",
                 },
             )
+        except asyncio.CancelledError:
+            raise
+        except GeneratorExit:
+            raise
         except Exception:
             logger.exception("Failed to yield error event for session %s", resolved_session_id)
         raise UpstreamServiceError("An error occurred processing your request") from exc

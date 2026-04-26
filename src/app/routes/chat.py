@@ -80,6 +80,8 @@ async def chat_stream_generator(
                     )
                     sent_terminal_event = True
                     yield f"data: {event}\n\n"
+                except GeneratorExit:
+                    raise
                 except Exception:
                     logger.exception("Failed to serialize SSE event")
                     error_event = json.dumps(
@@ -94,6 +96,8 @@ async def chat_stream_generator(
                     sent_terminal_event = True
                     yield f"data: {error_event}\n\n"
 
+    except GeneratorExit:
+        raise
     except Exception:
         logger.exception("Chat stream generator failed")
         log_event(
