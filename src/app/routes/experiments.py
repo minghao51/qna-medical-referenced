@@ -6,6 +6,7 @@ JSON output reports stored under experiments/.
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,16 @@ router = APIRouter()
 
 EXPERIMENTS_DIR = Path("experiments")
 OUTPUTS_DIR = EXPERIMENTS_DIR / "outputs"
+
+_EXPERIMENT_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_experiment_name(name: str) -> None:
+    if not name or not _EXPERIMENT_NAME_RE.fullmatch(name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid experiment name. Only alphanumeric characters, dots, underscores, and hyphens are allowed.",
+        )
 
 
 def _find_yaml_configs() -> list[Path]:
@@ -95,6 +106,7 @@ def list_experiments() -> dict[str, Any]:
     summary="Get experiment results",
 )
 def get_experiment_results(experiment_name: str) -> dict[str, Any]:
+    _validate_experiment_name(experiment_name)
     report_path = OUTPUTS_DIR / f"{experiment_name}_report.json"
     if not report_path.is_file():
         raise HTTPException(status_code=404, detail="Report not found")
@@ -109,6 +121,7 @@ def get_experiment_results(experiment_name: str) -> dict[str, Any]:
     summary="Get parsed experiment config",
 )
 def get_experiment_config(experiment_name: str) -> dict[str, Any]:
+    _validate_experiment_name(experiment_name)
     candidates = [
         EXPERIMENTS_DIR / f"{experiment_name}.yaml",
         EXPERIMENTS_DIR / f"{experiment_name}.yml",
