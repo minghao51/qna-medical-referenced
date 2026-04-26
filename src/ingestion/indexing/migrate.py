@@ -125,7 +125,7 @@ def migrate(
             ids=to_insert_ids,
             embeddings=to_insert_embeddings,
             documents=to_insert_documents,
-            metadatas=to_insert_metadatas,
+            metadatas=to_insert_metadatas,  # type: ignore[arg-type]
         )
 
     report = {

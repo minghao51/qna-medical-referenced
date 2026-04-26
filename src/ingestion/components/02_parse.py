@@ -36,7 +36,7 @@ def parse_markdown_document(md_path: str) -> dict[str, Any]:
     from src.ingestion.steps.load_markdown import MarkdownLoader
 
     loader = MarkdownLoader()
-    docs = loader.load_markdown_documents()
+    docs = loader.load_all_markdown()
     for doc in docs:
         if doc.get("source") == Path(md_path).name:
             return {"path": md_path, "text": doc.get("extracted_text", ""), "source_type": "markdown"}

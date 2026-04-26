@@ -84,7 +84,7 @@ def _weighted_sample_chunks(
 
     while population and len(sampled) < target_count:
         weights = [max(0.01, float(c.get("quality_score", 0.5)) ** 2) for c in population]
-        selected = random.choices(population, weights=weights, k=1)[0]
+        selected = random.choices(population, weights=weights, k=1)[0]  # nosec B311
         sampled.append(selected)
         population = [chunk for chunk in population if chunk["id"] != selected["id"]]
 

@@ -73,7 +73,7 @@ def keyword_score_with_extracted_keywords(
     keyword_index: dict[str, list[int]],
     doc_term_freqs: dict[int, dict[str, int]],
     tokenize: Callable[[str], list[str]],
-    extracted_keywords_list: list[list[str]] | None = None,
+    extracted_keywords_list: list[list[str] | None] | None = None,
     keyword_boost_weight: float = 0.5,
 ) -> dict[int, float]:
     """BM25 keyword scoring with bonus for LLM-extracted keyword matches.

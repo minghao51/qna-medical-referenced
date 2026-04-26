@@ -29,7 +29,7 @@ MANIFEST_PATH = DATA_DIR / "download_manifest.json"
 
 def get_file_path(url: str, extension: str = "html") -> Path:
     """Generate a filename from URL."""
-    url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+    url_hash = hashlib.md5(url.encode()).hexdigest()[:8]  # nosec B324
     safe_name = re.sub(r"[^\w\-]", "_", url.split("/")[-1][:50])
     if not safe_name or safe_name.endswith("_"):
         safe_name = f"content_{url_hash}"
