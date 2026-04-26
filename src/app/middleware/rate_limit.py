@@ -186,7 +186,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if request.url.path in ANONYMOUS_CHAT_PATHS:
             browser_id = self._get_or_create_browser_id(request)
-            limit = settings.anonymous_chat_rate_limit_per_minute
+            limit = settings.api.anonymous_chat_rate_limit_per_minute
             return f"anon-chat:{client_ip}:{browser_id}", limit
 
         return f"ip:{client_ip}", limit
