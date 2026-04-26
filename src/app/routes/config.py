@@ -10,6 +10,14 @@ import logging
 from fastapi import APIRouter
 
 from src.config import settings
+from src.ingestion.steps.chunking.config import is_structured_chunking_enabled
+from src.ingestion.steps.convert_html import (
+    get_html_extractor_mode,
+    get_html_extractor_strategy,
+    is_page_classification_enabled,
+)
+from src.ingestion.steps.load_markdown import get_index_only_classified_pages
+from src.ingestion.steps.load_pdfs import get_pdf_extractor_strategy, get_pdf_table_extractor
 from src.rag.runtime import get_runtime_retrieval_config
 
 logger = logging.getLogger(__name__)
@@ -44,14 +52,13 @@ def get_config() -> dict:
             "enable_query_understanding": retrieval_cfg["enable_query_understanding"],
         },
         "ingestion": {
-            "structured_chunking_enabled": True,
-            "page_classification_enabled": True,
-            "html_extractor_strategy": getattr(settings.ingestion, "html_extractor_strategy", "trafilatura_bs")
-            if hasattr(settings, "ingestion")
-            else "trafilatura_bs",
-            "pdf_extractor_strategy": getattr(settings.ingestion, "pdf_extractor_strategy", "pypdf_pdfplumber")
-            if hasattr(settings, "ingestion")
-            else "pypdf_pdfplumber",
+            "structured_chunking_enabled": is_structured_chunking_enabled(),
+            "page_classification_enabled": is_page_classification_enabled(),
+            "index_only_classified_pages": get_index_only_classified_pages(),
+            "html_extractor_strategy": get_html_extractor_strategy(),
+            "html_extractor_mode": get_html_extractor_mode(),
+            "pdf_extractor_strategy": get_pdf_extractor_strategy(),
+            "pdf_table_extractor": get_pdf_table_extractor(),
         },
         "enrichment": {
             "enable_keyword_extraction": retrieval_cfg.get("enable_keyword_extraction", False),
