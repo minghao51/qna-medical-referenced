@@ -47,6 +47,7 @@ async def test_network_timeout_with_retry():
         # Note: This test documents expected behavior - actual retry logic
         # may be implemented at a different level
         # For now, we verify the function handles the error gracefully
+        pytest.skip("Test is incomplete: no function under test is invoked")
 
 
 @pytest.mark.asyncio

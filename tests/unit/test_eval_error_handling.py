@@ -67,9 +67,8 @@ async def test_cache_during_failures():
             # Results should be consistent
             if len(results1) > 0 and len(results2) > 0:
                 assert results1[0]["query"] == results2[0]["query"]
-        except Exception:
-            # Cache may not work in test environment
-            pass
+        except Exception as e:
+            pytest.fail(f"Unexpected error during cache test: {e}")
 
 
 # =============================================================================
@@ -93,25 +92,25 @@ async def test_partial_results_on_some_failures():
         metric.score = 0.8
         metric.reason = "mock success"
 
-    with patch("src.evals.assessment.answer_eval.safe_a_measure", side_effect=mock_safe_measure):
-        try:
-            results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+    with patch("src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Test answer"):
+        with patch("src.evals.assessment.answer_eval.safe_a_measure", side_effect=mock_safe_measure):
+            try:
+                results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
-            # Should return results even with some failures
-            if len(results) > 0:
-                result = results[0]
+                # Should return results even with some failures
+                if len(results) > 0:
+                    result = results[0]
 
-                # Check that we got some results
-                assert "metrics" in result
+                    # Check that we got some results
+                    assert "metrics" in result
 
-                # Some metrics may have failed
-                metrics = result["metrics"]
+                    # Some metrics may have failed
+                    metrics = result["metrics"]
 
-                # Should have at least attempted metrics
-                assert len(metrics) > 0
-        except Exception:
-            # Expected if all metrics fail
-            pass
+                    # Should have at least attempted metrics
+                    assert len(metrics) > 0
+            except Exception as e:
+                pytest.fail(f"Unexpected error during partial results test: {e}")
 
 
 # =============================================================================
@@ -291,24 +290,24 @@ async def test_metric_calculation_with_invalid_context():
     dataset = [{"query": "Test query", "query_id": "context_test_001"}]
 
     # Mock retrieval to return empty context
-    with patch("src.rag.runtime.retrieve_context_with_trace") as mock_retrieve:
-        mock_retrieve.return_value = ("", [], {"retrieval": {}, "context": {}, "generation": {}, "total_time_ms": 0})
+    with patch("src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Test answer"):
+        with patch("src.rag.runtime.retrieve_context_with_trace") as mock_retrieve:
+            mock_retrieve.return_value = ("", [], {"retrieval": {}, "context": {}, "generation": {}, "total_time_ms": 0})
 
-        try:
-            results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
+            try:
+                results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
-            # Should still generate results
-            if len(results) > 0:
-                assert "metrics" in results[0]
+                # Should still generate results
+                if len(results) > 0:
+                    assert "metrics" in results[0]
 
-                # Some metrics may fail due to empty context
-                metrics = results[0]["metrics"]
+                    # Some metrics may fail due to empty context
+                    metrics = results[0]["metrics"]
 
-                # Should have attempted all metrics
-                assert len(metrics) >= 0
-        except Exception:
-            # Expected if evaluation fails without context
-            pass
+                    # Should have attempted all metrics
+                    assert len(metrics) >= 0
+            except Exception as e:
+                pytest.fail(f"Unexpected error during invalid context test: {e}")
 
 
 @pytest.mark.asyncio
