@@ -11,7 +11,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -65,7 +65,6 @@ from src.source_metadata import (  # noqa: E402
     sanitize_external_url,
 )
 
-logger = logging.getLogger(__name__)
 _VALID_SEARCH_MODES = {"rrf_hybrid", "semantic_only", "bm25_only"}
 
 
@@ -184,12 +183,13 @@ class ChromaVectorStore:
 
     @property
     def documents(self) -> dict[str, Any]:
-        all_data = self._collection.get(include=["documents", "metadatas", "embeddings"])
-        docs = all_data.get("documents", [])
-        metas = all_data.get("metadatas", [])
-        embs = all_data.get("embeddings", [])
+        all_data: dict[str, Any] = self._collection.get(include=["documents", "metadatas", "embeddings"])  # type: ignore[assignment]
+        docs: list[Any] = all_data.get("documents", []) or []
+        metas: list[Any] = all_data.get("metadatas", []) or []
+        embs: list[Any] = all_data.get("embeddings", []) or []
+        ids: list[Any] = all_data.get("ids", []) or []
         return {
-            "ids": list(all_data.get("ids", [])),
+            "ids": list(ids),
             "contents": list(docs),
             "embeddings": [e.tolist() if hasattr(e, "tolist") else e for e in embs],
             "metadatas": list(metas),
@@ -240,11 +240,13 @@ class ChromaVectorStore:
         self._persist_legacy_snapshot()
 
     def _load_content_hashes(self) -> None:
-        all_data = self._collection.get(include=["metadatas"])
-        for doc_id, meta in zip(all_data.get("ids", []), all_data.get("metadatas", []), strict=False):
+        all_data: dict[str, Any] = self._collection.get(include=["metadatas"])  # type: ignore[assignment]
+        ids: list[Any] = all_data.get("ids", []) or []
+        metas: list[Any] = all_data.get("metadatas", []) or []
+        for doc_id, meta in zip(ids, metas, strict=False):
             self._id_set.add(doc_id)
             if meta and "content_hash" in meta:
-                self.content_hashes.add(meta["content_hash"])
+                self.content_hashes.add(str(meta["content_hash"]))
 
     def _apply_index_metadata(self) -> None:
         if self._index_metadata:
@@ -259,16 +261,19 @@ class ChromaVectorStore:
             if include_embeddings:
                 include_fields.append("embeddings")
 
-            all_data = self._collection.get(include=include_fields)
-            self._doc_ids = list(all_data.get("ids", []))
-            self._doc_contents = list(all_data.get("documents", []))
-            metadatas = [dict(meta or {}) for meta in all_data.get("metadatas", [])]
-            self._doc_metadatas = metadatas
+            all_data: dict[str, Any] = self._collection.get(include=include_fields)  # type: ignore[assignment,arg-type]
+            ids: list[Any] = all_data.get("ids", []) or []
+            docs: list[Any] = all_data.get("documents", []) or []
+            metas: list[Any] = all_data.get("metadatas", []) or []
+            self._doc_ids = list(ids)
+            self._doc_contents = list(docs)
+            self._doc_metadatas = [dict(meta or {}) for meta in metas]
 
             if include_embeddings:
+                embs: list[Any] = all_data.get("embeddings", []) or []
                 self._doc_embeddings = [
                     emb.tolist() if hasattr(emb, "tolist") else emb
-                    for emb in all_data.get("embeddings", [])
+                    for emb in embs
                 ]
             else:
                 self._doc_embeddings = []
@@ -278,7 +283,7 @@ class ChromaVectorStore:
             self._doc_term_freqs = build_term_frequencies(self._doc_contents, self._tokenize)
             # Extract keywords from metadata for each document
             self._extracted_keywords_list = []
-            for meta in metadatas:
+            for meta in self._doc_metadatas:
                 if meta and "extracted_keywords" in meta:
                     kws = meta["extracted_keywords"]
                     if isinstance(kws, list):
@@ -293,10 +298,11 @@ class ChromaVectorStore:
         """Lazy-load embeddings only when needed for semantic search."""
         if not self._doc_embeddings and self._collection.count() > 0:
             logger.debug("Lazy-loading embeddings for semantic search")
-            all_data = self._collection.get(include=["embeddings"])
+            all_data: dict[str, Any] = self._collection.get(include=["embeddings"])  # type: ignore[assignment]
+            embeddings_raw: list[Any] = all_data.get("embeddings", []) or []
             self._doc_embeddings = [
                 emb.tolist() if hasattr(emb, "tolist") else emb
-                for emb in all_data.get("embeddings", [])
+                for emb in embeddings_raw
             ]
 
     def _rebuild_in_memory_indexes(self) -> None:
@@ -449,9 +455,9 @@ class ChromaVectorStore:
         if to_upsert_ids:
             self._collection.upsert(
                 ids=to_upsert_ids,
-                embeddings=to_upsert_embeddings,
+                embeddings=to_upsert_embeddings,  # type: ignore[arg-type]
                 documents=to_upsert_documents,
-                metadatas=to_upsert_metadatas,
+                metadatas=to_upsert_metadatas,  # type: ignore[arg-type]
             )
 
             # Incrementally update keyword index for new documents
@@ -539,7 +545,7 @@ class ChromaVectorStore:
 
     def _search_ranked(
         self, query: str, search_mode: str, filter: dict | None = None
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, list[Any]], list[float]]:
         self._rebuild_index_if_needed()
         mode = (search_mode or "rrf_hybrid").lower()
         if mode not in _VALID_SEARCH_MODES:
@@ -564,26 +570,34 @@ class ChromaVectorStore:
 
         if filter is not None:
             if use_semantic:
-                all_data = self._collection.query(
-                    query_embeddings=[query_embedding],
-                    n_results=1000,
-                    where=filter,
-                    include=["documents", "metadatas", "embeddings", "distances"],
+                if query_embedding is None:
+                    raise ValueError("query_embedding must not be None when use_semantic is True")
+                query_result = cast(
+                    dict[str, Any],
+                    self._collection.query(
+                        query_embeddings=[query_embedding],  # type: ignore[arg-type]
+                        n_results=1000,
+                        where=filter,
+                        include=["documents", "metadatas", "embeddings", "distances"],
+                    ),
                 )
-                chroma_ids = list(all_data.get("ids", [[]])[0])
-                chroma_docs = list(all_data.get("documents", [[]])[0])
-                chroma_embeddings = all_data.get("embeddings", [[]])[0]
-                chroma_metadatas = list(all_data.get("metadatas", [[]])[0])
-                chroma_distances: list[float] = list(all_data.get("distances", [[]])[0])
+                chroma_ids = list(query_result.get("ids", [[]])[0])
+                chroma_docs = list(query_result.get("documents", [[]])[0])
+                chroma_embeddings = query_result.get("embeddings", [[]])[0]
+                chroma_metadatas = list(query_result.get("metadatas", [[]])[0])
+                chroma_distances: list[float] = list(query_result.get("distances", [[]])[0])
             else:
-                all_data = self._collection.get(
-                    where=filter,
-                    include=["documents", "metadatas", "embeddings"],
+                get_result = cast(
+                    dict[str, Any],
+                    self._collection.get(
+                        where=filter,
+                        include=["documents", "metadatas", "embeddings"],
+                    ),
                 )
-                chroma_ids = list(all_data.get("ids", []))
-                chroma_docs = list(all_data.get("documents", []))
-                chroma_embeddings = all_data.get("embeddings", [])
-                chroma_metadatas = list(all_data.get("metadatas", []))
+                chroma_ids = list(get_result.get("ids", []))
+                chroma_docs = list(get_result.get("documents", []))
+                chroma_embeddings = get_result.get("embeddings", [])
+                chroma_metadatas = list(get_result.get("metadatas", []))
                 chroma_distances = []
             filtered_term_freqs = build_term_frequencies(chroma_docs, self._tokenize)
             filtered_keyword_index = build_keyword_index(chroma_docs, self._tokenize)
@@ -606,11 +620,12 @@ class ChromaVectorStore:
             chroma_distances = []
             keyword_scores = self._keyword_score(query)
 
+        chroma_embeddings_raw: list[Any] = chroma_embeddings
         documents_for_ranking: dict[str, list[Any]] = {
             "ids": chroma_ids,
             "contents": list(chroma_docs),
             "embeddings": [
-                emb.tolist() if hasattr(emb, "tolist") else emb for emb in chroma_embeddings
+                emb.tolist() if hasattr(emb, "tolist") else emb for emb in chroma_embeddings_raw
             ],
             "metadatas": list(chroma_metadatas),
         }
