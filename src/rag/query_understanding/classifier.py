@@ -46,7 +46,6 @@ class QueryClassifier:
         r"^define\s+",
         r"^explain\s+",
         r"^meaning\s+of\s+",
-        r"\?+$",
     ]
 
     COMPARISON_PATTERNS: ClassVar[list[str]] = [
@@ -125,9 +124,20 @@ class QueryClassifier:
         Returns None if no pattern matches (ambiguous).
         """
         query_lower = query.lower().strip()
+        priority_order = [
+            QueryType.REFERENCE_RANGE,
+            QueryType.COMPARISON,
+            QueryType.SYMPTOM_QUERY,
+            QueryType.TREATMENT,
+            QueryType.RISK_FACTOR,
+            QueryType.DEFINITION,
+            QueryType.FOLLOW_UP,
+        ]
 
-        # Check each query type's patterns
-        for query_type, patterns in self._compiled_patterns.items():
+        # Check each query type's patterns in priority order so specific intents
+        # are classified before generic "what is" definitions.
+        for query_type in priority_order:
+            patterns = self._compiled_patterns[query_type]
             for pattern in patterns:
                 if pattern.search(query):
                     confidence = 0.8  # High confidence for rule-based matches
