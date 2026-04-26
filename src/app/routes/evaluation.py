@@ -26,8 +26,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from src.app.schemas import EvaluateSingleRequest
 from src.services.evaluation_service import EvaluationService
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,11 @@ def _get_evaluation_service() -> EvaluationService:
         latest_pointer=LATEST_POINTER,
         comprehensive_ablation_dir=Path("data/evals_comprehensive_ablation"),
     )
+
+
+def _require_authenticated_request(request: Request) -> None:
+    if getattr(request.state, "auth", None) is None:
+        raise HTTPException(status_code=401, detail="Missing X-API-Key header")
 
 
 @router.get(
@@ -479,16 +485,18 @@ def get_answer_quality_details(run_dir: str) -> dict[str, Any]:
     summary="Evaluate a single answer",
     description="Evaluate one query-answer-context pair using DeepEval metrics (for debugging)",
 )
-async def evaluate_single_answer(query: str, answer: str, context: str) -> dict[str, Any]:
+async def evaluate_single_answer(
+    payload: EvaluateSingleRequest,
+    request: Request,
+) -> dict[str, Any]:
     """Evaluate a single query-answer-context pair.
 
     Useful for debugging and testing specific responses. Runs all 6 DeepEval
     medical quality metrics on the provided input.
 
     Args:
-        query: The question or query text
-        answer: The generated answer to evaluate
-        context: The retrieved context used to generate the answer
+        payload: The query-answer-context payload to evaluate
+        request: FastAPI request object
 
     Returns:
         Dictionary containing:
@@ -500,7 +508,7 @@ async def evaluate_single_answer(query: str, answer: str, context: str) -> dict[
         HTTPException(500): If evaluation fails
 
     Example:
-        POST /evaluation/evaluate-single?query=...&answer=...&context=...
+        POST /evaluation/evaluate-single
 
         Response:
         {
@@ -518,17 +526,22 @@ async def evaluate_single_answer(query: str, answer: str, context: str) -> dict[
 
     from src.evals.metrics.medical import METRIC_SPECS, create_medical_metrics
 
-    test_case = LLMTestCase(input=query, actual_output=answer, retrieval_context=[context])
+    _require_authenticated_request(request)
+    test_case = LLMTestCase(
+        input=payload.query,
+        actual_output=payload.answer,
+        retrieval_context=[payload.context],
+    )
 
     results = {}
     for spec, metric in zip(METRIC_SPECS, create_medical_metrics(), strict=True):
         try:
             await safe_a_measure(
-                    metric,
-                    test_case,
-                    ignore_errors=False,
-                    skip_on_missing_params=False,
-                )
+                metric,
+                test_case,
+                ignore_errors=False,
+                skip_on_missing_params=False,
+            )
             results[spec.key] = {
                 "score": metric.score if metric.score is not None else 0.0,
                 "reason": metric.reason if hasattr(metric, "reason") else None,
@@ -538,4 +551,4 @@ async def evaluate_single_answer(query: str, answer: str, context: str) -> dict[
             logger.error("Failed to measure metric %s: %s", spec.key, e)
             results[spec.key] = {"score": 0.0, "error": str(e)}
 
-    return {"query": query, "answer": answer, "metrics": results}
+    return {"query": payload.query, "answer": payload.answer, "metrics": results}

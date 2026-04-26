@@ -47,3 +47,16 @@ class ChatSource(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     sources: list[ChatSource]
+
+
+class EvaluateSingleRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    answer: str = Field(..., min_length=1, max_length=8000)
+    context: str = Field(..., min_length=1, max_length=16000)
+
+    @field_validator("query", "answer", "context", mode="before")
+    @classmethod
+    def sanitize_text_fields(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value

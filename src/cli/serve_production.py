@@ -7,7 +7,7 @@ import uvicorn
 def main() -> None:
     uvicorn.run(
         "src.app.factory:app",
-        host="0.0.0.0",
+        host="0.0.0.0",  # nosec B104
         port=8000,
         reload=False,
         workers=1,  # Single worker (vector store in-memory)

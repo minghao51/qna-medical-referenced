@@ -1,3 +1,3 @@
-from src.app.schemas.chat import ChatRequest, ChatResponse
+from src.app.schemas.chat import ChatRequest, ChatResponse, EvaluateSingleRequest
 
-__all__ = ["ChatRequest", "ChatResponse"]
+__all__ = ["ChatRequest", "ChatResponse", "EvaluateSingleRequest"]
