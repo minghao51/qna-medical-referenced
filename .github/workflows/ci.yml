@@ -30,7 +30,7 @@ jobs:
         run: uv run mypy src/
 
       - name: Run Bandit
-        run: uv run bandit -r src/ -f json -o bandit-report.json || true
+        run: uv run bandit -r src/ -ll -f json -o bandit-report.json
 
   unit-tests:
     runs-on: ubuntu-latest
@@ -47,7 +47,14 @@ jobs:
         run: uv sync --dev --frozen
 
       - name: Run unit tests
-        run: uv run pytest tests/unit/ -m "not slow" --maxfail=3 -n auto -q
+        run: >
+          uv run pytest tests/unit/ -m "not slow" --maxfail=3 -n auto -q
+          --cov=src/app/middleware
+          --cov=src/app/routes
+          --cov=src.rag.runtime
+          --cov=src/infra/storage
+          --cov-report=term-missing
+          --cov-fail-under=55
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -85,6 +92,20 @@ jobs:
 
       - name: Run smoke tests
         run: uv run pytest -m smoke --maxfail=1 -q
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Audit Python dependencies
+        run: uvx pip-audit --strict
 
   frontend:
     runs-on: ubuntu-latest
