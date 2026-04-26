@@ -148,7 +148,7 @@ class ChromaVectorStore:
         self.keyword_index: dict[str, list[int]] = {}
         self._doc_term_freqs: dict[int, dict[str, int]] = {}
         self._extracted_keywords_list: list[list[str] | None] = []
-        self._index_dirty = False
+        self._index_dirty = True
         self.last_indexing_stats: dict[str, Any] = {}
 
         self._load_content_hashes()
@@ -184,10 +184,11 @@ class ChromaVectorStore:
     @property
     def documents(self) -> dict[str, Any]:
         all_data: dict[str, Any] = self._collection.get(include=["documents", "metadatas", "embeddings"])  # type: ignore[assignment]
-        docs: list[Any] = all_data.get("documents", []) or []
-        metas: list[Any] = all_data.get("metadatas", []) or []
-        embs: list[Any] = all_data.get("embeddings", []) or []
-        ids: list[Any] = all_data.get("ids", []) or []
+        docs: list[Any] = all_data.get("documents") or []
+        metas: list[Any] = all_data.get("metadatas") or []
+        embs_raw = all_data.get("embeddings")
+        embs: list[Any] = embs_raw if embs_raw is not None else []
+        ids: list[Any] = all_data.get("ids") or []
         return {
             "ids": list(ids),
             "contents": list(docs),
@@ -270,7 +271,8 @@ class ChromaVectorStore:
             self._doc_metadatas = [dict(meta or {}) for meta in metas]
 
             if include_embeddings:
-                embs: list[Any] = all_data.get("embeddings", []) or []
+                embs_raw = all_data.get("embeddings")
+                embs: list[Any] = embs_raw if embs_raw is not None else []
                 self._doc_embeddings = [
                     emb.tolist() if hasattr(emb, "tolist") else emb
                     for emb in embs
@@ -299,7 +301,8 @@ class ChromaVectorStore:
         if not self._doc_embeddings and self._collection.count() > 0:
             logger.debug("Lazy-loading embeddings for semantic search")
             all_data: dict[str, Any] = self._collection.get(include=["embeddings"])  # type: ignore[assignment]
-            embeddings_raw: list[Any] = all_data.get("embeddings", []) or []
+            embeddings_raw_raw = all_data.get("embeddings")
+            embeddings_raw: list[Any] = embeddings_raw_raw if embeddings_raw_raw is not None else []
             self._doc_embeddings = [
                 emb.tolist() if hasattr(emb, "tolist") else emb
                 for emb in embeddings_raw
@@ -818,6 +821,90 @@ class ChromaVectorStore:
             if len(selected) >= limit:
                 break
         return selected
+
+    @staticmethod
+    def _build_source_type_filter(source_type: str | None) -> dict[str, Any] | None:
+        normalized = str(source_type or "").strip()
+        if not normalized:
+            return None
+        return {"source_type": normalized}
+
+    def list_documents_paginated(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        source_type: str | None = None,
+    ) -> dict[str, Any]:
+        where_filter = self._build_source_type_filter(source_type)
+        page_result = cast(
+            dict[str, Any],
+            self._collection.get(
+                where=where_filter,
+                limit=limit,
+                offset=offset,
+                include=["documents", "metadatas"],
+            ),
+        )
+        count_result = cast(
+            dict[str, Any],
+            self._collection.get(
+                where=where_filter,
+                include=["metadatas"],
+            ),
+        )
+
+        ids = list(page_result.get("ids") or [])
+        contents = list(page_result.get("documents") or [])
+        metadatas = list(page_result.get("metadatas") or [])
+
+        items: list[dict[str, Any]] = []
+        for index, doc_id in enumerate(ids):
+            metadata = metadatas[index] if index < len(metadatas) else {}
+            content = contents[index] if index < len(contents) else ""
+            items.append(
+                {
+                    "id": doc_id,
+                    "source": metadata.get("source", ""),
+                    "page": metadata.get("page"),
+                    "source_type": metadata.get("source_type", ""),
+                    "source_class": metadata.get("source_class", ""),
+                    "content_type": metadata.get("content_type", ""),
+                    "content_preview": content[:200] if content else "",
+                    "content_length": len(content),
+                }
+            )
+
+        source_type_counts: dict[str, int] = {}
+        for metadata in count_result.get("metadatas") or []:
+            key = str((metadata or {}).get("source_type") or "unknown")
+            source_type_counts[key] = source_type_counts.get(key, 0) + 1
+
+        total = len(count_result.get("ids") or [])
+        return {
+            "total": total,
+            "items": items,
+            "source_type_counts": source_type_counts,
+            "index_metadata": self._index_metadata,
+        }
+
+    def get_document_by_id(self, doc_id: str) -> dict[str, Any] | None:
+        result = cast(
+            dict[str, Any],
+            self._collection.get(ids=[doc_id], include=["documents", "metadatas"]),
+        )
+        ids = list(result.get("ids") or [])
+        if not ids:
+            return None
+
+        content = (result.get("documents") or [""])[0]
+        metadata = (result.get("metadatas") or [{}])[0]
+        return {
+            "id": ids[0],
+            "content": content,
+            "metadata": metadata,
+            "content_length": len(content),
+        }
 
     def clear(self) -> None:
         all_ids = self._collection.get(include=[]).get("ids", [])

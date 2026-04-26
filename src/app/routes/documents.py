@@ -7,7 +7,7 @@ for inspection and debugging from the frontend.
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.config.context import get_runtime_state
 from src.ingestion.indexing.vector_store import get_vector_store
@@ -17,13 +17,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _check_store() -> Any:
+def _check_store(request_id: str | None = None) -> Any:
     if not get_runtime_state().vector_store_initialized:
         raise HTTPException(status_code=503, detail="Vector store not initialized")
     try:
         return get_vector_store()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.exception("Vector store unavailable (request_id=%s)", request_id)
+        raise HTTPException(status_code=503, detail="Vector store unavailable") from exc
 
 
 @router.get(
@@ -32,57 +33,31 @@ def _check_store() -> Any:
     description="Get a paginated summary of all indexed document chunks",
 )
 def list_documents(
+    request: Request,
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     source_type: str | None = None,
 ) -> dict[str, Any]:
-    store = _check_store()
+    request_id = getattr(request.state, "request_id", None)
+    store = _check_store(request_id)
 
     try:
-        all_docs = store.documents
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    ids = all_docs.get("ids", [])
-    contents = all_docs.get("contents", [])
-    metadatas = all_docs.get("metadatas", [])
-
-    items: list[dict[str, Any]] = []
-    for i, doc_id in enumerate(ids):
-        meta = metadatas[i] if i < len(metadatas) else {}
-        content = contents[i] if i < len(contents) else ""
-
-        if source_type and meta.get("source_type", meta.get("source_class", "")) != source_type:
-            continue
-
-        items.append(
-            {
-                "id": doc_id,
-                "source": meta.get("source", ""),
-                "page": meta.get("page"),
-                "source_type": meta.get("source_type", ""),
-                "source_class": meta.get("source_class", ""),
-                "content_type": meta.get("content_type", ""),
-                "content_preview": content[:200] if content else "",
-                "content_length": len(content),
-            }
+        paged = store.list_documents_paginated(
+            limit=limit,
+            offset=offset,
+            source_type=source_type,
         )
-
-    total = len(items)
-    page = items[offset : offset + limit]
-
-    source_types: dict[str, int] = {}
-    for item in items:
-        st = item["source_type"] or "unknown"
-        source_types[st] = source_types.get(st, 0) + 1
+    except Exception as exc:
+        logger.exception("Failed to list documents (request_id=%s)", request_id)
+        raise HTTPException(status_code=500, detail="Failed to load documents") from exc
 
     return {
-        "total": total,
+        "total": paged["total"],
         "offset": offset,
         "limit": limit,
-        "items": page,
-        "source_type_counts": source_types,
-        "index_metadata": all_docs.get("index_metadata", {}),
+        "items": paged["items"],
+        "source_type_counts": paged["source_type_counts"],
+        "index_metadata": paged["index_metadata"],
     }
 
 
@@ -91,25 +66,16 @@ def list_documents(
     summary="Get a single document chunk",
     description="Retrieve full content and metadata for a specific chunk",
 )
-def get_document(doc_id: str) -> dict[str, Any]:
-    store = _check_store()
+def get_document(doc_id: str, request: Request) -> dict[str, Any]:
+    request_id = getattr(request.state, "request_id", None)
+    store = _check_store(request_id)
 
     try:
-        result = store._collection.get(ids=[doc_id], include=["documents", "metadatas"])
+        result = store.get_document_by_id(doc_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("Failed to fetch document (request_id=%s doc_id=%s)", request_id, doc_id)
+        raise HTTPException(status_code=500, detail="Failed to load document") from exc
 
-    ids = result.get("ids", [])
-    if not ids:
+    if not result:
         raise HTTPException(status_code=404, detail="Document not found")
-
-    idx = 0
-    content = result.get("documents", [""])[idx]
-    meta = result.get("metadatas", [{}])[idx]
-
-    return {
-        "id": ids[idx],
-        "content": content,
-        "metadata": meta,
-        "content_length": len(content),
-    }
+    return result
