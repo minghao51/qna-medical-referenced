@@ -1,0 +1,362 @@
+---
+title: "Retrieval Pipeline"
+description: "Query understanding, expansion, search modes, reranking, and trace analysis"
+date: today
+format:
+  html:
+    self-contained: true
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+---
+
+The retrieval pipeline transforms a user query into ranked, relevant context.
+It chains six steps: query understanding, expansion, candidate retrieval (hybrid
+semantic + BM25), reranking, diversification, and context assembly. This notebook
+demonstrates each step and compares the available configuration options.
+
+## Pipeline Flow
+
+```
+Query → Understanding → Expansion → Hybrid Search → Reranking → Diversification → Context
+```
+
+```{python}
+#| error: true
+from pathlib import Path
+
+import polars as pl
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data"
+```
+
+## Query Understanding
+
+The query understanding module classifies incoming queries by type and routes them
+to retrieval parameters tuned for that category.
+
+```{python}
+#| error: true
+from src.rag.query_understanding.classifier import classify_query, QueryType
+
+sample_queries = [
+    "What is LDL cholesterol?",
+    "Statins vs fibrates for hyperlipidemia",
+    "Normal blood pressure range",
+    "Symptoms of iron deficiency anemia",
+    "Treatment options for type 2 diabetes",
+    "Risk factors for cardiovascular disease",
+]
+
+for query in sample_queries:
+    classification = classify_query(query)
+    print(f"  {query}")
+    print(f"    → type={classification.query_type.value}, "
+          f"confidence={classification.confidence:.2f}")
+    print()
+```
+
+### Routing by Query Type
+
+Each query type gets tuned retrieval parameters:
+
+| Query Type | Overfetch | MMR λ | Search Mode | Special |
+|-----------|-----------|-------|-------------|---------|
+| DEFINITION | 3 | 0.75 | rrf_hybrid | — |
+| COMPARISON | 5 | 0.60 | rrf_hybrid | Multi-source enabled |
+| REFERENCE_RANGE | 4 | 0.80 | semantic_only | Similarity threshold 0.5 |
+| SYMPTOM_QUERY | 4 | 0.70 | rrf_hybrid | — |
+| TREATMENT | 4 | 0.70 | rrf_hybrid | — |
+
+```{python}
+#| error: true
+from src.rag.query_understanding.router import get_retrieval_params_for_query
+
+print("=== Routed Parameters ===")
+for query in sample_queries[:3]:
+    params = get_retrieval_params_for_query(query)
+    classification = classify_query(query)
+    print(f"  [{classification.query_type.value}] {query}")
+    print(f"    search_mode={params['search_mode']}, "
+          f"overfetch={params['overfetch_multiplier']}, "
+          f"mmr_lambda={params['mmr_lambda']}")
+    print()
+```
+
+**Finding**: Query understanding improved nDCG@5 by +6.3% over baseline with no
+additional latency cost (it reuses the existing index). See notebook 05.
+
+## Query Expansion
+
+Queries are expanded through multiple layers to improve recall:
+
+```{python}
+#| error: true
+from src.rag.query_understanding.classifier import classify_query
+
+expansion_layers = [
+    "1. Original query     — user's exact input",
+    "2. Tokenized          — whitespace + punctuation normalization",
+    "3. Acronym expansion  — LDL → Low-Density Lipoprotein",
+    "4. Keyword focus      — deduplicated, lowercase tokens",
+    "5. HyDE hypothetical  — LLM-generated answer (when enabled)",
+    "6. HyPE questions     — pre-stored index questions (when enabled)",
+]
+
+print("=== Query Expansion Layers ===")
+for layer in expansion_layers:
+    print(f"  {layer}")
+```
+
+## Search Modes
+
+Three search modes are available, each with different tradeoffs:
+
+```{python}
+#| error: true
+modes = {
+    "rrf_hybrid": (
+        "Reciprocal Rank Fusion of semantic + BM25",
+        "Balanced — best for most queries"
+    ),
+    "semantic_only": (
+        "Pure cosine similarity on embeddings",
+        "When keywords are irrelevant or misleading"
+    ),
+    "bm25_only": (
+        "Pure keyword matching (BM25, k1=1.5, b=0.75)",
+        "Exact medical terminology lookups"
+    ),
+}
+
+print("=== Search Modes ===")
+for mode, (desc, use_case) in modes.items():
+    print(f"\n  {mode}")
+    print(f"    Method:    {desc}")
+    print(f"    Use case:  {use_case}")
+```
+
+### Retrieval Configuration
+
+```{python}
+#| error: true
+from src.rag.runtime import RetrievalDiversityConfig
+
+default_config = RetrievalDiversityConfig()
+
+print("=== Default RetrievalDiversityConfig ===")
+for field in [
+    "search_mode", "top_k", "overfetch_multiplier",
+    "max_chunks_per_source_page", "max_chunks_per_source",
+    "mmr_lambda", "enable_diversification",
+    "enable_hyde", "enable_hype", "enable_reranking",
+    "enable_query_understanding", "reranking_mode",
+]:
+    print(f"  {field:35s} = {getattr(default_config, field)}")
+```
+
+## Retrieval with Trace
+
+The `retrieve_context_with_trace` function returns the full pipeline trace,
+including timing for each step and scores for each retrieved document.
+
+```{python}
+#| error: true
+from src.rag.runtime import initialize_runtime_index
+
+print("Initializing runtime index...")
+result = initialize_runtime_index()
+print(f"Index status: {result.get('status', 'unknown')}")
+if "total_documents" in result:
+    print(f"Total documents indexed: {result['total_documents']}")
+```
+
+```{python}
+#| error: true
+#| cache: true
+from src.rag.runtime import retrieve_context_with_trace
+
+test_query = "What is the normal range for LDL cholesterol?"
+
+context, sources, trace = retrieve_context_with_trace(
+    query=test_query,
+    top_k=5,
+    retrieval_options={"search_mode": "rrf_hybrid"},
+)
+
+print(f"Query: {test_query}")
+print(f"Retrieved {len(sources)} sources")
+print(f"Total pipeline time: {trace.total_time_ms} ms")
+print()
+
+for step in trace.retrieval.steps:
+    status = "SKIPPED" if step.skipped else f"{step.timing_ms} ms"
+    print(f"  {step.name:25s} {status}")
+    if step.details:
+        for k, v in step.details.items():
+            if isinstance(v, (int, float, str, bool)):
+                print(f"    {k}: {v}")
+```
+
+### Retrieved Sources
+
+```{python}
+#| error: true
+print("=== Retrieved Sources ===")
+for i, source in enumerate(sources[:5], 1):
+    print(f"\n  [{i}] {getattr(source, 'title', 'N/A')}")
+    print(f"      Source: {getattr(source, 'source', 'N/A')}")
+    print(f"      Page:   {getattr(source, 'page', 'N/A')}")
+    print(f"      Score:  {getattr(source, 'relevance_score', 'N/A')}")
+```
+
+## Comparing Search Modes Side-by-Side
+
+```{python}
+#| error: true
+#| cache: true
+from src.rag.runtime import retrieve_context_with_trace
+
+queries_from_fixtures = [
+    "What are normal cholesterol levels?",
+    "Symptoms of iron deficiency",
+]
+
+search_modes = ["rrf_hybrid", "semantic_only", "bm25_only"]
+
+results_comparison = []
+for query in queries_from_fixtures:
+    for mode in search_modes:
+        try:
+            ctx, srcs, trc = retrieve_context_with_trace(
+                query=query,
+                top_k=5,
+                retrieval_options={"search_mode": mode},
+            )
+            results_comparison.append({
+                "query": query,
+                "mode": mode,
+                "sources_found": len(srcs),
+                "time_ms": trc.total_time_ms,
+            })
+        except Exception as e:
+            results_comparison.append({
+                "query": query,
+                "mode": mode,
+                "sources_found": 0,
+                "time_ms": -1,
+                "error": str(e),
+            })
+
+if results_comparison:
+    comp_df = pl.DataFrame(results_comparison)
+    print("=== Search Mode Comparison ===")
+    print(comp_df)
+```
+
+## Reranking
+
+Cross-encoder reranking re-scores the top candidates with a specialized model
+(`BAAI/bge-reranker-base`) for higher precision at the cost of additional latency.
+
+```{python}
+#| error: true
+print("=== Reranking Configuration ===")
+print("  Model:           BAAI/bge-reranker-base")
+print("  Default mode:    cross_encoder")
+print("  Options:         cross_encoder | mmr | both")
+print()
+print("=== Ablation Results (54 queries) ===")
+print()
+print("| Mode               | NDCG@K  | MRR     | Evidence Hit | Latency p50 |")
+print("|--------------------|---------|---------|-------------|-------------|")
+print("| no_reranking       | 0.6813  | 0.6673  | 0.0185      | 237 ms      |")
+print("| cross_encoder_only | 0.7205  | 0.7034  | 0.1852      | 485 ms      |")
+print("| mmr_only           | 0.6647  | 0.6682  | 0.0556      | 538 ms      |")
+print("| both_reranking     | 0.6647  | 0.6682  | 0.0556      | 774 ms      |")
+print()
+print("Cross-encoder reranking: +0.039 NDCG, +0.167 evidence hit rate, ~2× latency.")
+```
+
+### Reranking Demo
+
+```{python}
+#| error: true
+#| cache: true
+from src.rag.runtime import retrieve_context_with_trace
+
+query = "What medications are used to treat hypertension?"
+
+configs = [
+    {"label": "No reranking", "opts": {"enable_reranking": False}},
+    {"label": "Cross-encoder", "opts": {"enable_reranking": True, "reranking_mode": "cross_encoder"}},
+]
+
+for config in configs:
+    try:
+        ctx, srcs, trc = retrieve_context_with_trace(
+            query=query, top_k=5, retrieval_options=config["opts"],
+        )
+        print(f"\n  [{config['label']}] — {trc.total_time_ms} ms, {len(srcs)} sources")
+        for s in srcs[:3]:
+            title = getattr(s, 'title', 'N/A')
+            score = getattr(s, 'relevance_score', 'N/A')
+            print(f"    {title} (score: {score})")
+    except Exception as e:
+        print(f"\n  [{config['label']}] — error: {e}")
+```
+
+## Diversification
+
+MMR (Maximal Marginal Relevance) balances relevance against diversity to avoid
+returning multiple chunks from the same source page.
+
+```{python}
+#| error: true
+print("=== Diversification Parameters ===")
+print()
+print("  mmr_lambda (0.0–1.0, default 0.75)")
+print("    1.0 = pure relevance (no diversity)")
+print("    0.0 = pure diversity (ignore relevance)")
+print("    0.75 = mostly relevant with some diversity")
+print()
+print("  max_chunks_per_source_page (default 2)")
+print("    Caps chunks from the same page of the same source.")
+print()
+print("  max_chunks_per_source (default 3)")
+print("    Caps chunks from the same source document.")
+print()
+print("  overfetch_multiplier (default 4)")
+print("    Fetch 4×k candidates before diversification pruning.")
+```
+
+## Full Retrieval with All Features
+
+```{python}
+#| error: true
+#| cache: true
+from src.rag.runtime import retrieve_context_with_trace
+
+query = "What are the risk factors for cardiovascular disease?"
+
+full_opts = {
+    "search_mode": "rrf_hybrid",
+    "enable_reranking": True,
+    "reranking_mode": "cross_encoder",
+    "enable_query_understanding": True,
+    "enable_diversification": True,
+}
+
+ctx, srcs, trc = retrieve_context_with_trace(
+    query=query, top_k=5, retrieval_options=full_opts,
+)
+
+print(f"Query: {query}")
+print(f"Sources: {len(srcs)}, Time: {trc.total_time_ms} ms")
+print()
+print("=== Pipeline Trace ===")
+for step in trc.retrieval.steps:
+    status = "SKIPPED" if step.skipped else f"{step.timing_ms} ms"
+    print(f"  {step.name:25s} {status}")
+```

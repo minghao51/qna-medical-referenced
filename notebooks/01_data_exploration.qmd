@@ -1,0 +1,164 @@
+---
+title: "Data Exploration"
+description: "Explore the medallion data layers (Bronze, Silver, Gold) in the medical Q&A pipeline"
+date: today
+format:
+  html:
+    self-contained: true
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+---
+
+The medical Q&A system uses a **medallion architecture** with three data layers.
+Raw documents land in the **Bronze** layer, get parsed into structured records in
+**Silver**, and emerge as chunked, enriched documents in **Gold**. This notebook
+walks through each layer to understand what data is available and its shape.
+
+## Setup
+
+```{python}
+#| error: true
+from pathlib import Path
+
+import polars as pl
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data"
+```
+
+## Bronze Layer (Raw Downloads)
+
+The Bronze layer stores raw downloaded files — HTML pages, PDFs, and any other
+source material. No parsing or transformation has occurred yet.
+
+```{python}
+#| error: true
+bronze_dir = DATA_DIR / "01_bronze"
+if bronze_dir.exists():
+    print("Bronze layer contents:")
+    for item in sorted(bronze_dir.rglob("*")):
+        if item.is_file():
+            size_kb = item.stat().st_size / 1024
+            print(f"  {item.relative_to(bronze_dir)} ({size_kb:.1f} KB)")
+else:
+    print("Bronze layer not yet populated. Run: uv run python -m src.cli.ingest")
+```
+
+## Silver Layer (Parsed Documents)
+
+The Silver layer contains parsed documents extracted from raw sources. PDFs become
+structured text with page boundaries; HTML is converted to Markdown. Each record
+tracks its source, page number, and extraction metadata.
+
+```{python}
+#| error: true
+silver_dir = DATA_DIR / "02_silver"
+
+pdf_docs_path = silver_dir / "documents" / "pdf_documents.parquet"
+md_docs_path = silver_dir / "documents" / "markdown_documents.parquet"
+
+if pdf_docs_path.exists():
+    pdf_df = pl.read_parquet(pdf_docs_path)
+    print(f"PDF documents: {len(pdf_df)}")
+    print(f"Columns: {pdf_df.columns}")
+    print(pdf_df.head(3))
+else:
+    print("No PDF documents yet. Run ingestion pipeline first.")
+```
+
+```{python}
+#| error: true
+if md_docs_path.exists():
+    md_df = pl.read_parquet(md_docs_path)
+    print(f"Markdown documents: {len(md_df)}")
+    print(f"Columns: {md_df.columns}")
+    print(md_df.head(3))
+else:
+    print("No Markdown documents yet.")
+```
+
+## Gold Layer (Chunks)
+
+The Gold layer is where documents become retrieval-ready chunks. Raw chunks are
+split by the configured strategy (recursive, semantic, etc.), and enriched chunks
+add hypothetical questions, keywords, and summaries.
+
+```{python}
+#| error: true
+gold_dir = DATA_DIR / "03_gold"
+chunks_path = gold_dir / "chunks" / "raw_chunks.parquet"
+enriched_path = gold_dir / "chunks" / "enriched_chunks.parquet"
+
+if chunks_path.exists():
+    chunks_df = pl.read_parquet(chunks_path)
+    print(f"Raw chunks: {len(chunks_df)}")
+    print(f"Columns: {chunks_df.columns}")
+else:
+    print("No raw chunks yet. Run ingestion pipeline first.")
+    chunks_df = None
+```
+
+```{python}
+#| error: true
+if enriched_path and enriched_path.exists():
+    enriched_df = pl.read_parquet(enriched_path)
+    print(f"Enriched chunks: {len(enriched_df)}")
+    print(f"Columns: {enriched_df.columns}")
+else:
+    enriched_df = None
+    print("No enriched chunks yet.")
+```
+
+## Chunk Quality Analysis
+
+Each chunk receives a quality score based on content length, structure, and
+information density. Here we examine the distribution of those scores.
+
+```{python}
+#| error: true
+if chunks_df is not None:
+    print("=== Chunk Quality Analysis ===")
+    print(f"Total chunks: {len(chunks_df)}")
+
+    if "quality_score" in chunks_df.columns:
+        print("\nQuality score distribution:")
+        print(chunks_df.select("quality_score").describe())
+
+    if "content" in chunks_df.columns:
+        lengths = chunks_df.select("content").to_series().str.len_chars()
+        print(f"\nAverage chunk length: {lengths.mean():.0f} characters")
+        print(f"Median chunk length: {lengths.median():.0f} characters")
+        print(f"Min: {lengths.min()}, Max: {lengths.max()}")
+```
+
+## Source Distribution
+
+Chunks come from multiple source documents. Understanding the distribution helps
+ensure retrieval isn't biased toward one source.
+
+```{python}
+#| error: true
+if chunks_df is not None and "source" in chunks_df.columns:
+    source_counts = chunks_df.group_by("source").len().sort("len", descending=True)
+    print("=== Source Distribution ===")
+    print(source_counts)
+```
+
+## Layer Summary
+
+```{python}
+#| error: true
+print("=== Data Layer Summary ===")
+for layer_name, layer_dir in [
+    ("Bronze (raw)", DATA_DIR / "01_bronze"),
+    ("Silver (parsed)", DATA_DIR / "02_silver"),
+    ("Gold (chunks)", DATA_DIR / "03_gold"),
+]:
+    if layer_dir.exists():
+        file_count = sum(1 for _ in layer_dir.rglob("*") if _.is_file())
+        total_size = sum(f.stat().st_size for f in layer_dir.rglob("*") if f.is_file())
+        print(f"  {layer_name}: {file_count} files, {total_size / 1024:.1f} KB")
+    else:
+        print(f"  {layer_name}: not populated")
+```

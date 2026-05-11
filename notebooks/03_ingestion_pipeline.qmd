@@ -1,0 +1,270 @@
+---
+title: "Ingestion Pipeline"
+description: "Walk through the full ingestion DAG: download, extract, chunk, enrich, embed, and index"
+date: today
+format:
+  html:
+    self-contained: true
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+---
+
+The ingestion pipeline transforms raw medical documents (PDFs, HTML, CSVs) into
+a hybrid vector index ready for retrieval. It follows a medallion architecture
+with six stages (L0–L5), each producing validated intermediate data. This notebook
+demonstrates each stage using the project's actual modules.
+
+## Pipeline Overview
+
+```
+L0: Download → L1: Extract → L2: Structure → L3: Chunk + HyPE → L4: Reference → L5: Index
+```
+
+```{python}
+#| error: true
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data"
+```
+
+## Stage L0-L1: Download and Extraction
+
+Raw sources are downloaded and converted to a common text format. PDFs are
+extracted using PyMuPDF (primary) with pdfplumber fallback. HTML sources are
+converted to Markdown.
+
+```{python}
+#| error: true
+from src.config.settings import get_settings
+
+settings = get_settings()
+print(f"Storage data dir:    {settings.storage.data_dir}")
+print(f"Collection name:     {settings.storage.collection_name}")
+print(f"Embedding model:     {settings.llm.embedding_model}")
+print(f"PDF extractor:       pymupdf_pdfplumber (default)")
+```
+
+### PDF Extraction Strategies
+
+Two extraction strategies are available:
+
+| Strategy | Primary | Fallback | Best For |
+|----------|---------|----------|----------|
+| `pymupdf_pdfplumber` | PyMuPDF | pdfplumber | Complex layouts (recommended) |
+| `pypdf_pdfplumber` | pypdf | pdfplumber | Simpler documents |
+
+```{python}
+#| error: true
+from src.ingestion.steps.load_pdfs import set_pdf_extractor_strategy, set_pdf_table_extractor
+
+print("PDF extraction configured: pymupdf_pdfplumber (default)")
+print("Table extraction configured: heuristic (default)")
+print()
+print("Available strategies:")
+print("  set_pdf_extractor_strategy('pymupdf_pdfplumber')  # Better text accuracy")
+print("  set_pdf_extractor_strategy('pypdf_pdfplumber')     # Faster, lower memory")
+print()
+print("Table strategies:")
+print("  set_pdf_table_extractor('heuristic')  # Rule-based, fast")
+print("  set_pdf_table_extractor('camelot')    # Structured table extraction")
+```
+
+## Stage L2-L3: Chunking
+
+The chunking stage splits documents into retrieval-sized pieces. The `TextChunker`
+supports multiple strategies with configurable size, overlap, and quality thresholds.
+
+```{python}
+#| error: true
+from src.ingestion.chunking.core import TextChunker
+from src.ingestion.chunking.config import DEFAULT_SOURCE_CHUNK_CONFIGS
+
+print("=== Default Chunk Configs ===")
+for source_type, cfg in DEFAULT_SOURCE_CHUNK_CONFIGS.items():
+    print(f"  {source_type:12s}: size={cfg['chunk_size']:3d}, "
+          f"overlap={cfg['chunk_overlap']:2d}, "
+          f"strategy={cfg['strategy']}, "
+          f"min_size={cfg['min_chunk_size']}")
+```
+
+### Chunking Strategy Demo
+
+Let's compare how different strategies handle a sample medical text block:
+
+```{python}
+#| error: true
+sample_text = """
+Hypertension Management Guidelines
+
+Stage 1 hypertension is defined as a systolic blood pressure of 130-139 mmHg
+or a diastolic blood pressure of 80-89 mmHg. First-line treatment typically
+includes lifestyle modifications such as dietary changes, exercise, and stress
+management.
+
+For patients with stage 2 hypertension (systolic ≥140 mmHg or diastolic ≥90 mmHg),
+pharmacological intervention is recommended. Common first-line medications include:
+- Thiazide diuretics
+- ACE inhibitors
+- Calcium channel blockers
+- Angiotensin II receptor blockers (ARBs)
+
+Monitoring should occur every 3-6 months after initial diagnosis. Target blood
+pressure is generally <130/80 mmHg for most adults, though individual targets may
+vary based on comorbidities and age.
+
+Reference ranges for lipid panel:
+- Total cholesterol: <200 mg/dL (desirable)
+- LDL cholesterol: <100 mg/dL (optimal)
+- HDL cholesterol: >40 mg/dL (men), >50 mg/dL (women)
+- Triglycerides: <150 mg/dL (normal)
+""".strip()
+
+from src.ingestion.chunking.core import TextChunker
+
+chunker = TextChunker(
+    chunk_size=256,
+    chunk_overlap=32,
+    strategy="custom_recursive",
+    min_chunk_size=50,
+)
+chunks = chunker.chunk_text(sample_text, source_type="markdown")
+print(f"custom_recursive produced {len(chunks)} chunks:")
+for i, chunk in enumerate(chunks):
+    content = chunk.get("content", "") if isinstance(chunk, dict) else str(chunk)
+    print(f"\n  Chunk {i+1} ({len(content)} chars):")
+    print(f"  {content[:120]}...")
+```
+
+### Strategy Characteristics
+
+| Strategy | Boundary Detection | Embeddings Needed | Speed | Quality |
+|----------|-------------------|-------------------|-------|---------|
+| `custom_recursive` | `\n\n` → `\n` → sentences → words | No | Fast | Good |
+| `chonkie_recursive` | Chonkie Pipeline + overlap refinement | No | Medium | Better |
+| `chonkie_semantic` | Embedding similarity boundaries | Yes (Qwen) | Slow | Best |
+| `medical_semantic` | Medical-aware semantic boundaries | Yes (Qwen) | Slow | Same as `chonkie_semantic` |
+
+**Finding**: The ablation study showed `medical_semantic` produced identical retrieval
+metrics to `chonkie_semantic` — no measurable quality difference. See notebook 05
+for the full analysis.
+
+## Stage L3.5: Enrichment (Optional)
+
+Enrichment adds metadata to chunks that can improve BM25 matching. Three enrichment
+types are available:
+
+```{python}
+#| error: true
+from src.config.settings import get_settings
+
+settings = get_settings()
+print("=== Enrichment Configuration ===")
+print(f"  Keyword extraction: {settings.enrichment.enable_keyword_extraction}")
+print(f"  Chunk summaries:    {settings.enrichment.enable_chunk_summaries}")
+print(f"  HyPE enabled:       {settings.hyde.hype_enabled}")
+print(f"  HyPE sample rate:   {settings.hyde.hype_sample_rate}")
+print(f"  HyPE max chunks:    {settings.hyde.hype_max_chunks}")
+print(f"  HyPE questions/chunk: {settings.hyde.hype_questions_per_chunk}")
+```
+
+### HyPE (Hypothetical Prompt Embeddings)
+
+HyPE generates questions each chunk could answer at index time. These questions
+are stored in chunk metadata and matched at query time for zero additional LLM cost.
+
+```{python}
+#| error: true
+print("HyPE generates questions like:")
+print('  "What is the target blood pressure for adults?"')
+print('  "What medications treat stage 2 hypertension?"')
+print()
+print("These are stored in chunk metadata and matched via token overlap")
+print("at retrieval time — no LLM call needed per query.")
+print()
+print("HyDE (query-time alternative) generates a hypothetical answer for")
+print("each query via LLM — adds latency but adapts to query phrasing.")
+print()
+print("| Aspect        | HyPE (index-time)  | HyDE (query-time)  |")
+print("|---------------|--------------------|--------------------|")
+print("| LLM cost      | ~10% of chunks once | Every query        |")
+print("| Latency       | Zero additional     | +1 LLM call/query  |")
+print("| Ablation result| No quality gain    | No quality gain    |")
+```
+
+**Finding**: Neither HyPE nor HyDE improved retrieval on the 54-query benchmark.
+All variants produced identical NDCG@K (0.6813). See notebook 05 for details.
+
+## Stage L4: Reference Data
+
+Lab reference ranges are loaded from CSV and added to the index as specialized
+chunks with structured metadata.
+
+```{python}
+#| error: true
+ref_dir = DATA_DIR / "raw"
+csv_files = list(ref_dir.glob("*.csv")) if ref_dir.exists() else []
+print(f"Reference CSV files: {len(csv_files)}")
+for f in csv_files:
+    print(f"  {f.name}")
+```
+
+## Stage L5: Vector Indexing
+
+The final stage embeds all chunks using Qwen `text-embedding-v4` (768 dimensions)
+and stores them in a hybrid index with both semantic (cosine) and BM25 keyword
+scoring.
+
+```{python}
+#| error: true
+from src.ingestion.indexing.vector_store import ChromaVectorStore
+
+print("=== Vector Store Configuration ===")
+print("  Backend:       ChromaDB (in-memory + JSON persistence)")
+print("  Embedding:     Qwen text-embedding-v4, 768-dim")
+print("  Semantic weight: 0.6")
+print("  Keyword weight:  0.2")
+print("  Source boost:    0.2")
+print("  BM25 params:     k1=1.5, b=0.75")
+print()
+print("Scoring formula (rrf_hybrid):")
+print("  combined = 0.6 * semantic + 0.2 * bm25 + 0.2 * source_prior")
+print("  RRF fuse: score = Σ 1/(60 + rank) across semantic + keyword rankings")
+```
+
+### Run the Full Pipeline
+
+```{python}
+#| error: true
+from src.ingestion.pipeline import build_ingestion_pipeline, execute_pipeline
+
+print("To run the full ingestion pipeline:")
+print()
+print("  from src.ingestion.pipeline import build_ingestion_pipeline, execute_pipeline")
+print()
+print("  dr = build_ingestion_pipeline(")
+print("      project_root=PROJECT_ROOT,")
+print("      enable_hype=False,")
+print("      enable_keyword_extraction=False,")
+print("      enable_chunk_summaries=False,")
+print("  )")
+print("  results = execute_pipeline(dr)")
+print()
+print("This executes L0→L5 and writes output to data/03_gold/ and data/vectors/.")
+```
+
+### Inspect Existing Index
+
+```{python}
+#| error: true
+vectors_dir = DATA_DIR / "vectors"
+if vectors_dir.exists():
+    index_files = list(vectors_dir.glob("*.json"))
+    print(f"Index files: {len(index_files)}")
+    for f in sorted(index_files):
+        size_kb = f.stat().st_size / 1024
+        print(f"  {f.name} ({size_kb:.1f} KB)")
+else:
+    print("No vector index found. Run ingestion pipeline first.")
+```

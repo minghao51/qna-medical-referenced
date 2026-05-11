@@ -1,0 +1,195 @@
+---
+title: "Chunking Strategy Analysis"
+description: "Analyze different chunking strategies, chunk quality, and raw vs enriched comparison"
+date: today
+format:
+  html:
+    self-contained: true
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+---
+
+Chunking is the most impactful stage in the ingestion pipeline. The choice of
+strategy — recursive splitting, semantic boundary detection, or late chunking —
+directly affects retrieval quality. This notebook analyzes the chunk output from
+different strategies, compares raw vs enriched chunks, and examines quality metrics.
+
+## Setup
+
+```{python}
+#| error: true
+from pathlib import Path
+
+import polars as pl
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data"
+```
+
+## Load Gold Layer Chunks
+
+```{python}
+#| error: true
+gold_chunks_dir = DATA_DIR / "03_gold" / "chunks"
+raw_chunks_path = gold_chunks_dir / "raw_chunks.parquet"
+enriched_chunks_path = gold_chunks_dir / "enriched_chunks.parquet"
+
+if raw_chunks_path.exists():
+    raw_df = pl.read_parquet(raw_chunks_path)
+    print(f"Raw chunks loaded: {len(raw_df)}")
+else:
+    raw_df = None
+    print("No raw chunks found. Run ingestion pipeline first.")
+
+if enriched_chunks_path.exists():
+    enriched_df = pl.read_parquet(enriched_chunks_path)
+    print(f"Enriched chunks loaded: {len(enriched_df)}")
+else:
+    enriched_df = None
+    print("No enriched chunks found.")
+```
+
+## Chunk Length Distribution
+
+Chunk size affects both embedding quality and retrieval granularity. Too small
+and context is lost; too large and similarity scores become noisy.
+
+```{python}
+#| error: true
+if raw_df is not None and "content" in raw_df.columns:
+    lengths = raw_df.select("content").to_series().str.len_chars()
+    print("=== Chunk Length Statistics ===")
+    print(f"  Min:    {lengths.min()}")
+    print(f"  Max:    {lengths.max()}")
+    print(f"  Mean:   {lengths.mean():.0f}")
+    print(f"  Median: {lengths.median():.0f}")
+    print(f"  Std:    {lengths.std():.0f}")
+```
+
+```{python}
+#| error: true
+import matplotlib.pyplot as plt
+
+if raw_df is not None and "content" in raw_df.columns:
+    lengths = raw_df.select("content").to_series().str.len_chars().to_list()
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.hist(lengths, bins=50, edgecolor="black", alpha=0.7)
+    ax.axvline(x=512, color="red", linestyle="--", label="Default chunk_size (512)")
+    ax.set_xlabel("Chunk Length (characters)")
+    ax.set_ylabel("Count")
+    ax.set_title("Chunk Length Distribution")
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
+```
+
+## Chunking Strategy Comparison
+
+The pipeline supports four chunking strategies. Here we compare their characteristics
+using the configured defaults:
+
+| Strategy | Type | Overlap | Embeddings Required |
+|----------|------|---------|-------------------|
+| `custom_recursive` | Recursive text splitting | Yes | No |
+| `chonkie_recursive` | Chonkie's Pipeline | Yes | No |
+| `chonkie_semantic` | Chonkie SemanticChunker | Manual | Yes (Qwen) |
+| `chonkie_late` | Chonkie LateChunker | Manual | Yes (Qwen) |
+
+```{python}
+#| error: true
+from src.ingestion.chunking.config import DEFAULT_SOURCE_CHUNK_CONFIGS, RECOMMENDED_STRATEGIES
+
+print("=== Default Chunk Configs Per Source Type ===")
+for source_type, config in DEFAULT_SOURCE_CHUNK_CONFIGS.items():
+    print(f"  {source_type}: chunk_size={config['chunk_size']}, "
+          f"overlap={config['chunk_overlap']}, strategy={config['strategy']}, "
+          f"min_size={config['min_chunk_size']}")
+
+print("\n=== Recommended Strategies ===")
+for source_type, strategy in RECOMMENDED_STRATEGIES.items():
+    print(f"  {source_type} → {strategy}")
+```
+
+## Chunk Quality Scores
+
+Each chunk receives a quality score (0–1) based on text density, structure, and
+information content. Chunks below a threshold (0.45) are filtered out.
+
+```{python}
+#| error: true
+if raw_df is not None and "quality_score" in raw_df.columns:
+    scores = raw_df.select("quality_score").to_series().to_list()
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.hist(scores, bins=30, edgecolor="black", alpha=0.7, color="steelblue")
+    ax.axvline(x=0.45, color="red", linestyle="--", label="Quality threshold (0.45)")
+    ax.set_xlabel("Quality Score")
+    ax.set_ylabel("Count")
+    ax.set_title("Chunk Quality Score Distribution")
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
+
+    below_threshold = sum(1 for s in scores if s < 0.45)
+    print(f"Chunks below quality threshold: {below_threshold} / {len(scores)} "
+          f"({below_threshold/len(scores)*100:.1f}%)")
+```
+
+## Compare Raw vs Enriched Chunks
+
+Enrichment adds hypothetical questions (HyPE), extracted keywords, and summaries
+to each chunk. These can improve BM25 matching but add processing cost.
+
+```{python}
+#| error: true
+if raw_df is not None and enriched_df is not None:
+    print("=== Raw vs Enriched Comparison ===")
+    print(f"  Raw chunks:      {len(raw_df)}")
+    print(f"  Enriched chunks: {len(enriched_df)}")
+
+    if "hypothetical_questions" in enriched_df.columns:
+        with_hype = enriched_df.filter(
+            pl.col("hypothetical_questions").list.len() > 0
+        )
+        print(f"  Chunks with HyPE: {len(with_hype)}")
+
+        if len(with_hype) > 0:
+            avg_questions = (
+                with_hype.select("hypothetical_questions")
+                .to_series()
+                .list.len()
+                .mean()
+            )
+            print(f"  Avg questions per chunk: {avg_questions:.1f}")
+
+    if "extracted_keywords" in enriched_df.columns:
+        with_keywords = enriched_df.filter(
+            pl.col("extracted_keywords").list.len() > 0
+        )
+        print(f"  Chunks with keywords: {len(with_keywords)}")
+
+    if "summary" in enriched_df.columns:
+        with_summary = enriched_df.filter(pl.col("summary").is_not_null())
+        print(f"  Chunks with summaries: {len(with_summary)}")
+```
+
+## Section Path Analysis
+
+Chunks track their location within the source document via `section_path`. This
+helps understand whether chunking preserves document structure.
+
+```{python}
+#| error: true
+if raw_df is not None and "section_path" in raw_df.columns:
+    section_counts = (
+        raw_df.filter(pl.col("section_path").is_not_null())
+        .group_by("section_path")
+        .len()
+        .sort("len", descending=True)
+        .head(15)
+    )
+    print("=== Top 15 Sections by Chunk Count ===")
+    print(section_counts)
+```
