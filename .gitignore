@@ -64,3 +64,10 @@ node_modules/
 .svelte-kit/
 *.tsbuildinfo
 frontend/package-lock.json
+
+# MkDocs build output
+site/
+
+# Quarto intermediate
+*.quarto_ipynb
+.jupyter_cache/
