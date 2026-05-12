@@ -32,8 +32,8 @@ class EvaluationService(BaseService):
         super().__init__()
         self._evals_dir = evals_dir
         self._latest_pointer = latest_pointer
-        self._comprehensive_ablation_dir = (
-            comprehensive_ablation_dir or Path("data/evals_comprehensive_ablation")
+        self._comprehensive_ablation_dir = comprehensive_ablation_dir or Path(
+            "data/evals_comprehensive_ablation"
         )
 
     def list_run_dirs(self) -> list[Path]:
@@ -181,7 +181,9 @@ class EvaluationService(BaseService):
         return {"ablation_runs": ablation_runs}
 
     def local_history_runs(self, limit: int) -> list[dict[str, Any]]:
-        runs = [run_dir for run_dir in self.list_run_dirs() if self.is_valid_local_run(run_dir)][:limit]
+        runs = [run_dir for run_dir in self.list_run_dirs() if self.is_valid_local_run(run_dir)][
+            :limit
+        ]
         result_runs = []
         for run_dir in runs:
             summary = self.read_summary(run_dir)
@@ -214,9 +216,15 @@ class EvaluationService(BaseService):
                     "source": "local",
                     "experiment_name": (experiment_cfg.get("metadata") or {}).get("name"),
                     "variant_name": experiment_cfg.get("variant_name"),
-                    "index_config_hash": (manifest.get("experiment") or {}).get("index_config_hash"),
-                    "wandb_url": (((summary.get("tracking") or {}).get("wandb") or {}).get("run_url")),
-                    "wandb_run_id": (((summary.get("tracking") or {}).get("wandb") or {}).get("run_id")),
+                    "index_config_hash": (manifest.get("experiment") or {}).get(
+                        "index_config_hash"
+                    ),
+                    "wandb_url": (
+                        ((summary.get("tracking") or {}).get("wandb") or {}).get("run_url")
+                    ),
+                    "wandb_run_id": (
+                        ((summary.get("tracking") or {}).get("wandb") or {}).get("run_id")
+                    ),
                     "dedup": summary.get("dedup", {}),
                     "tracking": summary.get("tracking", {}),
                 }
@@ -247,7 +255,8 @@ class EvaluationService(BaseService):
                 metrics_tracking["duration_s"].append(duration)
         return {
             "total_runs": len(runs),
-            "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"]) / len(metrics_tracking["hit_rate_at_k"])
+            "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"])
+            / len(metrics_tracking["hit_rate_at_k"])
             if metrics_tracking["hit_rate_at_k"]
             else 0,
             "avg_mrr": sum(metrics_tracking["mrr"]) / len(metrics_tracking["mrr"])
@@ -257,7 +266,8 @@ class EvaluationService(BaseService):
             / len(metrics_tracking["latency_p50_ms"])
             if metrics_tracking["latency_p50_ms"]
             else 0,
-            "avg_duration": sum(metrics_tracking["duration_s"]) / len(metrics_tracking["duration_s"])
+            "avg_duration": sum(metrics_tracking["duration_s"])
+            / len(metrics_tracking["duration_s"])
             if metrics_tracking["duration_s"]
             else 0,
             "sources": source_breakdown,
@@ -377,13 +387,16 @@ class EvaluationService(BaseService):
 
         dimensions = {
             "pdf_extraction": [
-                run for run in runs if run["variant"] in ("baseline", "pdf_pymupdf", "pdf_pymupdf_camelot")
+                run
+                for run in runs
+                if run["variant"] in ("baseline", "pdf_pymupdf", "pdf_pymupdf_camelot")
             ],
             "html_extraction": [run for run in runs if run["variant"].startswith("html_")],
             "chunking_strategy": [
                 run
                 for run in runs
-                if run["variant"].startswith("chunk_") and not run["variant"].startswith("chunksize_")
+                if run["variant"].startswith("chunk_")
+                and not run["variant"].startswith("chunksize_")
             ],
             "chunk_size": [run for run in runs if run["variant"].startswith("chunksize_")],
             "retrieval": [run for run in runs if run["variant"].startswith("retrieval_")],

@@ -24,9 +24,7 @@ logger = logging.getLogger(__name__)
 _PROFILE_REGISTRY: dict[str, dict[str, Any]] = {}
 
 
-def _load_profile_from_experiment(
-    config_path: str, variant_name: str
-) -> dict[str, Any] | None:
+def _load_profile_from_experiment(config_path: str, variant_name: str) -> dict[str, Any] | None:
     """Load a variant config from an experiment YAML file."""
     try:
         from src.experiments.config import resolve_experiment_runs
@@ -110,7 +108,7 @@ def apply_production_profile(name: str | None = None) -> bool:
             logger.warning(f"Production profile '{name}' not found, using defaults")
         return False
 
-    from src.rag.runtime import configure_runtime_for_experiment
+    from src.rag.index import configure_runtime_for_experiment
 
     configure_runtime_for_experiment(profile)
     logger.info(f"Applied production profile: {name}")

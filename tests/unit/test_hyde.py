@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
+from src.rag.config import resolve_retrieval_config
 from src.rag.hyde import (
     expand_query_with_hyde,
     expand_query_with_hyde_async,
@@ -21,10 +22,7 @@ from src.rag.hyde import (
     should_enable_hyde,
     validate_hyde_config,
 )
-from src.rag.runtime import (
-    _resolve_retrieval_config,
-    retrieve_context_with_trace_async,
-)
+from src.rag.runtime import retrieve_context_with_trace_async
 
 # =============================================================================
 # HyDE Generation Tests
@@ -317,7 +315,7 @@ async def test_hyde_backward_compatibility():
 @pytest.mark.asyncio
 async def test_runtime_config_with_hyde():
     """Test that runtime config properly handles HyDE settings."""
-    config = _resolve_retrieval_config(
+    config = resolve_retrieval_config(
         {
             "enable_hyde": True,
             "hyde_max_length": 300,
@@ -331,7 +329,7 @@ async def test_runtime_config_with_hyde():
 @pytest.mark.asyncio
 async def test_runtime_config_defaults_hyde_disabled():
     """Test that HyDE is disabled by default in runtime config."""
-    config = _resolve_retrieval_config(None)
+    config = resolve_retrieval_config(None)
 
     assert config.enable_hyde is False
     assert config.hyde_max_length == 200

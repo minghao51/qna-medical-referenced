@@ -3,7 +3,7 @@
 import pytest
 
 from src.ingestion.pipeline import build_ingestion_pipeline, execute_pipeline
-from src.rag.runtime import initialize_runtime_index
+from src.rag import initialize_runtime_index
 
 
 @pytest.fixture(scope="session")
@@ -72,6 +72,7 @@ async def test_hamilton_e2e_complete_pipeline(hamilton_setup):
 
     # Verify vector store is populated
     from src.ingestion.indexing.vector_store import get_vector_store
+
     vector_store = get_vector_store()
     stats = vector_store.get_stats()
     assert stats["document_count"] > 0
@@ -88,7 +89,9 @@ async def test_hamilton_e2e_complete_pipeline(hamilton_setup):
     )
 
     # Verify same results (idempotent)
-    assert results2["write_gold_chunks"]["chunk_count"] == results["write_gold_chunks"]["chunk_count"]
+    assert (
+        results2["write_gold_chunks"]["chunk_count"] == results["write_gold_chunks"]["chunk_count"]
+    )
     assert results2["embed_chunks"][0]["attempted"] == embed_stats["attempted"]
 
 

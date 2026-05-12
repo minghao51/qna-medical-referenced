@@ -29,7 +29,8 @@ from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 from src.ingestion.indexing.vector_store import get_vector_store, set_vector_store_runtime_config
 from src.ingestion.steps.chunk_text import chunk_documents
 from src.ingestion.steps.load_pdfs import get_documents
-from src.rag.runtime import initialize_runtime_index, retrieve_context_with_trace
+from src.rag import initialize_runtime_index
+from src.rag.runtime import retrieve_context_with_trace
 
 pytestmark = [pytest.mark.e2e_real_apis, pytest.mark.slow]
 

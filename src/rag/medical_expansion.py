@@ -31,7 +31,9 @@ class MedicalExpansionProvider(Protocol):
 
     provider_name: str
 
-    def expand(self, query: str, *, base_queries: list[str] | None = None) -> list[MedicalExpansion]:
+    def expand(
+        self, query: str, *, base_queries: list[str] | None = None
+    ) -> list[MedicalExpansion]:
         """Return normalized medical expansion terms for a query."""
 
 

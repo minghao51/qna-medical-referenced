@@ -140,7 +140,7 @@ class TestDiversityConcurrency:
 
     def test_concurrent_diversify_calls(self):
         """Multiple threads calling _diversify_results should not interfere."""
-        from src.rag.runtime import _diversify_results
+        from src.rag.diversification import diversify_results
 
         results = [
             {
@@ -158,7 +158,7 @@ class TestDiversityConcurrency:
 
         def diversify():
             try:
-                output = _diversify_results(
+                output = diversify_results(
                     results,
                     top_k=5,
                     max_chunks_per_source_page=2,

@@ -1,30 +1,32 @@
 from src.evals.assessment.retrieval_eval import reranking_ablation_configs
+from src.rag import query_expansion as query_exp_mod
+from src.rag import retrieval as ret_mod
 from src.rag import runtime
+from src.rag.config import RetrievalDiversityConfig, should_apply_diversification
 from src.rag.medical_expansion import MedicalExpansion
-from src.rag.runtime import RetrievalDiversityConfig, _should_apply_diversification
 
 
-def test_should_apply_diversification_matches_reranking_mode():
+def testshould_apply_diversification_matches_reranking_mode():
     assert (
-        _should_apply_diversification(
+        should_apply_diversification(
             RetrievalDiversityConfig(enable_diversification=True, reranking_mode="cross_encoder")
         )
         is False
     )
     assert (
-        _should_apply_diversification(
+        should_apply_diversification(
             RetrievalDiversityConfig(enable_diversification=True, reranking_mode="mmr")
         )
         is True
     )
     assert (
-        _should_apply_diversification(
+        should_apply_diversification(
             RetrievalDiversityConfig(enable_diversification=True, reranking_mode="both")
         )
         is True
     )
     assert (
-        _should_apply_diversification(
+        should_apply_diversification(
             RetrievalDiversityConfig(enable_diversification=False, reranking_mode="both")
         )
         is False
@@ -53,16 +55,17 @@ def test_reranking_ablation_configs_define_distinct_modes():
 def test_retrieve_context_applies_cross_encoder_without_mmr(monkeypatch):
     monkeypatch.setattr(runtime, "initialize_runtime_index", lambda: None)
     monkeypatch.setattr(runtime, "get_vector_store", lambda: object())
-    monkeypatch.setattr(runtime, "_expand_queries", lambda query: [query])
+    monkeypatch.setattr(query_exp_mod, "expand_lexical_queries", lambda query: [query])
+    monkeypatch.setattr(query_exp_mod, "expand_medical_terms", lambda *a, **kw: [])
     monkeypatch.setattr(
         runtime,
         "_extend_with_hype_questions",
         lambda vector_store, query, expanded_queries, enable_hype: (expanded_queries, []),
     )
     monkeypatch.setattr(
-        runtime,
-        "_retrieve_candidates_with_trace",
-        lambda vector_store, query, fetch_k, search_mode, pre_expanded_queries: (
+        ret_mod,
+        "retrieve_candidates_with_trace",
+        lambda vector_store, query, fetch_k, search_mode, pre_expanded_queries=None: (
             [
                 {
                     "id": "a",
@@ -77,7 +80,7 @@ def test_retrieve_context_applies_cross_encoder_without_mmr(monkeypatch):
             ],
             {
                 "timing_ms": 0,
-                "expanded_queries": pre_expanded_queries,
+                "expanded_queries": pre_expanded_queries or [query],
                 "result_count": 1,
                 "score_weights": {},
             },
@@ -110,10 +113,9 @@ def test_retrieve_context_applies_cross_encoder_without_mmr(monkeypatch):
         seen["enable_diversification"] = kwargs["enable_diversification"]
         return results[:top_k]
 
-    monkeypatch.setattr(runtime, "_diversify_results", fake_diversify)
+    monkeypatch.setattr(runtime, "diversify_results", fake_diversify)
     monkeypatch.setattr(
-        runtime,
-        "build_context_and_sources",
+        "src.rag.formatting.build_context_and_sources",
         lambda results: ("context", ["s1.pdf"], [{"label": "s1.pdf"}]),
     )
 
@@ -139,9 +141,9 @@ def test_retrieve_context_with_trace_reports_medical_expansion_and_rerank_contro
         lambda vector_store, query, expanded_queries, enable_hype: (expanded_queries, []),
     )
     monkeypatch.setattr(
-        runtime,
-        "_retrieve_candidates_with_trace",
-        lambda vector_store, query, fetch_k, search_mode, pre_expanded_queries: (
+        ret_mod,
+        "retrieve_candidates_with_trace",
+        lambda vector_store, query, fetch_k, search_mode, pre_expanded_queries=None: (
             [
                 {
                     "id": "a",
@@ -168,7 +170,9 @@ def test_retrieve_context_with_trace_reports_medical_expansion_and_rerank_contro
         provider_name = "stub"
 
         def expand(self, query, *, base_queries=None):
-            return [MedicalExpansion(term="hypertension guideline", source="stub", relation="synonym")]
+            return [
+                MedicalExpansion(term="hypertension guideline", source="stub", relation="synonym")
+            ]
 
     class StubReranker:
         def rerank(self, *, query, results, top_k, min_score=None):
@@ -186,11 +190,12 @@ def test_retrieve_context_with_trace_reports_medical_expansion_and_rerank_contro
                 },
             )()
 
-    monkeypatch.setattr(runtime, "get_medical_expansion_provider", lambda provider_name: StubProvider())
+    monkeypatch.setattr(
+        query_exp_mod, "get_medical_expansion_provider", lambda provider_name: StubProvider()
+    )
     monkeypatch.setattr("src.rag.reranker.get_reranker", lambda: StubReranker())
     monkeypatch.setattr(
-        runtime,
-        "build_context_and_sources",
+        "src.rag.formatting.build_context_and_sources",
         lambda results: ("context", ["s1.pdf"], [{"label": "s1.pdf"}]),
     )
 
@@ -211,7 +216,10 @@ def test_retrieve_context_with_trace_reports_medical_expansion_and_rerank_contro
     assert trace.retrieval.score_weights["enable_medical_expansion"] is True
     assert trace.retrieval.score_weights["medical_expansion_provider"] == "stub"
     assert trace.retrieval.score_weights["medical_expansion_term_count"] == 1
-    assert trace.retrieval.score_weights["medical_expansion_terms"][0]["term"] == "hypertension guideline"
+    assert (
+        trace.retrieval.score_weights["medical_expansion_terms"][0]["term"]
+        == "hypertension guideline"
+    )
     assert trace.retrieval.score_weights["rerank_score_threshold"] == 0.5
     assert trace.retrieval.score_weights["rerank_candidates_reranked"] == 1
     assert trace.retrieval.score_weights["rerank_timing_ms"] == 12
