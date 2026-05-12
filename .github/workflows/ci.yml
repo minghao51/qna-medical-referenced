@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+env:
+  DOTENV_PRIVATE_KEY: ${{ secrets.DOTENV_PRIVATE_KEY }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -70,9 +73,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --frozen
 
+      - name: Setup dotenvx
+        if: env.DOTENV_PRIVATE_KEY != ''
+        run: npm install -g @dotenvx/dotenvx
+
       - name: Run integration tests
         run: >
-          uv run pytest tests/integration/
+          dotenvx run -- uv run pytest tests/integration/
           -m "not slow and not live_api and not live_openrouter and not deepeval and not e2e_real_apis and not network"
           --maxfail=2 -q
 
@@ -90,8 +97,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --frozen
 
+      - name: Setup dotenvx
+        if: env.DOTENV_PRIVATE_KEY != ''
+        run: npm install -g @dotenvx/dotenvx
+
       - name: Run smoke tests
-        run: uv run pytest -m smoke --maxfail=1 -q
+        run: dotenvx run -- uv run pytest -m smoke --maxfail=1 -q
 
   dependency-audit:
     runs-on: ubuntu-latest

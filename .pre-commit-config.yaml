@@ -8,18 +8,20 @@ repos:
         exclude: \.(md|qmd)$
       - id: check-yaml
       - id: check-json
+        exclude: tsconfig.json
       - id: check-toml
       - id: check-merge-conflict
       - id: check-case-conflict
+      - id: check-ast
       - id: check-added-large-files
         args: ['--maxkb=1000']
         exclude: ^docs/notebooks/html/
       - id: debug-statements
       - id: name-tests-test
-        args: ['--pytest']
+        args: ['--pytest-test-first']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.1
+    rev: v0.15.1
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -28,7 +30,7 @@ repos:
         exclude: ^notebooks/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.0
+    rev: v1.18.1
     hooks:
       - id: mypy
         additional_dependencies:
@@ -38,7 +40,7 @@ repos:
         exclude: ^(tests/|frontend/|scripts/)
 
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.10.0
+    rev: 1.9.2
     hooks:
       - id: bandit
         args: ['-c', 'pyproject.toml']
@@ -54,7 +56,7 @@ repos:
     hooks:
       - id: quarto-render
         name: Render changed .qmd notebooks
-        entry: bash -c 'changed=$$(git diff --cached --name-only -- "notebooks/*.qmd"); if [ -n "$$changed" ]; then for f in $$changed; do uv run quarto render "$$f"; done; git add notebooks/_freeze/ docs/notebooks/html/; fi'
+        entry: bash -c 'changed=$(git diff --cached --name-only -- "notebooks/*.qmd"); if [ -n "$changed" ]; then for f in $changed; do uv run quarto render "$f"; done; git add notebooks/_freeze/ docs/notebooks/html/; fi'
         language: system
         files: '^notebooks/.*\.qmd$'
         pass_filenames: false
