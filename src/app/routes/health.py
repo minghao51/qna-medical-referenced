@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from src.app.middleware.rate_limit import rate_limiter
-from src.rag.runtime import get_runtime_status
+from src.rag import get_runtime_status
 
 router = APIRouter()
 

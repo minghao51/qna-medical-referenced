@@ -122,7 +122,11 @@ class ChromaVectorStore:
 
         chroma_host = settings.storage.chroma_server_host.strip()
         if chroma_host:
-            logger.info("Connecting to ChromaDB server at %s:%d", chroma_host, settings.storage.chroma_server_port)
+            logger.info(
+                "Connecting to ChromaDB server at %s:%d",
+                chroma_host,
+                settings.storage.chroma_server_port,
+            )
             self._client = chromadb.HttpClient(
                 host=chroma_host,
                 port=settings.storage.chroma_server_port,
@@ -183,7 +187,10 @@ class ChromaVectorStore:
 
     @property
     def documents(self) -> dict[str, Any]:
-        all_data: dict[str, Any] = self._collection.get(include=["documents", "metadatas", "embeddings"])  # type: ignore[assignment]
+        all_data = cast(
+            dict[str, Any],
+            self._collection.get(include=["documents", "metadatas", "embeddings"]),
+        )
         docs: list[Any] = all_data.get("documents") or []
         metas: list[Any] = all_data.get("metadatas") or []
         embs_raw = all_data.get("embeddings")
@@ -241,7 +248,7 @@ class ChromaVectorStore:
         self._persist_legacy_snapshot()
 
     def _load_content_hashes(self) -> None:
-        all_data: dict[str, Any] = self._collection.get(include=["metadatas"])  # type: ignore[assignment]
+        all_data = cast(dict[str, Any], self._collection.get(include=["metadatas"]))
         ids: list[Any] = all_data.get("ids", []) or []
         metas: list[Any] = all_data.get("metadatas", []) or []
         for doc_id, meta in zip(ids, metas, strict=False):
@@ -262,7 +269,7 @@ class ChromaVectorStore:
             if include_embeddings:
                 include_fields.append("embeddings")
 
-            all_data: dict[str, Any] = self._collection.get(include=include_fields)  # type: ignore[assignment,arg-type]
+            all_data = cast(dict[str, Any], self._collection.get(include=cast(Any, include_fields)))
             ids: list[Any] = all_data.get("ids", []) or []
             docs: list[Any] = all_data.get("documents", []) or []
             metas: list[Any] = all_data.get("metadatas", []) or []
@@ -274,8 +281,7 @@ class ChromaVectorStore:
                 embs_raw = all_data.get("embeddings")
                 embs: list[Any] = embs_raw if embs_raw is not None else []
                 self._doc_embeddings = [
-                    emb.tolist() if hasattr(emb, "tolist") else emb
-                    for emb in embs
+                    emb.tolist() if hasattr(emb, "tolist") else emb for emb in embs
                 ]
             else:
                 self._doc_embeddings = []
@@ -300,12 +306,11 @@ class ChromaVectorStore:
         """Lazy-load embeddings only when needed for semantic search."""
         if not self._doc_embeddings and self._collection.count() > 0:
             logger.debug("Lazy-loading embeddings for semantic search")
-            all_data: dict[str, Any] = self._collection.get(include=["embeddings"])  # type: ignore[assignment]
+            all_data = cast(dict[str, Any], self._collection.get(include=["embeddings"]))
             embeddings_raw_raw = all_data.get("embeddings")
             embeddings_raw: list[Any] = embeddings_raw_raw if embeddings_raw_raw is not None else []
             self._doc_embeddings = [
-                emb.tolist() if hasattr(emb, "tolist") else emb
-                for emb in embeddings_raw
+                emb.tolist() if hasattr(emb, "tolist") else emb for emb in embeddings_raw
             ]
 
     def _rebuild_in_memory_indexes(self) -> None:
@@ -458,14 +463,18 @@ class ChromaVectorStore:
         if to_upsert_ids:
             self._collection.upsert(
                 ids=to_upsert_ids,
-                embeddings=to_upsert_embeddings,  # type: ignore[arg-type]
+                embeddings=cast(Any, to_upsert_embeddings),
                 documents=to_upsert_documents,
-                metadatas=to_upsert_metadatas,  # type: ignore[arg-type]
+                metadatas=cast(Any, to_upsert_metadatas),
             )
 
             # Incrementally update keyword index for new documents
             for doc_id, text, meta, embedding in zip(
-                to_upsert_ids, to_upsert_documents, to_upsert_metadatas, to_upsert_embeddings, strict=False
+                to_upsert_ids,
+                to_upsert_documents,
+                to_upsert_metadatas,
+                to_upsert_embeddings,
+                strict=False,
             ):
                 self._doc_ids.append(doc_id)
                 self._doc_contents.append(text)
@@ -578,7 +587,7 @@ class ChromaVectorStore:
                 query_result = cast(
                     dict[str, Any],
                     self._collection.query(
-                        query_embeddings=[query_embedding],  # type: ignore[arg-type]
+                        query_embeddings=cast(Any, [query_embedding]),
                         n_results=1000,
                         where=filter,
                         include=["documents", "metadatas", "embeddings", "distances"],

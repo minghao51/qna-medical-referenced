@@ -29,10 +29,12 @@ def _merge_result_sets(result_sets: list[list[dict]], top_k: int) -> list[dict]:
     return ranked[:top_k]
 
 
-def _resolve_expanded_queries(
-    query: str, pre_expanded_queries: list[str] | None
-) -> list[str]:
-    return list(pre_expanded_queries) if pre_expanded_queries is not None else expand_lexical_queries(query)
+def _resolve_expanded_queries(query: str, pre_expanded_queries: list[str] | None) -> list[str]:
+    return (
+        list(pre_expanded_queries)
+        if pre_expanded_queries is not None
+        else expand_lexical_queries(query)
+    )
 
 
 def retrieve_candidates(

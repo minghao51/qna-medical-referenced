@@ -13,6 +13,7 @@ Supports pluggable extractor strategies:
 from __future__ import annotations
 
 import hashlib
+import importlib
 import logging
 import re
 from collections import Counter
@@ -32,15 +33,14 @@ from src.ingestion.steps.download_web import get_manifest_alias_filenames
 logger = logging.getLogger(__name__)
 
 trafilatura: Any = None
-html_to_markdown: Any = None
-
 try:  # pragma: no cover - optional dependency
-    import trafilatura
+    trafilatura = importlib.import_module("trafilatura")
 except Exception:  # pragma: no cover - optional dependency
     logger.debug("trafilatura not available")
 
+html_to_markdown: Any = None
 try:  # pragma: no cover - optional dependency
-    import html_to_markdown  # type: ignore[no-redef]
+    html_to_markdown = importlib.import_module("html_to_markdown")
 except Exception:  # pragma: no cover - optional dependency
     logger.debug("html_to_markdown not available")
 
@@ -60,31 +60,17 @@ class HTMLProcessorConfig:
     page_classification_enabled: bool = True
     extractor_mode: str = "auto"
 
-    def set_extractor_strategy(self, strategy: str) -> None:
-        """Set the HTML extractor strategy."""
-        valid = {
-            "trafilatura_bs",
-            "html2md_trafilatura_bs",
-            "readability_bs",
-            "full_cascade",
-        }
-        self.extractor_strategy = strategy if strategy in valid else "trafilatura_bs"
-
-
-# Global configuration instance
-_html_config = HTMLProcessorConfig()
-
 
 def _current_html_extractor_strategy() -> str:
-    return get_runtime_state().html_extractor_strategy
+    return str(get_runtime_state().html_extractor_strategy)
 
 
 def _current_html_extractor_mode() -> str:
-    return get_runtime_state().html_extractor_mode
+    return str(get_runtime_state().html_extractor_mode)
 
 
 def _page_classification_enabled() -> bool:
-    return get_runtime_state().page_classification_enabled
+    return bool(get_runtime_state().page_classification_enabled)
 
 
 def get_html_extractor_strategy() -> str:
@@ -100,34 +86,30 @@ def is_page_classification_enabled() -> bool:
 
 
 def set_html_extractor_strategy(strategy: str) -> None:
-    """Set the HTML extractor strategy."""
-    _html_config.set_extractor_strategy(strategy)
-    get_runtime_state().html_extractor_strategy = _html_config.extractor_strategy
+    valid = {"trafilatura_bs", "html2md_trafilatura_bs", "readability_bs", "full_cascade"}
+    get_runtime_state().html_extractor_strategy = (
+        strategy if strategy in valid else "trafilatura_bs"
+    )
 
 
 def set_html_extractor_mode(mode: str) -> None:
-    """Set the HTML extractor mode."""
     normalized = str(mode or "auto").strip().lower()
     if normalized not in {"auto", "primary_only", "fallback_only"}:
         normalized = "auto"
-    _html_config.extractor_mode = normalized
     get_runtime_state().html_extractor_mode = normalized
 
 
 def set_page_classification_enabled(enabled: bool) -> None:
-    """Enable or disable page classification."""
-    normalized = bool(enabled)
-    _html_config.page_classification_enabled = normalized
-    get_runtime_state().page_classification_enabled = normalized
+    get_runtime_state().page_classification_enabled = bool(enabled)
 
 
 def get_html_processor_config() -> HTMLProcessorConfig:
-    """Get the current HTML processor configuration."""
     state = get_runtime_state()
-    _html_config.extractor_strategy = state.html_extractor_strategy
-    _html_config.extractor_mode = state.html_extractor_mode
-    _html_config.page_classification_enabled = state.page_classification_enabled
-    return _html_config
+    return HTMLProcessorConfig(
+        extractor_strategy=state.html_extractor_strategy,
+        extractor_mode=state.html_extractor_mode,
+        page_classification_enabled=state.page_classification_enabled,
+    )
 
 
 EXTRACTOR_CHAIN_DEPTH: int | None = None
@@ -340,7 +322,7 @@ def _markdown_from_blocks(blocks: list[dict[str, Any]]) -> str:
 
 
 def _visible_text(soup: BeautifulSoup) -> str:
-    return soup.get_text("\n", strip=True)
+    return str(soup.get_text("\n", strip=True))
 
 
 def _density(text: str, html_content: str) -> float:

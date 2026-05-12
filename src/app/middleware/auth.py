@@ -76,7 +76,10 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 
         auth_context = authenticate_api_key(api_key.strip())
         if auth_context is None:
-            logger.warning("Invalid API key attempt from %s", request.client.host if request.client else "unknown")
+            logger.warning(
+                "Invalid API key attempt from %s",
+                request.client.host if request.client else "unknown",
+            )
             return self._error_response(request, 403, "Invalid API key")
 
         request.state.auth = auth_context

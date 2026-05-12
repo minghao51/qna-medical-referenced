@@ -39,7 +39,11 @@ def parse_markdown_document(md_path: str) -> dict[str, Any]:
     docs = loader.load_all_markdown()
     for doc in docs:
         if doc.get("source") == Path(md_path).name:
-            return {"path": md_path, "text": doc.get("extracted_text", ""), "source_type": "markdown"}
+            return {
+                "path": md_path,
+                "text": doc.get("extracted_text", ""),
+                "source_type": "markdown",
+            }
     return {"path": md_path, "text": "", "source_type": "markdown"}
 
 
@@ -63,7 +67,11 @@ def all_markdown_documents(
 
     docs = get_markdown_documents()
     return [
-        {"path": d.get("source", ""), "text": d.get("extracted_text", ""), "source_type": "markdown"}
+        {
+            "path": d.get("source", ""),
+            "text": d.get("extracted_text", ""),
+            "source_type": "markdown",
+        }
         for d in docs
     ]
 

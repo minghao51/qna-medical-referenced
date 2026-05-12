@@ -34,14 +34,16 @@ class TextChunker:
         - chonkie_late: Chonkie's LateChunker using Qwen embeddings
     """
 
-    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = frozenset({
-        "recursive",
-        "custom_recursive",
-        "chonkie_recursive",
-        "chonkie_semantic",
-        "chonkie_late",
-        "medical_semantic",
-    })
+    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "recursive",
+            "custom_recursive",
+            "chonkie_recursive",
+            "chonkie_semantic",
+            "chonkie_late",
+            "medical_semantic",
+        }
+    )
 
     def __init__(
         self,

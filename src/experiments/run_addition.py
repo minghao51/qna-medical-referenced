@@ -90,8 +90,7 @@ def main() -> int:
         logger.info(f"Winner: {winner_name}")
 
         any_target_met = any(
-            summary.meets_target_improvement(v.variant_name)
-            for v in summary.variant_results
+            summary.meets_target_improvement(v.variant_name) for v in summary.variant_results
         )
         if any_target_met:
             logger.info("✅ Target improvement met by one or more variants!")

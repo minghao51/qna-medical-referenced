@@ -88,9 +88,7 @@ def _weighted_sample_chunks(
         sampled.append(selected)
         population = [chunk for chunk in population if chunk["id"] != selected["id"]]
 
-    logger.info(
-        f"Enrichment sampling: selected {len(sampled)} chunks from {len(chunks)} total"
-    )
+    logger.info(f"Enrichment sampling: selected {len(sampled)} chunks from {len(chunks)} total")
     return sampled
 
 
@@ -141,9 +139,7 @@ def _parse_enrich_result(response: str) -> dict[str, Any]:
     keywords = parsed.get("keywords", [])
     if isinstance(keywords, list):
         result["keywords"] = [
-            str(k).strip().lower()
-            for k in keywords
-            if isinstance(k, str) and k.strip()
+            str(k).strip().lower() for k in keywords if isinstance(k, str) and k.strip()
         ][:15]  # Cap at 15 to prevent bloat
 
     # Extract summary
@@ -251,18 +247,14 @@ async def enrich_chunks(
         feature_label.append("keywords")
     if enable_summaries:
         feature_label.append("summaries")
-    logger.info(
-        f"Enriching {len(sampled_chunks)} chunks with {', '.join(feature_label)}..."
-    )
+    logger.info(f"Enriching {len(sampled_chunks)} chunks with {', '.join(feature_label)}...")
 
     enrichment_results: dict[str, dict[str, Any]] = {}
     errors = 0
 
     for i in range(0, len(sampled_chunks), ENRICH_BATCH_SIZE):
         batch = sampled_chunks[i : i + ENRICH_BATCH_SIZE]
-        batch_results = await _enrich_chunk_batch(
-            batch, client, enable_keywords, enable_summaries
-        )
+        batch_results = await _enrich_chunk_batch(batch, client, enable_keywords, enable_summaries)
         enrichment_results.update(batch_results)
         errors += len(batch) - len(batch_results)
 

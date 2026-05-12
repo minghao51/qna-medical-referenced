@@ -27,7 +27,7 @@ def run_pipeline(
     total_start = time.time()
 
     from src.config import settings
-    from src.rag.runtime import initialize_runtime_index
+    from src.rag import initialize_runtime_index
 
     print("[1/5] Downloading content...")
     if not skip_download:
@@ -186,7 +186,7 @@ def run_hamilton_pipeline(
         dr.execute(final_vars=["embed_chunks"])
     print()
 
-    from src.rag.runtime import initialize_runtime_index
+    from src.rag import initialize_runtime_index
 
     initialize_runtime_index(rebuild=False)
 

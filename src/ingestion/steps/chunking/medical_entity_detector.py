@@ -20,15 +20,17 @@ class MedicalEntityDetector:
     """
 
     # Medical entity categories we care about for chunking
-    RELEVANT_ENTITY_LABELS: ClassVar[frozenset[str]] = frozenset({
-        "DRUG",
-        "CHEMICAL",
-        "DISEASE",
-        "DISORDER",
-        "SYMPTOM",
-        "PROCEDURE",
-        "TREATMENT",
-    })
+    RELEVANT_ENTITY_LABELS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "DRUG",
+            "CHEMICAL",
+            "DISEASE",
+            "DISORDER",
+            "SYMPTOM",
+            "PROCEDURE",
+            "TREATMENT",
+        }
+    )
 
     DRUG_PATTERNS: ClassVar[list[str]] = [
         r"\b(?:[A-Z][a-z]*\s+)+(?:\d+\s*(?:mg|mcg|g|ml|units?)[^.]*)(?:\s+(?:oral|IV|IM|SC|topical|inhaled)[^.]*)?",
@@ -80,13 +82,15 @@ class MedicalEntityDetector:
 
         for ent in doc.ents:
             if ent.label_ in self.RELEVANT_ENTITY_LABELS:
-                entities.append({
-                    "text": ent.text,
-                    "label": ent.label_,
-                    "start": ent.start_char,
-                    "end": ent.end_char,
-                    "confidence": 1.0,  # spaCy doesn't provide confidence by default
-                })
+                entities.append(
+                    {
+                        "text": ent.text,
+                        "label": ent.label_,
+                        "start": ent.start_char,
+                        "end": ent.end_char,
+                        "confidence": 1.0,  # spaCy doesn't provide confidence by default
+                    }
+                )
 
         return entities
 
@@ -96,23 +100,27 @@ class MedicalEntityDetector:
 
         for pattern in self.DRUG_PATTERNS:
             for match in re.finditer(pattern, text, re.IGNORECASE):
-                entities.append({
-                    "text": match.group(),
-                    "label": "DRUG",
-                    "start": match.start(),
-                    "end": match.end(),
-                    "confidence": 0.7,
-                })
+                entities.append(
+                    {
+                        "text": match.group(),
+                        "label": "DRUG",
+                        "start": match.start(),
+                        "end": match.end(),
+                        "confidence": 0.7,
+                    }
+                )
 
         for pattern in self.CONDITION_PATTERNS:
             for match in re.finditer(pattern, text, re.IGNORECASE):
-                entities.append({
-                    "text": match.group(),
-                    "label": "DISEASE",
-                    "start": match.start(),
-                    "end": match.end(),
-                    "confidence": 0.8,
-                })
+                entities.append(
+                    {
+                        "text": match.group(),
+                        "label": "DISEASE",
+                        "start": match.start(),
+                        "end": match.end(),
+                        "confidence": 0.8,
+                    }
+                )
 
         return entities
 

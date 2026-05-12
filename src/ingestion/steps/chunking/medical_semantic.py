@@ -43,7 +43,9 @@ class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
             medical_model: spaCy model for medical entity detection
         """
         if strategy != "medical_semantic":
-            raise ValueError(f"MedicalSemanticChunkerAdapter only supports 'medical_semantic', got '{strategy}'")
+            raise ValueError(
+                f"MedicalSemanticChunkerAdapter only supports 'medical_semantic', got '{strategy}'"
+            )
 
         # Initialize parent with chonkie_semantic as the base strategy
         super().__init__(
@@ -96,10 +98,12 @@ class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
         current_pos = 0
         for line in lines:
             if self.structure_rules.is_clinical_section_header(line):
-                metadata["clinical_sections"].append({
-                    "text": line.strip(),
-                    "position": current_pos,
-                })
+                metadata["clinical_sections"].append(
+                    {
+                        "text": line.strip(),
+                        "position": current_pos,
+                    }
+                )
             current_pos += len(line) + 1
 
         # Find lab tables
@@ -111,26 +115,32 @@ class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
                 while j < len(lines) and "|" in lines[j]:
                     table_lines.append(lines[j])
                     j += 1
-                metadata["lab_tables"].append({
-                    "content": "\n".join(table_lines),
-                    "start_line": i,
-                    "end_line": j,
-                })
+                metadata["lab_tables"].append(
+                    {
+                        "content": "\n".join(table_lines),
+                        "start_line": i,
+                        "end_line": j,
+                    }
+                )
 
         # Find dosing sections
         for i, line in enumerate(lines):
             if self.structure_rules.contains_dosing_info(line):
-                metadata["dosing_sections"].append({
-                    "line": i,
-                    "text": line,
-                })
+                metadata["dosing_sections"].append(
+                    {
+                        "line": i,
+                        "text": line,
+                    }
+                )
 
         # Get entity boundaries
         metadata["entity_boundaries"] = self.entity_detector.get_boundary_hints(text)
 
         return text, metadata
 
-    def _should_merge_chunks(self, chunk1: dict[str, Any], chunk2: dict[str, Any], metadata: dict[str, Any]) -> bool:
+    def _should_merge_chunks(
+        self, chunk1: dict[str, Any], chunk2: dict[str, Any], metadata: dict[str, Any]
+    ) -> bool:
         """Check if two chunks should be merged based on medical structure.
 
         Args:
@@ -149,7 +159,9 @@ class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
             return True
 
         # Don't split lab tables
-        if self.structure_rules.is_lab_table(content1) or self.structure_rules.is_lab_table(content2):
+        if self.structure_rules.is_lab_table(content1) or self.structure_rules.is_lab_table(
+            content2
+        ):
             return True
 
         # Check if chunk1 ends with incomplete dosing info
@@ -206,7 +218,9 @@ class MedicalSemanticChunkerAdapter(ChonkieChunkerAdapter):
 
         return processed
 
-    def _merge_two_chunks(self, chunk1: dict[str, Any], chunk2: dict[str, Any], original_text: str) -> dict[str, Any]:
+    def _merge_two_chunks(
+        self, chunk1: dict[str, Any], chunk2: dict[str, Any], original_text: str
+    ) -> dict[str, Any]:
         """Merge two chunks together.
 
         Args:

@@ -48,11 +48,11 @@ except Exception:
 
 
 def _pdf_extractor_strategy() -> str:
-    return get_runtime_state().pdf_extractor_strategy
+    return str(get_runtime_state().pdf_extractor_strategy)
 
 
 def _pdf_table_extractor() -> str:
-    return get_runtime_state().pdf_table_extractor
+    return str(get_runtime_state().pdf_table_extractor)
 
 
 def get_pdf_extractor_strategy() -> str:
@@ -232,7 +232,9 @@ class PDFLoader:
             tables = camelot.read_pdf(str(pdf_path), pages=str(page_num), flavor="lattice")
             return tables if tables and len(tables) > 0 else None
         except Exception as e:
-            logger.debug("Camelot table extraction failed for %s page %s: %s", pdf_path, page_num, e)
+            logger.debug(
+                "Camelot table extraction failed for %s page %s: %s", pdf_path, page_num, e
+            )
             return None
 
     def load_pdf(self, pdf_path: str) -> str:
@@ -270,7 +272,9 @@ class PDFLoader:
                 extractor = (
                     "pdfplumber"
                     if use_fallback
-                    else ("pymupdf" if _pdf_extractor_strategy() == "pymupdf_pdfplumber" else "pypdf")
+                    else (
+                        "pymupdf" if _pdf_extractor_strategy() == "pymupdf_pdfplumber" else "pypdf"
+                    )
                 )
                 if use_fallback:
                     fallback_used += 1

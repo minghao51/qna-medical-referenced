@@ -94,12 +94,14 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
     primary_metric = summary.config.metrics.primary if summary.config.metrics else "ndcg@5"
     baseline_metrics = summary.baseline_result.metrics
 
-    lines.extend([
-        "### Metrics",
-        "",
-        "| Metric | Baseline |",
-        "|--------|----------|",
-    ])
+    lines.extend(
+        [
+            "### Metrics",
+            "",
+            "| Metric | Baseline |",
+            "|--------|----------|",
+        ]
+    )
 
     # Display key metrics
     key_metrics = [primary_metric]
@@ -116,24 +118,28 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
         baseline_formatted = _format_metric_value(baseline_value)
         lines.append(f"| {metric} | {baseline_formatted} |")
 
-    lines.extend([
-        "",
-        "## Variant Results",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Variant Results",
+            "",
+        ]
+    )
 
     # Add variant comparisons
     for variant_result in summary.variant_results:
-        lines.extend([
-            f"### {variant_result.variant_name}",
-            "",
-            f"- **Run Directory:** `{variant_result.run_dir}`",
-            "",
-            "### Metrics vs Baseline",
-            "",
-            "| Metric | Baseline | Variant | Delta | % Change | Target Met |",
-            "|--------|----------|---------|-------|----------|-----------|",
-        ])
+        lines.extend(
+            [
+                f"### {variant_result.variant_name}",
+                "",
+                f"- **Run Directory:** `{variant_result.run_dir}`",
+                "",
+                "### Metrics vs Baseline",
+                "",
+                "| Metric | Baseline | Variant | Delta | % Change | Target Met |",
+                "|--------|----------|---------|-------|----------|-----------|",
+            ]
+        )
 
         for metric in key_metrics:
             baseline_value = resolve_metric_key(baseline_metrics, metric)
@@ -159,12 +165,14 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
 
     # Add winner section
     winner_name, winner_result = summary.get_winner()
-    lines.extend([
-        "## Overall Results",
-        "",
-        f"**Winner:** {winner_name}",
-        "",
-    ])
+    lines.extend(
+        [
+            "## Overall Results",
+            "",
+            f"**Winner:** {winner_name}",
+            "",
+        ]
+    )
 
     if winner_name != "baseline":
         winner_metrics = winner_result.metrics
@@ -173,37 +181,40 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
 
         if winner_value is not None and baseline_value is not None and baseline_value != 0:
             improvement = ((winner_value - baseline_value) / baseline_value) * 100
-            lines.append(
-                f"**Improvement over baseline:** {improvement:.2f}%"
-            )
+            lines.append(f"**Improvement over baseline:** {improvement:.2f}%")
 
-    lines.extend([
-        "",
-        "## Recommendations",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Recommendations",
+            "",
+        ]
+    )
 
     # Generate recommendations based on results
     any_target_met = any(
-        summary.meets_target_improvement(v.variant_name)
-        for v in summary.variant_results
+        summary.meets_target_improvement(v.variant_name) for v in summary.variant_results
     )
 
     if any_target_met:
-        lines.extend([
-            "✅ **One or more variants met the target improvement threshold.**",
-            "",
-            "Consider deploying the winning variant to production.",
-        ])
+        lines.extend(
+            [
+                "✅ **One or more variants met the target improvement threshold.**",
+                "",
+                "Consider deploying the winning variant to production.",
+            ]
+        )
     else:
-        lines.extend([
-            "❌ **No variants met the target improvement threshold.**",
-            "",
-            "Consider:",
-            "- Tuning variant parameters",
-            "- Combining successful features from multiple variants",
-            "- Investigating why features didn't improve performance",
-        ])
+        lines.extend(
+            [
+                "❌ **No variants met the target improvement threshold.**",
+                "",
+                "Consider:",
+                "- Tuning variant parameters",
+                "- Combining successful features from multiple variants",
+                "- Investigating why features didn't improve performance",
+            ]
+        )
 
     lines.append("")
 
@@ -246,10 +257,11 @@ def generate_json_report(summary: ExperimentSummary) -> dict[str, Any]:
             "metrics": winner_result.metrics,
         },
         "primary_metric": primary_metric,
-        "target_improvement": summary.config.metrics.target_improvement if summary.config.metrics else 0.03,
+        "target_improvement": summary.config.metrics.target_improvement
+        if summary.config.metrics
+        else 0.03,
         "any_target_met": any(
-            summary.meets_target_improvement(v.variant_name)
-            for v in summary.variant_results
+            summary.meets_target_improvement(v.variant_name) for v in summary.variant_results
         ),
     }
 

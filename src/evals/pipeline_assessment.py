@@ -21,7 +21,7 @@ from src.evals.step_checks import (
     audit_l0_download,
 )
 from src.experiments.wandb_tracking import log_assessment_to_wandb
-from src.rag.runtime import configure_runtime_for_experiment, initialize_runtime_index
+from src.rag import configure_runtime_for_experiment, initialize_runtime_index
 
 
 def run_assessment(**kwargs):

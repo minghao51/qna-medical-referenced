@@ -119,7 +119,9 @@ def _build_experiment_for_variant(
     experiment = copy.deepcopy(base_experiment)
 
     # Update metadata
-    experiment.setdefault("metadata", {})["name"] = f"{experiment['metadata'].get('name', 'experiment')}_{variant.name}"
+    experiment.setdefault("metadata", {})["name"] = (
+        f"{experiment['metadata'].get('name', 'experiment')}_{variant.name}"
+    )
 
     # Isolate variant in its own vector store collection
     embedding_index = experiment.setdefault("embedding_index", {})
@@ -131,7 +133,9 @@ def _build_experiment_for_variant(
         if current_collection:
             embedding_index["collection_name"] = f"{current_collection}_{variant.name}"
         current_suffix = str(embedding_index.get("collection_name_suffix") or "").strip()
-        embedding_index["collection_name_suffix"] = f"{current_suffix}_{variant.name}" if current_suffix else variant.name
+        embedding_index["collection_name_suffix"] = (
+            f"{current_suffix}_{variant.name}" if current_suffix else variant.name
+        )
 
     # Update ingestion config
     if variant.chunking_strategy:
@@ -188,7 +192,9 @@ def run_variant(
 
     # Build variant-specific experiment config
     variant_experiment = _build_experiment_for_variant(
-        experiment_config, variant, artifact_dir,
+        experiment_config,
+        variant,
+        artifact_dir,
         collection_name_override=collection_name_override,
     )
 
@@ -236,9 +242,7 @@ def run_variant(
 def _chunking_key(experiment: dict[str, Any]) -> str:
     """Extract a hashable key from the chunking config."""
     configs = experiment.get("ingestion", {}).get("source_chunk_configs", {})
-    strategies = tuple(sorted(
-        (k, v.get("strategy", "")) for k, v in (configs or {}).items()
-    ))
+    strategies = tuple(sorted((k, v.get("strategy", "")) for k, v in (configs or {}).items()))
     return str(strategies)
 
 
@@ -283,7 +287,9 @@ def run_feature_addition_experiment(
 
     # Group variants by chunking strategy to avoid redundant ingestion
     baseline_exp = _build_experiment_for_variant(
-        base_experiment, config.baseline, str(base_artifact_dir / "baseline"),
+        base_experiment,
+        config.baseline,
+        str(base_artifact_dir / "baseline"),
     )
     baseline_key = _chunking_key(baseline_exp)
 
@@ -295,7 +301,9 @@ def run_feature_addition_experiment(
         if variant is None:
             continue
         v_exp = _build_experiment_for_variant(
-            base_experiment, variant, str(base_artifact_dir / variant.name),
+            base_experiment,
+            variant,
+            str(base_artifact_dir / variant.name),
         )
         v_key = _chunking_key(v_exp)
         needs_ingestion = v_key not in {key for _, _, key in all_variants}
@@ -318,11 +326,15 @@ def run_feature_addition_experiment(
                 )
                 # Record collection name for group reuse
                 v_exp = _build_experiment_for_variant(
-                    base_experiment, variant, str(base_artifact_dir / variant.name),
+                    base_experiment,
+                    variant,
+                    str(base_artifact_dir / variant.name),
                 )
                 collection_map[group_key] = v_exp["embedding_index"]["collection_name"]
             else:
-                logger.info(f"Running variant {variant.name}: skipping ingestion, reusing collection {collection_map[group_key]}")
+                logger.info(
+                    f"Running variant {variant.name}: skipping ingestion, reusing collection {collection_map[group_key]}"
+                )
                 result = run_variant(
                     base_experiment,
                     variant,
@@ -372,4 +384,6 @@ def load_and_run_experiment(
         ExperimentSummary with all results
     """
     config = ExperimentConfig.from_yaml(experiment_yaml)
-    return run_feature_addition_experiment(config, base_experiment_path, base_experiment, run_assessment_fn)
+    return run_feature_addition_experiment(
+        config, base_experiment_path, base_experiment, run_assessment_fn
+    )

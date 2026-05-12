@@ -24,7 +24,7 @@ class QwenModel(DeepEvalBaseLLM):
         client: OpenAI-compatible client pointing to Dashscope API
     """
 
-    model: str  # type: ignore[assignment]
+    model: str
 
     def __init__(self, model: str):
         self.model = model
@@ -87,7 +87,7 @@ class LiteLLMJudgeModel(DeepEvalBaseLLM):
     and litellm.acompletion() for provider-agnostic evaluation.
     """
 
-    model: str  # type: ignore[assignment]
+    model: str
 
     def __init__(self, model: str):
         self.model = model

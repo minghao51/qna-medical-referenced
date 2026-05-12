@@ -76,7 +76,9 @@ def list_experiments() -> dict[str, Any]:
                     "primary_metric": (
                         parsed.get("evaluation", {}).get("primary_metric", "ndcg@k")
                     ),
-                    "has_results": any(r.name == f"{path.stem}_report.json" for r in output_reports),
+                    "has_results": any(
+                        r.name == f"{path.stem}_report.json" for r in output_reports
+                    ),
                 }
             )
         except Exception:

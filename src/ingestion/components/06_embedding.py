@@ -25,7 +25,7 @@ def embed_chunks(
     reference_chunks: list[dict[str, Any]],
     embedding_config: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    from src.services.vector_store_service import get_vector_store
+    from src.ingestion.indexing.chroma_store import get_vector_store
 
     if not all_chunks and not reference_chunks:
         return []

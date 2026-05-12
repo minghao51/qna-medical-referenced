@@ -40,6 +40,7 @@ LATEST_POINTER = Path("data/evals/latest_run.txt")
 RUN_DIR_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 VALID_STAGES = {"l0", "l1", "l2", "l3", "l4", "l5", "l6"}
 
+
 def _validate_run_dir(run_dir: str) -> str:
     normalized = str(run_dir or "").strip()
     if not normalized or not RUN_DIR_PATTERN.fullmatch(normalized):
@@ -54,6 +55,7 @@ def _validate_stage(stage: str) -> str:
             status_code=400, detail=f"Invalid stage. Must be one of: {sorted(VALID_STAGES)}"
         )
     return normalized
+
 
 def _get_evaluation_service() -> EvaluationService:
     return EvaluationService(

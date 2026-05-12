@@ -10,7 +10,7 @@ from typing import Any
 
 from src.config import settings
 from src.ingestion.steps.chunk_text import DEFAULT_SOURCE_CHUNK_CONFIGS
-from src.rag.runtime import get_runtime_retrieval_config
+from src.rag import get_runtime_retrieval_config
 
 SUPPORTED_SCHEMA_VERSIONS = {1}
 
@@ -214,7 +214,9 @@ def _normalize_embedding_index(raw: dict[str, Any]) -> dict[str, Any]:
 
     embedding_index["collection_name"] = _derive_collection_name(base_name, suffix)
     embedding_index["embedding_batch_size"] = int(
-        embedding_index.get("embedding_batch_size", getattr(settings.llm, "embedding_batch_size", 10))
+        embedding_index.get(
+            "embedding_batch_size", getattr(settings.llm, "embedding_batch_size", 10)
+        )
     )
     return embedding_index
 

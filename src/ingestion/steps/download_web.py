@@ -268,7 +268,7 @@ async def download_url(url: str, timeout: int = 30) -> str | None:
         try:
             response = await client.get(url)
             response.raise_for_status()
-            return response.text
+            return str(response.text)
         except httpx.HTTPStatusError as e:
             logger.warning("HTTP error downloading %s: %s", url, e)
             return None
@@ -283,7 +283,7 @@ async def download_binary(url: str, timeout: int = 60) -> bytes | None:
         try:
             response = await client.get(url)
             response.raise_for_status()
-            return response.content
+            return bytes(response.content)
         except httpx.HTTPStatusError as e:
             logger.warning("HTTP error downloading %s: %s", url, e)
             return None
@@ -504,9 +504,7 @@ async def extract_ace_cues() -> list[str]:
         ),
     ]
 
-    results = await asyncio.gather(
-        *[_download_and_save_html(url, name) for url, name in pages]
-    )
+    results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in pages])
     return [r for r in results if r]
 
 
@@ -555,9 +553,7 @@ async def extract_ace_drug_guidances() -> list[str]:
         ),
     ]
 
-    results = await asyncio.gather(
-        *[_download_and_save_html(url, name) for url, name in guidances]
-    )
+    results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in guidances])
     return [r for r in results if r]
 
 
@@ -597,9 +593,7 @@ async def extract_healthhub_content() -> list[str]:
         ),
     ]
 
-    results = await asyncio.gather(
-        *[_download_and_save_html(url, name) for url, name in pages]
-    )
+    results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in pages])
     return [r for r in results if r]
 
 
@@ -633,9 +627,7 @@ async def extract_hpp_guidelines() -> list[str]:
         ),
     ]
 
-    results = await asyncio.gather(
-        *[_download_and_save_html(url, name) for url, name in pages]
-    )
+    results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in pages])
     return [r for r in results if r]
 
 
@@ -645,9 +637,7 @@ async def extract_moh_content() -> list[str]:
         ("https://www.moh.gov.sg/", "moh_singapore"),
     ]
 
-    results = await asyncio.gather(
-        *[_download_and_save_html(url, name) for url, name in pages]
-    )
+    results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in pages])
     return [r for r in results if r]
 
 

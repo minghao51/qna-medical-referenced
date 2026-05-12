@@ -59,7 +59,7 @@ RECOMMENDED_STRATEGIES = {
 
 
 def is_structured_chunking_enabled() -> bool:
-    return get_runtime_state().structured_chunking_enabled
+    return bool(get_runtime_state().structured_chunking_enabled)
 
 
 def set_structured_chunking_enabled(enabled: bool) -> None:

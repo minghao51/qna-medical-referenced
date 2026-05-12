@@ -58,7 +58,7 @@ def _hash_secret_bcrypt(secret: str, rounds: int = 12) -> str:
         Bcrypt hash string
     """
     salt = bcrypt.gensalt(rounds=rounds)
-    return bcrypt.hashpw(secret.encode("utf-8"), salt).decode("utf-8")
+    return str(bcrypt.hashpw(secret.encode("utf-8"), salt).decode("utf-8"))
 
 
 def _hash_secret_legacy(secret: str) -> str:
@@ -97,7 +97,7 @@ def _verify_secret(secret: str, hashed: str) -> bool:
     """
     if hashed.startswith(("$2b$", "$2a$", "$2y$")):
         try:
-            return bcrypt.checkpw(secret.encode("utf-8"), hashed.encode("utf-8"))
+            return bool(bcrypt.checkpw(secret.encode("utf-8"), hashed.encode("utf-8")))
         except (ValueError, TypeError):
             return False
     if len(hashed) == 64 and all(c in "0123456789abcdef" for c in hashed):

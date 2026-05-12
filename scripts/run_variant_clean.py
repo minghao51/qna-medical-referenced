@@ -65,7 +65,7 @@ def reset_global_state() -> None:
     """Reset all global state modules to defaults."""
     from src.config.context import reset_runtime_state
     from src.infra.di import reset_container
-    from src.rag.runtime import reset_runtime_index_state
+    from src.rag import reset_runtime_index_state
 
     reset_container()
     reset_runtime_state()
@@ -73,10 +73,12 @@ def reset_global_state() -> None:
 
     # Reset ChromaDB factory singleton
     from src.ingestion.indexing.chroma_store import ChromaVectorStoreFactory
+
     ChromaVectorStoreFactory.reset()
 
     # Reset chunking config
     import src.ingestion.steps.chunking.config as chunking_config
+
     chunking_config.set_source_chunk_configs(None)
     chunking_config.set_structured_chunking_enabled(True)
     chunking_config.set_auto_select_strategy(False)
@@ -91,9 +93,9 @@ def run_variant_clean(
     include_answer_eval: bool = True,
 ) -> None:
     """Run a single variant with guaranteed clean state."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running variant: {variant_name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Load experiment config
     runs = resolve_experiment_runs(config_path, variant=variant_name)
@@ -123,13 +125,17 @@ def run_variant_clean(
     print("\n2. Configuring runtime...")
 
     # Step 4: Configure runtime for experiment
-    from src.rag.runtime import configure_runtime_for_experiment
+    from src.rag import configure_runtime_for_experiment
+
     configure_runtime_for_experiment(experiment_config)
 
     # Verify strategy was set
     from src.ingestion.steps.convert_html import get_html_processor_config
+
     print(f"   HTML strategy: {get_html_processor_config().extractor_strategy}")
-    print(f"   PDF strategy: {experiment_config.get('ingestion', {}).get('pdf_extractor_strategy')}")
+    print(
+        f"   PDF strategy: {experiment_config.get('ingestion', {}).get('pdf_extractor_strategy')}"
+    )
 
     print("\n3. Running assessment...")
 
@@ -159,11 +165,13 @@ def run_variant_clean(
     idx_prep = result.summary.get("index_preparation", {})
     idx_stats = idx_prep.get("indexing_stats", {})
     if idx_stats:
-        print(f"   Chunks: attempted={idx_stats.get('attempted')}, inserted={idx_stats.get('inserted')}, dup={idx_stats.get('skipped_duplicate_content')}")
+        print(
+            f"   Chunks: attempted={idx_stats.get('attempted')}, inserted={idx_stats.get('inserted')}, dup={idx_stats.get('skipped_duplicate_content')}"
+        )
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Variant complete: {variant_name}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
 
 def main():

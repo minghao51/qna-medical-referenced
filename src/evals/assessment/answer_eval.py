@@ -396,9 +396,7 @@ async def evaluate_answer_quality_async(
     metric_concurrency = max(1, int(settings.deepeval.deepeval_metric_concurrency))
     cache_enabled = bool(settings.deepeval.deepeval_answer_cache_enabled)
     metric_cache_enabled = bool(settings.deepeval.deepeval_metric_cache_enabled)
-    resolved_cache_dir = cache_dir or Path(
-        settings.deepeval.deepeval_cache_dir
-    )
+    resolved_cache_dir = cache_dir or Path(settings.deepeval.deepeval_cache_dir)
     retrieval_cache_path, generation_cache_path, _ = _resolve_cache_paths(
         resolved_cache_dir if cache_enabled else None
     )

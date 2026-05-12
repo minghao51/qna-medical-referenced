@@ -23,7 +23,7 @@ from src.evals.artifacts import (
 from src.evals.dataset_builder import build_retrieval_dataset
 from src.evals.schemas import AssessmentConfig, AssessmentResult
 from src.experiments.wandb_tracking import log_assessment_to_wandb
-from src.rag.runtime import configure_runtime_for_experiment, initialize_runtime_index
+from src.rag import configure_runtime_for_experiment, initialize_runtime_index
 
 logger = logging.getLogger(__name__)
 
@@ -197,9 +197,7 @@ def run_assessment(
         thresholds.update(json.loads(Path(thresholds_file).read_text(encoding="utf-8")))
 
     _api_key = settings.llm.dashscope_api_key or os.environ.get("DASHSCOPE_API_KEY", "")
-    key_available = (
-        bool(_api_key) and _api_key != "test-api-key"
-    )
+    key_available = bool(_api_key) and _api_key != "test-api-key"
     resolved_include_answer_eval = (
         bool(include_answer_eval) if include_answer_eval is not None else key_available
     )

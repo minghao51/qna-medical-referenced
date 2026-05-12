@@ -5,7 +5,7 @@ for inspection and debugging from the frontend.
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -78,4 +78,4 @@ def get_document(doc_id: str, request: Request) -> dict[str, Any]:
 
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
-    return result
+    return cast(dict[str, Any], result)

@@ -95,7 +95,9 @@ def embed_texts_with_stats(
 
     return resolved_embeddings, {
         "text_count": len(texts),
-        "batch_count": (len(uncached_items) + batch_size - 1) // batch_size if uncached_items else 0,
+        "batch_count": (len(uncached_items) + batch_size - 1) // batch_size
+        if uncached_items
+        else 0,
         "batch_size": batch_size,
         "embedding_model": model_name,
         "elapsed_ms": int((time.time() - start_time) * 1000),

@@ -24,12 +24,14 @@ class ChonkieChunkerAdapter:
     chunking strategies.
     """
 
-    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = frozenset({
-        "chonkie_recursive",
-        "chonkie_semantic",
-        "chonkie_late",
-        "medical_semantic",
-    })
+    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "chonkie_recursive",
+            "chonkie_semantic",
+            "chonkie_late",
+            "medical_semantic",
+        }
+    )
 
     def __init__(
         self,

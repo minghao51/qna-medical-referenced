@@ -79,9 +79,7 @@ def build_ingestion_pipeline(
             .with_config(config)
             .with_cache(path=str(resolved_project_root / ".cache" / "hamilton"))
             .enable_dynamic_execution(allow_experimental_mode=True)
-            .with_remote_executor(
-                executors.MultiProcessingExecutor(max_tasks=parallel_cores)
-            )
+            .with_remote_executor(executors.MultiProcessingExecutor(max_tasks=parallel_cores))
             .build()
         )
 
@@ -125,7 +123,6 @@ def visualize_pipeline(
         final_vars: Variables to include in visualization.
     """
     import graphviz
-
 
     dot = graphviz.Digraph(comment="RAG Ingestion Pipeline DAG")
     dot.attr(rankdir="TB")

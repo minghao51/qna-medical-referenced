@@ -136,8 +136,10 @@ async def _build_index_from_sources(vector_store) -> dict[str, Any]:
         "Indexed document chunks "
         "(attempted=%d, inserted=%d, "
         "duplicate_id=%d, duplicate_content=%d)",
-        stats['attempted'], stats['inserted'],
-        stats['skipped_duplicate_id'], stats['skipped_duplicate_content'],
+        stats["attempted"],
+        stats["inserted"],
+        stats["skipped_duplicate_id"],
+        stats["skipped_duplicate_content"],
     )
     return stats
 
@@ -284,13 +286,17 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
     set_auto_select_strategy(ingestion.get("auto_select_chunk_strategy", False))
     indexing_features = {
         "enable_hype": bool(ingestion.get("enable_hype", settings.hyde.hype_enabled)),
-        "hype_sample_rate": float(ingestion.get("hype_sample_rate", settings.hyde.hype_sample_rate)),
+        "hype_sample_rate": float(
+            ingestion.get("hype_sample_rate", settings.hyde.hype_sample_rate)
+        ),
         "hype_max_chunks": int(ingestion.get("hype_max_chunks", settings.hyde.hype_max_chunks)),
         "hype_questions_per_chunk": int(
             ingestion.get("hype_questions_per_chunk", settings.hyde.hype_questions_per_chunk)
         ),
         "enable_keyword_extraction": bool(
-            ingestion.get("enable_keyword_extraction", settings.enrichment.enable_keyword_extraction)
+            ingestion.get(
+                "enable_keyword_extraction", settings.enrichment.enable_keyword_extraction
+            )
         ),
         "enable_chunk_summaries": bool(
             ingestion.get("enable_chunk_summaries", settings.enrichment.enable_chunk_summaries)
@@ -301,7 +307,9 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
             )
         ),
         "keyword_extraction_max_chunks": int(
-            ingestion.get("keyword_extraction_max_chunks", settings.enrichment.keyword_extraction_max_chunks)
+            ingestion.get(
+                "keyword_extraction_max_chunks", settings.enrichment.keyword_extraction_max_chunks
+            )
         ),
     }
     vector_config = {
@@ -319,7 +327,9 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
             "experiment_file": experiment.get("experiment_file"),
             "experiment_config_hash": experiment.get("experiment_config_hash"),
             "index_config_hash": experiment.get("index_config_hash"),
-            "collection_name": embedding_index.get("collection_name", settings.storage.collection_name),
+            "collection_name": embedding_index.get(
+                "collection_name", settings.storage.collection_name
+            ),
             "embedding_model": embedding_index.get("embedding_model", settings.llm.embedding_model),
             "embedding_batch_size": embedding_index.get(
                 "embedding_batch_size", settings.llm.embedding_batch_size

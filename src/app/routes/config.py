@@ -18,7 +18,7 @@ from src.ingestion.steps.convert_html import (
 )
 from src.ingestion.steps.load_markdown import get_index_only_classified_pages
 from src.ingestion.steps.load_pdfs import get_pdf_extractor_strategy, get_pdf_table_extractor
-from src.rag.runtime import get_runtime_retrieval_config
+from src.rag import get_runtime_retrieval_config
 
 logger = logging.getLogger(__name__)
 

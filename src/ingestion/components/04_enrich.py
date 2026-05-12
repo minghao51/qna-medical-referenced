@@ -95,7 +95,9 @@ def apply_keyword_extractions(
 
     for chunk in all_chunks:
         if chunk["id"] in keyword_extractions:
-            chunk.setdefault("metadata", {})["extracted_keywords"] = keyword_extractions[chunk["id"]].get("keywords", [])
+            chunk.setdefault("metadata", {})["extracted_keywords"] = keyword_extractions[
+                chunk["id"]
+            ].get("keywords", [])
     return all_chunks
 
 

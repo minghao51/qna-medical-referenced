@@ -70,9 +70,7 @@ def resolve_retrieval_config(
     cfg.medical_expansion_provider = str(
         cfg.medical_expansion_provider or settings.retrieval.medical_expansion_provider
     ).lower()
-    cfg.enable_reranking = bool(cfg.enable_reranking) or bool(
-        settings.retrieval.enable_reranking
-    )
+    cfg.enable_reranking = bool(cfg.enable_reranking) or bool(settings.retrieval.enable_reranking)
     if cfg.rerank_top_k is None:
         cfg.rerank_top_k = settings.retrieval.rerank_top_k
     else:
@@ -81,9 +79,7 @@ def resolve_retrieval_config(
         cfg.rerank_score_threshold = settings.retrieval.rerank_score_threshold
     else:
         cfg.rerank_score_threshold = float(cfg.rerank_score_threshold)
-    cfg.reranking_mode = str(
-        cfg.reranking_mode or settings.retrieval.reranking_mode
-    ).lower()
+    cfg.reranking_mode = str(cfg.reranking_mode or settings.retrieval.reranking_mode).lower()
     if cfg.reranking_mode not in {"cross_encoder", "mmr", "both"}:
         cfg.reranking_mode = "cross_encoder"
     cfg.enable_keyword_extraction = bool(cfg.enable_keyword_extraction) or bool(

@@ -25,7 +25,9 @@ class FileChatHistoryStore:
     ):
         self.path = Path(path)
         self._lock = threading.RLock()
-        self.ttl_seconds = settings.api.chat_history_ttl_seconds if ttl_seconds is None else ttl_seconds
+        self.ttl_seconds = (
+            settings.api.chat_history_ttl_seconds if ttl_seconds is None else ttl_seconds
+        )
         configured_max = settings.api.chat_history_max_messages_per_session
         if max_messages_per_session is None:
             self.max_messages_per_session = max(1, int(configured_max))

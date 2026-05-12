@@ -96,14 +96,18 @@ def _winner_sort_key(metrics: dict[str, Any]) -> tuple[float, float, float, floa
     )
 
 
-def select_best_variant(metrics_by_variant: dict[str, dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+def select_best_variant(
+    metrics_by_variant: dict[str, dict[str, Any]],
+) -> tuple[str, dict[str, Any]]:
     if not metrics_by_variant:
         raise ValueError("Cannot select best variant from empty metrics")
     winner_name = max(metrics_by_variant, key=lambda key: _winner_sort_key(metrics_by_variant[key]))
     return winner_name, metrics_by_variant[winner_name]
 
 
-def _config_options_by_variant(family: FeatureFamily, experiment: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _config_options_by_variant(
+    family: FeatureFamily, experiment: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
     return dict(family.config_builder(_base_retrieval_options(experiment)))
 
 
@@ -129,7 +133,9 @@ def _winner_experiment(
     if family.name == "keyword":
         ingestion["enable_keyword_extraction"] = bool(options.get("enable_keyword_extraction"))
         ingestion["enable_chunk_summaries"] = bool(options.get("enable_chunk_summaries"))
-        embedding_index["collection_name"] = f"{embedding_index['collection_name']}_{winner_name}_answer"
+        embedding_index["collection_name"] = (
+            f"{embedding_index['collection_name']}_{winner_name}_answer"
+        )
         embedding_index["rebuild_policy"] = "always"
     elif family.name == "hype":
         ingestion["enable_hype"] = bool(options.get("enable_hype"))
@@ -137,7 +143,9 @@ def _winner_experiment(
             ingestion["hype_sample_rate"] = options["hype_sample_rate"]
         retrieval["enable_hype"] = bool(options.get("enable_hype"))
         retrieval["enable_hyde"] = bool(options.get("enable_hyde"))
-        embedding_index["collection_name"] = f"{embedding_index['collection_name']}_{winner_name}_answer"
+        embedding_index["collection_name"] = (
+            f"{embedding_index['collection_name']}_{winner_name}_answer"
+        )
         embedding_index["rebuild_policy"] = "always"
     else:
         retrieval.update(
@@ -299,9 +307,7 @@ def render_feature_ablation_summary(summary: dict[str, Any]) -> str:
             ]
         )
         if answer_metrics:
-            lines.append(
-                f"- Winner answer-eval run: `{study.get('winner_answer_eval_run_dir')}`"
-            )
+            lines.append(f"- Winner answer-eval run: `{study.get('winner_answer_eval_run_dir')}`")
             lines.append(
                 f"- Winner answer-eval status: `{answer_metrics.get('status', 'unknown')}`"
             )
@@ -315,7 +321,9 @@ def render_feature_ablation_summary(summary: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_feature_ablation_outputs(summary: dict[str, Any], output_dir: str | Path) -> tuple[Path, Path]:
+def write_feature_ablation_outputs(
+    summary: dict[str, Any], output_dir: str | Path
+) -> tuple[Path, Path]:
     output_root = Path(output_dir)
     output_root.mkdir(parents=True, exist_ok=True)
     markdown_path = output_root / "feature_ablation_summary.md"

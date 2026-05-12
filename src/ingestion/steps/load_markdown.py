@@ -21,7 +21,7 @@ from src.source_metadata import (
 
 
 def _is_index_only_classified_pages() -> bool:
-    return get_runtime_state().index_only_classified_pages
+    return bool(get_runtime_state().index_only_classified_pages)
 
 
 def get_index_only_classified_pages() -> bool:

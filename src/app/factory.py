@@ -18,6 +18,7 @@ Example:
 """
 
 import logging
+import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import cast
@@ -82,6 +83,9 @@ async def lifespan(app: FastAPI):
     container = get_container()
     app.state.container = container
 
+    if settings.wandb.wandb_api_key and not os.environ.get("WANDB_API_KEY"):
+        os.environ["WANDB_API_KEY"] = settings.wandb.wandb_api_key
+
     # Initialize LLM client
     app.state.llm_client = container.get_llm_client()
 
@@ -90,6 +94,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize vector store
     from src.rag.production_profile import apply_production_profile
+
     profile_name = settings.production.production_profile
     if profile_name:
         if apply_production_profile(profile_name):
@@ -140,7 +145,9 @@ def create_app() -> FastAPI:
     # For production, update allow_origins with actual frontend domain
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[o.strip() for o in settings.api.cors_allowed_origins.split(",") if o.strip()],
+        allow_origins=[
+            o.strip() for o in settings.api.cors_allowed_origins.split(",") if o.strip()
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

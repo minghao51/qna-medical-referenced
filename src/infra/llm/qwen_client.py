@@ -23,6 +23,7 @@ Example:
 import asyncio
 import logging
 import time
+from typing import Any
 
 from openai import AsyncOpenAI, OpenAI
 
@@ -60,7 +61,7 @@ def retry_with_backoff(func):
             return requests.get("https://api.example.com")
     """
 
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         last_exception: Exception | None = None
         for attempt in range(MAX_RETRIES):
             try:
@@ -107,7 +108,9 @@ class QwenClient:
             model: Model identifier (e.g., "qwen3.5-flash", "qwen3.5-plus")
                    If None, uses the model from settings.llm.model_name
         """
-        self.client = OpenAI(api_key=settings.llm.dashscope_api_key, base_url=settings.llm.qwen_base_url)
+        self.client = OpenAI(
+            api_key=settings.llm.dashscope_api_key, base_url=settings.llm.qwen_base_url
+        )
         self.async_client = AsyncOpenAI(
             api_key=settings.llm.dashscope_api_key, base_url=settings.llm.qwen_base_url
         )
@@ -172,7 +175,7 @@ Instructions:
         content = response.choices[0].message.content
         if content is None:
             raise ValueError("Empty response from Qwen API")
-        return content
+        return str(content)
 
     async def a_generate(self, prompt: str, context: str = "") -> str:
         """Generate a response asynchronously using Qwen with medical context."""
@@ -212,7 +215,7 @@ Instructions:
                 content = response.choices[0].message.content
                 if content is None:
                     raise ValueError("Empty response from Qwen API")
-                return content
+                return str(content)
             except Exception as e:
                 last_exception = e
                 if attempt < MAX_RETRIES - 1:

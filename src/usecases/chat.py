@@ -228,17 +228,25 @@ async def stream_chat_message(
     except Exception as exc:
         logger.exception("Error during stream for session %s", resolved_session_id)
         try:
-            await asyncio.to_thread(history_store.save_message, resolved_session_id, "user", message)
+            await asyncio.to_thread(
+                history_store.save_message, resolved_session_id, "user", message
+            )
             if accumulated_response:
                 await asyncio.to_thread(
-                    history_store.save_message, resolved_session_id, "assistant", accumulated_response
+                    history_store.save_message,
+                    resolved_session_id,
+                    "assistant",
+                    accumulated_response,
                 )
         except asyncio.CancelledError:
             raise
         except GeneratorExit:
             raise
         except Exception:
-            logger.warning("Failed to save partial error message to history for session %s", resolved_session_id)
+            logger.warning(
+                "Failed to save partial error message to history for session %s",
+                resolved_session_id,
+            )
 
         try:
             yield (

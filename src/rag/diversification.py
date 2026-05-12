@@ -125,8 +125,6 @@ def diversify_results(
             if len(selected) >= top_k:
                 break
         if len(selected) < top_k:
-            logger.warning(
-                "Only %d/%d results after diversity constraints", len(selected), top_k
-            )
+            logger.warning("Only %d/%d results after diversity constraints", len(selected), top_k)
 
     return selected

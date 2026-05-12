@@ -1,6 +1,7 @@
 """Synthetic medical Q&A generation using DeepEval's Synthesizer."""
 
 from pathlib import Path
+from typing import Any
 
 from deepeval.synthesizer import Synthesizer
 from deepeval.synthesizer.config import ContextConstructionConfig
@@ -29,15 +30,15 @@ def generate_synthetic_dataset(
     """
     synthesizer = Synthesizer(model=get_heavy_model(), async_mode=True)
 
-    goldens = synthesizer.generate_goldens_from_docs(
+    goldens: list[Any] = synthesizer.generate_goldens_from_docs(
         document_paths=[str(p) for p in document_paths],
         context_construction_config=ContextConstructionConfig(
             critic_model=get_heavy_model(),
             chunk_size=1024,
             chunk_overlap=50,
         ),
-        num_transformations=max(1, num_questions // len(document_paths)),  # type: ignore[call-arg]
+        num_transformations=max(1, num_questions // len(document_paths)),
     )
 
-    synthesizer.save_as(file_path=str(output_path), file_type="json")  # type: ignore[call-arg]
+    synthesizer.save_as(file_path=str(output_path), file_type="json")
     return goldens

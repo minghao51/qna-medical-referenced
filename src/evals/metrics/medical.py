@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeAlias
 
 from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, GEval
 from deepeval.test_case import LLMTestCaseParams
@@ -11,7 +11,7 @@ from deepeval.test_case import LLMTestCaseParams
 from src.config import settings
 from src.evals.deepeval_models import get_heavy_model, get_light_model
 
-MetricFactory = GEval | AnswerRelevancyMetric | FaithfulnessMetric
+MetricFactory: TypeAlias = GEval | AnswerRelevancyMetric | FaithfulnessMetric  # noqa: UP040
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,7 @@ class MetricSpec:
     factory: Any
 
     def create(self) -> MetricFactory:
-        return self.factory()  # type: ignore[no-any-return]
+        return self.factory()
 
 
 def _build_factual_accuracy() -> GEval:

@@ -195,12 +195,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _is_bypass_auth(auth) -> bool:
         if not auth:
             return False
-        bypass_key_ids = {v.strip() for v in settings.api.rate_limit_bypass_key_ids.split(",") if v.strip()}
-        bypass_roles = {v.strip() for v in settings.api.rate_limit_bypass_roles.split(",") if v.strip()}
-        return (
-            auth.key_id in bypass_key_ids
-            or bool(auth.role and auth.role in bypass_roles)
-        )
+        bypass_key_ids = {
+            v.strip() for v in settings.api.rate_limit_bypass_key_ids.split(",") if v.strip()
+        }
+        bypass_roles = {
+            v.strip() for v in settings.api.rate_limit_bypass_roles.split(",") if v.strip()
+        }
+        return auth.key_id in bypass_key_ids or bool(auth.role and auth.role in bypass_roles)
 
     @staticmethod
     def _get_client_ip(request: Request) -> str:
@@ -209,10 +210,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             if forwarded_for:
                 first_hop = forwarded_for.split(",")[0].strip()
                 if first_hop:
-                    return first_hop
+                    return str(first_hop)
             real_ip = request.headers.get("X-Real-IP", "").strip()
             if real_ip:
-                return real_ip
+                return str(real_ip)
 
         return request.client.host if request.client else "unknown"
 
@@ -221,7 +222,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         cookie_name = settings.api.anonymous_browser_cookie_name
         browser_id = request.cookies.get(cookie_name)
         if browser_id:
-            return browser_id
+            return str(browser_id)
 
         browser_id = secrets.token_urlsafe(24)
         request.state.rate_limit_browser_id = browser_id

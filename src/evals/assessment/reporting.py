@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import subprocess
+import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def git_head() -> str | None:
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607
             ["git", "rev-parse", "HEAD"],
             check=True,
             capture_output=True,

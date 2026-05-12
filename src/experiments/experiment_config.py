@@ -126,7 +126,9 @@ class ExperimentConfig:
             "baseline": {
                 "name": self.baseline.name if self.baseline else "baseline",
                 "chunking_strategy": self.baseline.chunking_strategy if self.baseline else None,
-                "query_understanding": self.baseline.query_understanding if self.baseline else False,
+                "query_understanding": self.baseline.query_understanding
+                if self.baseline
+                else False,
                 "ingestion_overrides": self.baseline.ingestion_overrides if self.baseline else None,
                 "retrieval_overrides": self.baseline.retrieval_overrides if self.baseline else None,
             },
@@ -166,7 +168,9 @@ class ExperimentConfig:
             yaml.dump(self.to_dict(), f, default_flow_style=False, sort_keys=False)
 
 
-def create_sample_experiment_config(output_path: str | Path = "experiments/feature_addition_sample.yaml") -> None:
+def create_sample_experiment_config(
+    output_path: str | Path = "experiments/feature_addition_sample.yaml",
+) -> None:
     """Create a sample feature addition experiment config.
 
     Args:

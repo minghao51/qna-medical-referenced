@@ -231,14 +231,10 @@ def evaluate_retrieval(
                 getattr(trace.retrieval, "score_weights", {}).get("hyde_enabled", False)
             ),
             "medical_expansion_enabled": bool(
-                getattr(trace.retrieval, "score_weights", {}).get(
-                    "enable_medical_expansion", False
-                )
+                getattr(trace.retrieval, "score_weights", {}).get("enable_medical_expansion", False)
             ),
             "medical_expansion_term_count": float(
-                getattr(trace.retrieval, "score_weights", {}).get(
-                    "medical_expansion_term_count", 0
-                )
+                getattr(trace.retrieval, "score_weights", {}).get("medical_expansion_term_count", 0)
             ),
             "reranking_enabled": bool(
                 getattr(trace.retrieval, "score_weights", {}).get("enable_reranking", False)
@@ -698,9 +694,9 @@ def run_reranking_ablations(
         for name in outputs:
             if name != "no_reranking":
                 variant = outputs[name]
-                variant["rerank_improvement_delta"] = (
-                    variant.get("hit_rate_at_k", 0) - baseline.get("hit_rate_at_k", 0)
-                )
+                variant["rerank_improvement_delta"] = variant.get(
+                    "hit_rate_at_k", 0
+                ) - baseline.get("hit_rate_at_k", 0)
                 variant["rerank_mrr_delta"] = variant.get("mrr", 0) - baseline.get("mrr", 0)
                 variant["rerank_exact_chunk_delta"] = variant.get(
                     "exact_chunk_hit_rate", 0

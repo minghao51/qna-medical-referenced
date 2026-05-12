@@ -1,9 +1,4 @@
-"""Backward-compatibility shim for vector_store.
-
-All code importing from this module gets ChromaVectorStore and
-ChromaVectorStoreFactory via chroma_store.py, preserving the original
-import paths so no caller code needs to change.
-"""
+"""Backward-compatibility shim — import from chroma_store instead."""
 
 from src.ingestion.indexing.chroma_store import (
     ChromaVectorStore,
@@ -17,6 +12,8 @@ VectorStore = ChromaVectorStore
 VectorStoreFactory = ChromaVectorStoreFactory
 
 __all__ = [
+    "ChromaVectorStore",
+    "ChromaVectorStoreFactory",
     "VectorStore",
     "VectorStoreFactory",
     "get_vector_store",

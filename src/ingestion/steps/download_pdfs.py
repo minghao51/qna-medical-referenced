@@ -90,7 +90,7 @@ async def download_pdf(url: str, timeout: int = 60) -> bytes | None:
             if "pdf" not in content_type.lower() and not looks_like_pdf:
                 logger.warning("Expected PDF but got %s for %s", content_type, url)
                 return None
-            return response.content
+            return bytes(response.content)
         except httpx.HTTPStatusError as e:
             logger.warning("HTTP error downloading %s: %s", url, e)
             return None

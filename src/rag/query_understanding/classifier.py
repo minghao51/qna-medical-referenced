@@ -111,10 +111,14 @@ class QueryClassifier:
         return {
             QueryType.DEFINITION: [re.compile(p, re.IGNORECASE) for p in self.DEFINITION_PATTERNS],
             QueryType.COMPARISON: [re.compile(p, re.IGNORECASE) for p in self.COMPARISON_PATTERNS],
-            QueryType.REFERENCE_RANGE: [re.compile(p, re.IGNORECASE) for p in self.REFERENCE_RANGE_PATTERNS],
+            QueryType.REFERENCE_RANGE: [
+                re.compile(p, re.IGNORECASE) for p in self.REFERENCE_RANGE_PATTERNS
+            ],
             QueryType.SYMPTOM_QUERY: [re.compile(p, re.IGNORECASE) for p in self.SYMPTOM_PATTERNS],
             QueryType.TREATMENT: [re.compile(p, re.IGNORECASE) for p in self.TREATMENT_PATTERNS],
-            QueryType.RISK_FACTOR: [re.compile(p, re.IGNORECASE) for p in self.RISK_FACTOR_PATTERNS],
+            QueryType.RISK_FACTOR: [
+                re.compile(p, re.IGNORECASE) for p in self.RISK_FACTOR_PATTERNS
+            ],
             QueryType.FOLLOW_UP: [re.compile(p, re.IGNORECASE) for p in self.FOLLOW_UP_PATTERNS],
         }
 
@@ -146,7 +150,10 @@ class QueryClassifier:
                     # Check for multi-part queries
                     if query_type != QueryType.COMPARISON:
                         # Check for comparison keywords in other types
-                        if any(p.search(query_lower) for p in self._compiled_patterns[QueryType.COMPARISON]):
+                        if any(
+                            p.search(query_lower)
+                            for p in self._compiled_patterns[QueryType.COMPARISON]
+                        ):
                             return QueryClassification(
                                 query_type=QueryType.COMPLEX,
                                 confidence=0.7,
@@ -301,5 +308,7 @@ def classify_query(query: str, llm_client: Any = None) -> QueryClassification:
     Returns:
         QueryClassification with type and confidence
     """
-    classifier = get_query_classifier(use_llm_fallback=llm_client is not None, llm_client=llm_client)
+    classifier = get_query_classifier(
+        use_llm_fallback=llm_client is not None, llm_client=llm_client
+    )
     return classifier.classify(query)

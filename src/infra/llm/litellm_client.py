@@ -72,7 +72,9 @@ class LiteLLMClient:
                 last_exception = e
                 if attempt < MAX_RETRIES - 1:
                     delay = INITIAL_DELAY * (2**attempt)
-                    logger.warning("Attempt %s failed: %s. Retrying in %ss...", attempt + 1, e, delay)
+                    logger.warning(
+                        "Attempt %s failed: %s. Retrying in %ss...", attempt + 1, e, delay
+                    )
                     time.sleep(delay)
                 else:
                     logger.error("All %s attempts failed: %s", MAX_RETRIES, e)
@@ -98,7 +100,9 @@ class LiteLLMClient:
                 last_exception = e
                 if attempt < MAX_RETRIES - 1:
                     delay = INITIAL_DELAY * (2**attempt)
-                    logger.warning("Async attempt %s failed: %s. Retrying in %ss...", attempt + 1, e, delay)
+                    logger.warning(
+                        "Async attempt %s failed: %s. Retrying in %ss...", attempt + 1, e, delay
+                    )
                     await asyncio.sleep(delay)
                 else:
                     logger.error("All %s async attempts failed: %s", MAX_RETRIES, e)
@@ -126,7 +130,9 @@ class LiteLLMClient:
                 last_exception = e
                 if attempt < MAX_RETRIES - 1:
                     delay = INITIAL_DELAY * (2**attempt)
-                    logger.warning("Stream attempt %s failed: %s. Retrying in %ss...", attempt + 1, e, delay)
+                    logger.warning(
+                        "Stream attempt %s failed: %s. Retrying in %ss...", attempt + 1, e, delay
+                    )
                     await asyncio.sleep(delay)
                 else:
                     logger.error("All %s stream attempts failed: %s", MAX_RETRIES, e)
