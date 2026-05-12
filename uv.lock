@@ -3185,7 +3185,6 @@ dependencies = [
     { name = "bcrypt" },
     { name = "beautifulsoup4" },
     { name = "chromadb" },
-    { name = "deepeval" },
     { name = "duckdb" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -3208,46 +3207,15 @@ dependencies = [
     { name = "wandb" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 chunkers = [
     { name = "chonkie", extra = ["semantic"] },
 ]
 dev = [
     { name = "bandit" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-evaluation = [
-    { name = "deepeval" },
-    { name = "langchain" },
-    { name = "langchain-community" },
-    { name = "langchain-core" },
-    { name = "langchain-openai" },
-]
-extraction = [
-    { name = "camelot-py" },
-]
-reranking = [
-    { name = "sentence-transformers" },
-]
-test = [
-    { name = "bandit" },
-    { name = "deepeval" },
-    { name = "langchain" },
-    { name = "langchain-community" },
-    { name = "langchain-core" },
-    { name = "langchain-openai" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[package.dev-dependencies]
-dev = [
     { name = "mypy" },
     { name = "playwright" },
+    { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -3262,45 +3230,43 @@ docs = [
     { name = "nbformat" },
     { name = "pymdown-extensions" },
 ]
+evaluation = [
+    { name = "deepeval" },
+    { name = "langchain" },
+    { name = "langchain-community" },
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+]
+extraction = [
+    { name = "camelot-py" },
+]
 medical = [
     { name = "spacy" },
+]
+reranking = [
+    { name = "sentence-transformers" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7.0" },
     { name = "bcrypt", specifier = ">=4.0.0" },
     { name = "beautifulsoup4", specifier = ">=4.13.0" },
-    { name = "camelot-py", marker = "extra == 'extraction'", specifier = ">=0.12.0" },
-    { name = "chonkie", extras = ["semantic"], marker = "extra == 'chunkers'", specifier = ">=1.0.0" },
     { name = "chromadb", specifier = ">=0.4.0" },
-    { name = "deepeval", specifier = ">=3.9.0,<4.0.0" },
-    { name = "deepeval", marker = "extra == 'evaluation'", specifier = ">=3.9.0,<4.0.0" },
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "fastapi", specifier = ">=0.129.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "langchain", marker = "extra == 'evaluation'", specifier = "<1" },
-    { name = "langchain-community", marker = "extra == 'evaluation'", specifier = "<1" },
-    { name = "langchain-core", marker = "extra == 'evaluation'", specifier = "<1" },
-    { name = "langchain-openai", marker = "extra == 'evaluation'", specifier = "<1" },
     { name = "litellm", specifier = ">=1.0.0" },
     { name = "markdownify", specifier = ">=0.14.0" },
     { name = "nltk", specifier = ">=3.9.2" },
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pdfplumber", specifier = ">=0.11.4" },
     { name = "polars", specifier = ">=1.0.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "pydantic-settings", specifier = ">=2.6.0" },
     { name = "pymupdf", specifier = ">=1.24.0" },
     { name = "pypdf", specifier = ">=4.0,<6.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.23.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
-    { name = "qna-medical-referenced", extras = ["dev", "evaluation"], marker = "extra == 'test'" },
     { name = "readability-lxml", specifier = ">=0.8.0" },
     { name = "requests", specifier = ">=2.32.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
-    { name = "sentence-transformers", marker = "extra == 'reranking'", specifier = ">=3.0.0" },
     { name = "sf-hamilton", extras = ["visualization"], specifier = ">=1.0.0" },
     { name = "trafilatura", specifier = ">=1.12.2" },
     { name = "urllib3", specifier = ">=2.0.0,<3.0.0" },
@@ -3309,9 +3275,12 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+chunkers = [{ name = "chonkie", extras = ["semantic"], specifier = ">=1.0.0" }]
 dev = [
+    { name = "bandit", specifier = ">=1.7.0" },
     { name = "mypy", specifier = ">=1.19.1" },
     { name = "playwright", specifier = ">=1.58.0" },
+    { name = "pre-commit", specifier = ">=3.0.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
@@ -3326,7 +3295,16 @@ docs = [
     { name = "nbformat", specifier = ">=5.0" },
     { name = "pymdown-extensions", specifier = ">=10.0" },
 ]
+evaluation = [
+    { name = "deepeval", specifier = ">=3.9.0,<4.0.0" },
+    { name = "langchain", specifier = "<1" },
+    { name = "langchain-community", specifier = "<1" },
+    { name = "langchain-core", specifier = "<1" },
+    { name = "langchain-openai", specifier = "<1" },
+]
+extraction = [{ name = "camelot-py", specifier = ">=0.12.0" }]
 medical = [{ name = "spacy", specifier = ">=3.8.0" }]
+reranking = [{ name = "sentence-transformers", specifier = ">=3.0.0" }]
 
 [[package]]
 name = "readability-lxml"

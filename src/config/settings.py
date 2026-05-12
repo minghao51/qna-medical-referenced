@@ -9,7 +9,6 @@ The YAML config is the source of truth for default values. Environment
 variables take precedence for overrides and sensitive values.
 """
 
-import os
 from pathlib import Path
 from typing import ClassVar
 
@@ -283,7 +282,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-
-if settings.wandb.wandb_api_key and not os.environ.get("WANDB_API_KEY"):
-    os.environ["WANDB_API_KEY"] = settings.wandb.wandb_api_key
