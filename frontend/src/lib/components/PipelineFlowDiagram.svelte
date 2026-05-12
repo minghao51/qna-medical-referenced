@@ -120,7 +120,7 @@
 			</div>
 		</div>
 	{/if}
-	
+
 	<div class="stage-descriptions">
 		{#each stages as stage}
 			<div class="description" class:active={activeStage === stage.id}>

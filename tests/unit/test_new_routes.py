@@ -140,7 +140,9 @@ class TestDocuments:
         }
         monkeypatch.setattr(documents, "get_vector_store", lambda: mock_store)
 
-        result = documents.list_documents(request=_make_request(), limit=50, offset=0, source_type="pdf")
+        result = documents.list_documents(
+            request=_make_request(), limit=50, offset=0, source_type="pdf"
+        )
 
         assert result["total"] == 2
         assert result["offset"] == 0

@@ -2,9 +2,9 @@
 	import type { Snippet } from 'svelte';
 	import { scale } from 'svelte/transition';
 
-	let { title, timing, expanded = $bindable(false), children }: { 
-		title: string; 
-		timing: number; 
+	let { title, timing, expanded = $bindable(false), children }: {
+		title: string;
+		timing: number;
 		expanded?: boolean;
 		children?: Snippet;
 	} = $props();

@@ -2221,17 +2221,17 @@ vertical-align: -.125em;
 
 <div class="quarto-title-meta">
 
-    
+
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
       <p class="date">May 11, 2026</p>
     </div>
   </div>
-  
-    
+
+
   </div>
-  
+
 
 
 </header>
@@ -2315,10 +2315,10 @@ vertical-align: -.125em;
 <pre><span class="ansi-red-fg">---------------------------------------------------------------------------</span>
 <span class="ansi-red-fg">NameError</span>                                 Traceback (most recent call last)
 <span class="ansi-cyan-fg">Cell</span><span class="ansi-cyan-fg"> </span><span class="ansi-green-fg">In[1]</span><span class="ansi-green-fg">, line 7</span>
-<span class="ansi-green-fg">      3</span> 
+<span class="ansi-green-fg">      3</span>
 <span class="ansi-green-fg">      4</span> <span style="font-weight:bold;color:rgb(0,135,0)">import</span> matplotlib.pyplot <span style="font-weight:bold;color:rgb(0,135,0)">as</span> plt
 <span class="ansi-green-fg">      5</span> <span style="font-weight:bold;color:rgb(0,135,0)">import</span> polars <span style="font-weight:bold;color:rgb(0,135,0)">as</span> pl
-<span class="ansi-green-fg">      6</span> 
+<span class="ansi-green-fg">      6</span>
 <span class="ansi-green-fg">----&gt; </span><span class="ansi-green-fg">7</span> PROJECT_ROOT = Path(__file__).resolve().parents[<span class="ansi-green-fg">1</span>]
 <span class="ansi-green-fg">      8</span> EXPERIMENTS_DIR = PROJECT_ROOT / <span class="ansi-yellow-fg">&quot;experiments&quot;</span> / <span class="ansi-yellow-fg">&quot;outputs&quot;</span>
 
@@ -2844,7 +2844,7 @@ FINAL RECOMMENDATIONS
     anchorJS.add('.anchored');
     const isCodeAnnotation = (el) => {
       for (const clz of el.classList) {
-        if (clz.startsWith('code-annotation-')) {                     
+        if (clz.startsWith('code-annotation-')) {
           return true;
         }
       }
@@ -2864,11 +2864,11 @@ FINAL RECOMMENDATIONS
         button.setAttribute("data-bs-toggle", "tooltip");
         button.setAttribute("data-bs-placement", "left");
         button.setAttribute("data-bs-title", "Copied!");
-        tooltip = new bootstrap.Tooltip(button, 
-          { trigger: "manual", 
+        tooltip = new bootstrap.Tooltip(button,
+          { trigger: "manual",
             customClass: "code-copy-button-tooltip",
             offset: [0, -8]});
-        tooltip.show();    
+        tooltip.show();
       }
       setTimeout(function() {
         if (tooltip) {
@@ -2942,7 +2942,7 @@ FINAL RECOMMENDATIONS
           if (codeDiv.classList.contains(fromCls)) {
             codeDiv.classList.remove(fromCls);
             codeDiv.classList.add(toCls);
-          } 
+          }
         }
         return false;
       }
@@ -2996,7 +2996,7 @@ FINAL RECOMMENDATIONS
       if (onUntriggerFn) {
         config.onUntrigger = onUntriggerFn;
       }
-      window.tippy(el, config); 
+      window.tippy(el, config);
     }
     const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
     for (var i=0; i<noterefs.length; i++) {
@@ -3071,7 +3071,7 @@ FINAL RECOMMENDATIONS
       tippyHover(xref, undefined, function(instance) {
         instance.disable();
         let url = xref.getAttribute('href');
-        let hash = undefined; 
+        let hash = undefined;
         if (url.startsWith('#')) {
           hash = url;
         } else {
@@ -3099,7 +3099,7 @@ FINAL RECOMMENDATIONS
               if (note !== null) {
                 const html = processXRef(id, note);
                 instance.setContent(html);
-              } 
+              }
             }).finally(() => {
               instance.enable();
               instance.show();
@@ -3123,7 +3123,7 @@ FINAL RECOMMENDATIONS
               }
               const html = processXRef(null, note);
               instance.setContent(html);
-            } 
+            }
           }).finally(() => {
             instance.enable();
             instance.show();
@@ -3163,7 +3163,7 @@ FINAL RECOMMENDATIONS
               height = bottom - top;
             }
             if (top !== null && height !== null && parent !== null) {
-              // cook up a div (if necessary) and position it 
+              // cook up a div (if necessary) and position it
               let div = window.document.getElementById("code-annotation-line-highlight");
               if (div === null) {
                 div = window.document.createElement("div");

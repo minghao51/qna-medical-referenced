@@ -6,6 +6,7 @@ from src.evals.assessment.answer_eval import evaluate_answer_quality_async
 
 pytestmark = [pytest.mark.deepeval, pytest.mark.slow, pytest.mark.live_api]
 
+
 @pytest.mark.asyncio
 async def test_evaluate_answer_quality_async_basic():
     """Test basic functionality of DeepEval answer evaluation."""

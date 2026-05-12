@@ -37,7 +37,9 @@ def _build_client(
     monkeypatch.setattr("src.app.middleware.rate_limit.RATE_LIMIT_DB", tmp_path / "rate_limits.db")
     monkeypatch.setattr(settings.api, "api_keys", api_keys)
     monkeypatch.setattr(settings.api, "api_keys_json", None)
-    monkeypatch.setattr(settings.api, "anonymous_chat_rate_limit_per_minute", anonymous_chat_rate_limit)
+    monkeypatch.setattr(
+        settings.api, "anonymous_chat_rate_limit_per_minute", anonymous_chat_rate_limit
+    )
     monkeypatch.setattr(settings.api, "anonymous_browser_cookie_name", "anon_browser_id")
     monkeypatch.setattr(settings.api, "chat_session_cookie_name", "chat_session_id")
     monkeypatch.setattr(settings.api, "chat_session_cookie_max_age_seconds", 3600)
@@ -427,7 +429,11 @@ def test_evaluate_single_accepts_json_payload_with_api_key(monkeypatch, tmp_path
     response = client.post(
         "/evaluation/evaluate-single",
         headers={"X-API-Key": "secret-key"},
-        json={"query": "What is LDL?", "answer": "LDL is cholesterol.", "context": "Guideline text"},
+        json={
+            "query": "What is LDL?",
+            "answer": "LDL is cholesterol.",
+            "context": "Guideline text",
+        },
     )
 
     assert response.status_code == 200
@@ -471,7 +477,9 @@ def test_documents_endpoint_uses_paginated_store_contract(monkeypatch, tmp_path:
     get_runtime_state().vector_store_initialized = True
     monkeypatch.setattr("src.app.routes.documents.get_vector_store", lambda: _FakeStore())
 
-    response = client.get("/documents?limit=10&offset=0&source_type=pdf", headers={"X-API-Key": "secret-key"})
+    response = client.get(
+        "/documents?limit=10&offset=0&source_type=pdf", headers={"X-API-Key": "secret-key"}
+    )
 
     assert response.status_code == 200
     payload = response.json()

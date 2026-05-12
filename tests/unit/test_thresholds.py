@@ -1,6 +1,5 @@
 """Unit tests for threshold evaluation."""
 
-
 from src.evals.assessment.thresholds import (
     DEFAULT_THRESHOLDS,
     evaluate_thresholds,

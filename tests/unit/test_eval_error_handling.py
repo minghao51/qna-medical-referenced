@@ -93,7 +93,9 @@ async def test_partial_results_on_some_failures():
         metric.reason = "mock success"
 
     with patch("src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Test answer"):
-        with patch("src.evals.assessment.answer_eval.safe_a_measure", side_effect=mock_safe_measure):
+        with patch(
+            "src.evals.assessment.answer_eval.safe_a_measure", side_effect=mock_safe_measure
+        ):
             try:
                 results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
 
@@ -292,7 +294,11 @@ async def test_metric_calculation_with_invalid_context():
     # Mock retrieval to return empty context
     with patch("src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Test answer"):
         with patch("src.rag.runtime.retrieve_context_with_trace") as mock_retrieve:
-            mock_retrieve.return_value = ("", [], {"retrieval": {}, "context": {}, "generation": {}, "total_time_ms": 0})
+            mock_retrieve.return_value = (
+                "",
+                [],
+                {"retrieval": {}, "context": {}, "generation": {}, "total_time_ms": 0},
+            )
 
             try:
                 results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)
@@ -333,7 +339,8 @@ async def test_metric_timeout_handling():
             "src.evals.assessment.answer_eval.asyncio.wait_for", side_effect=timeout_wait_for
         ):
             with patch(
-                "src.infra.llm.qwen_client.QwenClient.a_generate", return_value="Timeout test answer"
+                "src.infra.llm.qwen_client.QwenClient.a_generate",
+                return_value="Timeout test answer",
             ):
                 try:
                     results, _aggregate = await evaluate_answer_quality_async(dataset, top_k=3)

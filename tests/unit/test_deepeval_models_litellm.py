@@ -53,9 +53,7 @@ def test_get_light_model_returns_litellm_when_configured(monkeypatch):
     from src.evals.deepeval_models import settings as _settings
 
     monkeypatch.setattr(_settings.llm, "provider", "litellm")
-    monkeypatch.setattr(
-        _settings.deepeval, "judge_model_light_litellm", "google/gemma-4-31b-it"
-    )
+    monkeypatch.setattr(_settings.deepeval, "judge_model_light_litellm", "google/gemma-4-31b-it")
 
     model = get_light_model()
     assert isinstance(model, LiteLLMJudgeModel)
@@ -66,9 +64,7 @@ def test_get_heavy_model_returns_litellm_when_configured(monkeypatch):
     from src.evals.deepeval_models import settings as _settings
 
     monkeypatch.setattr(_settings.llm, "provider", "litellm")
-    monkeypatch.setattr(
-        _settings.deepeval, "judge_model_heavy_litellm", "google/gemma-4-31b-it"
-    )
+    monkeypatch.setattr(_settings.deepeval, "judge_model_heavy_litellm", "google/gemma-4-31b-it")
 
     model = get_heavy_model()
     assert isinstance(model, LiteLLMJudgeModel)

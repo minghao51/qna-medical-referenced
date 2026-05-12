@@ -1,6 +1,5 @@
 """Unit tests for eval metrics utilities."""
 
-
 import pytest
 
 from src.evals.metrics._utils import (

@@ -26,7 +26,7 @@ export function getDomainType(source: string): DomainType {
 	try {
 		const url = new URL(source.startsWith('http') ? source : `https://${source}`);
 		const hostname = url.hostname.toLowerCase();
-		
+
 		if (hostname.endsWith('.gov') || hostname.includes('.gov.')) {
 			return 'government';
 		}
@@ -60,16 +60,16 @@ export function calculateSourceQuality(sources: string[]): number {
 	if (!sources || sources.length === 0) {
 		return 30;
 	}
-	
+
 	const credibilityScores = sources.map(source => {
 		const domainType = getDomainType(source);
 		return getDomainCredibilityScore(domainType);
 	});
-	
+
 	const avgCredibility = credibilityScores.reduce((a, b) => a + b, 0) / credibilityScores.length;
-	
+
 	const sourceBonus = Math.min(sources.length * 5, 20);
-	
+
 	return Math.min(avgCredibility + sourceBonus, 100);
 }
 
@@ -77,14 +77,14 @@ export function calculateRetrievalScore(documents: RetrievedDocument[]): number 
 	if (!documents || documents.length === 0) {
 		return 20;
 	}
-	
+
 	const avgCombinedScore = documents.reduce((sum, doc) => sum + doc.combined_score, 0) / documents.length;
 	const scorePercent = avgCombinedScore * 100;
-	
+
 	const documentCountBonus = Math.min(documents.length * 5, 15);
-	
+
 	const topScoreBonus = documents.length > 0 ? documents[0].combined_score * 20 : 0;
-	
+
 	return Math.min(scorePercent * 0.7 + documentCountBonus + topScoreBonus, 100);
 }
 
@@ -92,11 +92,11 @@ export function calculateContextRelevance(context: ContextStage): number {
 	if (!context) {
 		return 30;
 	}
-	
+
 	const chunkScore = Math.min(context.total_chunks / 5 * 30, 30);
 	const charScore = Math.min(context.total_chars / 3000 * 30, 30);
 	const sourceScore = Math.min(context.sources.length * 10, 40);
-	
+
 	return Math.min(chunkScore + charScore + sourceScore, 100);
 }
 
@@ -104,14 +104,14 @@ export function calculateGenerationSuccess(generation: GenerationStage): number 
 	if (!generation) {
 		return 50;
 	}
-	
+
 	const hasModel = generation.model ? 30 : 0;
 	const reasonableTiming = generation.timing_ms < 30000 ? 30 : 15;
 	const hasTokens = generation.tokens_estimate ? 20 : 10;
-	const reasonableTokens = generation.tokens_estimate 
+	const reasonableTokens = generation.tokens_estimate
 		? (generation.tokens_estimate < 2000 ? 20 : 10)
 		: 0;
-	
+
 	return Math.min(hasModel + reasonableTiming + hasTokens + reasonableTokens, 100);
 }
 
@@ -128,19 +128,19 @@ export function calculateConfidence(pipeline: PipelineTrace | null | undefined):
 			}
 		};
 	}
-	
+
 	const retrieval = calculateRetrievalScore(pipeline.retrieval?.documents || []);
 	const sourceQuality = calculateSourceQuality(pipeline.context?.sources || []);
 	const contextRelevance = calculateContextRelevance(pipeline.context);
 	const generationSuccess = calculateGenerationSuccess(pipeline.generation);
-	
+
 	const overall = Math.round(
 		retrieval * 0.4 +
 		sourceQuality * 0.3 +
 		contextRelevance * 0.2 +
 		generationSuccess * 0.1
 	);
-	
+
 	let level: ConfidenceLevel;
 	if (overall >= 75) {
 		level = 'high';
@@ -149,7 +149,7 @@ export function calculateConfidence(pipeline: PipelineTrace | null | undefined):
 	} else {
 		level = 'low';
 	}
-	
+
 	return {
 		overall,
 		level,
@@ -192,7 +192,7 @@ export function getStageStatus(
 		if (score <= thresholdLow) return 'warning';
 		return 'error';
 	};
-	
+
 	return {
 		retrieval: getHigherBetterStatus(retrieval?.documents?.[0]?.combined_score, 0.7, 0.4),
 		context: getHigherBetterStatus(context?.total_chunks, 3, 1),

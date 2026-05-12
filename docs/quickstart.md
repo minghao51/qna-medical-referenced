@@ -14,7 +14,7 @@ Prerequisites and first-time setup. For daily commands, see `docs/local-workflow
 
 ```bash
 # 1. Install dependencies
-uv sync --extra test
+uv sync --dev --group evaluation
 
 # 2. Configure API key
 dotenvx set DASHSCOPE_API_KEY "your_api_key_here"

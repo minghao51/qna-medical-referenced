@@ -2221,17 +2221,17 @@ vertical-align: -.125em;
 
 <div class="quarto-title-meta">
 
-    
+
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
       <p class="date">May 11, 2026</p>
     </div>
   </div>
-  
-    
+
+
   </div>
-  
+
 
 
 </header>
@@ -2255,7 +2255,7 @@ vertical-align: -.125em;
 <span class="ansi-red-fg">NameError</span>                                 Traceback (most recent call last)
 <span class="ansi-cyan-fg">Cell</span><span class="ansi-cyan-fg"> </span><span class="ansi-green-fg">In[1]</span><span class="ansi-green-fg">, line 3</span>
 <span class="ansi-green-fg">      1</span> <span style="font-weight:bold;color:rgb(0,135,0)">from</span> pathlib <span style="font-weight:bold;color:rgb(0,135,0)">import</span> Path
-<span class="ansi-green-fg">      2</span> 
+<span class="ansi-green-fg">      2</span>
 <span class="ansi-green-fg">----&gt; </span><span class="ansi-green-fg">3</span> PROJECT_ROOT = Path(__file__).resolve().parents[<span class="ansi-green-fg">1</span>]
 <span class="ansi-green-fg">      4</span> DATA_DIR = PROJECT_ROOT / <span class="ansi-yellow-fg">&quot;data&quot;</span>
 
@@ -2284,7 +2284,7 @@ vertical-align: -.125em;
 <span class="ansi-red-fg">ModuleNotFoundError</span>                       Traceback (most recent call last)
 <span class="ansi-cyan-fg">Cell</span><span class="ansi-cyan-fg"> </span><span class="ansi-green-fg">In[2]</span><span class="ansi-green-fg">, line 1</span>
 <span class="ansi-green-fg">----&gt; </span><span class="ansi-green-fg">1</span> <span style="font-weight:bold;color:rgb(0,135,0)">from</span> src.config.settings <span style="font-weight:bold;color:rgb(0,135,0)">import</span> get_settings
-<span class="ansi-green-fg">      2</span> 
+<span class="ansi-green-fg">      2</span>
 <span class="ansi-green-fg">      3</span> settings = get_settings()
 <span class="ansi-green-fg">      4</span> print(f&quot;Storage data dir:    {settings.storage.data_dir}&quot;)
 
@@ -2347,7 +2347,7 @@ vertical-align: -.125em;
 <span class="ansi-red-fg">ModuleNotFoundError</span>                       Traceback (most recent call last)
 <span class="ansi-cyan-fg">Cell</span><span class="ansi-cyan-fg"> </span><span class="ansi-green-fg">In[3]</span><span class="ansi-green-fg">, line 1</span>
 <span class="ansi-green-fg">----&gt; </span><span class="ansi-green-fg">1</span> <span style="font-weight:bold;color:rgb(0,135,0)">from</span> src.ingestion.steps.load_pdfs <span style="font-weight:bold;color:rgb(0,135,0)">import</span> set_pdf_extractor_strategy, set_pdf_table_extractor
-<span class="ansi-green-fg">      2</span> 
+<span class="ansi-green-fg">      2</span>
 <span class="ansi-green-fg">      3</span> print(<span class="ansi-yellow-fg">&quot;PDF extraction configured: pymupdf_pdfplumber (default)&quot;</span>)
 <span class="ansi-green-fg">      4</span> print(<span class="ansi-yellow-fg">&quot;Table extraction configured: heuristic (default)&quot;</span>)
 
@@ -2380,7 +2380,7 @@ vertical-align: -.125em;
 <span class="ansi-cyan-fg">Cell</span><span class="ansi-cyan-fg"> </span><span class="ansi-green-fg">In[4]</span><span class="ansi-green-fg">, line 1</span>
 <span class="ansi-green-fg">----&gt; </span><span class="ansi-green-fg">1</span> <span style="font-weight:bold;color:rgb(0,135,0)">from</span> src.ingestion.chunking.core <span style="font-weight:bold;color:rgb(0,135,0)">import</span> TextChunker
 <span class="ansi-green-fg">      2</span> <span style="font-weight:bold;color:rgb(0,135,0)">from</span> src.ingestion.chunking.config <span style="font-weight:bold;color:rgb(0,135,0)">import</span> DEFAULT_SOURCE_CHUNK_CONFIGS
-<span class="ansi-green-fg">      3</span> 
+<span class="ansi-green-fg">      3</span>
 <span class="ansi-green-fg">      4</span> print(<span class="ansi-yellow-fg">&quot;=== Default Chunk Configs ===&quot;</span>)
 
 <span class="ansi-red-fg">ModuleNotFoundError</span>: No module named &#39;src&#39;</pre>
@@ -2442,9 +2442,9 @@ vertical-align: -.125em;
 <span class="ansi-green-fg">     23</span> - HDL cholesterol: &gt;<span class="ansi-green-fg">40</span> mg/dL (men), &gt;<span class="ansi-green-fg">50</span> mg/dL (women)
 <span class="ansi-green-fg">     24</span> - Triglycerides: &lt;<span class="ansi-green-fg">150</span> mg/dL (normal)
 <span class="ansi-green-fg">     25</span> &quot;&quot;&quot;.strip()
-<span class="ansi-green-fg">     26</span> 
+<span class="ansi-green-fg">     26</span>
 <span class="ansi-green-fg">---&gt; </span><span class="ansi-green-fg">27</span> <span style="font-weight:bold;color:rgb(0,135,0)">from</span> src.ingestion.chunking.core <span style="font-weight:bold;color:rgb(0,135,0)">import</span> TextChunker
-<span class="ansi-green-fg">     28</span> 
+<span class="ansi-green-fg">     28</span>
 <span class="ansi-green-fg">     29</span> chunker = TextChunker(
 <span class="ansi-green-fg">     30</span>     chunk_size=<span class="ansi-green-fg">256</span>,
 
@@ -2529,7 +2529,7 @@ vertical-align: -.125em;
 <span class="ansi-red-fg">ModuleNotFoundError</span>                       Traceback (most recent call last)
 <span class="ansi-cyan-fg">Cell</span><span class="ansi-cyan-fg"> </span><span class="ansi-green-fg">In[6]</span><span class="ansi-green-fg">, line 1</span>
 <span class="ansi-green-fg">----&gt; </span><span class="ansi-green-fg">1</span> <span style="font-weight:bold;color:rgb(0,135,0)">from</span> src.config.settings <span style="font-weight:bold;color:rgb(0,135,0)">import</span> get_settings
-<span class="ansi-green-fg">      2</span> 
+<span class="ansi-green-fg">      2</span>
 <span class="ansi-green-fg">      3</span> settings = get_settings()
 <span class="ansi-green-fg">      4</span> print(<span class="ansi-yellow-fg">&quot;=== Enrichment Configuration ===&quot;</span>)
 
@@ -2633,7 +2633,7 @@ each query via LLM — adds latency but adapts to query phrasing.
 <span class="ansi-red-fg">ModuleNotFoundError</span>                       Traceback (most recent call last)
 <span class="ansi-cyan-fg">Cell</span><span class="ansi-cyan-fg"> </span><span class="ansi-green-fg">In[9]</span><span class="ansi-green-fg">, line 1</span>
 <span class="ansi-green-fg">----&gt; </span><span class="ansi-green-fg">1</span> <span style="font-weight:bold;color:rgb(0,135,0)">from</span> src.ingestion.indexing.vector_store <span style="font-weight:bold;color:rgb(0,135,0)">import</span> ChromaVectorStore
-<span class="ansi-green-fg">      2</span> 
+<span class="ansi-green-fg">      2</span>
 <span class="ansi-green-fg">      3</span> print(<span class="ansi-yellow-fg">&quot;=== Vector Store Configuration ===&quot;</span>)
 <span class="ansi-green-fg">      4</span> print(<span class="ansi-yellow-fg">&quot;  Backend:       ChromaDB (in-memory + JSON persistence)&quot;</span>)
 
@@ -2668,7 +2668,7 @@ each query via LLM — adds latency but adapts to query phrasing.
 <span class="ansi-red-fg">ModuleNotFoundError</span>                       Traceback (most recent call last)
 <span class="ansi-cyan-fg">Cell</span><span class="ansi-cyan-fg"> </span><span class="ansi-green-fg">In[10]</span><span class="ansi-green-fg">, line 1</span>
 <span class="ansi-green-fg">----&gt; </span><span class="ansi-green-fg">1</span> <span style="font-weight:bold;color:rgb(0,135,0)">from</span> src.ingestion.pipeline <span style="font-weight:bold;color:rgb(0,135,0)">import</span> build_ingestion_pipeline, execute_pipeline
-<span class="ansi-green-fg">      2</span> 
+<span class="ansi-green-fg">      2</span>
 <span class="ansi-green-fg">      3</span> print(<span class="ansi-yellow-fg">&quot;To run the full ingestion pipeline:&quot;</span>)
 <span class="ansi-green-fg">      4</span> print()
 
@@ -2724,7 +2724,7 @@ each query via LLM — adds latency but adapts to query phrasing.
     anchorJS.add('.anchored');
     const isCodeAnnotation = (el) => {
       for (const clz of el.classList) {
-        if (clz.startsWith('code-annotation-')) {                     
+        if (clz.startsWith('code-annotation-')) {
           return true;
         }
       }
@@ -2744,11 +2744,11 @@ each query via LLM — adds latency but adapts to query phrasing.
         button.setAttribute("data-bs-toggle", "tooltip");
         button.setAttribute("data-bs-placement", "left");
         button.setAttribute("data-bs-title", "Copied!");
-        tooltip = new bootstrap.Tooltip(button, 
-          { trigger: "manual", 
+        tooltip = new bootstrap.Tooltip(button,
+          { trigger: "manual",
             customClass: "code-copy-button-tooltip",
             offset: [0, -8]});
-        tooltip.show();    
+        tooltip.show();
       }
       setTimeout(function() {
         if (tooltip) {
@@ -2822,7 +2822,7 @@ each query via LLM — adds latency but adapts to query phrasing.
           if (codeDiv.classList.contains(fromCls)) {
             codeDiv.classList.remove(fromCls);
             codeDiv.classList.add(toCls);
-          } 
+          }
         }
         return false;
       }
@@ -2876,7 +2876,7 @@ each query via LLM — adds latency but adapts to query phrasing.
       if (onUntriggerFn) {
         config.onUntrigger = onUntriggerFn;
       }
-      window.tippy(el, config); 
+      window.tippy(el, config);
     }
     const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
     for (var i=0; i<noterefs.length; i++) {
@@ -2951,7 +2951,7 @@ each query via LLM — adds latency but adapts to query phrasing.
       tippyHover(xref, undefined, function(instance) {
         instance.disable();
         let url = xref.getAttribute('href');
-        let hash = undefined; 
+        let hash = undefined;
         if (url.startsWith('#')) {
           hash = url;
         } else {
@@ -2979,7 +2979,7 @@ each query via LLM — adds latency but adapts to query phrasing.
               if (note !== null) {
                 const html = processXRef(id, note);
                 instance.setContent(html);
-              } 
+              }
             }).finally(() => {
               instance.enable();
               instance.show();
@@ -3003,7 +3003,7 @@ each query via LLM — adds latency but adapts to query phrasing.
               }
               const html = processXRef(null, note);
               instance.setContent(html);
-            } 
+            }
           }).finally(() => {
             instance.enable();
             instance.show();
@@ -3043,7 +3043,7 @@ each query via LLM — adds latency but adapts to query phrasing.
               height = bottom - top;
             }
             if (top !== null && height !== null && parent !== null) {
-              // cook up a div (if necessary) and position it 
+              // cook up a div (if necessary) and position it
               let div = window.document.getElementById("code-annotation-line-highlight");
               if (div === null) {
                 div = window.document.createElement("div");

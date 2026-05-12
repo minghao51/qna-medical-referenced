@@ -40,15 +40,15 @@
 
 	const stagesByLevel = $derived(() => {
 		const levels = new Map<number, DagStage[]>();
-		
+
 		for (const stage of stages) {
 			const incoming = connections.filter(c => c.to === stage.id);
 			const level = incoming.length > 0 ? 1 : 0;
-			
+
 			if (!levels.has(level)) levels.set(level, []);
 			levels.get(level)!.push(stage);
 		}
-		
+
 		return Array.from(levels.entries()).sort((a, b) => a[0] - b[0]).map(([_, s]) => s);
 	});
 </script>
@@ -57,7 +57,7 @@
 	{#if title}
 		<h3 class="dag-title">{title}</h3>
 	{/if}
-	
+
 	<div class="dag-flow">
 		{#each stagesByLevel() as levelStages, levelIndex}
 			<div class="dag-level">

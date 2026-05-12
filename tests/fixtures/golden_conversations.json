@@ -6,12 +6,12 @@
             "conversation_category": "contextual_followup",
             "turns": [
                 {"role": "user", "content": "What is the LDL-C target for secondary prevention?"},
-                {"role": "user", "content": "And what if the patient has diabetes?"},
+                {"role": "user", "content": "And what if the patient has diabetes?"}
             ],
             "expected_outcome": "Assistant provides LDL-C target of <1.8 mmol/L for secondary prevention, then correctly identifies diabetes as a cardiovascular risk enhancer that may indicate more aggressive lipid management",
             "turn_level_expected_keywords": [
                 ["LDL-C", "1.8", "mmol", "secondary", "prevention"],
-                ["diabetes", "risk", "enhancer", "ASCVD", "statin", "cardiovascular"],
+                ["diabetes", "risk", "enhancer", "ASCVD", "statin", "cardiovascular"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -19,7 +19,7 @@
             ],
             "difficulty": "medium",
             "dataset_split": "regression",
-            "source_family": "lipid",
+            "source_family": "lipid"
         },
         {
             "conversation_id": "mt_002",
@@ -29,13 +29,13 @@
                 {"role": "user", "content": "What should I eat for pre-diabetes?"},
                 {
                     "role": "user",
-                    "content": "How should I balance fruit intake with the pre-diabetes plate method?",
-                },
+                    "content": "How should I balance fruit intake with the pre-diabetes plate method?"
+                }
             ],
             "expected_outcome": "Assistant first explains the plate method (half vegetables, quarter proteins, quarter carbs), then addresses how fruits fit into this framework emphasizing they belong to the carb portion and should be balanced with non-starchy vegetables",
             "turn_level_expected_keywords": [
                 ["plate", "vegetables", "half", "protein", "pre-diabetes"],
-                ["fruits", "plate", "half", "carbohydrate", "balance", "pre-diabetes"],
+                ["fruits", "plate", "half", "carbohydrate", "balance", "pre-diabetes"]
             ],
             "turn_level_expected_sources": [["pre-diabetes"], ["pre-diabetes"]],
             "context": [
@@ -43,7 +43,7 @@
             ],
             "difficulty": "easy",
             "dataset_split": "regression",
-            "source_family": "pre diabetes",
+            "source_family": "pre diabetes"
         },
         {
             "conversation_id": "mt_003",
@@ -51,12 +51,12 @@
             "conversation_category": "clarification",
             "turns": [
                 {"role": "user", "content": "What is FH?"},
-                {"role": "user", "content": "When should genetic testing be considered for FH?"},
+                {"role": "user", "content": "When should genetic testing be considered for FH?"}
             ],
             "expected_outcome": "Assistant defines FH as familial hypercholesterolemia, then specifies LDL-C >= 4.9 mmol/L (190 mg/dL) as the threshold where genetic testing should be considered",
             "turn_level_expected_keywords": [
                 ["FH", "familial", "hypercholesterolemia", "LDL-C"],
-                ["genetic", "testing", "LDL-C", "4.9", "mmol"],
+                ["genetic", "testing", "LDL-C", "4.9", "mmol"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -64,7 +64,7 @@
             ],
             "difficulty": "hard",
             "dataset_split": "regression",
-            "source_family": "lipid",
+            "source_family": "lipid"
         },
         {
             "conversation_id": "mt_004",
@@ -73,14 +73,14 @@
             "turns": [
                 {
                     "role": "user",
-                    "content": "What are risk enhancers in cardiovascular risk assessment?",
+                    "content": "What are risk enhancers in cardiovascular risk assessment?"
                 },
-                {"role": "user", "content": "Is diabetes considered a risk enhancer?"},
+                {"role": "user", "content": "Is diabetes considered a risk enhancer?"}
             ],
             "expected_outcome": "Assistant lists risk enhancers (family history, metabolic syndrome, CKD, etc.) and confirms diabetes is indeed a risk enhancer that favors statin therapy",
             "turn_level_expected_keywords": [
                 ["risk", "enhancers", "cardiovascular", "family", "history", "statin"],
-                ["diabetes", "risk", "enhancer", "cardiovascular", "statin"],
+                ["diabetes", "risk", "enhancer", "cardiovascular", "statin"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -88,7 +88,7 @@
             ],
             "difficulty": "medium",
             "dataset_split": "regression",
-            "source_family": "lipid",
+            "source_family": "lipid"
         },
         {
             "conversation_id": "mt_005",
@@ -97,17 +97,17 @@
             "turns": [
                 {
                     "role": "user",
-                    "content": "At what BMI should medication be considered for pre-diabetes?",
+                    "content": "At what BMI should medication be considered for pre-diabetes?"
                 },
                 {
                     "role": "user",
-                    "content": "What lifestyle changes should be tried first before medication?",
-                },
+                    "content": "What lifestyle changes should be tried first before medication?"
+                }
             ],
             "expected_outcome": "Assistant specifies BMI >= 23 kg/m2 as the threshold for considering metformin, and emphasizes lifestyle modification (diet, exercise, weight loss) as the first-line intervention",
             "turn_level_expected_keywords": [
                 ["BMI", "23", "medication", "metformin", "pre-diabetes"],
-                ["lifestyle", "diet", "exercise", "weight", "loss", "pre-diabetes"],
+                ["lifestyle", "diet", "exercise", "weight", "loss", "pre-diabetes"]
             ],
             "turn_level_expected_sources": [["pre-diabetes"], ["pre-diabetes"]],
             "context": [
@@ -115,7 +115,7 @@
             ],
             "difficulty": "medium",
             "dataset_split": "regression",
-            "source_family": "pre diabetes",
+            "source_family": "pre diabetes"
         },
         {
             "conversation_id": "mt_006",
@@ -125,13 +125,13 @@
                 {"role": "user", "content": "When is statin therapy indicated?"},
                 {
                     "role": "user",
-                    "content": "When should high-intensity statin therapy be favored?",
-                },
+                    "content": "When should high-intensity statin therapy be favored?"
+                }
             ],
             "expected_outcome": "Assistant explains statin therapy is indicated for ASCVD and high-risk primary prevention, and high-intensity statins are favored when risk enhancers are present or LDL-C goals are not achieved",
             "turn_level_expected_keywords": [
                 ["statin", "ASCVD", "primary", "prevention", "LDL-C"],
-                ["high-intensity", "statin", "risk", "enhancers", "LDL-C"],
+                ["high-intensity", "statin", "risk", "enhancers", "LDL-C"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -139,7 +139,7 @@
             ],
             "difficulty": "hard",
             "dataset_split": "test",
-            "source_family": "lipid",
+            "source_family": "lipid"
         },
         {
             "conversation_id": "mt_007",
@@ -148,17 +148,17 @@
             "turns": [
                 {
                     "role": "user",
-                    "content": "What should fill half the plate for pre-diabetes meal planning?",
+                    "content": "What should fill half the plate for pre-diabetes meal planning?"
                 },
                 {
                     "role": "user",
-                    "content": "Which grains are recommended as part of pre-diabetes dietary advice?",
-                },
+                    "content": "Which grains are recommended as part of pre-diabetes dietary advice?"
+                }
             ],
             "expected_outcome": "Assistant first explains half the plate should be non-starchy vegetables, then recommends whole grains over refined grains as the preferred carbohydrate source",
             "turn_level_expected_keywords": [
                 ["plate", "half", "vegetables", "pre-diabetes"],
-                ["grains", "whole", "pre-diabetes", "fiber"],
+                ["grains", "whole", "pre-diabetes", "fiber"]
             ],
             "turn_level_expected_sources": [["pre-diabetes"], ["pre-diabetes"]],
             "context": [
@@ -166,7 +166,7 @@
             ],
             "difficulty": "easy",
             "dataset_split": "dev",
-            "source_family": "pre diabetes",
+            "source_family": "pre diabetes"
         },
         {
             "conversation_id": "mt_008",
@@ -175,17 +175,17 @@
             "turns": [
                 {
                     "role": "user",
-                    "content": "What is the main treatment goal in ASCVD-focused lipid management?",
+                    "content": "What is the main treatment goal in ASCVD-focused lipid management?"
                 },
                 {
                     "role": "user",
-                    "content": "How often should lipid panels be monitored during treatment?",
-                },
+                    "content": "How often should lipid panels be monitored during treatment?"
+                }
             ],
             "expected_outcome": "Assistant states the primary goal is LDL-C reduction to reduce ASCVD risk, then recommends checking lipid panels every 3-6 months during active treatment",
             "turn_level_expected_keywords": [
                 ["ASCVD", "LDL-C", "reduce", "cholesterol", "risk"],
-                ["lipid", "panel", "3-6", "months", "monitor", "treatment"],
+                ["lipid", "panel", "3-6", "months", "monitor", "treatment"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -193,7 +193,7 @@
             ],
             "difficulty": "medium",
             "dataset_split": "dev",
-            "source_family": "lipid",
+            "source_family": "lipid"
         },
         {
             "conversation_id": "mt_009",
@@ -202,17 +202,17 @@
             "turns": [
                 {
                     "role": "user",
-                    "content": "What triglyceride level defines severe hypertriglyceridemia?",
+                    "content": "What triglyceride level defines severe hypertriglyceridemia?"
                 },
                 {
                     "role": "user",
-                    "content": "When should medication be considered for high triglycerides?",
-                },
+                    "content": "When should medication be considered for high triglycerides?"
+                }
             ],
             "expected_outcome": "Assistant defines severe hypertriglyceridemia as TG >= 5.6 mmol/L (500 mg/dL) and indicates medication is considered when TG remains elevated despite lifestyle changes or when pancreatitis risk is elevated",
             "turn_level_expected_keywords": [
                 ["triglyceride", "5.6", "500", "severe", "hypertriglyceridemia"],
-                ["medication", "fibrate", "omega-3", "lifestyle", "pancreatitis"],
+                ["medication", "fibrate", "omega-3", "lifestyle", "pancreatitis"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -220,7 +220,7 @@
             ],
             "difficulty": "hard",
             "dataset_split": "test",
-            "source_family": "lipid",
+            "source_family": "lipid"
         },
         {
             "conversation_id": "mt_010",
@@ -229,17 +229,17 @@
             "turns": [
                 {
                     "role": "user",
-                    "content": "What clinical factors go beyond traditional calculators in lipid risk assessment?",
+                    "content": "What clinical factors go beyond traditional calculators in lipid risk assessment?"
                 },
                 {
                     "role": "user",
-                    "content": "How do I know if a patient is high enough risk to need aggressive treatment?",
-                },
+                    "content": "How do I know if a patient is high enough risk to need aggressive treatment?"
+                }
             ],
             "expected_outcome": "Assistant lists risk enhancers (diabetes, CKD, metabolic syndrome, family history, etc.) and explains that these factors along with calculated risk determine treatment intensity",
             "turn_level_expected_keywords": [
                 ["risk", "enhancers", "traditional", "calculators", "ASCVD"],
-                ["high-risk", "statin", "intensity", "diabetes", "risk", "enhancers"],
+                ["high-risk", "statin", "intensity", "diabetes", "risk", "enhancers"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -247,7 +247,7 @@
             ],
             "difficulty": "hard",
             "dataset_split": "dev",
-            "source_family": "lipid",
+            "source_family": "lipid"
         },
         {
             "conversation_id": "mt_011",
@@ -256,17 +256,17 @@
             "turns": [
                 {
                     "role": "user",
-                    "content": "When should metformin be considered for pre-diabetes?",
+                    "content": "When should metformin be considered for pre-diabetes?"
                 },
                 {
                     "role": "user",
-                    "content": "What BMI threshold makes metformin more strongly indicated?",
-                },
+                    "content": "What BMI threshold makes metformin more strongly indicated?"
+                }
             ],
             "expected_outcome": "Assistant explains metformin is considered when lifestyle measures fail and BMI is elevated, with BMI >= 23 kg/m2 being the specific threshold mentioned in guidelines",
             "turn_level_expected_keywords": [
                 ["metformin", "pre-diabetes", "lifestyle", "BMI", "23"],
-                ["BMI", "23", "metformin", "pre-diabetes", "threshold"],
+                ["BMI", "23", "metformin", "pre-diabetes", "threshold"]
             ],
             "turn_level_expected_sources": [["pre-diabetes"], ["pre-diabetes"]],
             "context": [
@@ -274,7 +274,7 @@
             ],
             "difficulty": "easy",
             "dataset_split": "regression",
-            "source_family": "pre diabetes",
+            "source_family": "pre diabetes"
         },
         {
             "conversation_id": "mt_012",
@@ -283,17 +283,17 @@
             "turns": [
                 {
                     "role": "user",
-                    "content": "What LDL-C threshold suggests possible familial hypercholesterolemia?",
+                    "content": "What LDL-C threshold suggests possible familial hypercholesterolemia?"
                 },
                 {
                     "role": "user",
-                    "content": "What treatment approach is recommended for FH patients with very high LDL-C?",
-                },
+                    "content": "What treatment approach is recommended for FH patients with very high LDL-C?"
+                }
             ],
             "expected_outcome": "Assistant identifies LDL-C >= 4.9 mmol/L as suggesting FH, then recommends high-intensity statin therapy as first-line, with addition of ezetimibe and potentially PCSK9 inhibitors if needed",
             "turn_level_expected_keywords": [
                 ["LDL-C", "4.9", "familial", "hypercholesterolemia", "FH"],
-                ["statin", "high-intensity", "ezetimibe", "PCSK9", "FH"],
+                ["statin", "high-intensity", "ezetimibe", "PCSK9", "FH"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -301,7 +301,7 @@
             ],
             "difficulty": "hard",
             "dataset_split": "test",
-            "source_family": "lipid",
+            "source_family": "lipid"
         },
         {
             "conversation_id": "mt_013",
@@ -310,17 +310,17 @@
             "turns": [
                 {
                     "role": "user",
-                    "content": "What food pattern is emphasized before starting metformin for pre-diabetes?",
+                    "content": "What food pattern is emphasized before starting metformin for pre-diabetes?"
                 },
                 {
                     "role": "user",
-                    "content": "Can you give specific dietary recommendations for pre-diabetes?",
-                },
+                    "content": "Can you give specific dietary recommendations for pre-diabetes?"
+                }
             ],
             "expected_outcome": "Assistant emphasizes plant-based, Mediterranean-style diet with vegetables and whole grains before medication, then provides specific plate method guidance",
             "turn_level_expected_keywords": [
                 ["diet", "lifestyle", "Mediterranean", "vegetables", "pre-diabetes"],
-                ["plate", "half", "vegetables", "whole", "grains", "pre-diabetes"],
+                ["plate", "half", "vegetables", "whole", "grains", "pre-diabetes"]
             ],
             "turn_level_expected_sources": [["pre-diabetes"], ["pre-diabetes"]],
             "context": [
@@ -328,7 +328,7 @@
             ],
             "difficulty": "medium",
             "dataset_split": "dev",
-            "source_family": "pre diabetes",
+            "source_family": "pre diabetes"
         },
         {
             "conversation_id": "mt_014",
@@ -338,13 +338,13 @@
                 {"role": "user", "content": "What are the side effects of statins?"},
                 {
                     "role": "user",
-                    "content": "How should I differentiate statin-associated muscle symptoms from other causes?",
-                },
+                    "content": "How should I differentiate statin-associated muscle symptoms from other causes?"
+                }
             ],
             "expected_outcome": "Assistant lists side effects (myopathy, muscle pain, elevated CK, rarely rhabdomyolysis) and explains differentiation involves timing correlation with statin initiation, symmetric proximal weakness pattern, and checking CK levels",
             "turn_level_expected_keywords": [
                 ["statin", "muscle", "pain", "myopathy", "CK", "rhabdomyolysis"],
-                ["statin-associated", "muscle", "symptoms", "CK", "differential"],
+                ["statin-associated", "muscle", "symptoms", "CK", "differential"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -352,7 +352,7 @@
             ],
             "difficulty": "hard",
             "dataset_split": "test",
-            "source_family": "lipid",
+            "source_family": "lipid"
         },
         {
             "conversation_id": "mt_015",
@@ -362,13 +362,13 @@
                 {"role": "user", "content": "When should ezetimibe be added to statin therapy?"},
                 {
                     "role": "user",
-                    "content": "When are PCSK9 inhibitors indicated for lipid management?",
-                },
+                    "content": "When are PCSK9 inhibitors indicated for lipid management?"
+                }
             ],
             "expected_outcome": "Assistant explains ezetimibe is added when LDL-C goals are not achieved on maximally tolerated statin, and PCSK9 inhibitors are reserved for very high-risk patients (FH with ASCVD, or non-FH with progressive ASCVD) who need additional LDL-C reduction",
             "turn_level_expected_keywords": [
                 ["ezetimibe", "statin", "add-on", "LDL-C", "goals"],
-                ["PCSK9", "inhibitors", "very-high-risk", "FH", "ASCVD"],
+                ["PCSK9", "inhibitors", "very-high-risk", "FH", "ASCVD"]
             ],
             "turn_level_expected_sources": [["Lipid"], ["Lipid"]],
             "context": [
@@ -376,8 +376,8 @@
             ],
             "difficulty": "hard",
             "dataset_split": "test",
-            "source_family": "lipid",
-        },
+            "source_family": "lipid"
+        }
     ],
     "stop_words": [
         "the",
@@ -394,7 +394,7 @@
         "with",
         "as",
         "at",
-        "by",
+        "by"
     ],
     "metadata": {
         "description": "Multi-turn conversation dataset for RAG chatbot evaluation",
@@ -404,9 +404,9 @@
             "contextual_followup": 6,
             "clarification": 3,
             "topic_shift": 2,
-            "cross_document": 4,
+            "cross_document": 4
         },
         "split_distribution": {"regression": 6, "test": 5, "dev": 4},
-        "difficulty_distribution": {"easy": 4, "medium": 6, "hard": 5},
-    },
+        "difficulty_distribution": {"easy": 4, "medium": 6, "hard": 5}
+    }
 }

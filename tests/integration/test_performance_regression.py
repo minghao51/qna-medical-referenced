@@ -49,7 +49,9 @@ def test_chat_endpoint_latency_regression_guard(monkeypatch, tmp_path: Path):
     latencies = []
     for _ in range(5):
         start = time.perf_counter()
-        response = client.post("/chat", headers={"X-API-Key": "secret-key"}, json={"message": "hello"})
+        response = client.post(
+            "/chat", headers={"X-API-Key": "secret-key"}, json={"message": "hello"}
+        )
         latencies.append(time.perf_counter() - start)
         assert response.status_code == 200
 

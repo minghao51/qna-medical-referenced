@@ -37,9 +37,9 @@
 	}
 </script>
 
-<button 
-	class="flow-node" 
-	class:active 
+<button
+	class="flow-node"
+	class:active
 	class:skipped
 	class:clickable={onclick !== undefined}
 	onclick={onclick}

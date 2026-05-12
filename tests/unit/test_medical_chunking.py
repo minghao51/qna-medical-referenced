@@ -107,10 +107,7 @@ def test_text_chunker_repeats_table_header_when_splitting_large_table():
                             "block_type": "table",
                             "text": "\n".join(
                                 [header]
-                                + [
-                                    f"Drug {idx} | {idx} mg | {row_payload}"
-                                    for idx in range(1, 8)
-                                ]
+                                + [f"Drug {idx} | {idx} mg | {row_payload}" for idx in range(1, 8)]
                             ),
                             "section_path": ["Medication table"],
                             "metadata": {"page": 2},

@@ -44,7 +44,7 @@ For setup and day-to-day usage, use the docs in this order:
 
 ```bash
 # Install all dependencies (including test dependencies)
-uv sync --extra test
+uv sync --dev --group evaluation
 
 # Setup environment (requires dotenvx: npm install @dotenvx/dotenvx -g)
 dotenvx set DASHSCOPE_API_KEY "your-key"
@@ -90,10 +90,7 @@ dotenvx run -- uv run python -m src.cli.ingest --enable-keyword-extraction
 - DAG visualization with `--visualize` flag
 - Incremental updates (skip completed stages)
 
-**Note**: Use `uv sync --extra test` to install all test dependencies, including:
-- `pytest-asyncio` for async test support
-- `deepeval` for evaluation tests
-- Other optional dependencies
+**Note**: Use `uv sync --dev --group evaluation` to install all test dependencies, including dev tools and evaluation packages.
 
 For production deployments, `uv sync` alone is sufficient.
 

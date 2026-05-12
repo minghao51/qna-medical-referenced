@@ -59,11 +59,6 @@ dataset:
     expanded: tests/fixtures/golden_queries_expanded.json
     comprehensive: tests/fixtures/golden_queries_comprehensive.json
     diverse: tests/fixtures/golden_queries_diverse.json
-  available_datasets:
-    original: tests/fixtures/golden_queries.json
-    expanded: tests/fixtures/golden_queries_expanded.json
-    comprehensive: tests/fixtures/golden_queries_comprehensive.json
-    diverse: tests/fixtures/golden_queries_diverse.json
 
 evaluation:
   artifact_dir: data/evals_comprehensive_ablation

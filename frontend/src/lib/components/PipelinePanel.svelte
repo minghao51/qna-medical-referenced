@@ -58,8 +58,8 @@
 			</div>
 		</div>
 
-		<PipelineFlowDiagram 
-			pipeline={pipeline} 
+		<PipelineFlowDiagram
+			pipeline={pipeline}
 			activeStage={activeFlowStage}
 			onNodeClick={handleFlowNodeClick}
 		/>
@@ -99,8 +99,8 @@
 							<h4>Retrieval Steps</h4>
 							{#each pipeline.retrieval.steps as step}
 								<div class="step-item-wrapper">
-									<button 
-										class="step-item" 
+									<button
+										class="step-item"
 										class:skipped={step.skipped}
 										class:expanded={expandedStep === step.name}
 										onclick={() => expandedStep = expandedStep === step.name ? null : step.name}
@@ -165,8 +165,8 @@
 					<div class="documents-list">
 						<h4>Retrieved Documents <span class="hint">(click to inspect)</span></h4>
 						{#each pipeline.retrieval.documents as doc}
-							<button 
-								class="doc-item clickable" 
+							<button
+								class="doc-item clickable"
 								onclick={() => selectedDocument = doc}
 								type="button"
 							>
@@ -251,9 +251,9 @@
 			</StepCard>
 
 			<!-- Generation Stage -->
-			<StepCard 
-				title="Generation" 
-				timing={pipeline.generation.timing_ms} 
+			<StepCard
+				title="Generation"
+				timing={pipeline.generation.timing_ms}
 				expanded={activeFlowStage === 'generation' || activeFlowStage === null}
 			>
 				<div class="stage-header">
@@ -288,10 +288,10 @@
 {/if}
 
 {#if selectedDocument}
-	<DocumentInspector 
-		document={selectedDocument} 
+	<DocumentInspector
+		document={selectedDocument}
 		query={pipeline.retrieval.query}
-		onclose={() => selectedDocument = null} 
+		onclose={() => selectedDocument = null}
 	/>
 {/if}
 

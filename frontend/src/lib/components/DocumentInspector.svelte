@@ -27,7 +27,7 @@
 		const queryLower = query.toLowerCase();
 		const contentLower = content.toLowerCase();
 		const snippets: string[] = [];
-		
+
 		const words = queryLower.split(/\s+/).filter(w => w.length > 2);
 		words.forEach(word => {
 			let idx = contentLower.indexOf(word);
@@ -37,7 +37,7 @@
 				snippets.push(content.slice(start, end));
 			}
 		});
-		
+
 		return snippets.slice(0, 3);
 	}
 
@@ -122,28 +122,28 @@
 				<h4>Retrieval Scores</h4>
 				<div class="scores-grid">
 					<div class="score-item">
-						<MetricBar 
-							label="Combined" 
-							value={Math.round(document.combined_score * 100)} 
+						<MetricBar
+							label="Combined"
+							value={Math.round(document.combined_score * 100)}
 							color="blue"
 						/>
 					</div>
 					<div class="score-item">
-						<MetricBar 
-							label="Semantic" 
-							value={Math.round(document.semantic_score * 100)} 
+						<MetricBar
+							label="Semantic"
+							value={Math.round(document.semantic_score * 100)}
 						/>
 					</div>
 					<div class="score-item">
-						<MetricBar 
-							label="Keyword" 
-							value={Math.round(document.keyword_score * 100)} 
+						<MetricBar
+							label="Keyword"
+							value={Math.round(document.keyword_score * 100)}
 						/>
 					</div>
 					<div class="score-item">
-						<MetricBar 
-							label="Source Boost" 
-							value={Math.round(document.source_boost * 100)} 
+						<MetricBar
+							label="Source Boost"
+							value={Math.round(document.source_boost * 100)}
 						/>
 					</div>
 				</div>

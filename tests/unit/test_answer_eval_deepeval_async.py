@@ -153,9 +153,7 @@ async def test_evaluate_answer_quality_async_marks_timeouts_as_metric_errors(mon
     )
     from src.evals.assessment.answer_eval import settings as _settings
 
-    monkeypatch.setattr(
-        _settings.deepeval, "deepeval_metric_timeout_seconds", 0
-    )
+    monkeypatch.setattr(_settings.deepeval, "deepeval_metric_timeout_seconds", 0)
 
     results, aggregate = await evaluate_answer_quality_async(
         [{"query_id": "q1", "query": "test query"}],

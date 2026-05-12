@@ -61,10 +61,7 @@ class TestCrossEncoderReranker:
 
     def test_rerank_respects_top_k(self):
         reranker = CrossEncoderReranker(model_name="test-model")
-        results = [
-            {"id": str(i), "content": f"content {i}", "score": 0.5}
-            for i in range(10)
-        ]
+        results = [{"id": str(i), "content": f"content {i}", "score": 0.5} for i in range(10)]
 
         with patch.object(reranker, "_load_model"):
             reranker._model = MagicMock()

@@ -17,7 +17,7 @@ export const metricDefinitions: Record<string, string> = {
 	'duplicate_file_rate': 'Percentage of files that contain purely duplicate content.',
 	'small_file_rate': 'Percentage of files that are unusually small and likely useless.',
 	'manifest_inventory_record_count': 'Number of records successfully registered in the inventory.',
-	
+
 	// L1
 	'pairs_evaluated': 'Number of (HTML, Markdown) pairs analyzed for quality.',
 	'markdown_empty_rate': 'Percentage of converted markdown files that resulted in empty content.',
@@ -26,7 +26,7 @@ export const metricDefinitions: Record<string, string> = {
 	'boilerplate_ratio_mean': 'Percentage of text identified as navigation, footers, or layout noise.',
 	'heading_preservation_rate_mean': 'How well structural headings (H1, H2) were preserved during conversion.',
 	'table_preservation_rate_mean': 'How well data tables survived the markdown conversion process.',
-	
+
 	// L2
 	'pdf_file_count': 'Total number of PDF documents processed.',
 	'page_extraction_coverage': 'Percentage of total PDF pages successfully extracted.',
