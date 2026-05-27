@@ -7,10 +7,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _run_async[T](coro: Coroutine[Any, Any, T]) -> T:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+    return asyncio.run(coro)
 
 
 def hype_questions_path(gold_data_path: str) -> str:
@@ -36,7 +50,7 @@ def generate_hype_for_chunks(
         return {}
 
     client = get_client()
-    hype_questions = asyncio.run(
+    hype_questions = _run_async(
         generate_hype_questions_for_chunks(
             chunks=all_chunks,
             client=client,
@@ -73,7 +87,7 @@ def extract_keywords_for_chunks(
         return {}
 
     client = get_client()
-    results = asyncio.run(
+    results = _run_async(
         enrich_chunks(
             chunks=all_chunks,
             client=client,
@@ -112,7 +126,7 @@ def generate_summaries_for_chunks(
         return {}
 
     client = get_client()
-    results = asyncio.run(
+    results = _run_async(
         enrich_chunks(
             chunks=all_chunks,
             client=client,
@@ -144,7 +158,24 @@ def write_enriched_chunks(
 ) -> dict[str, Any]:
     import polars as pl
 
+    from src.ingestion.schemas.gold_models import EnrichedChunkGold
+
     Path(gold_chunks_dir).mkdir(parents=True, exist_ok=True)
+    for chunk in enriched_chunks:
+        try:
+            EnrichedChunkGold(
+                id=chunk.get("id", ""),
+                source=chunk.get("source", ""),
+                source_type=chunk.get("source_type", ""),
+                page=chunk.get("page"),
+                content=chunk.get("content", ""),
+                content_type=chunk.get("content_type", "paragraph"),
+                section_path=chunk.get("section_path", []),
+                quality_score=chunk.get("quality_score", 1.0),
+                metadata=chunk.get("metadata", {}),
+            )
+        except Exception as e:
+            logger.warning("Gold validation failed for chunk %s: %s", chunk.get("id"), e)
     path = Path(gold_chunks_dir) / "enriched_chunks.parquet"
     df = pl.DataFrame(enriched_chunks)
     df.write_parquet(path)

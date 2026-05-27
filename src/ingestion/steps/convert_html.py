@@ -480,18 +480,7 @@ def convert_html_to_md(
 
 
 def _bs_fallback_extract(html_content: str) -> dict[str, Any]:
-    soup = BeautifulSoup(html_content, "html.parser")
-    _remove_noise(soup)
-    visible_text = _visible_text(soup)
-    blocks = _collect_structured_blocks(soup)
-    markdown = _markdown_from_blocks(blocks)
-    return {
-        "extractor": "beautifulsoup",
-        "page_type": _classify_page(soup, visible_text),
-        "visible_text": visible_text,
-        "structured_blocks": blocks,
-        "markdown": markdown,
-    }
+    return _fallback_extract(html_content)
 
 
 def _build_extractor_chain() -> list[tuple[str, Callable]]:
@@ -551,15 +540,14 @@ def get_html_files() -> list[Path]:
 
 def main(force: bool = False):
     """Convert all HTML files to Markdown."""
-    print("=" * 60)
-    print("L1: HTML to Markdown Converter")
-    print("=" * 60)
-    print(f"\nData directory: {DATA_DIR}")
-    print()
+    logger.info("=" * 60)
+    logger.info("L1: HTML to Markdown Converter")
+    logger.info("=" * 60)
+    logger.info("Data directory: %s", DATA_DIR)
 
     html_files = get_html_files()
     repeated_hashes = _compute_global_boilerplate_hashes(html_files)
-    print(f"Found {len(html_files)} HTML files")
+    logger.info("Found %d HTML files", len(html_files))
 
     converted = 0
     skipped = 0
@@ -568,24 +556,23 @@ def main(force: bool = False):
         md_path = html_path.with_suffix(".md")
 
         if md_path.exists() and not force:
-            print(f"Skipping (MD exists): {html_path.name}")
+            logger.info("Skipping (MD exists): %s", html_path.name)
             skipped += 1
             continue
 
-        print(f"Converting: {html_path.name}")
+        logger.info("Converting: %s", html_path.name)
         result = convert_html_to_md(html_path, force=force, repeated_hashes=repeated_hashes)
         if result:
-            print(f"  -> Saved: {result.name}")
+            logger.info("  -> Saved: %s", result.name)
             converted += 1
         else:
             skipped += 1
 
-    print()
-    print("=" * 60)
-    print(f"Converted: {converted} files")
-    print(f"Skipped:   {skipped} files")
-    print(f"Total MD:  {len(list(DATA_DIR.glob('*.md')))} files")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("Converted: %d files", converted)
+    logger.info("Skipped:   %d files", skipped)
+    logger.info("Total MD:  %d files", len(list(DATA_DIR.glob("*.md"))))
+    logger.info("=" * 60)
 
 
 if __name__ == "__main__":

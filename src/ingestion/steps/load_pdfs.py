@@ -208,7 +208,10 @@ class PDFLoader:
 
     def _extract_with_pymupdf(self, pdf_path: Path) -> tuple[Any, list[str]]:
         reader = pymupdf.open(str(pdf_path))
-        texts = [page.get_text("text") or "" for page in reader]
+        try:
+            texts = [page.get_text("text") or "" for page in reader]
+        finally:
+            reader.close()
         return reader, texts
 
     def _extract_with_pdfplumber(self, pdf_path: Path) -> list[str]:

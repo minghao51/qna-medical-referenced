@@ -13,10 +13,11 @@ import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+import yaml
 from bs4 import BeautifulSoup
 
 from src.config import DATA_RAW_DIR
@@ -25,6 +26,23 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = DATA_RAW_DIR
 MANIFEST_PATH = DATA_DIR / "download_manifest.json"
+SOURCES_CONFIG_PATH = Path(__file__).resolve().parents[3] / "config" / "sources.yaml"
+
+_manifest_lock = asyncio.Lock()
+
+
+def _load_sources_config() -> dict[str, Any]:
+    if not SOURCES_CONFIG_PATH.exists():
+        return {}
+    with open(SOURCES_CONFIG_PATH, encoding="utf-8") as f:
+        return dict(yaml.safe_load(f) or {})
+
+
+def _get_web_sources(group: str) -> list[tuple[str, str]]:
+    config = _load_sources_config()
+    web = config.get("web_sources", {})
+    entries = web.get(group, [])
+    return [(e["url"], e["name"]) for e in entries if "url" in e and "name" in e]
 
 
 def get_file_path(url: str, extension: str = "html") -> Path:
@@ -34,7 +52,7 @@ def get_file_path(url: str, extension: str = "html") -> Path:
     if not safe_name or safe_name.endswith("_"):
         safe_name = f"content_{url_hash}"
     filename = f"{safe_name}_{url_hash}.{extension}"
-    return DATA_DIR / filename
+    return cast(Path, DATA_DIR / filename)
 
 
 def normalize_url(url: str) -> str:
@@ -53,7 +71,13 @@ def _load_manifest() -> dict[str, Any]:
         try:
             return dict(json.loads(MANIFEST_PATH.read_text(encoding="utf-8")))
         except Exception as e:
-            logger.debug("Failed to load manifest: %s", e)
+            logger.error("Failed to load manifest: %s", e)
+            backup_path = MANIFEST_PATH.with_suffix(".json.corrupt")
+            try:
+                shutil.copy2(str(MANIFEST_PATH), str(backup_path))
+                logger.error("Corrupt manifest backed up to %s", backup_path)
+            except Exception as backup_err:
+                logger.error("Failed to back up corrupt manifest: %s", backup_err)
             return {"records": []}
     return {"records": []}
 
@@ -224,7 +248,7 @@ def _find_existing_file_by_content_hash(content_hash_value: str) -> Path | None:
         try:
             digest = hashlib.sha256(html_file.read_bytes()).hexdigest()[:16]
             if digest == content_hash_value:
-                return html_file
+                return cast(Path, html_file)
         except Exception as e:
             logger.debug("Failed to hash file %s: %s", html_file.name, e)
             continue
@@ -262,112 +286,187 @@ def file_exists(url: str, extension: str = "html") -> bool:
     return file_path.exists()
 
 
-async def download_url(url: str, timeout: int = 30) -> str | None:
-    """Download content from URL."""
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-            return str(response.text)
-        except httpx.HTTPStatusError as e:
-            logger.warning("HTTP error downloading %s: %s", url, e)
-            return None
-        except httpx.RequestError as e:
-            logger.warning("Request error downloading %s: %s", url, e)
-            return None
+def _is_transient_error(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return bool(exc.response.status_code >= 500)
+    if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError)):
+        return True
+    return False
 
 
-async def download_binary(url: str, timeout: int = 60) -> bytes | None:
-    """Download binary content (PDF) from URL."""
+async def download_url(url: str, timeout: int = 30, max_retries: int = 3) -> str | None:
+    """Download content from URL with retry for transient errors."""
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-            return bytes(response.content)
-        except httpx.HTTPStatusError as e:
-            logger.warning("HTTP error downloading %s: %s", url, e)
-            return None
-        except httpx.RequestError as e:
-            logger.warning("Request error downloading %s: %s", url, e)
-            return None
+        for attempt in range(max_retries):
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+                return str(response.text)
+            except httpx.HTTPStatusError as e:
+                if _is_transient_error(e) and attempt < max_retries - 1:
+                    delay = 2**attempt
+                    logger.warning(
+                        "Transient HTTP error (attempt %d/%d) for %s, retrying in %ds: %s",
+                        attempt + 1,
+                        max_retries,
+                        url,
+                        delay,
+                        e,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.warning("HTTP error downloading %s: %s", url, e)
+                return None
+            except httpx.RequestError as e:
+                if _is_transient_error(e) and attempt < max_retries - 1:
+                    delay = 2**attempt
+                    logger.warning(
+                        "Transient request error (attempt %d/%d) for %s, retrying in %ds: %s",
+                        attempt + 1,
+                        max_retries,
+                        url,
+                        delay,
+                        e,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.warning("Request error downloading %s: %s", url, e)
+                return None
+        return None
+
+
+async def download_binary(url: str, timeout: int = 60, max_retries: int = 3) -> bytes | None:
+    """Download binary content (PDF) from URL with retry for transient errors."""
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        for attempt in range(max_retries):
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+                return bytes(response.content)
+            except httpx.HTTPStatusError as e:
+                if _is_transient_error(e) and attempt < max_retries - 1:
+                    delay = 2**attempt
+                    logger.warning(
+                        "Transient HTTP error (attempt %d/%d) for %s, retrying in %ds: %s",
+                        attempt + 1,
+                        max_retries,
+                        url,
+                        delay,
+                        e,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.warning("HTTP error downloading %s: %s", url, e)
+                return None
+            except httpx.RequestError as e:
+                if _is_transient_error(e) and attempt < max_retries - 1:
+                    delay = 2**attempt
+                    logger.warning(
+                        "Transient request error (attempt %d/%d) for %s, retrying in %ds: %s",
+                        attempt + 1,
+                        max_retries,
+                        url,
+                        delay,
+                        e,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.warning("Request error downloading %s: %s", url, e)
+                return None
+        return None
 
 
 async def _download_and_save_html(url: str, logical_name: str, timeout: int = 30) -> str | None:
     normalized_url = normalize_url(url)
-    manifest = _load_manifest()
-    by_url, by_hash = _manifest_indexes(manifest)
-    prior = by_url.get(normalized_url)
-    if prior and prior.get("filename"):
-        file_path = DATA_DIR / str(prior["filename"])
-        if file_path.exists():
-            print(f"Skipping (manifest exists): {logical_name}")
-            return None
+    async with _manifest_lock:
+        manifest = _load_manifest()
+        by_url, by_hash = _manifest_indexes(manifest)
+        prior = by_url.get(normalized_url)
+        if prior and prior.get("filename"):
+            file_path = DATA_DIR / str(prior["filename"])
+            if file_path.exists():
+                logger.info("Skipping (manifest exists): %s", logical_name)
+                return None
 
-    print(f"Downloading: {logical_name}")
+    logger.info("Downloading: %s", logical_name)
     content = await download_url(url, timeout)
     if not content:
-        _register_manifest_record(
-            manifest=manifest,
-            url=url,
-            normalized_url=normalized_url,
-            logical_name=logical_name,
-            file_path=None,
-            content_hash=None,
-            status="download_failed",
-        )
-        _save_manifest(manifest)
-        return None
-
-    content_hash_value = hashlib.sha256(content.encode("utf-8", errors="ignore")).hexdigest()[:16]
-    duplicate_record = next(iter(by_hash.get(content_hash_value, [])), None)
-    if duplicate_record and duplicate_record.get("filename"):
-        duplicate_file = DATA_DIR / str(duplicate_record["filename"])
-        if duplicate_file.exists():
-            print(f"Skipping duplicate content: {logical_name} (same as {duplicate_file.name})")
+        async with _manifest_lock:
+            manifest = _load_manifest()
             _register_manifest_record(
                 manifest=manifest,
                 url=url,
                 normalized_url=normalized_url,
                 logical_name=logical_name,
-                file_path=duplicate_file,
-                content_hash=content_hash_value,
-                status="duplicate_content_alias",
-                duplicate_of=duplicate_file.name,
+                file_path=None,
+                content_hash=None,
+                status="download_failed",
             )
             _save_manifest(manifest)
-            return None
+        return None
+
+    content_hash_value = hashlib.sha256(content.encode("utf-8", errors="ignore")).hexdigest()[:16]
+
+    async with _manifest_lock:
+        manifest = _load_manifest()
+        _, by_hash = _manifest_indexes(manifest)
+        duplicate_record = next(iter(by_hash.get(content_hash_value, [])), None)
+        if duplicate_record and duplicate_record.get("filename"):
+            duplicate_file = DATA_DIR / str(duplicate_record["filename"])
+            if duplicate_file.exists():
+                logger.info(
+                    "Skipping duplicate content: %s (same as %s)", logical_name, duplicate_file.name
+                )
+                _register_manifest_record(
+                    manifest=manifest,
+                    url=url,
+                    normalized_url=normalized_url,
+                    logical_name=logical_name,
+                    file_path=duplicate_file,
+                    content_hash=content_hash_value,
+                    status="duplicate_content_alias",
+                    duplicate_of=duplicate_file.name,
+                )
+                _save_manifest(manifest)
+                return None
 
     existing_file = _find_existing_file_by_content_hash(content_hash_value)
     if existing_file is not None:
-        print(
-            f"Skipping duplicate content (filesystem): {logical_name} (same as {existing_file.name})"
-        )
+        async with _manifest_lock:
+            manifest = _load_manifest()
+            logger.info(
+                "Skipping duplicate content (filesystem): %s (same as %s)",
+                logical_name,
+                existing_file.name,
+            )
+            _register_manifest_record(
+                manifest=manifest,
+                url=url,
+                normalized_url=normalized_url,
+                logical_name=logical_name,
+                file_path=existing_file,
+                content_hash=content_hash_value,
+                status="duplicate_content_alias",
+                duplicate_of=existing_file.name,
+            )
+            _save_manifest(manifest)
+        return None
+
+    file_path = get_file_path(url, "html")
+    file_path.write_text(content, encoding="utf-8")
+    async with _manifest_lock:
+        manifest = _load_manifest()
         _register_manifest_record(
             manifest=manifest,
             url=url,
             normalized_url=normalized_url,
             logical_name=logical_name,
-            file_path=existing_file,
+            file_path=file_path,
             content_hash=content_hash_value,
-            status="duplicate_content_alias",
-            duplicate_of=existing_file.name,
+            status="downloaded",
         )
         _save_manifest(manifest)
-        return None
-
-    file_path = get_file_path(url, "html")
-    file_path.write_text(content, encoding="utf-8")
-    _register_manifest_record(
-        manifest=manifest,
-        url=url,
-        normalized_url=normalized_url,
-        logical_name=logical_name,
-        file_path=file_path,
-        content_hash=content_hash_value,
-        status="downloaded",
-    )
-    _save_manifest(manifest)
-    print(f"  Saved: {file_path.name}")
+    logger.info("  Saved: %s", file_path.name)
     return str(file_path)
 
 
@@ -386,100 +485,7 @@ def clean_html_to_text(html: str) -> str:
 
 async def extract_ace_clinical_guidelines() -> list[str]:
     """Extract ACE Clinical Guidelines from ace-hta.gov.sg."""
-    guidelines = [
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/",
-            "ace_guidelines_index",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/osteoporosis--diagnosis-and-management/",
-            "osteoporosis_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/major-depressive-disorder-achieving-and-sustaining-remission/",
-            "depression_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/generalised-anxiety-disorder-easing-burden-and-enabling-remission/",
-            "anxiety_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/management-of-chronic-coronary-syndrome/",
-            "coronary_syndrome_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/promoting-smoking-cessation-and-treating-tobacco-dependence/",
-            "smoking_cessation_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/chronic-obstructive-pulmonary-disease-diagnosis-and-management/",
-            "copd_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/initiating-basal-insulin-in-type-2-diabetes-mellitus/",
-            "diabetes_insulin_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/foot-assessment-in-patients-with-diabetes-mellitus/",
-            "diabetes_foot_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/venous-thromboembolism-treating-with-the-appropriate-anticoagulant-and-duration/",
-            "vte_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/lipid-management-focus-on-cardiovascular-risk/",
-            "lipid_management_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/mild-and-moderate-atopic-dermatitis-acg/",
-            "atopic_dermatitis_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/heart-failure-acg/",
-            "heart_failure_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/atrial-fibrillation-acg/",
-            "atrial_fibrillation_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/chronic-kidney-disease-acg/",
-            "ckd_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/asthma-diagnosis-management/",
-            "asthma_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/obesity-weight-management-acg/",
-            "obesity_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/allergic-rhinitis-acg/",
-            "allergic_rhinitis_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/dementia-acg/",
-            "dementia_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/bipolar-disorder-acg/",
-            "bipolar_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/gord-acg/",
-            "gord_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/osteoarthritis-knee-acg/",
-            "osteoarthritis_guideline",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/stroke-management-acg/",
-            "stroke_guideline",
-        ),
-    ]
+    guidelines = _get_web_sources("ace_clinical_guidelines")
 
     results = await asyncio.gather(
         *[_download_and_save_html(url, name) for url, name in guidelines]
@@ -489,20 +495,7 @@ async def extract_ace_clinical_guidelines() -> list[str]:
 
 async def extract_ace_cues() -> list[str]:
     """Extract ACE CUES resources from ace-hta.gov.sg."""
-    pages = [
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-cues-overview/",
-            "ace_cues_index",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-cues/asthma-management/",
-            "ace_cues_asthma",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-cues/inhaler-technique-videos/",
-            "ace_cues_inhaler",
-        ),
-    ]
+    pages = _get_web_sources("ace_cues")
 
     results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in pages])
     return [r for r in results if r]
@@ -510,48 +503,7 @@ async def extract_ace_cues() -> list[str]:
 
 async def extract_ace_drug_guidances() -> list[str]:
     """Extract ACE Drug Guidances from ace-hta.gov.sg."""
-    guidances = [
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/semaglutide-obesity/",
-            "semaglutide_obesity",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/empagliflozin/",
-            "empagliflozin",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/glp1-diabetes/",
-            "glp1_diabetes",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/apixaban/",
-            "apixaban",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/pcsk9-inhibitors/",
-            "pcsk9_inhibitors",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/biologics-asthma/",
-            "biologics_asthma",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/trastuzumab-deruxtecan-nsclc/",
-            "trastuzumab_deruxtecan",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/ribociclib-breast/",
-            "ribociclib_breast",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/inavolisib-breast/",
-            "inavolisib_breast",
-        ),
-        (
-            "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/ustekinumab-biosimilar/",
-            "ustekinumab",
-        ),
-    ]
+    guidances = _get_web_sources("ace_drug_guidances")
 
     results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in guidances])
     return [r for r in results if r]
@@ -559,39 +511,7 @@ async def extract_ace_drug_guidances() -> list[str]:
 
 async def extract_healthhub_content() -> list[str]:
     """Extract HealthHub health conditions and screening info."""
-    pages = [
-        ("https://www.healthhub.sg/health-conditions/high-cholesterol", "high_cholesterol"),
-        ("https://www.healthhub.sg/health-conditions/diabetes", "diabetes"),
-        ("https://www.healthhub.sg/health-conditions/hypertension", "hypertension"),
-        (
-            "https://www.healthhub.sg/well-being-and-lifestyle/personal-care/type-2-screening-tests",
-            "health_screening_tests",
-        ),
-        (
-            "https://www.healthhub.sg/programmes/healthiersg-screening/screening-faq",
-            "healthier_sg_screening_faq",
-        ),
-        (
-            "https://www.healthhub.sg/well-being-and-lifestyle/mental-wellness/",
-            "mental_wellness",
-        ),
-        (
-            "https://www.healthhub.sg/well-being-and-lifestyle/exercise-and-fitness/",
-            "exercise_fitness",
-        ),
-        (
-            "https://www.healthhub.sg/well-being-and-lifestyle/food-diet-and-nutrition/",
-            "food_nutrition",
-        ),
-        (
-            "https://www.healthhub.sg/well-being-and-lifestyle/active-ageing/",
-            "active_ageing",
-        ),
-        (
-            "https://www.healthhub.sg/well-being-and-lifestyle/personal-care/all-you-need-to-know-about-vaccinations/",
-            "vaccinations_guide",
-        ),
-    ]
+    pages = _get_web_sources("healthhub")
 
     results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in pages])
     return [r for r in results if r]
@@ -599,33 +519,7 @@ async def extract_healthhub_content() -> list[str]:
 
 async def extract_hpp_guidelines() -> list[str]:
     """Extract HPP/MOH Professional Guidelines."""
-    pages = [
-        ("https://hpp.moh.gov.sg/guidelines/", "hpp_guidelines_index"),
-        (
-            "https://hpp.moh.gov.sg/guidelines/collaborative-prescribing/",
-            "collab_prescribing_guideline",
-        ),
-        (
-            "https://hpp.moh.gov.sg/guidelines/infection-prevention-and-control-guidelines-and-standards/",
-            "infection_control_guideline",
-        ),
-        (
-            "https://hpp.moh.gov.sg/guidelines/eatwise-sg/",
-            "eatwise_sg_guideline",
-        ),
-        (
-            "https://hpp.moh.gov.sg/guidelines/practice-guide-for-tiered-care-model-for-mental-health/",
-            "mental_health_tiered_care",
-        ),
-        (
-            "https://hpp.moh.gov.sg/guidelines/medisave-for-chronic-disease-management-programme/",
-            "medisave_cdmp_guideline",
-        ),
-        (
-            "https://hpp.moh.gov.sg/guidelines/dental-fee-benchmarks/",
-            "dental_fee_benchmarks",
-        ),
-    ]
+    pages = _get_web_sources("hpp_guidelines")
 
     results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in pages])
     return [r for r in results if r]
@@ -633,9 +527,7 @@ async def extract_hpp_guidelines() -> list[str]:
 
 async def extract_moh_content() -> list[str]:
     """Extract MOH Singapore main page."""
-    pages = [
-        ("https://www.moh.gov.sg/", "moh_singapore"),
-    ]
+    pages = _get_web_sources("moh")
 
     results = await asyncio.gather(*[_download_and_save_html(url, name) for url, name in pages])
     return [r for r in results if r]
@@ -643,12 +535,7 @@ async def extract_moh_content() -> list[str]:
 
 async def extract_international_guidelines() -> list[str]:
     """Extract international medical guidelines (NHS/NICE) with extended timeout."""
-    pages = [
-        ("https://www.nice.org.uk/guidance/ng28", "nice_diabetes_ng28"),
-        ("https://www.nice.org.uk/guidance/cg127", "nice_hypertension"),
-        ("https://www.nice.org.uk/guidance/cg181", "nice_lipid"),
-        ("https://www.nice.org.uk/guidance/ng236", "nice_heart_failure"),
-    ]
+    pages = _get_web_sources("international_guidelines")
 
     results = await asyncio.gather(
         *[_download_and_save_html(url, name, timeout=60) for url, name in pages]
@@ -665,36 +552,35 @@ def list_downloaded_files() -> list[str]:
 
 async def main():
     """Main function to download all content."""
-    print("=" * 60)
-    print("L0: Medical Content Downloader")
-    print("=" * 60)
-    print(f"\nData directory: {DATA_DIR.absolute()}")
-    print(f"Existing files: {len(list_downloaded_files())}")
-    print()
+    logger.info("=" * 60)
+    logger.info("L0: Medical Content Downloader")
+    logger.info("=" * 60)
+    logger.info("Data directory: %s", DATA_DIR.absolute())
+    logger.info("Existing files: %d", len(list_downloaded_files()))
 
     all_downloaded = []
 
-    print("\n[1/6] Downloading ACE Clinical Guidelines...")
+    logger.info("[1/6] Downloading ACE Clinical Guidelines...")
     all_downloaded.extend(await extract_ace_clinical_guidelines())
 
-    print("\n[2/6] Downloading ACE CUES resources...")
+    logger.info("[2/6] Downloading ACE CUES resources...")
     all_downloaded.extend(await extract_ace_cues())
 
-    print("\n[3/6] Downloading ACE Drug Guidances...")
+    logger.info("[3/6] Downloading ACE Drug Guidances...")
     all_downloaded.extend(await extract_ace_drug_guidances())
 
-    print("\n[4/6] Downloading HealthHub content...")
+    logger.info("[4/6] Downloading HealthHub content...")
     all_downloaded.extend(await extract_healthhub_content())
 
-    print("\n[5/6] Downloading HPP Guidelines...")
+    logger.info("[5/6] Downloading HPP Guidelines...")
     all_downloaded.extend(await extract_hpp_guidelines())
 
-    print("\n[6/6] Downloading International Guidelines (NHS/NICE)...")
+    logger.info("[6/6] Downloading International Guidelines (NHS/NICE)...")
     all_downloaded.extend(await extract_international_guidelines())
 
-    print("\n" + "=" * 60)
-    print(f"Download complete! Total files in data/raw: {len(list_downloaded_files())}")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("Download complete! Total files in data/raw: %d", len(list_downloaded_files()))
+    logger.info("=" * 60)
 
 
 if __name__ == "__main__":

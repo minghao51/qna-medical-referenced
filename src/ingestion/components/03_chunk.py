@@ -26,6 +26,7 @@ def chunk_silver_documents(
     silver_documents_dir: str,
     source_type: str = "pdf",
 ) -> list[dict[str, Any]]:
+    from src.ingestion.schemas.silver_models import ExtractedDocumentSilver, SourceMetadataSilver
     from src.ingestion.steps.chunk_text import chunk_documents
 
     if source_type == "pdf":
@@ -38,6 +39,21 @@ def chunk_silver_documents(
 
     df = pl.read_parquet(path)
     docs = df.to_dicts()
+    for doc in docs:
+        try:
+            ExtractedDocumentSilver(
+                id=str(Path(doc.get("path", "")).stem),
+                source=doc.get("path", ""),
+                source_type=source_type,
+                extracted_text=doc.get("text", ""),
+                metadata=SourceMetadataSilver(
+                    source_type=source_type,
+                    source_class="document",
+                    canonical_label="silver_to_gold",
+                ),
+            )
+        except Exception as e:
+            logger.warning("Silver validation failed for %s: %s", doc.get("path"), e)
     chunks = chunk_documents(docs)
     return chunks
 

@@ -198,10 +198,12 @@ def source_kind(source: str) -> str:
     lowered = str(source).lower()
     if lowered.endswith(".pdf"):
         return "pdf"
+    if lowered.endswith(".html"):
+        return "html"
     if lowered.endswith(".md"):
         return "markdown"
     return "default"
 
 
 def hash_content(content: str) -> str:
-    return hashlib.sha256(content.lower().encode("utf-8")).hexdigest()[:16] if content else ""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16] if content else ""

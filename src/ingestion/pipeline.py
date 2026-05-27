@@ -9,6 +9,7 @@ This module builds and executes the DAG that orchestrates:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,8 @@ from hamilton import driver
 from hamilton.execution import executors
 
 from src.ingestion.components import _modules
+
+logger = logging.getLogger(__name__)
 
 
 def build_ingestion_pipeline(
@@ -26,6 +29,9 @@ def build_ingestion_pipeline(
     enable_chunk_summaries: bool = False,
     force_rebuild: bool = False,
     parallel_cores: int = 1,
+    hype_config: dict[str, Any] | None = None,
+    enrichment_config: dict[str, Any] | None = None,
+    embedding_config: dict[str, Any] | None = None,
 ) -> driver.Driver:
     """Build the ingestion pipeline Hamilton driver.
 
@@ -37,8 +43,29 @@ def build_ingestion_pipeline(
         enable_chunk_summaries: Enable chunk summarization.
         force_rebuild: Force rebuild of vector store.
         parallel_cores: Number of cores for parallel execution.
+        hype_config: Config for HyPE question generation.
+        enrichment_config: Config for keyword/summary enrichment.
+        embedding_config: Config for embedding generation.
     """
     modules = _modules
+
+    _default_hype_config = {
+        "sample_rate": 0.1,
+        "max_chunks": 500,
+        "questions_per_chunk": 2,
+    }
+    _default_enrichment_config = {
+        "sample_rate": 1.0,
+        "max_chunks": 500,
+    }
+    _default_embedding_config = {
+        "model_name": "text-embedding-v4",
+        "batch_size": 10,
+    }
+
+    resolved_hype_config = hype_config or _default_hype_config
+    resolved_enrichment_config = enrichment_config or _default_enrichment_config
+    resolved_embedding_config = embedding_config or _default_embedding_config
 
     config = {
         "project_root": project_root if isinstance(project_root, Path) else Path(project_root),
@@ -47,19 +74,9 @@ def build_ingestion_pipeline(
         "enable_keyword_extraction": enable_keyword_extraction,
         "enable_chunk_summaries": enable_chunk_summaries,
         "force_rebuild": force_rebuild,
-        "hype_config": {
-            "sample_rate": 0.1,
-            "max_chunks": 500,
-            "questions_per_chunk": 2,
-        },
-        "enrichment_config": {
-            "sample_rate": 1.0,
-            "max_chunks": 500,
-        },
-        "embedding_config": {
-            "model_name": "text-embedding-v4",
-            "batch_size": 10,
-        },
+        "hype_config": resolved_hype_config,
+        "enrichment_config": resolved_enrichment_config,
+        "embedding_config": resolved_embedding_config,
     }
 
     resolved_project_root = Path(str(config["project_root"]))
@@ -191,4 +208,4 @@ def visualize_pipeline(
     output_path = Path(output_path)
     output_str = str(output_path.with_suffix(""))
     dot.render(output_str, format="png", cleanup=True)
-    print(f"DAG visualization saved to {output_path}")
+    logger.info("DAG visualization saved to %s", output_path)

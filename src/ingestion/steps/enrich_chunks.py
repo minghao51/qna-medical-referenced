@@ -27,8 +27,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import random
 from typing import TYPE_CHECKING, Any
+
+from src.ingestion.steps._utils import _weighted_sample_chunks
 
 if TYPE_CHECKING:
     from src.infra.llm.qwen_client import QwenClient
@@ -58,38 +59,6 @@ Rules:
 - Do NOT hallucinate entities not supported by the text
 - Summary should capture the main clinical recommendation or finding
 - If the chunk is too short or lacks medical content, return empty keywords and a brief summary"""
-
-
-def _weighted_sample_chunks(
-    chunks: list[dict],
-    sample_rate: float,
-    max_chunks: int,
-) -> list[dict]:
-    """Select chunks using weighted random sampling by quality_score.
-
-    Args:
-        chunks: List of chunk dicts with 'id' and 'quality_score'
-        sample_rate: Fraction of chunks to select (0.0-1.0)
-        max_chunks: Maximum number of chunks to return
-
-    Returns:
-        List of sampled chunk dicts
-    """
-    if not chunks:
-        return []
-
-    target_count = min(max_chunks, max(1, int(len(chunks) * sample_rate)))
-    population = list(chunks)
-    sampled: list[dict] = []
-
-    while population and len(sampled) < target_count:
-        weights = [max(0.01, float(c.get("quality_score", 0.5)) ** 2) for c in population]
-        selected = random.choices(population, weights=weights, k=1)[0]  # nosec B311
-        sampled.append(selected)
-        population = [chunk for chunk in population if chunk["id"] != selected["id"]]
-
-    logger.info(f"Enrichment sampling: selected {len(sampled)} chunks from {len(chunks)} total")
-    return sampled
 
 
 def _parse_enrich_result(response: str) -> dict[str, Any]:
@@ -238,7 +207,9 @@ async def enrich_chunks(
         logger.info("Enrichment skipped: both keywords and summaries are disabled")
         return {}
 
-    sampled_chunks = _weighted_sample_chunks(chunks, sample_rate, max_chunks)
+    sampled_chunks = _weighted_sample_chunks(
+        chunks, sample_rate, max_chunks, label="Enrichment sampling"
+    )
     if not sampled_chunks:
         return {}
 

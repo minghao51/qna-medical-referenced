@@ -12,6 +12,19 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _run_async(coro):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+    return asyncio.run(coro)
+
+
 def bronze_data_path(project_root: Path) -> str:
     return str(project_root / "data" / "01_bronze")
 
@@ -43,7 +56,7 @@ def download_web_content(
     from src.ingestion.steps.download_web import main as download_main
 
     Path(downloads_dir).mkdir(parents=True, exist_ok=True)
-    asyncio.run(download_main())
+    _run_async(download_main())
     return [str(f) for f in Path(downloads_dir).glob("*.html")]
 
 
@@ -54,7 +67,7 @@ def download_pdf_files(
     from src.ingestion.steps.download_pdfs import main as download_pdfs_main
 
     Path(raw_pdfs_dir).mkdir(parents=True, exist_ok=True)
-    asyncio.run(download_pdfs_main())
+    _run_async(download_pdfs_main())
     return [str(f) for f in Path(raw_pdfs_dir).glob("*.pdf")]
 
 

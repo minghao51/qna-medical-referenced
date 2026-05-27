@@ -17,6 +17,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -25,6 +26,9 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.config import settings  # noqa: E402
+
+MetadataValue = str | int | float | bool | None
+MetadataMap = dict[str, MetadataValue]
 
 
 def migrate(
@@ -94,7 +98,7 @@ def migrate(
     to_insert_ids = []
     to_insert_embeddings = []
     to_insert_documents = []
-    to_insert_metadatas = []
+    to_insert_metadatas: list[MetadataMap] = []
 
     skipped_duplicate_id = 0
     skipped_duplicate_content = 0
@@ -104,7 +108,11 @@ def migrate(
             skipped_duplicate_id += 1
             continue
         content_hash_val = content_hashes[i] if i < len(content_hashes) else None
-        meta = dict(metadatas[i]) if i < len(metadatas) else {}
+        raw_meta = dict(metadatas[i]) if i < len(metadatas) else {}
+        meta: MetadataMap = {}
+        for k, v in raw_meta.items():
+            if isinstance(v, (bool, int, float, str)) or v is None:
+                meta[str(k)] = v
         if content_hash_val:
             meta["content_hash"] = content_hash_val
 
@@ -112,11 +120,7 @@ def migrate(
         to_insert_embeddings.append(embeddings[i] if i < len(embeddings) else [])
         to_insert_documents.append(documents[i] if i < len(documents) else "")
         for k, v in list(meta.items()):
-            if isinstance(v, list) and len(v) == 0:
-                del meta[k]
-            elif isinstance(v, (dict, list)):
-                del meta[k]
-            elif v is None:
+            if v is None:
                 del meta[k]
         to_insert_metadatas.append(meta)
 
@@ -125,7 +129,7 @@ def migrate(
             ids=to_insert_ids,
             embeddings=to_insert_embeddings,
             documents=to_insert_documents,
-            metadatas=to_insert_metadatas,
+            metadatas=cast(Any, to_insert_metadatas),
         )
 
     report = {

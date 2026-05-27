@@ -32,28 +32,21 @@ def parse_pdf_document(pdf_path: str) -> dict[str, Any]:
     return {"path": pdf_path, "text": result, "source_type": "pdf"}
 
 
-def parse_markdown_document(md_path: str) -> dict[str, Any]:
-    from src.ingestion.steps.load_markdown import MarkdownLoader
-
-    loader = MarkdownLoader()
-    docs = loader.load_all_markdown()
-    for doc in docs:
-        if doc.get("source") == Path(md_path).name:
-            return {
-                "path": md_path,
-                "text": doc.get("extracted_text", ""),
-                "source_type": "markdown",
-            }
-    return {"path": md_path, "text": "", "source_type": "markdown"}
-
-
 def all_pdf_documents(
     all_pdf_downloads: list[str],
 ) -> list[dict[str, Any]]:
+    from src.ingestion.schemas.bronze_models import DownloadedFileBronze
+
     results = []
     for pdf_path in all_pdf_downloads:
         try:
             result = parse_pdf_document(pdf_path)
+            DownloadedFileBronze(
+                url=result.get("path", ""),
+                local_path=result.get("path", ""),
+                file_type="pdf",
+                download_status="parsed",
+            )
             results.append(result)
         except Exception as e:
             logger.warning("Failed to parse PDF %s: %s", pdf_path, e)
@@ -63,17 +56,28 @@ def all_pdf_documents(
 def all_markdown_documents(
     all_web_downloads: list[str],
 ) -> list[dict[str, Any]]:
+    from src.ingestion.schemas.bronze_models import DownloadedFileBronze
     from src.ingestion.steps.load_markdown import get_markdown_documents
 
     docs = get_markdown_documents()
-    return [
-        {
+    results = []
+    for d in docs:
+        result = {
             "path": d.get("source", ""),
             "text": d.get("extracted_text", ""),
             "source_type": "markdown",
         }
-        for d in docs
-    ]
+        try:
+            DownloadedFileBronze(
+                url=result["path"],
+                local_path=result["path"],
+                file_type="html",
+                download_status="parsed",
+            )
+        except Exception as e:
+            logger.warning("Bronze validation failed for %s: %s", result["path"], e)
+        results.append(result)
+    return results
 
 
 def silver_documents_parquet_path(
@@ -90,6 +94,8 @@ def write_silver_documents(
 ) -> dict[str, Any]:
     import polars as pl
 
+    from src.ingestion.schemas.silver_models import ExtractedDocumentSilver, SourceMetadataSilver
+
     Path(silver_documents_dir).mkdir(parents=True, exist_ok=True)
 
     pdf_df = pl.DataFrame(all_pdf_documents)
@@ -102,6 +108,38 @@ def write_silver_documents(
         pdf_df.write_parquet(pdf_path)
     if len(md_df) > 0:
         md_df.write_parquet(md_path)
+
+    for doc in all_pdf_documents:
+        try:
+            ExtractedDocumentSilver(
+                id=str(Path(doc.get("path", "")).stem),
+                source=doc.get("path", ""),
+                source_type="pdf",
+                extracted_text=doc.get("text", ""),
+                metadata=SourceMetadataSilver(
+                    source_type="pdf",
+                    source_class="document",
+                    canonical_label="parsed_pdf",
+                ),
+            )
+        except Exception as e:
+            logger.warning("Silver validation failed for PDF %s: %s", doc.get("path"), e)
+
+    for doc in all_markdown_documents:
+        try:
+            ExtractedDocumentSilver(
+                id=str(Path(doc.get("path", "")).stem),
+                source=doc.get("path", ""),
+                source_type="markdown",
+                extracted_text=doc.get("text", ""),
+                metadata=SourceMetadataSilver(
+                    source_type="markdown",
+                    source_class="document",
+                    canonical_label="parsed_markdown",
+                ),
+            )
+        except Exception as e:
+            logger.warning("Silver validation failed for MD %s: %s", doc.get("path"), e)
 
     return {
         "pdf_count": len(pdf_df),

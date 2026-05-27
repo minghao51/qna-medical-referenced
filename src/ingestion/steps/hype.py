@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import random
 from typing import cast
+
+from src.ingestion.steps._utils import _weighted_sample_chunks
 
 if False:
     from src.infra.llm.qwen_client import QwenClient
@@ -22,38 +23,6 @@ if False:
 logger = logging.getLogger(__name__)
 
 HYPE_BATCH_SIZE = 10
-
-
-def _weighted_sample_chunks(
-    chunks: list[dict],
-    sample_rate: float,
-    max_chunks: int,
-) -> list[dict]:
-    """Select chunks using weighted random sampling by quality_score.
-
-    Args:
-        chunks: List of chunk dicts with 'id' and 'quality_score'
-        sample_rate: Fraction of chunks to select (0.0-1.0)
-        max_chunks: Maximum number of chunks to return
-
-    Returns:
-        List of sampled chunk dicts
-    """
-    if not chunks:
-        return []
-
-    target_count = min(max_chunks, max(1, int(len(chunks) * sample_rate)))
-    population = list(chunks)
-    sampled: list[dict] = []
-
-    while population and len(sampled) < target_count:
-        weights = [max(0.01, float(c.get("quality_score", 0.5)) ** 2) for c in population]
-        selected = random.choices(population, weights=weights, k=1)[0]  # nosec B311
-        sampled.append(selected)
-        population = [chunk for chunk in population if chunk["id"] != selected["id"]]
-
-    logger.info(f"HyPE sampling: selected {len(sampled)} chunks from {len(chunks)} total")
-    return sampled
 
 
 async def generate_hype_questions_for_chunks(
@@ -77,7 +46,7 @@ async def generate_hype_questions_for_chunks(
     """
     from src.rag.hyde import generate_hypothetical_questions
 
-    sampled_chunks = _weighted_sample_chunks(chunks, sample_rate, max_chunks)
+    sampled_chunks = _weighted_sample_chunks(chunks, sample_rate, max_chunks, label="HyPE sampling")
     if not sampled_chunks:
         return {}
 
