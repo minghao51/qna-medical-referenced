@@ -49,3 +49,39 @@ class AssessmentResult:
     status: str
     failed_thresholds: list[dict[str, Any]]
     summary: dict[str, Any]
+
+
+@dataclass
+class AssessmentRunParams:
+    artifact_dir: str | Path = "data/evals"
+    name: str | None = None
+    dataset_path: str | Path | None = None
+    top_k: int = 5
+    max_synthetic_questions: int = 40
+    disable_llm_generation: bool = False
+    disable_llm_judging: bool = False
+    include_answer_eval: bool | None = None
+    sample_docs_per_source_type: int = 10
+    seed: int = 42
+    max_queries: int | None = None
+    sample_seed: int = 42
+    reuse_cached_dataset: bool = False
+    fail_on_thresholds: bool = False
+    thresholds_file: str | Path | None = None
+    dataset_split: str | None = None
+    min_label_confidence: str = "low"
+    retrieval_mode: str = "rrf_hybrid"
+    disable_page_classification: bool = False
+    disable_structured_chunking: bool = False
+    disable_bm25: bool = False
+    export_failed_generations: bool = False
+    force_rerun: bool = False
+    retrieval_options: dict[str, Any] = field(default_factory=dict)
+    run_retrieval_ablations: bool = False
+    run_hype_ablations: bool = False
+    run_keyword_ablations: bool = False
+    run_reranking_ablations: bool = False
+    run_diversity_sweep: bool = False
+    diversity_sweep: dict[str, Any] = field(default_factory=dict)
+    skip_ingestion: bool = False
+    experiment_config: dict[str, Any] | None = None

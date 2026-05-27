@@ -7,12 +7,17 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# fcntl.flock is process-level only; this mutex prevents concurrent access
+# from multiple threads within the same process that would bypass flock.
+_thread_lock = threading.Lock()
 
 RUN_INDEX_FILENAME = "run_index.json"
 LOCK_TIMEOUT_SECONDS = 30
@@ -71,7 +76,14 @@ def _with_file_lock(base_dir: Path):
     """Context manager for file-based locking on the run index."""
     lock_file = _lock_path(base_dir)
     lock_file.parent.mkdir(parents=True, exist_ok=True)
-    return open(lock_file, "w")
+    _thread_lock.acquire()
+    try:
+        fh = open(lock_file, "w")
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        return fh
+    except BaseException:
+        _thread_lock.release()
+        raise
 
 
 def _load_run_index(base_dir: Path) -> dict[str, Any]:
@@ -128,13 +140,12 @@ def write_latest_pointer(base_dir: Path, run_dir: Path) -> Path:
     pointer = Path(base_dir) / "latest_run.txt"
     pointer.parent.mkdir(parents=True, exist_ok=True)
 
-    # Use file locking to prevent races in parallel execution
     with _with_file_lock(base_dir) as lock_f:
         try:
-            fcntl.flock(lock_f, fcntl.LOCK_EX)
             pointer.write_text(str(run_dir), encoding="utf-8")
         finally:
             fcntl.flock(lock_f, fcntl.LOCK_UN)
+            _thread_lock.release()
     return pointer
 
 
@@ -145,9 +156,7 @@ def update_run_index(
     run_dir: Path,
     status: str = "completed",
 ) -> Path:
-    # Use file locking to prevent races in parallel execution
     with _with_file_lock(base_dir) as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_EX)
         try:
             payload = _load_run_index(base_dir)
             payload["entries"][run_identity] = {
@@ -157,6 +166,7 @@ def update_run_index(
             return _write_run_index(base_dir, payload)
         finally:
             fcntl.flock(lock_f, fcntl.LOCK_UN)
+            _thread_lock.release()
 
 
 def find_reusable_run(base_dir: Path, run_identity: str) -> Path | None:

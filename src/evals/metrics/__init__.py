@@ -11,8 +11,16 @@ from src.evals.metrics._utils import (
     reciprocal_rank,
 )
 
-# Medical-specific evaluation metrics
-from src.evals.metrics.medical import METRIC_SPECS, MetricSpec, create_medical_metrics
+_MEDICAL_EXPORTS = {"METRIC_SPECS", "MetricSpec", "create_medical_metrics"}
+
+
+def __getattr__(name: str):
+    if name in _MEDICAL_EXPORTS:
+        from src.evals.metrics import medical
+
+        return getattr(medical, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "METRIC_SPECS",

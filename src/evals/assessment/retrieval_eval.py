@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from src.evals.metrics import (
@@ -14,6 +15,7 @@ from src.evals.metrics import (
     recall_at_k,
     reciprocal_rank,
 )
+from src.evals.metrics._utils import mean as _mean
 
 logger = logging.getLogger(__name__)
 
@@ -58,20 +60,80 @@ def expected_source_type_for_item(item: dict[str, Any]) -> str:
     return "unknown"
 
 
+def _sources_match(doc_source_normalized: str, expected_sources: list[str]) -> bool:
+    for es in expected_sources:
+        es_norm = normalize_source_label(es)
+        if doc_source_normalized == es_norm:
+            return True
+        es_family = re.sub(r"[^a-z0-9]+", " ", es_norm).strip().split()[:3]
+        doc_family = re.sub(r"[^a-z0-9]+", " ", doc_source_normalized).strip().split()[:3]
+        if es_family and es_family == doc_family:
+            return True
+    return False
+
+
 def doc_is_relevant(doc: dict[str, Any], item: dict[str, Any]) -> bool:
     source = normalize_source_label(str(doc.get("source", "")))
     content = str(doc.get("content", "")).lower()
     expected_sources = [str(s).lower() for s in item.get("expected_sources", [])]
     expected_keywords = [str(k).lower() for k in item.get("expected_keywords", [])]
     evidence_phrase = str(item.get("evidence_phrase", "")).strip().lower()
-    if expected_sources and any(es in source for es in expected_sources):
+    if expected_sources and _sources_match(source, expected_sources):
         return True
     if evidence_phrase and evidence_phrase in content:
         return True
     if expected_keywords:
-        overlap = sum(1 for kw in expected_keywords if kw and kw in content)
+        overlap = sum(
+            1
+            for kw in expected_keywords
+            if kw and re.search(r"\b" + re.escape(kw) + r"\b", content)
+        )
         return overlap >= min(2, max(1, len(expected_keywords)))
     return False
+
+
+def graded_relevance(doc: dict[str, Any], item: dict[str, Any]) -> int:
+    source = normalize_source_label(str(doc.get("source", "")))
+    content = str(doc.get("content", "")).lower()
+    expected_sources = [str(s).lower() for s in item.get("expected_sources", [])]
+    expected_keywords = [str(k).lower() for k in item.get("expected_keywords", [])]
+    evidence_phrase = str(item.get("evidence_phrase", "")).strip().lower()
+    source_match = expected_sources and _sources_match(source, expected_sources)
+    keyword_overlap = (
+        sum(
+            1
+            for kw in expected_keywords
+            if kw and re.search(r"\b" + re.escape(kw) + r"\b", content)
+        )
+        if expected_keywords
+        else 0
+    )
+    evidence_match = bool(evidence_phrase and evidence_phrase in content)
+    exact_chunk_id = item.get("expected_chunk_id")
+    chunk_match = exact_chunk_id and str(doc.get("id")) == str(exact_chunk_id)
+    if source_match and chunk_match and keyword_overlap >= 2:
+        return 3
+    if source_match and keyword_overlap >= 2:
+        return 3
+    if source_match and keyword_overlap >= 1:
+        return 2
+    if source_match or (keyword_overlap >= 2):
+        return 2
+    if evidence_match or keyword_overlap >= 1:
+        return 1
+    return 0
+
+
+def graded_ndcg_at_k(graded_rels: list[int], k: int | None = None) -> float:
+    import math
+
+    rel = graded_rels[:k] if k else list(graded_rels)
+    if not rel:
+        return 0.0
+    dcg = sum(r / math.log2(i + 2) for i, r in enumerate(rel))
+    ideal = sorted(rel, reverse=True)
+    idcg = sum(r / math.log2(i + 2) for i, r in enumerate(ideal))
+    return dcg / idcg if idcg else 0.0
 
 
 def binary_unique_by_key(
@@ -101,6 +163,7 @@ def evaluate_retrieval(
     recall_values: list[float] = []
     mrr_values: list[float] = []
     ndcg_values: list[float] = []
+    graded_ndcg_values: list[float] = []
     source_hit_values: list[float] = []
     dedup_hit_values: list[float] = []
     dedup_precision_values: list[float] = []
@@ -153,6 +216,7 @@ def evaluate_retrieval(
             for doc in trace.retrieval.documents
         ]
         binary_relevance = [1 if doc_is_relevant(doc, item) else 0 for doc in retrieved_docs]
+        graded_rels = [graded_relevance(doc, item) for doc in retrieved_docs]
         dedup_doc_binary = binary_unique_by_key(retrieved_docs, item, lambda d: d.get("id"))
         unique_source_binary = binary_unique_by_key(
             retrieved_docs,
@@ -212,6 +276,7 @@ def evaluate_retrieval(
             "recall_at_k": recall_at_k(binary_relevance, total_relevant),
             "mrr": reciprocal_rank(binary_relevance),
             "ndcg_at_k": ndcg_at_k(binary_relevance, top_k),
+            "graded_ndcg_at_k": graded_ndcg_at_k(graded_rels, top_k),
             "source_hit": source_hit,
             "dedup_hit_rate_at_k": hit_rate_at_k(dedup_doc_binary),
             "dedup_precision_at_k": precision_at_k(
@@ -265,6 +330,7 @@ def evaluate_retrieval(
         recall_values.append(row_metrics["recall_at_k"])
         mrr_values.append(row_metrics["mrr"])
         ndcg_values.append(row_metrics["ndcg_at_k"])
+        graded_ndcg_values.append(row_metrics["graded_ndcg_at_k"])
         source_hit_values.append(row_metrics["source_hit"])
         dedup_hit_values.append(row_metrics["dedup_hit_rate_at_k"])
         dedup_precision_values.append(row_metrics["dedup_precision_at_k"])
@@ -351,6 +417,7 @@ def evaluate_retrieval(
         "recall_at_k": mean(recall_values),
         "mrr": mean(mrr_values),
         "ndcg_at_k": mean(ndcg_values),
+        "graded_ndcg_at_k": _mean(graded_ndcg_values),
         "source_hit_rate": mean(source_hit_values),
         "dedup_hit_rate_at_k": mean(dedup_hit_values),
         "dedup_precision_at_k": mean(dedup_precision_values),

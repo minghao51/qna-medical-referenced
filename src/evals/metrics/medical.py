@@ -5,13 +5,29 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, TypeAlias
 
-from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, GEval
-from deepeval.test_case import LLMTestCaseParams
+try:
+    from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, GEval
+    from deepeval.test_case import LLMTestCaseParams
+
+    _DEEPEVAL_AVAILABLE = True
+except ModuleNotFoundError:
+    AnswerRelevancyMetric = Any
+    FaithfulnessMetric = Any
+    GEval = Any
+    LLMTestCaseParams = None
+    _DEEPEVAL_AVAILABLE = False
 
 from src.config import settings
 from src.evals.deepeval_models import get_heavy_model, get_light_model
 
 MetricFactory: TypeAlias = GEval | AnswerRelevancyMetric | FaithfulnessMetric  # noqa: UP040
+
+
+def _require_deepeval() -> None:
+    if not _DEEPEVAL_AVAILABLE:
+        raise ModuleNotFoundError(
+            "deepeval is required for medical metrics. Install with: uv sync --group evaluation"
+        )
 
 
 @dataclass(frozen=True)
@@ -26,6 +42,7 @@ class MetricSpec:
 
 
 def _build_factual_accuracy() -> GEval:
+    _require_deepeval()
     return GEval(
         name="Factual Accuracy",
         criteria="""You are a medical information evaluator. Assess the factual accuracy of the answer.
@@ -54,6 +71,7 @@ Rate from 1-5:
 
 
 def _build_completeness() -> GEval:
+    _require_deepeval()
     return GEval(
         name="Completeness",
         criteria="""Assess if the answer completely addresses the medical question.
@@ -78,6 +96,7 @@ Rate from 1-5:
 
 
 def _build_clinical_relevance() -> GEval:
+    _require_deepeval()
     return GEval(
         name="Clinical Relevance",
         criteria="""Evaluate clinical relevance and appropriateness for medical practice.
@@ -106,6 +125,7 @@ Rate from 1-5:
 
 
 def _build_clarity() -> GEval:
+    _require_deepeval()
     return GEval(
         name="Clarity",
         criteria="""Assess answer clarity for healthcare professionals.
@@ -130,6 +150,7 @@ Rate from 1-5:
 
 
 def _build_answer_relevancy() -> AnswerRelevancyMetric:
+    _require_deepeval()
     return AnswerRelevancyMetric(
         threshold=0.7,
         model=get_light_model(),
@@ -139,6 +160,7 @@ def _build_answer_relevancy() -> AnswerRelevancyMetric:
 
 
 def _build_faithfulness() -> FaithfulnessMetric:
+    _require_deepeval()
     return FaithfulnessMetric(
         threshold=0.8,
         model=get_heavy_model(),
@@ -190,6 +212,7 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
 
 def create_medical_metrics() -> list[MetricFactory]:
     """Return fresh metric instances for each evaluation run."""
+    _require_deepeval()
     return [spec.create() for spec in METRIC_SPECS]
 
 

@@ -3,9 +3,6 @@
 from pathlib import Path
 from typing import Any
 
-from deepeval.synthesizer import Synthesizer
-from deepeval.synthesizer.config import ContextConstructionConfig
-
 from src.evals.deepeval_models import get_heavy_model
 
 
@@ -28,6 +25,9 @@ def generate_synthetic_dataset(
     Returns:
         List of golden test cases (DeepEval Golden objects)
     """
+    from deepeval.synthesizer import Synthesizer
+    from deepeval.synthesizer.config import ContextConstructionConfig
+
     synthesizer = Synthesizer(model=get_heavy_model(), async_mode=True)
 
     goldens: list[Any] = synthesizer.generate_goldens_from_docs(

@@ -6,22 +6,28 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
-
-from deepeval.metrics.indicator import safe_a_measure
-from deepeval.test_case import LLMTestCase
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, cast
 
 from src.config import settings
 from src.evals.artifacts import to_serializable
 from src.evals.metrics import mean
-from src.evals.metrics import medical as medical_metrics
 from src.ingestion.indexing.vector_store import get_vector_store_runtime_config
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from deepeval.test_case import LLMTestCase
+
+try:
+    from deepeval.metrics.indicator import safe_a_measure as _safe_a_measure
+except ModuleNotFoundError:
+    _safe_a_measure = None
+
+safe_a_measure = _safe_a_measure
 
 
 @dataclass(frozen=True)
@@ -36,11 +42,23 @@ class AnswerQualityCase:
     cache: dict[str, bool]
 
     def to_test_case(self) -> LLMTestCase:
-        return LLMTestCase(
-            input=self.query,
-            actual_output=self.answer,
-            retrieval_context=[self.context],
-        )
+        try:
+            from deepeval.test_case import LLMTestCase
+
+            return LLMTestCase(
+                input=self.query,
+                actual_output=self.answer,
+                retrieval_context=[self.context],
+            )
+        except ModuleNotFoundError:
+            return cast(
+                "LLMTestCase",
+                SimpleNamespace(
+                    input=self.query,
+                    actual_output=self.answer,
+                    retrieval_context=[self.context],
+                ),
+            )
 
 
 def _runtime_signature(
@@ -237,18 +255,20 @@ async def _evaluate_metric(
         status = "ok"
         max_retries = 2
         timeout_seconds = max(1, int(settings.deepeval.deepeval_metric_timeout_seconds))
-
         for attempt in range(max_retries):
             try:
-                await asyncio.wait_for(
-                    safe_a_measure(
-                        metric,
-                        test_case,
-                        ignore_errors=False,
-                        skip_on_missing_params=False,
-                    ),
-                    timeout=timeout_seconds,
-                )
+                if safe_a_measure is not None:
+                    await asyncio.wait_for(
+                        safe_a_measure(
+                            metric,
+                            test_case,
+                            ignore_errors=False,
+                            skip_on_missing_params=False,
+                        ),
+                        timeout=timeout_seconds,
+                    )
+                else:
+                    await asyncio.wait_for(metric.a_measure(test_case), timeout=timeout_seconds)
                 score = metric.score if metric.score is not None else None
                 reason = getattr(metric, "reason", None)
                 error = getattr(metric, "error", None)
@@ -296,6 +316,8 @@ def _metric_cache_key(case: AnswerQualityCase, runtime_signature: dict[str, Any]
 async def _evaluate_case_metrics(
     case: AnswerQualityCase,
     *,
+    metric_specs: list[Any],
+    metric_builder: Any,
     runtime_signature: dict[str, Any],
     metric_cache: dict[str, Any],
     metric_cache_enabled: bool,
@@ -318,38 +340,55 @@ async def _evaluate_case_metrics(
             }
             return cached_metric_results, score_updates, True
 
-    metric_instances = medical_metrics.create_medical_metrics()
+    try:
+        metric_instances = metric_builder()
+    except ModuleNotFoundError as exc:
+        error_text = str(exc)
+        metric_results = {
+            spec.key: {
+                "status": "error",
+                "score": None,
+                "reason": None,
+                "error": error_text,
+                "elapsed_ms": 0,
+                "cached": False,
+            }
+            for spec in metric_specs
+        }
+        score_updates = {spec.key: None for spec in metric_specs}
+        return metric_results, score_updates, False
     metric_map = {
-        spec.key: metric
-        for spec, metric in zip(medical_metrics.METRIC_SPECS, metric_instances, strict=True)
+        spec.key: metric for spec, metric in zip(metric_specs, metric_instances, strict=True)
     }
     semaphore = asyncio.Semaphore(metric_concurrency)
     payloads = await asyncio.gather(
         *[
             _evaluate_metric(metric_map[spec.key], case.to_test_case(), semaphore=semaphore)
-            for spec in medical_metrics.METRIC_SPECS
+            for spec in metric_specs
         ]
     )
     metric_results = {
-        spec.key: payload
-        for spec, payload in zip(medical_metrics.METRIC_SPECS, payloads, strict=True)
+        spec.key: payload for spec, payload in zip(metric_specs, payloads, strict=True)
     }
-    score_updates = {key: payload["score"] for key, payload in metric_results.items()}
+    computed_scores: dict[str, float | None] = {}
+    for key, payload in metric_results.items():
+        raw_score = payload.get("score")
+        computed_scores[key] = float(raw_score) if isinstance(raw_score, (int, float)) else None
     if metric_cache_enabled:
         metric_cache[cache_key] = {
             "metrics": metric_results,
-            "score_updates": score_updates,
+            "score_updates": computed_scores,
         }
-    return metric_results, score_updates, False
+    return metric_results, computed_scores, False
 
 
 def _aggregate_metric_results(
+    metric_count: int,
     score_buckets: dict[str, list[float]],
     error_buckets: dict[str, int],
     total_queries: int,
     query_count_scored: int,
 ) -> dict[str, Any]:
-    metric_count = len(medical_metrics.METRIC_SPECS)
     metric_evaluations_total = total_queries * metric_count
     metric_evaluations_failed = sum(error_buckets.values())
     metric_evaluations_ok = metric_evaluations_total - metric_evaluations_failed
@@ -386,9 +425,10 @@ async def evaluate_answer_quality_async(
     retrieval_options: dict[str, Any] | None = None,
     cache_namespace: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    _api_key = settings.llm.dashscope_api_key or os.environ.get("DASHSCOPE_API_KEY", "")
-    if not _api_key or _api_key == "test-api-key":
+    _api_key = settings.llm.dashscope_api_key.get_secret_value()
+    if not _api_key:
         return [], {"status": "skipped", "reason": "missing_dashscope_api_key"}
+    from src.evals.metrics import medical as medical_metrics
 
     top_k = max(0, int(top_k))
 
@@ -412,8 +452,10 @@ async def evaluate_answer_quality_async(
         cache_namespace=cache_namespace,
     )
     query_semaphore = asyncio.Semaphore(query_concurrency)
-    score_buckets: dict[str, list[float]] = {spec.key: [] for spec in medical_metrics.METRIC_SPECS}
-    error_buckets = {spec.key: 0 for spec in medical_metrics.METRIC_SPECS}
+    metric_specs = list(medical_metrics.METRIC_SPECS)
+    metric_builder = medical_metrics.create_medical_metrics
+    score_buckets: dict[str, list[float]] = {spec.key: [] for spec in metric_specs}
+    error_buckets = {spec.key: 0 for spec in metric_specs}
     query_count_scored = 0
 
     async def _evaluate_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -431,6 +473,8 @@ async def evaluate_answer_quality_async(
         metrics_started = time.time()
         metric_results, score_updates, metrics_cached = await _evaluate_case_metrics(
             case,
+            metric_specs=metric_specs,
+            metric_builder=metric_builder,
             runtime_signature=runtime_signature,
             metric_cache=metric_cache,
             metric_cache_enabled=metric_cache_enabled,
@@ -474,7 +518,7 @@ async def evaluate_answer_quality_async(
         _write_cache_entries(metric_cache_path, metric_cache)
 
     aggregate = _aggregate_metric_results(
-        score_buckets, error_buckets, len(results), query_count_scored
+        len(metric_specs), score_buckets, error_buckets, len(results), query_count_scored
     )
     return results, aggregate
 

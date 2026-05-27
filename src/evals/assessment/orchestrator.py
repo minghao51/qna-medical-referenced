@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from collections.abc import Callable
 from dataclasses import asdict
@@ -21,7 +20,7 @@ from src.evals.artifacts import (
     write_latest_pointer,
 )
 from src.evals.dataset_builder import build_retrieval_dataset
-from src.evals.schemas import AssessmentConfig, AssessmentResult
+from src.evals.schemas import AssessmentConfig, AssessmentResult, AssessmentRunParams
 from src.experiments.wandb_tracking import log_assessment_to_wandb
 from src.rag import configure_runtime_for_experiment, initialize_runtime_index
 
@@ -112,40 +111,9 @@ def _build_input_provenance(
     }
 
 
-def run_assessment(
+def _run_assessment_impl(
+    params: AssessmentRunParams,
     *,
-    artifact_dir: str | Path = "data/evals",
-    name: str | None = None,
-    dataset_path: str | Path | None = None,
-    top_k: int = 5,
-    max_synthetic_questions: int = 40,
-    disable_llm_generation: bool = False,
-    disable_llm_judging: bool = False,
-    include_answer_eval: bool | None = None,
-    sample_docs_per_source_type: int = 10,
-    seed: int = 42,
-    max_queries: int | None = None,
-    sample_seed: int = 42,
-    reuse_cached_dataset: bool = False,
-    fail_on_thresholds: bool = False,
-    thresholds_file: str | Path | None = None,
-    dataset_split: str | None = None,
-    min_label_confidence: str = "low",
-    retrieval_mode: str = "rrf_hybrid",
-    disable_page_classification: bool = False,
-    disable_structured_chunking: bool = False,
-    disable_bm25: bool = False,
-    export_failed_generations: bool = False,
-    force_rerun: bool = False,
-    retrieval_options: dict[str, Any] | None = None,
-    run_retrieval_ablations: bool = False,
-    run_hype_ablations: bool = False,
-    run_keyword_ablations: bool = False,
-    run_reranking_ablations: bool = False,
-    run_diversity_sweep: bool = False,
-    diversity_sweep: dict[str, Any] | None = None,
-    skip_ingestion: bool = False,
-    experiment_config: dict[str, Any] | None = None,
     audit_l0_download_fn: Callable[[], dict[str, Any]] | None = None,
     assess_l1_html_markdown_quality_fn: Callable[[], dict[str, Any]] | None = None,
     assess_l2_pdf_quality_fn: Callable[[], dict[str, Any]] | None = None,
@@ -193,52 +161,54 @@ def run_assessment(
     from src.ingestion.steps.load_markdown import set_index_only_classified_pages
 
     thresholds = dict(DEFAULT_THRESHOLDS)
-    if thresholds_file:
-        thresholds.update(json.loads(Path(thresholds_file).read_text(encoding="utf-8")))
+    if params.thresholds_file:
+        thresholds.update(json.loads(Path(params.thresholds_file).read_text(encoding="utf-8")))
 
-    _api_key = settings.llm.dashscope_api_key or os.environ.get("DASHSCOPE_API_KEY", "")
-    key_available = bool(_api_key) and _api_key != "test-api-key"
+    _api_key = settings.llm.dashscope_api_key.get_secret_value()
+    key_available = bool(_api_key)
     resolved_include_answer_eval = (
-        bool(include_answer_eval) if include_answer_eval is not None else key_available
+        bool(params.include_answer_eval)
+        if params.include_answer_eval is not None
+        else key_available
     )
-    resolved_retrieval_options = dict(retrieval_options or {})
-    if disable_bm25:
+    resolved_retrieval_options = dict(params.retrieval_options or {})
+    if params.disable_bm25:
         resolved_retrieval_options["search_mode"] = "semantic_only"
-    elif retrieval_mode != "rrf_hybrid":
-        resolved_retrieval_options["search_mode"] = retrieval_mode
+    elif params.retrieval_mode != "rrf_hybrid":
+        resolved_retrieval_options["search_mode"] = params.retrieval_mode
     config = AssessmentConfig(
-        artifact_dir=Path(artifact_dir),
-        name=name,
-        dataset_path=Path(dataset_path) if dataset_path else None,
-        top_k=top_k,
-        max_synthetic_questions=max_synthetic_questions,
-        disable_llm_generation=disable_llm_generation,
-        disable_llm_judging=disable_llm_judging,
+        artifact_dir=Path(params.artifact_dir),
+        name=params.name,
+        dataset_path=Path(params.dataset_path) if params.dataset_path else None,
+        top_k=params.top_k,
+        max_synthetic_questions=params.max_synthetic_questions,
+        disable_llm_generation=params.disable_llm_generation,
+        disable_llm_judging=params.disable_llm_judging,
         include_answer_eval=resolved_include_answer_eval,
-        sample_docs_per_source_type=sample_docs_per_source_type,
-        seed=seed,
-        max_queries=max_queries,
-        sample_seed=sample_seed,
-        reuse_cached_dataset=reuse_cached_dataset,
-        fail_on_thresholds=fail_on_thresholds,
+        sample_docs_per_source_type=params.sample_docs_per_source_type,
+        seed=params.seed,
+        max_queries=params.max_queries,
+        sample_seed=params.sample_seed,
+        reuse_cached_dataset=params.reuse_cached_dataset,
+        fail_on_thresholds=params.fail_on_thresholds,
         thresholds=thresholds,
         retrieval_options=resolved_retrieval_options,
-        dataset_split=dataset_split,
-        min_label_confidence=min_label_confidence,
-        retrieval_mode=retrieval_mode,
-        disable_page_classification=disable_page_classification,
-        disable_structured_chunking=disable_structured_chunking,
-        disable_bm25=disable_bm25,
-        export_failed_generations=export_failed_generations,
-        run_retrieval_ablations=run_retrieval_ablations,
-        run_hype_ablations=run_hype_ablations,
-        run_keyword_ablations=run_keyword_ablations,
-        run_reranking_ablations=run_reranking_ablations,
-        run_diversity_sweep=run_diversity_sweep,
-        diversity_sweep=dict(diversity_sweep or {}),
-        experiment_config=experiment_config,
-        force_rerun=force_rerun,
-        skip_ingestion=skip_ingestion,
+        dataset_split=params.dataset_split,
+        min_label_confidence=params.min_label_confidence,
+        retrieval_mode=params.retrieval_mode,
+        disable_page_classification=params.disable_page_classification,
+        disable_structured_chunking=params.disable_structured_chunking,
+        disable_bm25=params.disable_bm25,
+        export_failed_generations=params.export_failed_generations,
+        run_retrieval_ablations=params.run_retrieval_ablations,
+        run_hype_ablations=params.run_hype_ablations,
+        run_keyword_ablations=params.run_keyword_ablations,
+        run_reranking_ablations=params.run_reranking_ablations,
+        run_diversity_sweep=params.run_diversity_sweep,
+        diversity_sweep=dict(params.diversity_sweep or {}),
+        experiment_config=params.experiment_config,
+        force_rerun=params.force_rerun,
+        skip_ingestion=params.skip_ingestion,
     )
     config_payload = asdict(config)
     git_revision = git_head_fn()
@@ -276,10 +246,10 @@ def run_assessment(
         logger.info("Skipping ingestion — reusing existing index")
         index_preparation = {"status": "skipped", "reason": "skip_ingestion_requested"}
     elif not config.experiment_config:
-        set_page_classification_enabled(not disable_page_classification)
-        set_index_only_classified_pages(not disable_page_classification)
+        set_page_classification_enabled(not config.disable_page_classification)
+        set_index_only_classified_pages(not config.disable_page_classification)
         set_html_extractor_mode("auto")
-        set_structured_chunking_enabled(not disable_structured_chunking)
+        set_structured_chunking_enabled(not config.disable_structured_chunking)
         set_source_chunk_configs(None)
         set_vector_store_runtime_config(None)
     else:
@@ -641,4 +611,134 @@ def run_assessment(
     status = "failed" if (failed_thresholds and config.fail_on_thresholds) else "ok"
     return AssessmentResult(
         run_dir=store.run_dir, status=status, failed_thresholds=failed_thresholds, summary=summary
+    )
+
+
+def run_assessment(
+    *,
+    artifact_dir: str | Path = "data/evals",
+    name: str | None = None,
+    dataset_path: str | Path | None = None,
+    top_k: int = 5,
+    max_synthetic_questions: int = 40,
+    disable_llm_generation: bool = False,
+    disable_llm_judging: bool = False,
+    include_answer_eval: bool | None = None,
+    sample_docs_per_source_type: int = 10,
+    seed: int = 42,
+    max_queries: int | None = None,
+    sample_seed: int = 42,
+    reuse_cached_dataset: bool = False,
+    fail_on_thresholds: bool = False,
+    thresholds_file: str | Path | None = None,
+    dataset_split: str | None = None,
+    min_label_confidence: str = "low",
+    retrieval_mode: str = "rrf_hybrid",
+    disable_page_classification: bool = False,
+    disable_structured_chunking: bool = False,
+    disable_bm25: bool = False,
+    export_failed_generations: bool = False,
+    force_rerun: bool = False,
+    retrieval_options: dict[str, Any] | None = None,
+    run_retrieval_ablations: bool = False,
+    run_hype_ablations: bool = False,
+    run_keyword_ablations: bool = False,
+    run_reranking_ablations: bool = False,
+    run_diversity_sweep: bool = False,
+    diversity_sweep: dict[str, Any] | None = None,
+    skip_ingestion: bool = False,
+    experiment_config: dict[str, Any] | None = None,
+    audit_l0_download_fn: Callable[[], dict[str, Any]] | None = None,
+    assess_l1_html_markdown_quality_fn: Callable[[], dict[str, Any]] | None = None,
+    assess_l2_pdf_quality_fn: Callable[[], dict[str, Any]] | None = None,
+    assess_l3_chunking_quality_fn: Callable[[], dict[str, Any]] | None = None,
+    assess_l4_reference_quality_fn: Callable[[], dict[str, Any]] | None = None,
+    assess_l5_index_quality_fn: Callable[..., dict[str, Any]] | None = None,
+    build_retrieval_dataset_fn: Callable[..., dict[str, Any]] = build_retrieval_dataset,
+    evaluate_retrieval_fn: Callable[
+        ..., tuple[list[dict[str, Any]], dict[str, Any]]
+    ] = evaluate_retrieval,
+    evaluate_answers_fn: Callable[
+        ..., tuple[list[dict[str, Any]], dict[str, Any]]
+    ] = evaluate_answer_quality,
+    evaluate_thresholds_fn: Callable[..., list[dict[str, Any]]] = evaluate_thresholds,
+    git_head_fn: Callable[[], str | None] = git_head,
+    configure_runtime_for_experiment_fn: Callable[
+        [dict[str, Any] | None], dict[str, Any]
+    ] = configure_runtime_for_experiment,
+    initialize_runtime_index_fn: Callable[..., dict[str, Any]] = initialize_runtime_index,
+    log_assessment_to_wandb_fn: Callable[..., dict[str, Any]] = log_assessment_to_wandb,
+    run_retrieval_ablations_fn: Callable[..., dict[str, Any]] = run_retrieval_ablations,
+    run_hype_ablations_fn: Callable[..., dict[str, Any]] = run_hype_ablations,
+    run_keyword_ablations_fn: Callable[..., dict[str, Any]] = run_keyword_ablations,
+    run_keyword_ablations_with_reingest_fn: Callable[
+        ..., dict[str, Any]
+    ] = run_keyword_ablations_with_reingest,
+    run_hype_ablations_with_reingest_fn: Callable[
+        ..., dict[str, Any]
+    ] = run_hype_ablations_with_reingest,
+    run_reranking_ablations_fn: Callable[..., dict[str, Any]] = run_reranking_ablations,
+    run_diversity_sweep_fn: Callable[..., list[dict[str, Any]]] = run_diversity_sweep,
+    render_summary_fn: Callable[..., str] = render_summary,
+    sha256_file_fn: Callable[[str | Path | None], str | None] = sha256_file,
+) -> AssessmentResult:
+    params = AssessmentRunParams(
+        artifact_dir=artifact_dir,
+        name=name,
+        dataset_path=dataset_path,
+        top_k=top_k,
+        max_synthetic_questions=max_synthetic_questions,
+        disable_llm_generation=disable_llm_generation,
+        disable_llm_judging=disable_llm_judging,
+        include_answer_eval=include_answer_eval,
+        sample_docs_per_source_type=sample_docs_per_source_type,
+        seed=seed,
+        max_queries=max_queries,
+        sample_seed=sample_seed,
+        reuse_cached_dataset=reuse_cached_dataset,
+        fail_on_thresholds=fail_on_thresholds,
+        thresholds_file=thresholds_file,
+        dataset_split=dataset_split,
+        min_label_confidence=min_label_confidence,
+        retrieval_mode=retrieval_mode,
+        disable_page_classification=disable_page_classification,
+        disable_structured_chunking=disable_structured_chunking,
+        disable_bm25=disable_bm25,
+        export_failed_generations=export_failed_generations,
+        force_rerun=force_rerun,
+        retrieval_options=retrieval_options or {},
+        run_retrieval_ablations=run_retrieval_ablations,
+        run_hype_ablations=run_hype_ablations,
+        run_keyword_ablations=run_keyword_ablations,
+        run_reranking_ablations=run_reranking_ablations,
+        run_diversity_sweep=run_diversity_sweep,
+        diversity_sweep=diversity_sweep or {},
+        skip_ingestion=skip_ingestion,
+        experiment_config=experiment_config,
+    )
+    return _run_assessment_impl(
+        params,
+        audit_l0_download_fn=audit_l0_download_fn,
+        assess_l1_html_markdown_quality_fn=assess_l1_html_markdown_quality_fn,
+        assess_l2_pdf_quality_fn=assess_l2_pdf_quality_fn,
+        assess_l3_chunking_quality_fn=assess_l3_chunking_quality_fn,
+        assess_l4_reference_quality_fn=assess_l4_reference_quality_fn,
+        assess_l5_index_quality_fn=assess_l5_index_quality_fn,
+        build_retrieval_dataset_fn=build_retrieval_dataset_fn,
+        evaluate_retrieval_fn=evaluate_retrieval_fn,
+        evaluate_answers_fn=evaluate_answers_fn,
+        evaluate_thresholds_fn=evaluate_thresholds_fn,
+        git_head_fn=git_head_fn,
+        configure_runtime_for_experiment_fn=configure_runtime_for_experiment_fn,
+        initialize_runtime_index_fn=initialize_runtime_index_fn,
+        log_assessment_to_wandb_fn=log_assessment_to_wandb_fn,
+        run_retrieval_ablations_fn=run_retrieval_ablations_fn,
+        run_hype_ablations_fn=run_hype_ablations_fn,
+        run_keyword_ablations_fn=run_keyword_ablations_fn,
+        run_keyword_ablations_with_reingest_fn=run_keyword_ablations_with_reingest_fn,
+        run_hype_ablations_with_reingest_fn=run_hype_ablations_with_reingest_fn,
+        run_reranking_ablations_fn=run_reranking_ablations_fn,
+        run_diversity_sweep_fn=run_diversity_sweep_fn,
+        render_summary_fn=render_summary_fn,
+        sha256_file_fn=sha256_file_fn,
     )
