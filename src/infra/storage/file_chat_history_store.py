@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -11,6 +13,8 @@ from typing import Any
 from src.app.exceptions import StorageError
 from src.config import CHAT_HISTORY_FILE
 from src.config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 SESSION_SCHEMA_VERSION = 2
 
@@ -40,11 +44,25 @@ class FileChatHistoryStore:
         try:
             with self.path.open("r", encoding="utf-8") as handle:
                 raw_history = json.load(handle)
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "Corrupt chat history file %s: %s — backing up and resetting", self.path, exc
+            )
+            self._backup_corrupt_file()
+            return {}
+        except OSError:
             return {}
         if not isinstance(raw_history, dict):
             return {}
         return self._normalize_history(raw_history)
+
+    def _backup_corrupt_file(self) -> None:
+        try:
+            backup_path = self.path.with_suffix(f"{self.path.suffix}.corrupt.{int(time.time())}")
+            shutil.copy2(self.path, backup_path)
+            logger.info("Corrupt file backed up to %s", backup_path)
+        except OSError:
+            logger.warning("Failed to back up corrupt file %s", self.path, exc_info=True)
 
     def _save_history_unlocked(self, history: dict[str, dict[str, Any]]) -> None:
         try:
