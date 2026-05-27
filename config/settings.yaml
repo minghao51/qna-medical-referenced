@@ -1,97 +1,169 @@
+# =============================================================================
+# Application Configuration
+# =============================================================================
 app:
-  environment: development
-  log_level: INFO
+  environment: development  # development | production | test
+  log_level: INFO           # DEBUG | INFO | WARNING | ERROR
 
+# =============================================================================
+# API Server Configuration
+# =============================================================================
 api:
   cors_allowed_origins: "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000,http://127.0.0.1:4173"
-  max_message_length: 2000
-  api_keys: null
-  api_keys_json: null
-  rate_limit_per_minute: 60
-  anonymous_chat_rate_limit_per_minute: 12
-  rate_limit_bypass_key_ids: ""
-  rate_limit_bypass_roles: ""
+  max_message_length: 2000          # Maximum characters per user message
+  api_keys: null                    # Comma-separated API keys for authentication (null = disabled)
+  api_keys_json: null               # JSON file path with API keys (alternative to api_keys)
+  rate_limit_per_minute: 60         # Requests per minute for authenticated users
+  anonymous_chat_rate_limit_per_minute: 12  # Requests per minute for anonymous users
+  rate_limit_bypass_key_ids: ""     # Comma-separated API key IDs that bypass rate limits
+  rate_limit_bypass_roles: ""       # Comma-separated roles that bypass rate limits
   anonymous_browser_cookie_name: "anon_browser_id"
   chat_session_cookie_name: "chat_session_id"
-  chat_session_cookie_max_age_seconds: 2592000
-  chat_history_ttl_seconds: 2592000
-  trust_proxy_headers: false
+  chat_session_cookie_max_age_seconds: 2592000   # 30 days
+  chat_history_ttl_seconds: 2592000              # 30 days
+  chat_history_max_messages_per_session: 100     # Maximum messages per chat session
+  trust_proxy_headers: false        # Set true when behind reverse proxy (for rate limiting)
 
+# =============================================================================
+# LLM Provider Configuration
+# =============================================================================
 llm:
-  provider: qwen
-  model_name: qwen3.5-flash
-  dashscope_api_key: ""
+  # Provider selection: qwen | litellm | gemini
+  provider: gemini
+
+  # --- Qwen (Dashscope) Configuration ---
+  model_name: qwen3.5-flash  # qwen3.5-flash | qwen3.5-27b | qwen3.5-plus | qwen-max
+  dashscope_api_key: ""      # Get from https://dashscope-us.aliyuncs.com/
   qwen_base_url: "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
-  embedding_model: text-embedding-v4
-  embedding_batch_size: 10
-  openrouter_api_key: ""
-  openrouter_model: google/gemma-4-31b-it
-  litellm_model: ""
-  judge_model_light: qwen3.5-35b-a3b
-  judge_model_heavy: qwen3.5-flash
-  judge_model_light_litellm: google/gemma-4-31b-it
-  judge_model_heavy_litellm: google/gemma-4-31b-it
-  judge_temperature: 0.0
-  judge_max_tokens: 1024
 
+  # --- Embedding Configuration ---
+  embedding_model: text-embedding-v4  # Embedding model for vector search
+  embedding_batch_size: 10            # Batch size for embedding requests
+
+  # --- LiteLLM/OpenRouter Configuration (when provider=litellm) ---
+  openrouter_api_key: ""     # Get from https://openrouter.ai/settings/keys
+  openrouter_model: google/gemma-4-31b-it  # Default OpenRouter model
+  litellm_model: ""          # Override with any LiteLLM model string
+
+  # --- Google Gemini Configuration (when provider=gemini) ---
+  gemini_api_key: ""              # Get from https://aistudio.google.com/apikey (set via .env)
+  gemini_model_name: gemma-4-31b-it  # gemini-2.5-flash | gemini-2.5-pro | gemini-2.0-flash
+
+  # --- Evaluation Judge Models (used by DeepEval for LLM-as-judge) ---
+  # Light judge: faster, cheaper (for routine evaluations)
+  judge_model_light: qwen3.5-35b-a3b
+  judge_model_light_litellm: google/gemma-4-31b-it
+  judge_model_light_gemini: gemma-4-31b-it
+
+  # Heavy judge: more accurate (for complex evaluations)
+  judge_model_heavy: qwen3.5-flash
+  judge_model_heavy_litellm: google/gemma-4-31b-it
+  judge_model_heavy_gemini: gemma-4-31b-it
+
+  # Judge generation parameters
+  judge_temperature: 0.0     # 0.0 = deterministic, higher = more creative
+  judge_max_tokens: 1024     # Maximum tokens for judge responses
+
+# =============================================================================
+# Vector Storage Configuration
+# =============================================================================
 storage:
-  collection_name: medical_docs
-  data_dir: data/raw
-  chroma_persist_directory: data/chroma
-  chroma_server_host: ""
-  chroma_server_port: 8000
+  collection_name: medical_docs  # ChromaDB collection name
+  data_dir: data/raw             # Raw data directory (PDFs, HTML, markdown)
+  chroma_persist_directory: data/chroma  # Local ChromaDB storage path
+  chroma_server_host: ""         # ChromaDB server host (empty = local mode)
+  chroma_server_port: 8000       # ChromaDB server port
 
+# =============================================================================
+# RAG Retrieval Configuration
+# =============================================================================
 retrieval:
-  retrieval_overfetch_multiplier: 4
-  max_chunks_per_source_page: 2
-  max_chunks_per_source: 3
-  mmr_lambda: 0.75
-  rrf_search_mode: rrf_hybrid
-  enable_reranking: false
-  reranker_model: BAAI/bge-reranker-base
-  reranker_batch_size: 16
-  reranker_device: cpu
-  rerank_top_k: null
-  rerank_score_threshold: null
-  reranking_mode: cross_encoder
-  medical_expansion_enabled: false
-  medical_expansion_provider: noop
+  retrieval_overfetch_multiplier: 4  # Fetch N*multiplier chunks, then filter
+  max_chunks_per_source_page: 2      # Maximum chunks from same page
+  max_chunks_per_source: 3           # Maximum chunks from same document
+  mmr_lambda: 0.75                   # MMR diversity (0=max diversity, 1=max relevance)
+  rrf_search_mode: rrf_hybrid        # rrf_hybrid | semantic | bm25
 
+  # --- Reranking Configuration ---
+  enable_reranking: false            # Enable cross-encoder reranking
+  reranker_model: BAAI/bge-reranker-base  # Reranker model (HuggingFace)
+  reranker_batch_size: 16            # Batch size for reranking
+  reranker_device: cpu               # cpu | cuda | mps
+  rerank_top_k: null                 # Top-K after reranking (null = no limit)
+  rerank_score_threshold: null       # Minimum reranker score (null = no filter)
+  reranking_mode: cross_encoder      # cross_encoder | cohere
+
+  # --- Medical Query Expansion ---
+  medical_expansion_enabled: false   # Enable medical term expansion
+  medical_expansion_provider: noop   # noop | llm | dictionary
+
+# =============================================================================
+# HyDE (Hypothetical Document Embeddings) Configuration
+# =============================================================================
 hyde:
+  # HyDE: Generate hypothetical answers to improve retrieval
   hyde_enabled: false
-  hyde_max_length: 200
+  hyde_max_length: 200  # Maximum words in hypothetical answer
+
+  # HYPE: Generate hypothetical questions during ingestion
   hype_enabled: false
-  hype_sample_rate: 0.1
-  hype_max_chunks: 500
-  hype_questions_per_chunk: 2
+  hype_sample_rate: 0.1              # Fraction of chunks to process (0.0-1.0)
+  hype_max_chunks: 500               # Maximum chunks to process
+  hype_questions_per_chunk: 2        # Questions per chunk
 
+# =============================================================================
+# Document Enrichment Configuration
+# =============================================================================
 enrichment:
-  enable_keyword_extraction: false
-  enable_chunk_summaries: false
-  keyword_extraction_sample_rate: 1.0
-  keyword_extraction_max_chunks: 500
+  enable_keyword_extraction: false   # Extract keywords from chunks
+  enable_chunk_summaries: false      # Generate summaries for chunks
+  keyword_extraction_sample_rate: 1.0  # Fraction of chunks to process (0.0-1.0)
+  keyword_extraction_max_chunks: 500   # Maximum chunks to process
 
+# =============================================================================
+# Ingestion Pipeline Configuration
+# =============================================================================
+# These defaults are used by RuntimeState and can be overridden at runtime
+# via CLI flags or experiment profiles.
+ingestion:
+  structured_chunking_enabled: true
+  auto_select_strategy: false          # Auto-detect best chunking strategy per doc
+  pdf_extractor_strategy: pypdf_pdfplumber  # pypdf_pdfplumber | pymupdf | docling
+  pdf_table_extractor: heuristic       # heuristic | docling
+  index_only_classified_pages: true    # Only index pages classified as medical
+  html_extractor_strategy: trafilatura_bs  # trafilatura_bs | readability | newspaper
+  html_extractor_mode: auto            # auto | full | fast
+  page_classification_enabled: true
+
+# =============================================================================
+# Retry Configuration
+# =============================================================================
 retry:
-  max_retries: 3
-  retry_delay: 1.0
+  max_retries: 3           # Maximum retry attempts for failed requests
+  retry_delay: 1.0         # Initial delay between retries (seconds), doubles each attempt
 
+# =============================================================================
+# DeepEval Configuration (Evaluation Framework)
+# =============================================================================
 deepeval:
-  judge_model_light: qwen3.5-35b-a3b
-  judge_model_heavy: qwen3.5-flash
-  judge_model_light_litellm: google/gemma-4-31b-it
-  judge_model_heavy_litellm: google/gemma-4-31b-it
-  deepeval_query_concurrency: 2
-  deepeval_metric_concurrency: 3
-  deepeval_metric_timeout_seconds: 90
-  deepeval_answer_cache_enabled: true
-  deepeval_metric_cache_enabled: true
-  deepeval_cache_dir: data/evals/cache
-  deepeval_cache_schema_version: 2
-  deepeval_faithfulness_truths_limit: 8
+  deepeval_query_concurrency: 2      # Concurrent evaluation queries
+  deepeval_metric_concurrency: 3     # Concurrent metric calculations
+  deepeval_metric_timeout_seconds: 90  # Timeout per metric calculation
+  deepeval_answer_cache_enabled: true   # Cache LLM judge responses
+  deepeval_metric_cache_enabled: true   # Cache metric calculations
+  deepeval_cache_dir: data/evals/cache  # Cache directory
+  deepeval_cache_schema_version: 2      # Cache schema version (increment to invalidate)
+  deepeval_faithfulness_truths_limit: 8  # Maximum truths extracted for faithfulness metric
 
+# =============================================================================
+# Weights & Biases Configuration (Experiment Tracking)
+# =============================================================================
 wandb:
-  wandb_api_key: ""
-  wandb_cache_ttl_seconds: 60
+  wandb_api_key: ""          # Get from https://wandb.ai/authorize
+  wandb_cache_ttl_seconds: 60  # Cache TTL for W&B API calls
 
+# =============================================================================
+# Production Configuration
+# =============================================================================
 production:
-  production_profile: baseline_cross_encoder
+  production_profile: baseline_cross_encoder  # Experiment profile for production deployment

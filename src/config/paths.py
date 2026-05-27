@@ -12,7 +12,15 @@ CHROMA_PERSIST_DIRECTORY = PROJECT_ROOT / settings.storage.chroma_persist_direct
 CHAT_HISTORY_FILE = DATA_DIR / "chat_history.json"
 RATE_LIMIT_DB = DATA_DIR / "rate_limits.db"
 
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-DATA_RAW_DIR.mkdir(parents=True, exist_ok=True)
-DATA_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-CHROMA_PERSIST_DIRECTORY.mkdir(parents=True, exist_ok=True)
+_dirs_initialized = False
+
+
+def ensure_dirs() -> None:
+    global _dirs_initialized
+    if _dirs_initialized:
+        return
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DATA_RAW_DIR.mkdir(parents=True, exist_ok=True)
+    DATA_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    CHROMA_PERSIST_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    _dirs_initialized = True

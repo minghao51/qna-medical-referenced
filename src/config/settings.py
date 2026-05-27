@@ -2,17 +2,20 @@
 
 This module provides a centralized settings object that combines:
 - YAML configuration from config/settings.yaml
-- Environment variable overrides (with prefix APP__)
-- Secrets from .env (via dotenvx)
+- Environment variable overrides (with APP__ prefix and __ nested delimiter)
+- Secrets from .env (via dotenvx, using APP__LLM__* keys)
 
-The YAML config is the source of truth for default values. Environment
-variables take precedence for overrides and sensitive values.
+Priority order (first wins):
+1. Init args
+2. Env vars (APP__LLM__MODEL_NAME)
+3. .env file (dotenvx decrypted, APP__* keys)
+4. YAML defaults (config/settings.yaml)
 """
 
+import functools
 from pathlib import Path
-from typing import ClassVar
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -29,7 +32,7 @@ class AppConfig(BaseModel):
 
 
 class ApiConfig(BaseModel):
-    cors_allowed_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000"
+    cors_allowed_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000,http://127.0.0.1:4173"
     max_message_length: int = 2000
     api_keys: str | None = None
     api_keys_json: str | None = None
@@ -48,17 +51,21 @@ class ApiConfig(BaseModel):
 class LLMConfig(BaseModel):
     provider: str = "qwen"
     model_name: str = "qwen3.5-flash"
-    dashscope_api_key: str = ""
+    dashscope_api_key: SecretStr = SecretStr("")
     qwen_base_url: str = "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
     embedding_model: str = "text-embedding-v4"
     embedding_batch_size: int = 10
-    openrouter_api_key: str = ""
+    openrouter_api_key: SecretStr = SecretStr("")
     openrouter_model: str = "google/gemma-4-31b-it"
     litellm_model: str = ""
+    gemini_api_key: SecretStr = SecretStr("")
+    gemini_model_name: str = "gemma-4-31b-it"
     judge_model_light: str = "qwen3.5-35b-a3b"
     judge_model_heavy: str = "qwen3.5-flash"
     judge_model_light_litellm: str = "google/gemma-4-31b-it"
     judge_model_heavy_litellm: str = "google/gemma-4-31b-it"
+    judge_model_light_gemini: str = "gemma-4-31b-it"
+    judge_model_heavy_gemini: str = "gemma-4-31b-it"
     judge_temperature: float = 0.0
     judge_max_tokens: int = 1024
 
@@ -104,16 +111,23 @@ class EnrichmentConfig(BaseModel):
     keyword_extraction_max_chunks: int = 500
 
 
+class IngestionConfig(BaseModel):
+    structured_chunking_enabled: bool = True
+    auto_select_strategy: bool = False
+    pdf_extractor_strategy: str = "pypdf_pdfplumber"
+    pdf_table_extractor: str = "heuristic"
+    index_only_classified_pages: bool = True
+    html_extractor_strategy: str = "trafilatura_bs"
+    html_extractor_mode: str = "auto"
+    page_classification_enabled: bool = True
+
+
 class RetryConfig(BaseModel):
     max_retries: int = 3
     retry_delay: float = 1.0
 
 
 class DeepEvalConfig(BaseModel):
-    judge_model_light: str = "qwen3.5-35b-a3b"
-    judge_model_heavy: str = "qwen3.5-flash"
-    judge_model_light_litellm: str = "google/gemma-4-31b-it"
-    judge_model_heavy_litellm: str = "google/gemma-4-31b-it"
     deepeval_query_concurrency: int = 2
     deepeval_metric_concurrency: int = 3
     deepeval_metric_timeout_seconds: int = 90
@@ -125,7 +139,7 @@ class DeepEvalConfig(BaseModel):
 
 
 class WandbConfig(BaseModel):
-    wandb_api_key: str = ""
+    wandb_api_key: SecretStr = SecretStr("")
     wandb_cache_ttl_seconds: int = 60
 
 
@@ -140,81 +154,6 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
     )
 
-    _LEGACY_FIELD_MAP: ClassVar[dict[str, tuple[str, str]]] = {
-        "app_environment": ("app", "environment"),
-        "log_level": ("app", "log_level"),
-        "max_message_length": ("api", "max_message_length"),
-        "api_keys": ("api", "api_keys"),
-        "api_keys_json": ("api", "api_keys_json"),
-        "rate_limit_per_minute": ("api", "rate_limit_per_minute"),
-        "anonymous_chat_rate_limit_per_minute": ("api", "anonymous_chat_rate_limit_per_minute"),
-        "rate_limit_bypass_key_ids": ("api", "rate_limit_bypass_key_ids"),
-        "rate_limit_bypass_roles": ("api", "rate_limit_bypass_roles"),
-        "anonymous_browser_cookie_name": ("api", "anonymous_browser_cookie_name"),
-        "chat_session_cookie_name": ("api", "chat_session_cookie_name"),
-        "chat_session_cookie_max_age_seconds": ("api", "chat_session_cookie_max_age_seconds"),
-        "chat_history_ttl_seconds": ("api", "chat_history_ttl_seconds"),
-        "chat_history_max_messages_per_session": ("api", "chat_history_max_messages_per_session"),
-        "trust_proxy_headers": ("api", "trust_proxy_headers"),
-        "llm_provider": ("llm", "provider"),
-        "model_name": ("llm", "model_name"),
-        "dashscope_api_key": ("llm", "dashscope_api_key"),
-        "qwen_base_url": ("llm", "qwen_base_url"),
-        "embedding_model": ("llm", "embedding_model"),
-        "embedding_batch_size": ("llm", "embedding_batch_size"),
-        "openrouter_api_key": ("llm", "openrouter_api_key"),
-        "openrouter_model": ("llm", "openrouter_model"),
-        "litellm_model": ("llm", "litellm_model"),
-        "judge_model_light": ("llm", "judge_model_light"),
-        "judge_model_heavy": ("llm", "judge_model_heavy"),
-        "judge_model_light_litellm": ("llm", "judge_model_light_litellm"),
-        "judge_model_heavy_litellm": ("llm", "judge_model_heavy_litellm"),
-        "judge_temperature": ("llm", "judge_temperature"),
-        "judge_max_tokens": ("llm", "judge_max_tokens"),
-        "collection_name": ("storage", "collection_name"),
-        "data_dir": ("storage", "data_dir"),
-        "chroma_persist_directory": ("storage", "chroma_persist_directory"),
-        "chroma_server_host": ("storage", "chroma_server_host"),
-        "chroma_server_port": ("storage", "chroma_server_port"),
-        "retrieval_overfetch_multiplier": ("retrieval", "retrieval_overfetch_multiplier"),
-        "max_chunks_per_source_page": ("retrieval", "max_chunks_per_source_page"),
-        "max_chunks_per_source": ("retrieval", "max_chunks_per_source"),
-        "mmr_lambda": ("retrieval", "mmr_lambda"),
-        "rrf_search_mode": ("retrieval", "rrf_search_mode"),
-        "enable_reranking": ("retrieval", "enable_reranking"),
-        "reranker_model": ("retrieval", "reranker_model"),
-        "reranker_batch_size": ("retrieval", "reranker_batch_size"),
-        "reranker_device": ("retrieval", "reranker_device"),
-        "rerank_top_k": ("retrieval", "rerank_top_k"),
-        "rerank_score_threshold": ("retrieval", "rerank_score_threshold"),
-        "reranking_mode": ("retrieval", "reranking_mode"),
-        "medical_expansion_enabled": ("retrieval", "medical_expansion_enabled"),
-        "medical_expansion_provider": ("retrieval", "medical_expansion_provider"),
-        "hyde_enabled": ("hyde", "hyde_enabled"),
-        "hyde_max_length": ("hyde", "hyde_max_length"),
-        "hype_enabled": ("hyde", "hype_enabled"),
-        "hype_sample_rate": ("hyde", "hype_sample_rate"),
-        "hype_max_chunks": ("hyde", "hype_max_chunks"),
-        "hype_questions_per_chunk": ("hyde", "hype_questions_per_chunk"),
-        "enable_keyword_extraction": ("enrichment", "enable_keyword_extraction"),
-        "enable_chunk_summaries": ("enrichment", "enable_chunk_summaries"),
-        "keyword_extraction_sample_rate": ("enrichment", "keyword_extraction_sample_rate"),
-        "keyword_extraction_max_chunks": ("enrichment", "keyword_extraction_max_chunks"),
-        "max_retries": ("retry", "max_retries"),
-        "retry_delay": ("retry", "retry_delay"),
-        "deepeval_query_concurrency": ("deepeval", "deepeval_query_concurrency"),
-        "deepeval_metric_concurrency": ("deepeval", "deepeval_metric_concurrency"),
-        "deepeval_metric_timeout_seconds": ("deepeval", "deepeval_metric_timeout_seconds"),
-        "deepeval_answer_cache_enabled": ("deepeval", "deepeval_answer_cache_enabled"),
-        "deepeval_metric_cache_enabled": ("deepeval", "deepeval_metric_cache_enabled"),
-        "deepeval_cache_dir": ("deepeval", "deepeval_cache_dir"),
-        "deepeval_cache_schema_version": ("deepeval", "deepeval_cache_schema_version"),
-        "deepeval_faithfulness_truths_limit": ("deepeval", "deepeval_faithfulness_truths_limit"),
-        "wandb_api_key": ("wandb", "wandb_api_key"),
-        "wandb_cache_ttl_seconds": ("wandb", "wandb_cache_ttl_seconds"),
-        "production_profile": ("production", "production_profile"),
-    }
-
     app: AppConfig = Field(default_factory=AppConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
@@ -222,35 +161,11 @@ class Settings(BaseSettings):
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     hyde: HyDEConfig = Field(default_factory=HyDEConfig)
     enrichment: EnrichmentConfig = Field(default_factory=EnrichmentConfig)
+    ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     deepeval: DeepEvalConfig = Field(default_factory=DeepEvalConfig)
     wandb: WandbConfig = Field(default_factory=WandbConfig)
     production: ProductionConfig = Field(default_factory=ProductionConfig)
-
-    @classmethod
-    def _coerce_legacy_flat_fields(cls, data: object) -> object:
-        if not isinstance(data, dict):
-            return data
-
-        migrated = dict(data)
-        for legacy_name, (section_name, field_name) in cls._LEGACY_FIELD_MAP.items():
-            if legacy_name not in migrated:
-                continue
-            value = migrated.pop(legacy_name)
-            section_payload = migrated.get(section_name)
-            if not isinstance(section_payload, dict):
-                section_payload = {}
-            section_payload.setdefault(field_name, value)
-            migrated[section_name] = section_payload
-        return migrated
-
-    def __init__(self, **values):
-        super().__init__(**self._coerce_legacy_flat_fields(values))
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_legacy_flat_fields(cls, data: object) -> object:
-        return cls._coerce_legacy_flat_fields(data)
 
     @classmethod
     def settings_customise_sources(
@@ -280,5 +195,30 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.api.cors_allowed_origins.split(",") if o.strip()]
 
+    @property
+    def dashscope_api_key_value(self) -> str:
+        return self.llm.dashscope_api_key.get_secret_value()
 
-settings = Settings()
+    @property
+    def openrouter_api_key_value(self) -> str:
+        return self.llm.openrouter_api_key.get_secret_value()
+
+    @property
+    def wandb_api_key_value(self) -> str:
+        return self.wandb.wandb_api_key.get_secret_value()
+
+
+@functools.lru_cache(maxsize=1)
+def _get_settings() -> Settings:
+    return Settings()
+
+
+class _SettingsProxy:
+    def __getattr__(self, name):
+        return getattr(_get_settings(), name)
+
+    def __repr__(self):
+        return repr(_get_settings())
+
+
+settings = _SettingsProxy()

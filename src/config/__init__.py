@@ -8,6 +8,7 @@ from src.config.paths import (
     DATA_RAW_DIR,
     PROJECT_ROOT,
     RATE_LIMIT_DB,
+    ensure_dirs,
 )
 from src.config.settings import (
     ApiConfig,
@@ -15,6 +16,7 @@ from src.config.settings import (
     DeepEvalConfig,
     EnrichmentConfig,
     HyDEConfig,
+    IngestionConfig,
     LLMConfig,
     ProductionConfig,
     RetrievalConfig,
@@ -23,6 +25,8 @@ from src.config.settings import (
     WandbConfig,
 )
 from src.config.settings import settings as settings
+
+ensure_dirs()
 
 VECTOR_DIR = CHROMA_PERSIST_DIRECTORY
 
@@ -40,11 +44,13 @@ __all__ = [
     "DeepEvalConfig",
     "EnrichmentConfig",
     "HyDEConfig",
+    "IngestionConfig",
     "LLMConfig",
     "ProductionConfig",
     "RetrievalConfig",
     "RetryConfig",
     "StorageConfig",
     "WandbConfig",
+    "ensure_dirs",
     "settings",
 ]

@@ -1,10 +1,17 @@
-"""Centralized runtime configuration context."""
+"""Centralized runtime configuration context.
+
+RuntimeState is a mutable overlay above static config.  Its ``_DEFAULTS``
+are sourced from ``config/settings.yaml`` (via ``settings.ingestion.*``),
+so the YAML file is the canonical source for all non-secret values.
+"""
 
 from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
+
+from src.config.settings import settings
 
 
 @dataclass
@@ -16,19 +23,19 @@ class RuntimeState:
     automatically via ``__getattr__`` / ``__setattr__``.
     """
 
-    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     _data: dict[str, Any] = field(default_factory=dict, repr=False)
 
     _DEFAULTS: ClassVar[dict[str, Any]] = {
-        "structured_chunking_enabled": True,
+        "structured_chunking_enabled": settings.ingestion.structured_chunking_enabled,
         "source_chunk_configs_override": None,
-        "auto_select_strategy": False,
-        "pdf_extractor_strategy": "pypdf_pdfplumber",
-        "pdf_table_extractor": "heuristic",
-        "index_only_classified_pages": True,
-        "html_extractor_strategy": "trafilatura_bs",
-        "html_extractor_mode": "auto",
-        "page_classification_enabled": True,
+        "auto_select_strategy": settings.ingestion.auto_select_strategy,
+        "pdf_extractor_strategy": settings.ingestion.pdf_extractor_strategy,
+        "pdf_table_extractor": settings.ingestion.pdf_table_extractor,
+        "index_only_classified_pages": settings.ingestion.index_only_classified_pages,
+        "html_extractor_strategy": settings.ingestion.html_extractor_strategy,
+        "html_extractor_mode": settings.ingestion.html_extractor_mode,
+        "page_classification_enabled": settings.ingestion.page_classification_enabled,
         "reranker_instance": None,
         "vector_store_initialized": False,
         "vector_store_initialized_signature": None,
