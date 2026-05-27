@@ -19,8 +19,6 @@ from src.rag.hyde import (
     expand_query_with_hyde,
     expand_query_with_hyde_async,
     generate_hypothetical_answer,
-    should_enable_hyde,
-    validate_hyde_config,
 )
 from src.rag.runtime import retrieve_context_with_trace_async
 
@@ -195,58 +193,6 @@ async def test_expand_query_with_hyde_async_handles_generation_failure():
 
         # Should fall back to original query only
         assert queries == [query]
-
-
-# =============================================================================
-# Configuration Tests
-# =============================================================================
-
-
-def test_should_enable_hyde_explicit_true():
-    """Test that explicit True setting enables HyDE."""
-    assert should_enable_hyde(explicit_setting=True) is True
-    assert should_enable_hyde(explicit_setting=True, config_setting=False) is True
-
-
-def test_should_enable_hyde_explicit_false():
-    """Test that explicit False setting disables HyDE."""
-    assert should_enable_hyde(explicit_setting=False) is False
-    assert should_enable_hyde(explicit_setting=False, config_setting=True) is False
-
-
-def test_should_enable_hyde_config_setting():
-    """Test that config setting is used when no explicit setting."""
-    assert should_enable_hyde(config_setting=True) is True
-    assert should_enable_hyde(config_setting=False) is False
-
-
-def test_should_enable_hyde_default():
-    """Test that HyDE is disabled by default."""
-    assert should_enable_hyde() is False
-    assert should_enable_hyde(explicit_setting=None, config_setting=None) is False
-
-
-def test_validate_hyde_config_valid():
-    """Test validation of valid HyDE configuration."""
-    enable, max_length = validate_hyde_config(True, 200)
-
-    assert enable is True
-    assert max_length == 200
-
-
-def test_validate_hyde_config_clamps_max_length():
-    """Test that max_length is clamped to valid range."""
-    # Too low
-    enable, max_length = validate_hyde_config(True, 10)
-    assert max_length == 50  # Minimum
-
-    # Too high
-    enable, max_length = validate_hyde_config(True, 1000)
-    assert max_length == 500  # Maximum
-
-    # Just right
-    _enable, max_length = validate_hyde_config(True, 300)
-    assert max_length == 300
 
 
 # =============================================================================

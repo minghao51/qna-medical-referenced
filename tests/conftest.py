@@ -3,12 +3,11 @@ import os
 from pathlib import Path
 
 import pytest
-from dotenv import load_dotenv
 
-load_dotenv()
-
-if "DASHSCOPE_API_KEY" not in os.environ or not os.environ.get("DASHSCOPE_API_KEY"):
-    os.environ["DASHSCOPE_API_KEY"] = "test-api-key"
+if "APP__LLM__DASHSCOPE_API_KEY" not in os.environ or not os.environ.get(
+    "APP__LLM__DASHSCOPE_API_KEY"
+):
+    os.environ["APP__LLM__DASHSCOPE_API_KEY"] = "test-api-key"
 
 
 LIVE_QWEN_ENABLED = os.environ.get("RUN_LIVE_QWEN_TESTS") == "1"
@@ -119,7 +118,10 @@ def _ensure_live_qwen_available():
     from src.config import settings
 
     try:
-        client = OpenAI(api_key=settings.llm.dashscope_api_key, base_url=settings.llm.qwen_base_url)
+        client = OpenAI(
+            api_key=settings.llm.dashscope_api_key.get_secret_value(),
+            base_url=settings.llm.qwen_base_url,
+        )
         # Simple test call to verify API is accessible
         client.embeddings.create(model="text-embedding-v4", input="test")
     except Exception as exc:
@@ -145,10 +147,11 @@ def _ensure_live_openrouter_available():
     from src.config import settings
 
     try:
-        if settings.openrouter_api_key:
-            os.environ.setdefault("OPENROUTER_API_KEY", settings.openrouter_api_key)
+        _openrouter_key = settings.llm.openrouter_api_key.get_secret_value()
+        if _openrouter_key:
+            os.environ.setdefault("OPENROUTER_API_KEY", _openrouter_key)
         litellm.completion(
-            model=f"openrouter/{settings.openrouter_model}",
+            model=f"openrouter/{settings.llm.openrouter_model}",
             messages=[{"role": "user", "content": "test"}],
             max_tokens=1,
         )

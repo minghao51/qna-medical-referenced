@@ -1,6 +1,11 @@
 import json
+from types import SimpleNamespace
 
 from src.app.routes import evaluation
+
+
+def _auth_request():
+    return SimpleNamespace(state=SimpleNamespace(auth=object()))
 
 
 def test_evaluation_history_includes_microsecond_run_dirs(monkeypatch, tmp_path):
@@ -39,8 +44,8 @@ def test_evaluation_history_includes_microsecond_run_dirs(monkeypatch, tmp_path)
     monkeypatch.setattr(evaluation, "EVALS_DIR", evals_dir)
     monkeypatch.setattr(evaluation, "LATEST_POINTER", evals_dir / "latest_run.txt")
 
-    history = evaluation.get_evaluation_history(limit=10)
-    runs = evaluation.get_evaluation_runs()
+    history = evaluation.get_evaluation_history(_auth_request(), limit=10)
+    runs = evaluation.get_evaluation_runs(_auth_request())
 
     assert history["runs"][0]["run_dir"] == newer.name
     assert history["runs"][0]["dedup"]["reused_existing_run"] is True
@@ -98,7 +103,7 @@ def test_evaluation_history_returns_local_runs_only(monkeypatch, tmp_path):
     monkeypatch.setattr(evaluation, "EVALS_DIR", evals_dir)
     monkeypatch.setattr(evaluation, "LATEST_POINTER", evals_dir / "latest_run.txt")
 
-    history = evaluation.get_evaluation_history(limit=10)
+    history = evaluation.get_evaluation_history(_auth_request(), limit=10)
 
     assert history["summary"]["total_runs"] == 1
     assert history["summary"]["sources"]["local"] == 1
@@ -145,7 +150,7 @@ def test_evaluation_history_handles_null_experiment_config(monkeypatch, tmp_path
     monkeypatch.setattr(evaluation, "EVALS_DIR", evals_dir)
     monkeypatch.setattr(evaluation, "LATEST_POINTER", evals_dir / "latest_run.txt")
 
-    history = evaluation.get_evaluation_history(limit=10)
+    history = evaluation.get_evaluation_history(_auth_request(), limit=10)
 
     assert history["runs"][0]["experiment_name"] is None
     assert history["runs"][0]["variant_name"] is None
@@ -201,8 +206,8 @@ def test_evaluation_history_excludes_incomplete_and_zero_query_runs(monkeypatch,
     monkeypatch.setattr(evaluation, "EVALS_DIR", evals_dir)
     monkeypatch.setattr(evaluation, "LATEST_POINTER", evals_dir / "latest_run.txt")
 
-    history = evaluation.get_evaluation_history(limit=10)
-    runs = evaluation.get_evaluation_runs()
+    history = evaluation.get_evaluation_history(_auth_request(), limit=10)
+    runs = evaluation.get_evaluation_runs(_auth_request())
 
     assert [run["run_dir"] for run in history["runs"]] == [valid.name]
     assert [run["run_dir"] for run in runs] == [valid.name]
@@ -239,7 +244,7 @@ def test_get_latest_evaluation_skips_incomplete_newest_run(monkeypatch, tmp_path
     monkeypatch.setattr(evaluation, "EVALS_DIR", evals_dir)
     monkeypatch.setattr(evaluation, "LATEST_POINTER", evals_dir / "latest_run.txt")
 
-    latest = evaluation.get_latest_evaluation()
+    latest = evaluation.get_latest_evaluation(_auth_request())
 
     assert latest["run_dir"] == valid.name
     assert latest["retrieval_metrics"]["hit_rate_at_k"] == 0.75

@@ -24,7 +24,7 @@ def test_apply_production_profile_returns_false_for_unknown_profile(monkeypatch)
     def fake_configure(profile):
         configured_profiles.append(profile)
 
-    monkeypatch.setattr("src.rag.runtime.configure_runtime_for_experiment", fake_configure)
+    monkeypatch.setattr("src.rag.index.configure_runtime_for_experiment", fake_configure)
 
     applied = production_profile.apply_production_profile("does-not-exist")
 

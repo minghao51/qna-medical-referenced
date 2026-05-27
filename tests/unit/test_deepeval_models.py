@@ -68,13 +68,15 @@ async def test_qwen_model_a_generate_uses_async_client(monkeypatch):
     assert captured["max_tokens"] == settings.llm.judge_max_tokens
 
 
-def test_get_light_model_returns_light_model():
+def test_get_light_model_returns_light_model(monkeypatch):
+    monkeypatch.setattr(settings.llm, "provider", "qwen")
     model = get_light_model()
     assert model.model == settings.llm.judge_model_light
     assert model.model == "qwen3.5-35b-a3b"
 
 
-def test_get_heavy_model_returns_heavy_model():
+def test_get_heavy_model_returns_heavy_model(monkeypatch):
+    monkeypatch.setattr(settings.llm, "provider", "qwen")
     model = get_heavy_model()
     assert model.model == settings.llm.judge_model_heavy
     assert model.model == "qwen3.5-flash"

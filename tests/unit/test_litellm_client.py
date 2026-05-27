@@ -15,18 +15,33 @@ def _stream_chunk(text: str):
 
 
 def test_litellm_client_resolve_model_from_settings(monkeypatch):
-    from src.infra.llm.litellm_client import settings as _settings
-
-    monkeypatch.setattr(_settings.llm, "litellm_model", "openrouter/foo/bar")
+    monkeypatch.setattr(
+        "src.infra.llm.litellm_client.settings",
+        SimpleNamespace(
+            llm=SimpleNamespace(
+                litellm_model="openrouter/foo/bar",
+                openrouter_model="google/gemma-4-31b-it",
+                openrouter_api_key=SimpleNamespace(get_secret_value=lambda: ""),
+            ),
+            retry=SimpleNamespace(max_retries=3, retry_delay=0.0),
+        ),
+    )
     client = LiteLLMClient()
     assert client.model == "openrouter/foo/bar"
 
 
 def test_litellm_client_resolve_model_from_openrouter_model(monkeypatch):
-    from src.infra.llm.litellm_client import settings as _settings
-
-    monkeypatch.setattr(_settings.llm, "litellm_model", "")
-    monkeypatch.setattr(_settings.llm, "openrouter_model", "google/gemma-4-31b-it")
+    monkeypatch.setattr(
+        "src.infra.llm.litellm_client.settings",
+        SimpleNamespace(
+            llm=SimpleNamespace(
+                litellm_model="",
+                openrouter_model="google/gemma-4-31b-it",
+                openrouter_api_key=SimpleNamespace(get_secret_value=lambda: ""),
+            ),
+            retry=SimpleNamespace(max_retries=3, retry_delay=0.0),
+        ),
+    )
     client = LiteLLMClient()
     assert client.model == "openrouter/google/gemma-4-31b-it"
 
@@ -124,10 +139,12 @@ def test_litellm_client_generate_empty_response_raises(monkeypatch):
 
 
 def test_get_client_returns_litellm_when_configured(monkeypatch):
-    from src.infra.llm import settings as _settings
-
-    monkeypatch.setattr(_settings.llm, "provider", "litellm")
-    monkeypatch.setattr(_settings.llm, "litellm_model", "openrouter/test-model")
+    monkeypatch.setattr(
+        "src.infra.llm.settings",
+        SimpleNamespace(
+            llm=SimpleNamespace(provider="litellm", litellm_model="openrouter/test-model")
+        ),
+    )
 
     from src.infra.llm import get_client
 
@@ -135,8 +152,9 @@ def test_get_client_returns_litellm_when_configured(monkeypatch):
     assert isinstance(client, LiteLLMClient)
 
 
-def test_get_client_returns_qwen_by_default():
+def test_get_client_returns_qwen_by_default(monkeypatch):
     from src.infra.llm import QwenClient, get_client
 
+    monkeypatch.setattr("src.infra.llm.settings.llm.provider", "qwen")
     client = get_client()
     assert isinstance(client, QwenClient)

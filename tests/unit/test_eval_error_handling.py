@@ -16,6 +16,14 @@ from unittest.mock import patch
 
 import pytest
 
+from src.config.settings import settings
+
+
+@pytest.fixture(autouse=True)
+def _force_qwen_provider(monkeypatch):
+    monkeypatch.setattr(settings.llm, "provider", "qwen")
+
+
 # =============================================================================
 # API Timeout Tests
 # =============================================================================

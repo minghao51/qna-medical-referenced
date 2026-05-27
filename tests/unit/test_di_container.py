@@ -65,8 +65,12 @@ def test_global_container():
     reset_container()
 
 
-def test_llm_client_singleton():
+def test_llm_client_singleton(monkeypatch):
     """Test LLM client singleton behavior."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.setattr("src.infra.llm.get_client", lambda: MagicMock())
+
     container = ServiceContainer()
 
     client1 = container.get_llm_client()

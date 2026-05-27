@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.app.factory import create_app
@@ -35,17 +36,21 @@ def _build_client(
     monkeypatch.setattr("src.app.factory.validate_security_configuration", lambda: None)
     monkeypatch.setattr("src.app.factory.initialize_runtime_index_async", lambda: None)
     monkeypatch.setattr("src.app.middleware.rate_limit.RATE_LIMIT_DB", tmp_path / "rate_limits.db")
-    monkeypatch.setattr(settings.api, "api_keys", api_keys)
-    monkeypatch.setattr(settings.api, "api_keys_json", None)
-    monkeypatch.setattr(
-        settings.api, "anonymous_chat_rate_limit_per_minute", anonymous_chat_rate_limit
+    api_config = settings.api.model_dump()
+    api_config.update(
+        {
+            "api_keys": api_keys,
+            "api_keys_json": None,
+            "anonymous_chat_rate_limit_per_minute": anonymous_chat_rate_limit,
+            "anonymous_browser_cookie_name": "anon_browser_id",
+            "chat_session_cookie_name": "chat_session_id",
+            "chat_session_cookie_max_age_seconds": 3600,
+            "trust_proxy_headers": trust_proxy_headers,
+            "rate_limit_bypass_key_ids": rate_limit_bypass_key_ids,
+            "rate_limit_bypass_roles": rate_limit_bypass_roles,
+        }
     )
-    monkeypatch.setattr(settings.api, "anonymous_browser_cookie_name", "anon_browser_id")
-    monkeypatch.setattr(settings.api, "chat_session_cookie_name", "chat_session_id")
-    monkeypatch.setattr(settings.api, "chat_session_cookie_max_age_seconds", 3600)
-    monkeypatch.setattr(settings.api, "trust_proxy_headers", trust_proxy_headers)
-    monkeypatch.setattr(settings.api, "rate_limit_bypass_key_ids", rate_limit_bypass_key_ids)
-    monkeypatch.setattr(settings.api, "rate_limit_bypass_roles", rate_limit_bypass_roles)
+    monkeypatch.setattr(settings, "api", SimpleNamespace(**api_config))
     APIKeyConfig.reload()
     app = create_app()
     app.state.llm_client = DummyLLMClient()
@@ -402,6 +407,8 @@ def test_evaluate_single_validates_payload_shape(monkeypatch, tmp_path: Path):
 
 
 def test_evaluate_single_accepts_json_payload_with_api_key(monkeypatch, tmp_path: Path):
+    pytest.importorskip("deepeval")
+
     async def _fake_measure(metric, test_case, ignore_errors=False, skip_on_missing_params=False):
         del test_case, ignore_errors, skip_on_missing_params
         metric.score = 0.9

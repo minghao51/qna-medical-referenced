@@ -1,18 +1,28 @@
 """Tests for synthetic data generator."""
 
+import importlib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.evals.synthetic.generator import generate_synthetic_dataset
+pytestmark = pytest.mark.skipif(
+    not importlib.util.find_spec("deepeval"),
+    reason="deepeval not installed",
+)
+
+
+def _import_generator():
+    from src.evals.synthetic.generator import generate_synthetic_dataset
+
+    return generate_synthetic_dataset
 
 
 def test_synthetic_generator_structure():
     """Test that generator function is properly structured."""
+    generate_synthetic_dataset = _import_generator()
     fixture_path = Path(__file__).parent.parent / "fixtures" / "sample_medical.txt"
 
-    # Mock both Synthesizer and ContextConstructionConfig to avoid needing API keys
     with (
         patch("src.evals.synthetic.generator.Synthesizer") as mock_synthesizer_class,
         patch("src.evals.synthetic.generator.ContextConstructionConfig"),
@@ -26,7 +36,6 @@ def test_synthetic_generator_structure():
             document_paths=[fixture_path], num_questions=2, output_path="/tmp/test_synthetic.json"
         )
 
-        # Verify synthesizer was called correctly
         mock_synthesizer.generate_goldens_from_docs.assert_called_once()
         mock_synthesizer.save_as.assert_called_once()
         _, kwargs = mock_synthesizer.generate_goldens_from_docs.call_args
@@ -37,6 +46,10 @@ def test_synthetic_generator_structure():
 
 def test_synthetic_generator_with_missing_file():
     """Test generator handles missing file gracefully."""
-    with patch("src.evals.synthetic.generator.ContextConstructionConfig"):
+    generate_synthetic_dataset = _import_generator()
+    with (
+        patch("src.evals.synthetic.generator.Synthesizer"),
+        patch("src.evals.synthetic.generator.ContextConstructionConfig"),
+    ):
         with pytest.raises((FileNotFoundError, Exception)):
             generate_synthetic_dataset(document_paths=["nonexistent.txt"])

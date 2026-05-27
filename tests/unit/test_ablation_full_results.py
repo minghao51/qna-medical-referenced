@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 from src.app.routes import evaluation
 
@@ -46,7 +47,8 @@ def test_full_ablation_results_include_runs_from_20260404_onward(monkeypatch, tm
 
     monkeypatch.setattr(evaluation, "Path", lambda _: ablation_dir)
 
-    result = evaluation.get_full_ablation_results()
+    request = SimpleNamespace(state=SimpleNamespace(auth=object()))
+    result = evaluation.get_full_ablation_results(request)
 
     assert [run["run_dir"] for run in result["runs"]] == [
         "20260405T000000Z_pdf_pymupdf",
@@ -69,7 +71,8 @@ def test_full_ablation_results_compute_delta_when_baseline_is_zero(monkeypatch, 
 
     monkeypatch.setattr(evaluation, "Path", lambda _: ablation_dir)
 
-    result = evaluation.get_full_ablation_results()
+    request = SimpleNamespace(state=SimpleNamespace(auth=object()))
+    result = evaluation.get_full_ablation_results(request)
     runs_by_variant = {run["variant"]: run for run in result["runs"]}
 
     assert runs_by_variant["baseline"]["delta_ndcg"] == 0.0

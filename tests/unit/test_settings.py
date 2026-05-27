@@ -25,28 +25,24 @@ def test_settings_defaults():
 
 
 def test_settings_custom_values(monkeypatch):
-    monkeypatch.delenv("MODEL_NAME", raising=False)
     settings = Settings(
         _env_file=None,
-        dashscope_api_key="test-key",
-        model_name="qwen-plus",
-        max_message_length=5000,
+        llm={"dashscope_api_key": "test-key", "model_name": "qwen-plus"},
+        api={"max_message_length": 5000},
     )
 
     assert settings.llm.model_name == "qwen-plus"
     assert settings.api.max_message_length == 5000
-    assert settings.llm.dashscope_api_key == "test-key"
+    assert settings.llm.dashscope_api_key.get_secret_value() == "test-key"
 
 
 def test_settings_nested_attribute_access(monkeypatch):
-    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     settings = Settings(_env_file=None, llm={"dashscope_api_key": "nested-test-key"})
 
-    assert settings.llm.dashscope_api_key == "nested-test-key"
+    assert settings.llm.dashscope_api_key.get_secret_value() == "nested-test-key"
 
 
 def test_settings_supports_nested_app_env_overrides(monkeypatch):
-    monkeypatch.delenv("MODEL_NAME", raising=False)
     monkeypatch.setenv("APP__LLM__MODEL_NAME", "env-override-model")
     monkeypatch.setenv("APP__API__MAX_MESSAGE_LENGTH", "4321")
 

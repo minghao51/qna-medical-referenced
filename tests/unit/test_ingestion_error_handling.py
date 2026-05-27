@@ -248,7 +248,9 @@ def test_api_key_error_messages():
 
     assert hasattr(settings.llm, "dashscope_api_key")
 
-    assert isinstance(settings.llm.dashscope_api_key, str)
+    from pydantic import SecretStr
+
+    assert isinstance(settings.llm.dashscope_api_key, SecretStr)
 
 
 # =============================================================================

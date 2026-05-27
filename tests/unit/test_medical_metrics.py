@@ -1,9 +1,23 @@
 """Tests for declarative DeepEval medical metric specs."""
 
-from src.evals.metrics.medical import METRIC_SPECS, create_medical_metrics
+import importlib
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not importlib.util.find_spec("deepeval"),
+    reason="deepeval not installed",
+)
+
+
+def _import_metrics():
+    from src.evals.metrics.medical import METRIC_SPECS, create_medical_metrics
+
+    return METRIC_SPECS, create_medical_metrics
 
 
 def test_metric_specs_expose_stable_keys_and_factories():
+    METRIC_SPECS, _ = _import_metrics()
     keys = [spec.key for spec in METRIC_SPECS]
 
     assert keys == [
@@ -25,6 +39,7 @@ def test_metric_specs_expose_stable_keys_and_factories():
 
 
 def test_create_medical_metrics_returns_fresh_instances():
+    METRIC_SPECS, create_medical_metrics = _import_metrics()
     first = create_medical_metrics()
     second = create_medical_metrics()
 
@@ -37,6 +52,7 @@ def test_create_medical_metrics_returns_fresh_instances():
 
 
 def test_metric_specs_use_expected_models():
+    METRIC_SPECS, create_medical_metrics = _import_metrics()
     metrics = create_medical_metrics()
     metric_map = {spec.key: metric for spec, metric in zip(METRIC_SPECS, metrics, strict=True)}
 

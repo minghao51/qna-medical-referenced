@@ -17,14 +17,18 @@ def _make_request() -> Request:
 
 class TestGetConfig:
     def test_returns_expected_keys(self):
-        result = config.get_config()
+        req = _make_request()
+        req.state.auth = {"role": "admin"}
+        result = config.get_config(req)
         assert "retrieval" in result
         assert "ingestion" in result
         assert "enrichment" in result
         assert "llm" in result
 
     def test_retrieval_has_required_fields(self):
-        result = config.get_config()
+        req = _make_request()
+        req.state.auth = {"role": "admin"}
+        result = config.get_config(req)
         retrieval = result["retrieval"]
         assert "search_mode" in retrieval
         assert "enable_diversification" in retrieval
@@ -34,7 +38,9 @@ class TestGetConfig:
         assert "enable_reranking" in retrieval
 
     def test_enrichment_uses_retrieval_cfg_fallbacks(self):
-        result = config.get_config()
+        req = _make_request()
+        req.state.auth = {"role": "admin"}
+        result = config.get_config(req)
         assert "enable_keyword_extraction" in result["enrichment"]
         assert "enable_chunk_summaries" in result["enrichment"]
 
@@ -63,7 +69,9 @@ class TestGetConfig:
             },
         )
 
-        result = config.get_config()
+        req = _make_request()
+        req.state.auth = {"role": "admin"}
+        result = config.get_config(req)
 
         assert result["retrieval"]["search_mode"] == "semantic_only"
         assert result["retrieval"]["top_k"] == 9
@@ -86,7 +94,7 @@ class TestDocuments:
         from src.config.context import get_runtime_state
 
         get_runtime_state().reset_vector_store_state()
-        get_runtime_state()._vector_store_initialized = True
+        get_runtime_state().set_vector_store_initialized("test-sig")
 
         class BrokenStore:
             @property
@@ -95,8 +103,10 @@ class TestDocuments:
 
         monkeypatch.setattr(documents, "get_vector_store", lambda: BrokenStore())
 
+        req = _make_request()
+        req.state.auth = {"role": "admin"}
         with pytest.raises(HTTPException) as exc_info:
-            documents.list_documents(request=_make_request(), limit=10, offset=0)
+            documents.list_documents(request=req, limit=10, offset=0)
         assert exc_info.value.status_code == 500
         assert exc_info.value.detail == "Failed to load documents"
 
@@ -104,21 +114,23 @@ class TestDocuments:
         from src.config.context import get_runtime_state
 
         get_runtime_state().reset_vector_store_state()
-        get_runtime_state()._vector_store_initialized = True
+        get_runtime_state().set_vector_store_initialized("test-sig")
 
         mock_store = MagicMock()
         mock_store.get_document_by_id.return_value = None
         monkeypatch.setattr(documents, "get_vector_store", lambda: mock_store)
 
+        req = _make_request()
+        req.state.auth = {"role": "admin"}
         with pytest.raises(HTTPException) as exc_info:
-            documents.get_document("nonexistent-id", _make_request())
+            documents.get_document("nonexistent-id", req)
         assert exc_info.value.status_code == 404
 
     def test_list_documents_returns_compatible_response_shape(self, monkeypatch):
         from src.config.context import get_runtime_state
 
         get_runtime_state().reset_vector_store_state()
-        get_runtime_state()._vector_store_initialized = True
+        get_runtime_state().set_vector_store_initialized("test-sig")
 
         mock_store = MagicMock()
         mock_store.list_documents_paginated.return_value = {
@@ -140,9 +152,9 @@ class TestDocuments:
         }
         monkeypatch.setattr(documents, "get_vector_store", lambda: mock_store)
 
-        result = documents.list_documents(
-            request=_make_request(), limit=50, offset=0, source_type="pdf"
-        )
+        req = _make_request()
+        req.state.auth = {"role": "admin"}
+        result = documents.list_documents(request=req, limit=50, offset=0, source_type="pdf")
 
         assert result["total"] == 2
         assert result["offset"] == 0
