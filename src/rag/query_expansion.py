@@ -117,10 +117,12 @@ async def expand_queries_async(
             max_length=hyde_max_length,
         )
         all_queries = _dedupe_queries(base_queries + hyde_queries)
-        logger.debug(f"HyDE expanded query '{query[:50]}...' to {len(all_queries)} variants")
+        logger.debug("HyDE expanded query '%s...' to %d variants", query[:50], len(all_queries))
         return all_queries
     except Exception as e:
         logger.error(
-            f"HyDE expansion failed for query '{query}': {e}, falling back to base expansion"
+            "HyDE expansion failed for query '%s': %s, falling back to base expansion",
+            query,
+            e,
         )
         return base_queries

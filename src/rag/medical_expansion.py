@@ -38,7 +38,12 @@ class MedicalExpansionProvider(Protocol):
 
 
 class NoopMedicalExpansionProvider:
-    """Default provider that returns no medical expansions."""
+    """Default provider that returns no medical expansions.
+
+    This is intentionally a noop placeholder — no real ontology expansion
+    is implemented yet.  Replace with a concrete provider when a medical
+    terminology service (e.g. UMLS, SNOMED) is integrated.
+    """
 
     provider_name = "noop"
 

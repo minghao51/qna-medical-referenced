@@ -1,4 +1,4 @@
-"""Data models for the health screening interpreter chatbot."""
+"""Pydantic models for RAG pipeline tracing and chat response metadata."""
 
 from typing import Any
 

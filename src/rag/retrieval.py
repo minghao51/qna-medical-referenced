@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.rag.protocols import VectorStoreProtocol
 from src.rag.query_expansion import expand_lexical_queries
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ def _resolve_expanded_queries(query: str, pre_expanded_queries: list[str] | None
 
 
 def retrieve_candidates(
-    vector_store,
+    vector_store: VectorStoreProtocol,
     query: str,
     top_k: int,
     search_mode: str,
@@ -54,7 +55,7 @@ def retrieve_candidates(
 
 
 def retrieve_candidates_with_trace(
-    vector_store,
+    vector_store: VectorStoreProtocol,
     query: str,
     top_k: int,
     search_mode: str,
@@ -66,7 +67,7 @@ def retrieve_candidates_with_trace(
 
 
 async def retrieve_candidates_with_trace_async(
-    vector_store,
+    vector_store: VectorStoreProtocol,
     query: str,
     top_k: int,
     search_mode: str,
@@ -95,7 +96,7 @@ async def retrieve_candidates_with_trace_async(
 
 
 def _search_and_merge_traced(
-    vector_store,
+    vector_store: VectorStoreProtocol,
     expanded_queries: list[str],
     top_k: int,
     search_mode: str,

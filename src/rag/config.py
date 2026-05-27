@@ -33,6 +33,11 @@ class RetrievalDiversityConfig:
     enable_query_understanding: bool = False
 
 
+_ALLOWED_OVERRIDES: set[str] = {
+    field.name for field in RetrievalDiversityConfig.__dataclass_fields__.values()
+}
+
+
 def resolve_retrieval_config(
     overrides: dict[str, Any] | None = None,
 ) -> RetrievalDiversityConfig:
@@ -45,7 +50,7 @@ def resolve_retrieval_config(
     )
     if overrides:
         for key, value in overrides.items():
-            if value is None or not hasattr(cfg, key):
+            if value is None or key not in _ALLOWED_OVERRIDES:
                 continue
             setattr(cfg, key, value)
     cfg.overfetch_multiplier = max(

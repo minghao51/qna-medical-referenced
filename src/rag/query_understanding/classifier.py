@@ -228,7 +228,7 @@ Respond with just the type name and a brief reasoning, in format: TYPE | reasoni
                 )
 
         except Exception as e:
-            logger.warning(f"LLM classification failed for query '{query}': {e}")
+            logger.warning("LLM classification failed for query '%s': %s", query, e)
 
         # Fallback to DEFINITION
         return QueryClassification(

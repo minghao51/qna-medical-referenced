@@ -33,7 +33,7 @@ def _load_profile_from_experiment(config_path: str, variant_name: str) -> dict[s
         if runs:
             return runs[-1]
     except Exception as e:
-        logger.warning(f"Failed to load profile '{variant_name}' from {config_path}: {e}")
+        logger.warning("Failed to load profile '%s' from %s: %s", variant_name, config_path, e)
     return None
 
 
@@ -105,11 +105,11 @@ def apply_production_profile(name: str | None = None) -> bool:
     profile = get_production_profile(name)
     if not profile:
         if name:
-            logger.warning(f"Production profile '{name}' not found, using defaults")
+            logger.warning("Production profile '%s' not found, using defaults", name)
         return False
 
     from src.rag.index import configure_runtime_for_experiment
 
     configure_runtime_for_experiment(profile)
-    logger.info(f"Applied production profile: {name}")
+    logger.info("Applied production profile: %s", name)
     return True

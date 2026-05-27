@@ -89,11 +89,11 @@ async def generate_hypothetical_answer(
         if len(words) > max_length:
             hypothetical = " ".join(words[:max_length])
 
-        logger.debug(f"Generated hypothetical answer for query: {query[:50]}...")
+        logger.debug("Generated hypothetical answer for query: %s...", query[:50])
         return str(hypothetical)
 
     except Exception as e:
-        logger.error(f"Failed to generate hypothetical answer for query '{query}': {e}")
+        logger.error("Failed to generate hypothetical answer for query '%s': %s", query, e)
         return ""
 
 
@@ -181,77 +181,6 @@ async def expand_query_with_hyde_async(
     return [query]
 
 
-def should_enable_hyde(
-    explicit_setting: bool | None = None,
-    config_setting: bool | None = None,
-) -> bool:
-    """Determine whether HyDE should be enabled.
-
-    This function checks multiple sources for HyDE configuration:
-    1. Explicit setting (function parameter)
-    2. Configuration setting (from config file)
-    3. Default (disabled)
-
-    Args:
-        explicit_setting: Explicit enable/disable from function call
-        config_setting: Setting from configuration file
-
-    Returns:
-        True if HyDE should be enabled, False otherwise
-
-    Example:
-        >>> should_enable_hyde(explicit_setting=True)
-        True
-        >>> should_enable_hyde(explicit_setting=False)
-        False
-        >>> should_enable_hyde(explicit_setting=None, config_setting=True)
-        True
-    """
-    # Explicit setting takes precedence
-    if explicit_setting is not None:
-        return explicit_setting
-
-    # Check configuration setting
-    if config_setting is not None:
-        return config_setting
-
-    # Default: disabled
-    return False
-
-
-def validate_hyde_config(
-    enable_hyde: bool,
-    max_length: int,
-) -> tuple[bool, int]:
-    """Validate HyDE configuration parameters.
-
-    Args:
-        enable_hyde: Whether HyDE is enabled
-        max_length: Maximum length for hypothetical answers
-
-    Returns:
-        Tuple of (validated_enable_hyde, validated_max_length)
-
-    Example:
-        >>> validate_hyde_config(True, 500)
-        (True, 500)
-        >>> validate_hyde_config(True, -10)
-        (True, 200)  # max_length clamped to minimum
-    """
-    # Validate max_length
-    min_length = 50
-    max_allowed_length = 500
-    validated_max_length = max(min_length, min(max_length, max_allowed_length))
-
-    if max_length != validated_max_length:
-        logger.warning(
-            f"HyDE max_length {max_length} out of range [{min_length}, {max_allowed_length}], "
-            f"clamped to {validated_max_length}"
-        )
-
-    return enable_hyde, validated_max_length
-
-
 HYPE_QUESTION_PROMPT_TEMPLATE = """Given this medical document chunk, generate {count} question(s) that this chunk would answer.
 Focus on specific medical terminology, clinical values, and guideline recommendations.
 
@@ -297,8 +226,10 @@ async def generate_hypothetical_questions(
             if line and len(line) > 10:
                 questions.append(line)
         result = questions[:count]
-        logger.debug(f"Generated {len(result)} hypothetical questions for chunk: {chunk[:50]}...")
+        logger.debug(
+            "Generated %d hypothetical questions for chunk: %s...", len(result), chunk[:50]
+        )
         return result
     except Exception as e:
-        logger.error(f"Failed to generate hypothetical questions: {e}")
+        logger.error("Failed to generate hypothetical questions: %s", e)
         return []

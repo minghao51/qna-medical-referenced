@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from src.rag.query_understanding.classifier import QueryClassification, QueryType
+from src.rag.query_understanding.classifier import QueryType
 
 logger = logging.getLogger(__name__)
 
@@ -147,51 +147,3 @@ def get_query_strategy(query_type: QueryType) -> QueryStrategy:
         QueryStrategy instance for the type
     """
     return _STRATEGIES.get(query_type, QueryStrategy(query_type))
-
-
-def apply_strategy(
-    query: str,
-    classification: QueryClassification,
-    results: list[dict] | None = None,
-) -> tuple[str, list[dict]]:
-    """Apply query type-specific strategy.
-
-    Args:
-        query: Original query
-        classification: Query classification result
-        results: Optional retrieval results to post-process
-
-    Returns:
-        Tuple of (preprocessed_query, post_processed_results)
-    """
-    strategy = get_query_strategy(classification.query_type)
-
-    # Preprocess query
-    preprocessed = strategy.preprocess_query(query)
-
-    # Post-process results if provided
-    if results is not None:
-        post_processed = strategy.post_process_results(results, query)
-    else:
-        post_processed = []
-
-    return preprocessed, post_processed
-
-
-def should_enable_reranking(
-    query: str,
-    classification: QueryClassification,
-    results: list[dict],
-) -> bool:
-    """Check if reranking should be enabled for this query.
-
-    Args:
-        query: Original query
-        classification: Query classification result
-        results: Retrieval results
-
-    Returns:
-        True if reranking is recommended
-    """
-    strategy = get_query_strategy(classification.query_type)
-    return strategy.should_rerank(results, query)

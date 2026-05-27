@@ -38,6 +38,7 @@ from src.ingestion.steps.load_pdfs import (
     set_pdf_table_extractor,
 )
 from src.ingestion.steps.load_reference_data import ReferenceDataLoader
+from src.rag.protocols import VectorStoreProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +51,14 @@ def _vector_store_runtime_signature() -> str:
     )
 
 
-async def _build_index_from_sources(vector_store) -> dict[str, Any]:
+async def _build_index_from_sources(vector_store: VectorStoreProtocol) -> dict[str, Any]:
     build_start = time.time()
     runtime_cfg = get_vector_store_runtime_config()
     indexing_features = dict(runtime_cfg.get("indexing_features", {}) or {})
     loader = ReferenceDataLoader()
-    pdf_docs = get_documents()
-    markdown_docs = get_markdown_documents()
-    chunked_docs = chunk_documents(pdf_docs)
+    pdf_docs = await asyncio.to_thread(get_documents)
+    markdown_docs = await asyncio.to_thread(get_markdown_documents)
+    chunked_docs = await asyncio.to_thread(chunk_documents, pdf_docs)
     chunked_docs.extend(chunk_documents(markdown_docs))
 
     hype_chunk_count = 0

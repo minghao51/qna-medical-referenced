@@ -17,6 +17,7 @@ from src.rag.config import (
 )
 from src.rag.diversification import diversify_results
 from src.rag.index import initialize_runtime_index
+from src.rag.protocols import VectorStoreProtocol
 from src.rag.query_expansion import prepare_expanded_queries
 from src.rag.trace_models import ChatSource, RetrievedDocument
 
@@ -60,8 +61,9 @@ def _apply_query_understanding(
         merged = dict(retrieval_options or {})
         merged.update(query_params)
         logger.debug(
-            f"Query understanding applied: type={classification.query_type.value}, "
-            f"confidence={classification.confidence}"
+            "Query understanding applied: type=%s, confidence=%s",
+            classification.query_type.value,
+            classification.confidence,
         )
         return merged
     except Exception as e:
@@ -70,7 +72,7 @@ def _apply_query_understanding(
 
 
 def _extend_with_hype_questions(
-    vector_store,
+    vector_store: VectorStoreProtocol,
     query: str,
     expanded_queries: list[str],
     *,
@@ -93,16 +95,16 @@ def _build_retrieved_documents(results: list[dict]) -> list[RetrievedDocument]:
         metadata = r.get("metadata", {})
         retrieved_docs.append(
             RetrievedDocument(
-                id=r["id"],
-                content=r["content"],
-                source=r["source"],
+                id=r.get("id", ""),
+                content=r.get("content", ""),
+                source=r.get("source", ""),
                 page=r.get("page"),
-                semantic_score=r["semantic_score"],
-                keyword_score=r["keyword_score"],
+                semantic_score=r.get("semantic_score", 0.0),
+                keyword_score=r.get("keyword_score", 0.0),
                 source_prior=r.get("source_prior", 0.0),
-                source_boost=r.get("source_prior", 0.0),
-                combined_score=r["combined_score"],
-                rank=r["rank"],
+                source_boost=r.get("source_boost", 0.0),
+                combined_score=r.get("combined_score", 0.0),
+                rank=r.get("rank", 0),
                 semantic_rank=r.get("semantic_rank"),
                 bm25_rank=r.get("bm25_rank"),
                 fused_rank=r.get("fused_rank"),
@@ -350,7 +352,7 @@ async def retrieve_context_with_trace_async(
         enable_hype=cfg.enable_hype,
     )
     if selected_hype_questions:
-        logger.debug(f"HyPE: expanded to {len(expanded_queries)} total queries")
+        logger.debug("HyPE: expanded to %d total queries", len(expanded_queries))
 
     retrieval_start = time.time()
     from src.rag.retrieval import retrieve_candidates_with_trace_async as retrieve_fn
@@ -454,7 +456,7 @@ async def retrieve_context_with_trace_async(
 def _prepare_query(
     query: str,
     retrieval_options: dict[str, Any] | None,
-) -> tuple[str, int, RetrievalDiversityConfig, float, Any]:
+) -> tuple[str, int, RetrievalDiversityConfig, float, VectorStoreProtocol]:
     """Validate, truncate, config-resolve, and init shared by sync/async retrieval."""
     original_length = len(query)
     if len(query) > 4000:
