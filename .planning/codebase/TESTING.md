@@ -3,14 +3,14 @@
 ## Testing Frameworks
 
 ### Backend (Python)
-- **pytest** (>=8.0) — primary test runner
+- **pytest** (>=9.0) — primary test runner
 - **pytest-asyncio** (>=0.23.0) — async test support via `@pytest.mark.asyncio`
 - **FastAPI TestClient** (`fastapi.testclient.TestClient`) — HTTP-level integration tests
 - **unittest.mock** (`patch`, `MagicMock`) — mocking external dependencies
-- **DeepEval** (>=2.0.0,<2.1.0) — LLM evaluation metrics (optional, `[evaluation]` extra)
+- **DeepEval** (>=3.9.0,<4.0.0) — LLM evaluation metrics (optional, `[evaluation]` extra)
 
 ### Frontend
-- **Playwright** (`@playwright/test`) — E2E browser tests
+- **Playwright** (`@playwright/test`) — E2E browser tests (6 spec files)
 - **svelte-check** — type checking (not unit tests)
 
 ## How to Run Tests
@@ -22,6 +22,11 @@ uv run pytest
 
 # Run with verbose output
 uv run pytest -v
+
+# Run specific test categories
+uv run pytest tests/unit/        # Unit tests only
+uv run pytest tests/integration/ # Integration tests only
+uv run pytest tests/e2e/         # E2E tests only
 
 # Skip slow / live API tests (default behavior — these are auto-skipped)
 uv run pytest
@@ -46,13 +51,24 @@ uv run ruff check
 
 # Type check
 uv run mypy
+
+# Security lint
+uv run bandit -c pyproject.toml
+```
+
+### Full Pre-commit Check
+```bash
+# Run all pre-commit hooks on all files
+uv run pre-commit run --all-files
 ```
 
 ### Frontend
 ```bash
 cd frontend
-bun run check       # Type check
-bun test            # Playwright E2E tests
+bun run check       # Type check (svelte-check)
+bun run test        # Playwright E2E tests
+bun run test:ui     # Playwright with UI mode
+bun run test:headed # Playwright headed mode
 bun run build       # Verify build succeeds
 ```
 
@@ -62,7 +78,7 @@ bun run build       # Verify build succeeds
 ```
 tests/
 ├── conftest.py                          # Global fixtures and hooks
-├── fixtures/
+├── fixtures/                            # Test data fixtures
 │   ├── golden_queries.json              # Standard test queries
 │   ├── golden_queries_expanded.json     # Extended query set
 │   ├── golden_queries_comprehensive.json
@@ -70,16 +86,49 @@ tests/
 │   ├── golden_queries_all.json
 │   ├── golden_conversations.json        # Multi-turn conversation fixtures
 │   └── sample_medical.txt
-├── test_settings.py                     # Config defaults tests
-├── test_configuration.py                # Runtime configuration tests
-├── test_chunker.py                      # Text chunker unit tests
-├── test_app_security.py                 # Auth/rate-limit integration tests
-├── test_chat_sources.py                 # Source citation tests
-├── test_retrieval.py                    # RAG retrieval tests
-├── test_eval_*.py                       # Evaluation pipeline tests
-├── test_deepeval_*.py                   # DeepEval integration tests
-├── test_wandb_*.py                      # W&B tracking tests
-└── ...
+├── unit/                                # Unit tests — fast, isolated, no I/O
+│   ├── test_chunker.py
+│   ├── test_configuration.py
+│   ├── test_settings.py
+│   ├── test_di_container.py
+│   ├── test_embedding_cache.py
+│   ├── test_eval_metrics.py
+│   ├── test_experiment_config.py
+│   ├── test_feature_ablation_runner.py
+│   ├── test_hyde.py
+│   ├── test_litellm_client.py
+│   ├── test_medical_chunking.py
+│   ├── test_medical_metrics.py
+│   ├── test_production_profile.py
+│   ├── test_query_understanding_classifier.py
+│   ├── test_reranker.py
+│   ├── test_retrieval_reranking_modes.py
+│   ├── test_runtime_index_initialization.py
+│   ├── test_runtime_retrieval_diversity.py
+│   ├── test_search.py
+│   ├── test_storage_history.py
+│   ├── test_synthetic_generator.py
+│   ├── test_thresholds.py
+│   ├── test_wandb_history.py
+│   ├── test_wandb_tracking.py
+│   └── ... (~50 files total)
+├── integration/                         # Integration tests — DB, filesystem, HTTP
+│   ├── test_app_security.py
+│   ├── test_chat_multi_turn.py
+│   ├── test_chat_sources.py
+│   ├── test_chroma_migration.py
+│   ├── test_chroma_search.py
+│   ├── test_chroma_store.py
+│   ├── test_concurrent_access.py
+│   ├── test_embedding.py
+│   ├── test_keyword_index.py
+│   ├── test_pdf_loader.py
+│   ├── test_performance_regression.py
+│   ├── test_retrieval.py
+│   └── ... (~15 files total)
+└── e2e/                                # End-to-end tests — full pipeline with real APIs
+    ├── test_backend_e2e_real_apis.py
+    └── test_hamilton_pipeline.py
 ```
 
 ### Test File Naming
@@ -88,7 +137,10 @@ tests/
 - Test functions: `test_<behavior>` (e.g., `test_settings_defaults`, `test_chat_requires_valid_api_key`)
 
 ### Test Grouping
-Tests are grouped by module/feature in flat files (no subdirectories within `tests/`). Related tests share a file (e.g., `test_eval_error_handling.py`, `test_eval_metrics.py`, `test_eval_deepeval.py`).
+Tests are grouped into subdirectories by scope:
+- `tests/unit/` — fast, isolated tests (no I/O, no external deps) — ~50 files
+- `tests/integration/` — tests with DB, filesystem, or service stack — ~15 files
+- `tests/e2e/` — full end-to-end workflow tests — 2 files
 
 ## pytest Configuration
 
@@ -96,16 +148,25 @@ Defined in `pyproject.toml`:
 ```toml
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
+minversion = "9.0"
+addopts = ["--strict-markers", "-ra", "--durations=10", "--import-mode=importlib"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 
 markers = [
+    "unit: fast isolated tests (no I/O, no external deps)",
+    "integration: tests with DB, filesystem, or service stack",
+    "e2e: full end-to-end workflow tests",
+    "slow: >1s tests",
     "live_api: requires live Qwen API access",
     "live_openrouter: requires live OpenRouter API access",
-    "deepeval: marks tests as DeepEval integration tests (slow, requires API)",
-    "e2e_real_apis: marks tests as end-to-end tests with real API integrations (requires ENABLE_REAL_API_TESTS=1)",
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    "deepeval: DeepEval integration tests (slow, requires API)",
+    "e2e_real_apis: end-to-end tests with real APIs (requires ENABLE_REAL_API_TESTS=1)",
+    "network: needs internet access",
+    "smoke: critical path tests",
+    "serial: cannot run in parallel",
 ]
 ```
 
@@ -119,6 +180,11 @@ markers = [
 | `e2e_real_apis` | Full E2E with real APIs | `ENABLE_REAL_API_TESTS=1` |
 | `slow` | Slow-running tests | `-m "not slow"` to skip |
 | `asyncio` | Async test functions | `@pytest.mark.asyncio` |
+| `unit` | Fast isolated tests | Auto-selected by `pytest tests/unit/` |
+| `integration` | Tests with deps | Auto-selected by `pytest tests/integration/` |
+| `e2e` | Full workflow tests | Auto-selected by `pytest tests/e2e/` |
+| `smoke` | Critical path tests | `-m smoke` |
+| `serial` | Cannot run in parallel | `-m serial` |
 
 Live API tests are **auto-skipped** by default via `pytest_collection_modifyitems` and `pytest_runtest_setup` hooks in `conftest.py`. These hooks also perform a pre-flight API check before running live tests.
 
@@ -142,6 +208,11 @@ Test fixtures live in `tests/fixtures/` as JSON files:
 - `golden_conversations.json` — multi-turn conversations for evaluation tests
 - `sample_medical.txt` — sample medical text for ingestion tests
 
+### Per-Directory conftest.py
+- `tests/conftest.py` — global fixtures and hooks
+- `tests/integration/conftest.py` — integration-specific fixtures
+- `tests/e2e/conftest.py` — E2E-specific fixtures
+
 ## Mocking Patterns
 
 ### Primary Approach: `monkeypatch`
@@ -154,8 +225,8 @@ def test_example(monkeypatch, tmp_path):
     monkeypatch.setattr("src.app.factory.initialize_runtime_index", lambda: None)
 
     # Patch settings attributes
-    monkeypatch.setattr(settings, "api_keys", "secret-key")
-    monkeypatch.setattr(settings, "rate_limit_per_minute", 10)
+    monkeypatch.setattr(settings, "api.api_keys", "secret-key")
+    monkeypatch.setattr(settings, "api.rate_limit_per_minute", 10)
 ```
 
 ### Mocking LLM Responses
@@ -232,9 +303,10 @@ async def test_dashscope_api_timeout_retry():
 Runs on push to `main` and all pull requests:
 
 1. **Backend job** (ubuntu-latest):
-   - Python 3.13 setup + uv
+   - Python 3.12 setup + uv
    - `uv sync --frozen --dev`
    - `uv run ruff check` (lint)
+   - `uv run mypy` (type check)
    - `uv run pytest` (tests)
 
 2. **Frontend job** (ubuntu-latest):
@@ -247,9 +319,8 @@ Runs on push to `main` and all pull requests:
    - Build backend image (`Dockerfile`)
    - Build frontend image (`frontend/Dockerfile`)
 
-## Coverage Configuration
-
-No explicit coverage configuration (no `.coveragerc`, no `coverage.py` settings in `pyproject.toml`). Coverage is not enforced in CI.
+### Docs Consistency (`.github/workflows/docs-consistency.yml`)
+- Runs `scripts/check_docs_consistency.sh` for doc integrity
 
 ## Key Testing Conventions
 
@@ -262,4 +333,4 @@ No explicit coverage configuration (no `.coveragerc`, no `coverage.py` settings 
 7. **Test both happy and error paths** — separate test functions for success and failure cases
 8. **Live API tests must be gated** with markers and auto-skip hooks in `conftest.py`
 9. **Settings tests should use `Settings(_env_file=None, ...)`** to avoid environment coupling
-10. **No test subdirectories** — all test files are flat in `tests/`
+10. **Tests organized by scope** in subdirectories: `tests/unit/`, `tests/integration/`, `tests/e2e/`

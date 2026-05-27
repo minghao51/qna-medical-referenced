@@ -68,6 +68,6 @@ frontend/package-lock.json
 # MkDocs build output
 site/
 
-# Quarto intermediate
-*.quarto_ipynb
+# MkDocs / Jupyter caches
 .jupyter_cache/
+.cache/mkdocs-jupyter/

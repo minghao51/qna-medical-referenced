@@ -20,14 +20,14 @@ HTTP interface built on FastAPI. Contains routes, middleware, schemas, and error
 | Middleware | `src/app/middleware/` | Cross-cutting concerns: auth (`APIKeyMiddleware`), rate limiting (`RateLimitMiddleware`), request tracing (`RequestIDMiddleware`) |
 | Schemas | `src/app/schemas/` | Pydantic request/response models |
 | Exceptions | `src/app/exceptions.py` | Domain exceptions (`AppError`, `UpstreamServiceError`, etc.) with FastAPI error handlers |
-| Security | `src/app/security.py` | API key validation (bcrypt), `AuthContext`, deployment security checks |
+| Security | `src/app/security.py` | API key validation (bcrypt + SHA256 legacy), `AuthContext`, deployment security checks |
 | Session | `src/app/session.py` | Anonymous chat session management via cookies |
 
 **Middleware execution order** (outermost to innermost):
-1. `RequestIDMiddleware` — adds `X-Request-ID` header
-2. `APIKeyMiddleware` — validates `X-API-Key` header
-3. `RateLimitMiddleware` — sliding-window rate limiting via SQLite
-4. `CORSMiddleware` — cross-origin request handling
+1. `CORSMiddleware` — cross-origin request handling
+2. `RateLimitMiddleware` — sliding-window rate limiting via SQLite
+3. `APIKeyMiddleware` — validates `X-API-Key` header
+4. `RequestIDMiddleware` — adds `X-Request-ID` header
 
 ### 2. Use Case Layer (`src/usecases/`)
 
@@ -40,18 +40,23 @@ Orchestration logic that coordinates domain operations. Each use case represents
 
 ### 3. RAG Layer (`src/rag/`)
 
-The retrieval-augmented generation engine. This is the core domain logic.
+The retrieval-augmented generation engine. This is the core domain logic — **recently refactored from a single god module into focused sub-modules**.
 
-| Module | Responsibility |
-|--------|---------------|
-| `runtime.py` | Central orchestrator for retrieval: query expansion, candidate retrieval, reranking, diversification, context assembly. ~1400 lines — the largest single module |
-| `formatting.py` | Formats retrieved chunks into context strings and `ChatSource` citations |
-| `hyde.py` | HyDE (Hypothetical Document Embeddings) — generates hypothetical answers to improve retrieval |
-| `reranker.py` | Cross-encoder reranking using sentence-transformers |
-| `medical_expansion.py` | Medical term expansion provider (currently noop, designed for ontology integration) |
-| `production_profile.py` | Applies tuned retrieval profiles from ablation studies |
-| `trace_models.py` | Pydantic models for pipeline tracing (`PipelineTrace`, `RetrievedDocument`, etc.) |
-| `query_understanding/` | Query type classification and retrieval parameter routing |
+| Module | Responsibility | Size |
+|--------|---------------|------|
+| `runtime.py` | Central orchestrator: coordinates retrieval pipeline stages | ~500 lines |
+| `index.py` | Index initialization, vector store setup, experiment config application | ~360 lines |
+| `config.py` | `RetrievalDiversityConfig` dataclass + config resolution + validation | ~105 lines |
+| `diversification.py` | MMR reranking + result deduplication (`mmr_rerank`, `diversify_results`) | ~130 lines |
+| `query_expansion.py` | Lexical/medical query expansion, HyDE async wrapper | ~125 lines |
+| `retrieval.py` | Candidate retrieval from vector store + result merging | ~115 lines |
+| `formatting.py` | Formats retrieved chunks into context strings and `ChatSource` citations | ~90 lines |
+| `hyde.py` | HyDE (Hypothetical Document Embeddings) — generates hypothetical answers | ~305 lines |
+| `reranker.py` | Cross-encoder reranking using sentence-transformers | ~155 lines |
+| `medical_expansion.py` | Medical term expansion provider (currently noop) | ~60 lines |
+| `production_profile.py` | Applies tuned retrieval profiles from ablation studies | ~115 lines |
+| `trace_models.py` | Pydantic models for pipeline tracing (`PipelineTrace`, `RetrievedDocument`, etc.) | ~110 lines |
+| `query_understanding/` | Query type classification and retrieval parameter routing | ~590 lines total |
 
 ### 4. Ingestion Layer (`src/ingestion/`)
 
@@ -75,11 +80,13 @@ Offline data processing pipeline that transforms raw documents into searchable v
 
 | Module | Role |
 |--------|------|
-| `chroma_store.py` | ChromaDB-backed vector store with hybrid search (semantic + BM25 + RRF fusion) |
+| `chroma_store.py` | ChromaDB-backed vector store with hybrid search (semantic + BM25 + RRF fusion) — ~1010 lines |
 | `embedding.py` | Text embedding via Qwen/OpenAI-compatible API |
 | `keyword_index.py` | BM25 keyword search with medical entity boosting |
 | `search.py` | Cosine similarity, rank fusion, MMR diversification algorithms |
 | `text_utils.py` | Tokenization, acronym expansion, content hashing |
+| `persistence.py` | Index persistence helpers |
+| `migrate.py` | Migration utilities |
 | `vector_store.py` | Backward-compatibility shim re-exporting `ChromaVectorStore` |
 
 ### 5. Infrastructure Layer (`src/infra/`)
@@ -93,7 +100,7 @@ Technical infrastructure and cross-cutting concerns.
 | `llm/litellm_client.py` | LiteLLM client for multi-provider support (OpenRouter, etc.) |
 | `storage/interfaces.py` | `ChatHistoryStore` Protocol (interface) for storage abstraction |
 | `storage/chat_history_store.py` | Abstract base for chat history |
-| `storage/file_chat_history_store.py` | JSON file-backed chat history implementation |
+| `storage/file_chat_history_store.py` | JSON file-backed chat history implementation with per-session message truncation |
 
 ### 6. Evaluation Layer (`src/evals/`)
 
@@ -101,10 +108,11 @@ Assessment and quality measurement framework.
 
 | Module | Role |
 |--------|------|
-| `assessment/orchestrator.py` | End-to-end evaluation orchestration |
+| `assessment/orchestrator.py` | End-to-end evaluation orchestration — ~645 lines |
 | `assessment/answer_eval.py` | LLM-as-judge answer quality evaluation |
-| `assessment/retrieval_eval.py` | Retrieval quality metrics |
+| `assessment/retrieval_eval.py` | Retrieval quality metrics — ~765 lines |
 | `assessment/thresholds.py` | Quality threshold management |
+| `assessment/reporting.py` | Report generation |
 | `assessment/l6_contract.py` | L6 contract validation |
 | `dataset_builder.py` | Build evaluation datasets |
 | `synthetic/generator.py` | Synthetic Q&A pair generation |
@@ -112,6 +120,9 @@ Assessment and quality measurement framework.
 | `checks/` | Leveled quality checks (L0–L5) for each pipeline stage |
 | `schemas.py` | Evaluation data models |
 | `artifacts.py` | Evaluation artifact management |
+| `deepeval_models.py` | DeepEval integration models |
+| `pipeline_assessment.py` | Pipeline-level assessment |
+| `step_checks.py` | Per-step quality checks |
 
 ### 7. Experiment Layer (`src/experiments/`)
 
@@ -119,37 +130,44 @@ Ablation study and experiment management.
 
 | Module | Role |
 |--------|------|
-| `config.py` | Experiment configuration loading (YAML) |
 | `experiment_config.py` | Experiment config models |
+| `config.py` | Experiment configuration loading (YAML) |
 | `feature_ablation_runner.py` | Feature ablation study execution |
 | `feature_addition_runner.py` | Feature addition experiments |
 | `wandb_tracking.py` | Weights & Biases integration for experiment tracking |
 | `wandb_history.py` | W&B run history querying |
 | `comparison_report.py` | Cross-experiment comparison reports |
+| `metric_utils.py` | Metric computation helpers |
+| `run_addition.py` | Addition experiment runner |
 
 ### 8. Configuration Layer (`src/config/`)
 
-Centralized settings management using Pydantic BaseSettings.
+Centralized settings management using Pydantic `BaseSettings` with YAML + env var sources.
 
 | Module | Role |
 |--------|------|
-| `settings.py` | `Settings` class — all configuration from env vars with defaults (~590 lines). Manages LLM, retrieval, rate limiting, ingestion, and evaluation settings |
+| `settings.py` | `Settings` class with 10 nested Pydantic models (AppConfig, ApiConfig, LLMConfig, StorageConfig, RetrievalConfig, HyDEConfig, EnrichmentConfig, RetryConfig, DeepEvalConfig, WandbConfig, ProductionConfig) — ~285 lines total. Loads from `config/settings.yaml` + env vars with `APP__` prefix |
 | `context.py` | `RuntimeState` — thread-safe mutable runtime state singleton for feature flags and runtime configuration |
 | `paths.py` | Canonical filesystem paths derived from settings |
+| `models/` | Split Pydantic model definitions (`api_config.py`, `llm_config.py`, `retrieval_config.py`, `storage_config.py`) |
 | `__init__.py` | Re-exports `settings` and path constants |
+
+**Config sources** (priority order):
+1. Direct `__init__` kwargs
+2. Environment variables with `APP__` prefix (e.g., `APP__API__CORS_ALLOWED_ORIGINS`)
+3. `.env` file (via dotenvx)
+4. `config/settings.yaml` (defaults)
 
 ### 9. Services Layer (`src/services/`)
 
-Service abstraction layer (partially adopted).
+Service abstraction layer (partially adopted, **recently trimmed**).
 
 | Module | Role |
 |--------|------|
 | `base_service.py` | `BaseService` with logging |
-| `vector_store_service.py` | Vector store access abstraction |
-| `rag_service.py` | RAG retrieval orchestration service |
 | `evaluation_service.py` | Evaluation orchestration service |
 
-**Note:** This layer exists but is not consistently used. The main chat flow still calls `src/rag/runtime.py` and `src/usecases/chat.py` directly rather than through services. The DI container (`src/infra/di.py`) manages service lifecycle.
+**Note:** `RAGService` and `VectorStoreService` were removed. The main chat flow calls `src/rag/runtime.py` and `src/usecases/chat.py` directly. The DI container (`src/infra/di.py`) manages service lifecycle.
 
 ## Data Flow Through the System
 
@@ -158,10 +176,10 @@ Service abstraction layer (partially adopted).
 ```
 User → Frontend (SvelteKit)
   → POST /chat (SSE streaming)
-    → RequestIDMiddleware (attach X-Request-ID)
-    → APIKeyMiddleware (validate X-API-Key if configured)
-    → RateLimitMiddleware (sliding-window check via SQLite)
     → CORSMiddleware
+    → RateLimitMiddleware (sliding-window check via SQLite)
+    → APIKeyMiddleware (validate X-API-Key if configured)
+    → RequestIDMiddleware (attach X-Request-ID)
     → chat route handler
       → ensure_chat_session (set/refresh anonymous session cookie)
       → stream_chat_message()
@@ -215,19 +233,19 @@ CLI: python -m src.cli.eval_pipeline
 
 ## Key Abstractions
 
-1. **`ChatHistoryStore` (Protocol)** — `src/infra/storage/interfaces.py:8` — Interface for chat history persistence. Implemented by `FileChatHistoryStore`.
+1. **`ChatHistoryStore` (Protocol)** — `src/infra/storage/interfaces.py:8` — Interface for chat history persistence. Implemented by `FileChatHistoryStore` with per-session message truncation.
 
 2. **`ServiceContainer`** — `src/infra/di.py:29` — DI container managing lazy-initialized services (vector store, LLM client, configs). Global singleton via `get_container()`.
 
 3. **`RuntimeState`** — `src/config/context.py:11` — Thread-safe mutable runtime state with property-based access. Manages feature flags and runtime configuration overrides.
 
-4. **`RetrievalDiversityConfig`** — `src/rag/runtime.py:99` — Configuration dataclass controlling retrieval behavior (search mode, reranking, diversification, HyDE, HyPE, etc.).
+4. **`RetrievalDiversityConfig`** — `src/rag/config.py:14` — Dataclass controlling retrieval behavior (search mode, reranking, diversification, HyDE, HyPE, etc.).
 
 5. **`PipelineTrace`** — `src/rag/trace_models.py` — Pydantic model capturing end-to-end pipeline metrics (retrieval timing, scores, reranking info, generation timing).
 
-6. **`ChromaVectorStore`** — `src/ingestion/indexing/chroma_store.py` — Core vector store with hybrid search, BM25 + semantic + RRF fusion.
+6. **`ChromaVectorStore`** — `src/ingestion/indexing/chroma_store.py` — Core vector store with hybrid search, BM25 + semantic + RRF fusion (~1010 lines).
 
-7. **`BaseService`** — `src/services/base_service.py:9` — Service base class with logging. Subclassed by `RAGService`, `VectorStoreService`, `EvaluationService`.
+7. **`BaseService`** — `src/services/base_service.py:9` — Service base class with logging. Subclassed by `EvaluationService`.
 
 ## Entry Points
 
@@ -246,20 +264,20 @@ CLI: python -m src.cli.eval_pipeline
 src/
 ├── app/          ← HTTP layer (routes, middleware, schemas) — depends on usecases/, config/
 ├── cli/          ← CLI entry points — thin wrappers calling usecases/ or uvicorn
-├── config/       ← Settings, paths, runtime state — no business logic dependencies
+├── config/       ← Settings (YAML + env vars), paths, runtime state — no business logic dependencies
 ├── evals/        ← Evaluation framework — depends on rag/, infra/, config/
 ├── experiments/  ← Ablation/experiment management — depends on evals/, config/
 ├── infra/        ← Infrastructure (DI, LLM clients, storage) — depends on config/
 ├── ingestion/    ← Data pipeline (download, convert, chunk, index) — depends on infra/, config/
 ├── rag/          ← Retrieval engine — depends on ingestion/, infra/, config/
-├── services/     ← Service abstractions — depends on rag/, ingestion/, config/
+├── services/     ← Service abstractions (evaluation only) — depends on rag/, ingestion/, config/
 └── usecases/     ← Use case orchestration — depends on rag/, infra/, app/
 ```
 
 **Dependency direction:** `cli/` → `usecases/` → `rag/` → `ingestion/` → `infra/` → `config/`. The `app/` layer calls into `usecases/`. `config/` is the deepest layer with no business logic dependencies.
 
 **Cross-boundary rules:**
-- `config/` never imports from other `src/` modules (except `settings.py` has no src imports)
+- `config/` never imports from other `src/` modules
 - `infra/` only depends on `config/`
 - `ingestion/` depends on `infra/` and `config/`
 - `rag/` depends on `ingestion/`, `infra/`, and `config/`

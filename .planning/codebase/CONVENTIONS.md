@@ -8,19 +8,20 @@
 - **Linting:** Ruff (`uv run ruff check`)
   - `line-length = 100`
   - `target-version = "py312"`
-  - Selected rules: `E`, `F`, `I`, `N`, `W`
+  - Selected rules: `E`, `F`, `I`, `UP`, `B`, `C4`, `DTZ`, `T10`, `ISC`, `PIE`, `PT`, `RUF`
   - `E501` (line-too-long) is **ignored** — Ruff's line-length acts as a guide, not a hard error
+- **Formatting:** Ruff formatter (`uv run ruff format`), integrated as pre-commit hook
 - **Type checking:** mypy (`uv run mypy`)
   - `python_version = "3.12"`
   - `strict_optional = true`
   - `warn_return_any = true`, `warn_unused_ignores = true`, `warn_redundant_casts = true`
   - `ignore_missing_imports = true` (with specific overrides for `nltk`, `google`, `deepeval`)
   - `disable_error_code = ["import-untyped"]`
-- **Formatting:** No explicit formatter (black/ruff format) configured — rely on Ruff's line-length guide
-- **No pre-commit hooks** configured
+- **Security linting:** Bandit (`uv run bandit -c pyproject.toml`)
+- **Pre-commit hooks:** Configured in `.pre-commit-config.yaml` — runs ruff, mypy, bandit, conventional commits, quarto render on commit
 
 ### TypeScript/Frontend (SvelteKit 5)
-- **Runtime:** Bun 1.2.5
+- **Runtime:** Bun 1.3.9
 - **Framework:** SvelteKit 5 + TypeScript (strict mode)
 - **Type checking:** `svelte-check --tsconfig ./tsconfig.json` via `bun run check`
 - **E2E testing:** Playwright
@@ -33,6 +34,7 @@
 - Test files: `test_<module_name>.py` (e.g., `test_settings.py`, `test_chunker.py`)
 - Frontend: Svelte component files use PascalCase or kebab-case per SvelteKit conventions
 - Config/experiment files: `snake_case.yaml` (e.g., `baseline.yaml`, `chunking_strategies.yaml`)
+- Config model files: `{domain}_config.py` (e.g., `api_config.py`, `llm_config.py`)
 - Docs: `YYYYMMDD-filename.md` format
 
 ### Variables and Functions
@@ -44,7 +46,7 @@
 
 ### Classes
 - PascalCase (e.g., `ChatSource`, `RetrievedDocument`, `PipelineTrace`, `RuntimeState`, `ServiceContainer`)
-- Pydantic models: PascalCase (e.g., `ChatRequest`, `ChatResponse`, `Settings`)
+- Pydantic models: PascalCase (e.g., `ChatRequest`, `ChatResponse`, `Settings`, `ApiConfig`, `LLMConfig`)
 - Dataclasses: PascalCase (e.g., `RuntimeRetrievalConfig`, `RetrievalDiversityConfig`, `AssessmentConfig`)
 - Exceptions: suffix with `Error` (e.g., `AppError`, `InvalidInputError`, `UpstreamServiceError`)
 
@@ -79,7 +81,7 @@
 ### Configuration
 - Logging configured via `configure_logging(level)` using `dictConfig`
 - Format: `"%(asctime)s %(levelname)s %(name)s %(message)s"`
-- Level controlled by `settings.log_level` (default: `"INFO"`)
+- Level controlled by `settings.app.log_level` (default: `"INFO"`)
 
 ## Type Usage
 
@@ -91,7 +93,7 @@
 - `dict[str, Any]` for unstructured configuration/options dicts
 
 ### Data Models
-- **Pydantic BaseModel** for API schemas, request/response models, and trace models
+- **Pydantic BaseModel** for API schemas, request/response models, trace models, and nested config models
   - Use `Field(...)` with constraints: `Field(..., min_length=1, max_length=2000)`
   - Use `field_validator` for input sanitization
 - **dataclasses** for internal config objects and non-serializable data
@@ -100,8 +102,10 @@
 
 ### Model Patterns
 - Pydantic models use `model_config = SettingsConfigDict(...)` for settings
+- Settings use `YamlConfigSettingsSource` for YAML-backed config + `APP__` env prefix
 - Use `model_dump()` (not `.dict()`) for serialization
-- Properties with `@property` for computed values (e.g., `settings.cors_origins`)
+- Properties with `@property` for computed values (e.g., `settings.cors_origins`, `settings.is_development`)
+- Nested config access: `settings.api.cors_allowed_origins`, `settings.llm.provider`
 
 ## Common Code Patterns and Idioms
 
@@ -115,14 +119,18 @@
 - `ServiceContainer` dataclass in `src/infra/di.py` manages lazy-initialized services
 - Global singleton via `get_container()` / `reset_container()`
 - Factory pattern for vector stores: `VectorStoreFactory.get_vector_store(config)`
-- Constructor injection in services (e.g., `RAGService(vector_store_service)`)
+- Constructor injection in services (e.g., `EvaluationService`)
 
 ### Configuration
-- `src/config/settings.py`: Pydantic `BaseSettings` loads from `.env` and env vars
+- **3-layer config stack:**
+  1. `config/settings.yaml` — default values (source of truth)
+  2. Environment variables with `APP__` prefix (`APP__API__CORS_ALLOWED_ORIGINS`)
+  3. `.env` file (via dotenvx)
 - Singleton: `settings = Settings()` exported from `src/config/__init__.py`
 - `src/config/paths.py`: canonical filesystem paths derived from settings
 - `src/config/context.py`: `RuntimeState` for mutable runtime config (thread-safe with `threading.Lock`)
 - `configure_runtime_for_experiment()` applies experiment YAML overrides at runtime
+- Legacy flat env var names supported via `_LEGACY_FIELD_MAP` in `settings.py`
 
 ### RAG Pipeline
 - Entry points: `retrieve_context()` (simple), `retrieve_context_with_trace()` (with timing), `retrieve_context_with_trace_async()` (with HyDE)

@@ -63,10 +63,14 @@
 				</svg>
 			</button>
 
-			{#if dropdownOpen}
-				<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-				<div class="dropdown-backdrop" onclick={closeDropdown}></div>
-				<div class="dropdown" role="menu">
+				{#if dropdownOpen}
+					<button
+						type="button"
+						class="dropdown-backdrop"
+						aria-label="Close menu"
+						onclick={closeDropdown}
+					></button>
+					<div class="dropdown" role="menu">
 					{#each secondaryItems as item}
 						<a
 							href={item.href}
