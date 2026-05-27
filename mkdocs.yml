@@ -2,6 +2,7 @@ site_name: Medical Q&A RAG Pipeline
 site_url: https://minghao.github.io/qna_medical_referenced/
 theme:
   name: material
+  custom_dir: overrides
   features:
     - navigation.tabs
     - navigation.sections
@@ -21,6 +22,21 @@ theme:
         name: Switch to light mode
 plugins:
   - search
+  - mkdocs-jupyter:
+      execute: false
+      theme: light
+      include: ["*.ipynb"]
+      allow_errors: true
+      include_source: true
+      show_input: true
+      no_prompt: false
+      ignore_h1_titles: true
+      cache: true
+      cache_dir: .cache/mkdocs-jupyter
+extra_css:
+  - stylesheets/jupyter-fix.css
+extra_javascript:
+  - javascripts/jupyter-theme-bridge.js
 markdown_extensions:
   - pymdownx.blocks.caption
   - md_in_html
@@ -33,8 +49,8 @@ nav:
   - Home: index.md
   - Notebooks:
       - Overview: notebooks/index.md
-      - Data Exploration: notebooks/data-exploration.md
-      - Chunking Strategy Analysis: notebooks/chunking-strategy-analysis.md
-      - Ingestion Pipeline: notebooks/ingestion-pipeline.md
-      - Retrieval Pipeline: notebooks/retrieval-pipeline.md
-      - Ablation Analysis: notebooks/feature-ablation-analysis.md
+      - Data Exploration: notebooks/01_data_exploration.ipynb
+      - Chunking Strategy Analysis: notebooks/02_chunking_analysis.ipynb
+      - Ingestion Pipeline: notebooks/03_ingestion_pipeline.ipynb
+      - Retrieval Pipeline: notebooks/04_retrieval_pipeline.ipynb
+      - Ablation Analysis: notebooks/05_ablation_analysis.ipynb
