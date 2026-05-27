@@ -1,76 +1,62 @@
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from collections.abc import Callable, Coroutine
+from typing import Any, TypeVar, cast
 
-import litellm
+from google import genai
+from google.genai import types
 from pydantic import BaseModel
 
 from src.config import settings
 from src.infra.llm.prompts import build_medical_messages
 
-T = TypeVar("T", bound=BaseModel)
-
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
 
 DEFAULT_TIMEOUT = 30.0
 
 
-def _resolve_model() -> str:
-    if settings.llm.litellm_model:
-        return str(settings.llm.litellm_model)
-    return f"openrouter/{settings.llm.openrouter_model!s}"
+def _to_gemini_contents(prompt: str, context: str) -> list[dict[str, Any]]:
+    messages = build_medical_messages(prompt, context)
+    return [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
 
 
-class LiteLLMClient:
+class GeminiClient:
     def __init__(self, model: str | None = None):
-        self.model = model or _resolve_model()
-        self._api_key = settings.llm.openrouter_api_key.get_secret_value() or None
+        api_key = settings.llm.gemini_api_key.get_secret_value()
+        self.client = genai.Client(api_key=api_key)
+        self.model = model or settings.llm.gemini_model_name
 
     def generate(self, prompt: str, context: str = "") -> str:
         return _retry_sync(
-            lambda: litellm.completion(
-                model=self.model,
-                messages=build_medical_messages(prompt, context),
-                temperature=0.7,
-                max_tokens=2048,
-                timeout=DEFAULT_TIMEOUT,
-                api_key=self._api_key,
-            ),
-            label="LiteLLM",
+            lambda: self._generate_sync(prompt, context),
+            label="Gemini",
         )
 
     async def a_generate(self, prompt: str, context: str = "") -> str:
         return await _retry_async(
-            lambda: litellm.acompletion(
-                model=self.model,
-                messages=build_medical_messages(prompt, context),
-                temperature=0.7,
-                max_tokens=2048,
-                timeout=DEFAULT_TIMEOUT,
-                api_key=self._api_key,
-            ),
-            label="LiteLLM",
+            lambda: self._generate_async(prompt, context),
+            label="Gemini",
         )
 
     async def a_generate_stream(self, prompt: str, context: str = ""):
         last_exception: Exception | None = None
+        contents = _to_gemini_contents(prompt, context)
         for attempt in range(_retry_max_retries()):
             try:
-                stream = await litellm.acompletion(
+                stream = await self.client.aio.models.generate_content_stream(
                     model=self.model,
-                    messages=build_medical_messages(prompt, context),
-                    temperature=0.7,
-                    max_tokens=2048,
-                    stream=True,
-                    timeout=DEFAULT_TIMEOUT,
-                    api_key=self._api_key,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        temperature=0.7,
+                        max_output_tokens=2048,
+                    ),
                 )
                 async for chunk in stream:
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        yield delta
+                    if chunk.text:
+                        yield chunk.text
                 return
             except Exception as e:
                 last_exception = e
@@ -88,51 +74,89 @@ class LiteLLMClient:
 
     def generate_structured(self, prompt: str, response_model: type[T], context: str = "") -> T:
         return _retry_sync_structured(
-            lambda: litellm.completion(
-                model=self.model,
-                messages=build_medical_messages(prompt, context),
-                temperature=0.7,
-                max_tokens=2048,
-                timeout=DEFAULT_TIMEOUT,
-                api_key=self._api_key,
-                response_format={"type": "json_object"},
-            ),
-            response_model=response_model,
-            label="LiteLLM",
+            lambda: self._generate_structured_sync(prompt, response_model, context),
+            label="Gemini",
         )
 
     async def a_generate_structured(
         self, prompt: str, response_model: type[T], context: str = ""
     ) -> T:
         return await _retry_async_structured(
-            lambda: litellm.acompletion(
-                model=self.model,
-                messages=build_medical_messages(prompt, context),
-                temperature=0.7,
-                max_tokens=2048,
-                timeout=DEFAULT_TIMEOUT,
-                api_key=self._api_key,
-                response_format={"type": "json_object"},
-            ),
-            response_model=response_model,
-            label="LiteLLM",
+            lambda: self._generate_structured_async(prompt, response_model, context),
+            label="Gemini",
         )
+
+    def _generate_sync(self, prompt: str, context: str) -> str:
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=_to_gemini_contents(prompt, context),
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=2048,
+            ),
+        )
+        if response.text is None:
+            raise ValueError("Empty response from Gemini API")
+        return str(response.text)
+
+    async def _generate_async(self, prompt: str, context: str) -> str:
+        response = await self.client.aio.models.generate_content(
+            model=self.model,
+            contents=_to_gemini_contents(prompt, context),
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=2048,
+            ),
+        )
+        if response.text is None:
+            raise ValueError("Empty response from Gemini API")
+        return str(response.text)
+
+    def _generate_structured_sync(self, prompt: str, response_model: type[T], context: str) -> T:
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=_to_gemini_contents(prompt, context),
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=2048,
+                response_mime_type="application/json",
+                response_schema=response_model,
+            ),
+        )
+        parsed = response.parsed
+        if parsed is None:
+            raise ValueError("Empty structured response from Gemini API")
+        return cast(T, parsed)
+
+    async def _generate_structured_async(
+        self, prompt: str, response_model: type[T], context: str
+    ) -> T:
+        response = await self.client.aio.models.generate_content(
+            model=self.model,
+            contents=_to_gemini_contents(prompt, context),
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=2048,
+                response_mime_type="application/json",
+                response_schema=response_model,
+            ),
+        )
+        parsed = response.parsed
+        if parsed is None:
+            raise ValueError("Empty structured response from Gemini API")
+        return cast(T, parsed)
 
 
 def _retry_max_retries() -> int:
     return int(settings.retry.max_retries)
 
 
-def _retry_sync(fn: Callable[[], Any], *, label: str = "call") -> str:
+def _retry_sync(fn: Callable[[], str], *, label: str = "call") -> str:
     max_retries = _retry_max_retries()
     last_exception: Exception | None = None
     for attempt in range(max_retries):
         try:
-            response = fn()
-            content = response.choices[0].message.content
-            if content is None:
-                raise ValueError(f"Empty response from {label}")
-            return str(content)
+            return fn()
         except Exception as e:
             last_exception = e
             if attempt < max_retries - 1:
@@ -146,16 +170,12 @@ def _retry_sync(fn: Callable[[], Any], *, label: str = "call") -> str:
     raise RuntimeError("Unexpected error in retry logic")
 
 
-async def _retry_async(fn: Callable[[], Awaitable[Any]], *, label: str = "call") -> str:
+async def _retry_async(fn: Callable[[], Coroutine[Any, Any, str]], *, label: str = "call") -> str:
     max_retries = _retry_max_retries()
     last_exception: Exception | None = None
     for attempt in range(max_retries):
         try:
-            response = await fn()
-            content = response.choices[0].message.content
-            if content is None:
-                raise ValueError(f"Empty response from {label}")
-            return str(content)
+            return await fn()
         except Exception as e:
             last_exception = e
             if attempt < max_retries - 1:
@@ -171,18 +191,12 @@ async def _retry_async(fn: Callable[[], Awaitable[Any]], *, label: str = "call")
     raise RuntimeError("Unexpected error in async retry logic")
 
 
-def _retry_sync_structured[T: BaseModel](
-    fn: Callable[[], Any], *, response_model: type[T], label: str = "call"
-) -> T:
+def _retry_sync_structured[T: BaseModel](fn: Callable[[], T], *, label: str = "call") -> T:
     max_retries = _retry_max_retries()
     last_exception: Exception | None = None
     for attempt in range(max_retries):
         try:
-            response = fn()
-            content = response.choices[0].message.content
-            if content is None:
-                raise ValueError(f"Empty response from {label}")
-            return response_model.model_validate_json(content)
+            return fn()
         except Exception as e:
             last_exception = e
             if attempt < max_retries - 1:
@@ -197,17 +211,13 @@ def _retry_sync_structured[T: BaseModel](
 
 
 async def _retry_async_structured[T: BaseModel](
-    fn: Callable[[], Awaitable[Any]], *, response_model: type[T], label: str = "call"
+    fn: Callable[[], Coroutine[Any, Any, T]], *, label: str = "call"
 ) -> T:
     max_retries = _retry_max_retries()
     last_exception: Exception | None = None
     for attempt in range(max_retries):
         try:
-            response = await fn()
-            content = response.choices[0].message.content
-            if content is None:
-                raise ValueError(f"Empty response from {label}")
-            return response_model.model_validate_json(content)
+            return await fn()
         except Exception as e:
             last_exception = e
             if attempt < max_retries - 1:
