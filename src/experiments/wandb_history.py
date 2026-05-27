@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import importlib
 import logging
+import threading
 import time
+from collections import OrderedDict
 from typing import Any
 
 from src.config import settings
 
 logger = logging.getLogger(__name__)
-_CACHE: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+
+_CACHE_MAX_SIZE = 256
+_CACHE: OrderedDict[tuple[Any, ...], tuple[float, dict[str, Any]]] = OrderedDict()
+_CACHE_LOCK = threading.Lock()
 
 
 def _to_plain_data(value: Any) -> Any:
@@ -35,25 +40,32 @@ def _cache_get(key: tuple[Any, ...]) -> dict[str, Any] | None:
     ttl = _cache_ttl_seconds()
     if ttl <= 0:
         return None
-    entry = _CACHE.get(key)
-    if entry is None:
-        return None
-    expires_at, value = entry
-    if time.time() >= expires_at:
-        _CACHE.pop(key, None)
-        return None
-    return dict(value)
+    with _CACHE_LOCK:
+        entry = _CACHE.get(key)
+        if entry is None:
+            return None
+        expires_at, value = entry
+        if time.time() >= expires_at:
+            _CACHE.pop(key, None)
+            return None
+        _CACHE.move_to_end(key)
+        return dict(value)
 
 
 def _cache_set(key: tuple[Any, ...], value: dict[str, Any]) -> dict[str, Any]:
     ttl = _cache_ttl_seconds()
     if ttl > 0:
-        _CACHE[key] = (time.time() + ttl, dict(value))
+        with _CACHE_LOCK:
+            _CACHE[key] = (time.time() + ttl, dict(value))
+            _CACHE.move_to_end(key)
+            while len(_CACHE) > _CACHE_MAX_SIZE:
+                _CACHE.popitem(last=False)
     return value
 
 
 def clear_wandb_cache() -> None:
-    _CACHE.clear()
+    with _CACHE_LOCK:
+        _CACHE.clear()
 
 
 def _normalize_wandb_run(run: Any, *, project: str, entity: str | None = None) -> dict[str, Any]:

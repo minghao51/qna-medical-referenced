@@ -2,15 +2,29 @@
 
 Defines YAML schema for configuring feature addition experiments
 that test new features against a baseline.
+
+.. deprecated::
+    This module defines a simplified experiment schema that overlaps with the
+    versioned YAML configuration loaded by ``src.experiments.config``.  New
+    experiments should prefer the versioned schema.  This module will be
+    removed in a future release once ``feature_addition_runner`` is migrated.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+warnings.warn(
+    "src.experiments.experiment_config is deprecated. "
+    "Use the versioned experiment config in src.experiments.config instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 @dataclasses.dataclass

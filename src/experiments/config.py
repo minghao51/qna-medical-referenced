@@ -8,6 +8,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from src.config import settings
 from src.ingestion.steps.chunk_text import DEFAULT_SOURCE_CHUNK_CONFIGS
 from src.rag import get_runtime_retrieval_config
@@ -15,131 +17,19 @@ from src.rag import get_runtime_retrieval_config
 SUPPORTED_SCHEMA_VERSIONS = {1}
 
 
-def _strip_comment(line: str) -> str:
-    in_single = False
-    in_double = False
-    result: list[str] = []
-    for ch in line:
-        if ch == "'" and not in_double:
-            in_single = not in_single
-        elif ch == '"' and not in_single:
-            in_double = not in_double
-        elif ch == "#" and not in_single and not in_double:
-            break
-        result.append(ch)
-    return "".join(result).rstrip()
+def _strip_comment(text: str) -> str:
+    return text.split("#", 1)[0].rstrip()
 
 
 def _parse_scalar(value: str) -> Any:
-    lowered = value.lower()
-    if lowered in {"true", "false"}:
-        return lowered == "true"
-    if lowered in {"null", "none"}:
-        return None
-    if value == "{}":
-        return {}
-    if value == "[]":
-        return []
-    if value.startswith('"') and value.endswith('"'):
-        return value[1:-1].encode("utf-8").decode("unicode_escape")
-    if value.startswith("'") and value.endswith("'"):
-        return value[1:-1]
-    if value.startswith("[") and value.endswith("]"):
-        inner = value[1:-1].strip()
-        if not inner:
-            return []
-        return [_parse_scalar(item.strip()) for item in inner.split(",") if item.strip()]
-    try:
-        if "." in value:
-            return float(value)
-        return int(value)
-    except ValueError:
-        return value
-
-
-def _parse_yaml_block(lines: list[tuple[int, str]], index: int, indent: int) -> tuple[Any, int]:
-    items: dict[str, Any] = {}
-    seq: list[Any] | None = None
-    while index < len(lines):
-        line_indent, text = lines[index]
-        if line_indent < indent:
-            break
-        if line_indent > indent:
-            raise ValueError(f"Unexpected indentation near: {text}")
-        if text.startswith("- "):
-            if items:
-                raise ValueError("Cannot mix mapping and sequence items at same indentation")
-            if seq is None:
-                seq = []
-            body = text[2:].strip()
-            if not body:
-                child, index = _parse_yaml_block(lines, index + 1, indent + 2)
-                seq.append(child)
-                continue
-            if ":" in body:
-                key, rest = body.split(":", 1)
-                key = key.strip()
-                rest = rest.strip()
-                node: dict[str, Any] = {}
-                if rest:
-                    node[key] = _parse_scalar(rest)
-                    index += 1
-                else:
-                    child, index = _parse_yaml_block(lines, index + 1, indent + 2)
-                    node[key] = child
-                while index < len(lines):
-                    child_indent, child_text = lines[index]
-                    if child_indent < indent + 2:
-                        break
-                    if child_indent > indent + 2:
-                        raise ValueError(f"Unexpected indentation near: {child_text}")
-                    if child_text.startswith("- "):
-                        break
-                    child_key, child_rest = child_text.split(":", 1)
-                    child_key = child_key.strip()
-                    child_rest = child_rest.strip()
-                    if child_rest:
-                        node[child_key] = _parse_scalar(child_rest)
-                        index += 1
-                    else:
-                        child, index = _parse_yaml_block(lines, index + 1, indent + 4)
-                        node[child_key] = child
-                seq.append(node)
-                continue
-            seq.append(_parse_scalar(body))
-            index += 1
-            continue
-        if seq is not None:
-            raise ValueError("Cannot mix sequence and mapping items at same indentation")
-        if ":" not in text:
-            raise ValueError(f"Expected key/value pair near: {text}")
-        key, rest = text.split(":", 1)
-        key = key.strip()
-        rest = rest.strip()
-        if rest:
-            items[key] = _parse_scalar(rest)
-            index += 1
-        else:
-            child, index = _parse_yaml_block(lines, index + 1, indent + 2)
-            items[key] = child
-    return (seq if seq is not None else items), index
+    parsed = yaml.safe_load(value)
+    return parsed
 
 
 def parse_simple_yaml(text: str) -> dict[str, Any]:
-    processed: list[tuple[int, str]] = []
-    for raw_line in text.splitlines():
-        line = _strip_comment(raw_line)
-        if not line.strip():
-            continue
-        indent = len(line) - len(line.lstrip(" "))
-        if indent % 2:
-            raise ValueError("Only even indentation is supported in experiment YAML")
-        processed.append((indent, line.strip()))
-    if not processed:
+    parsed = yaml.safe_load(text)
+    if parsed is None:
         return {}
-    parsed, index = _parse_yaml_block(processed, 0, 0)
-    if index != len(processed):
-        raise ValueError("Failed to parse entire experiment file")
     if not isinstance(parsed, dict):
         raise ValueError("Experiment root must be a mapping")
     return parsed

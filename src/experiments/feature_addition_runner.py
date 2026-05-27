@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import warnings as _warnings
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,7 +16,10 @@ from typing import Any
 
 from src.evals import run_assessment
 from src.experiments.config import build_run_assessment_kwargs, resolve_experiment_runs
-from src.experiments.experiment_config import ExperimentConfig, ExperimentVariant
+
+with _warnings.catch_warnings():
+    _warnings.simplefilter("ignore", DeprecationWarning)
+    from src.experiments.experiment_config import ExperimentConfig, ExperimentVariant
 from src.experiments.metric_utils import resolve_metric_key
 
 logger = logging.getLogger(__name__)
@@ -39,6 +43,7 @@ class ExperimentSummary:
     experiment_name: str
     baseline_result: VariantResult
     variant_results: list[VariantResult]
+    failed_variants: list[dict[str, str]]
     timestamp: str
     config: ExperimentConfig
 
@@ -98,6 +103,14 @@ class ExperimentSummary:
         """
         value = resolve_metric_key(metrics, metric_name)
         return float(value) if isinstance(value, (int, float)) else 0.0
+
+    def format_failures_report(self) -> str:
+        if not self.failed_variants:
+            return ""
+        lines = ["Failed variants:"]
+        for entry in self.failed_variants:
+            lines.append(f"  - {entry['variant']}: {entry['error']}")
+        return "\n".join(lines)
 
 
 def _build_experiment_for_variant(
@@ -312,6 +325,7 @@ def run_feature_addition_experiment(
     # Run variants: first per chunking group ingests, others reuse collection
     collection_map: dict[str, str] = {}
     results_map: dict[str, VariantResult] = {}
+    failed_variants: list[dict[str, str]] = []
 
     for variant, needs_ingestion, group_key in all_variants:
         try:
@@ -346,6 +360,7 @@ def run_feature_addition_experiment(
             results_map[variant.name] = result
         except Exception as e:
             logger.exception(f"Variant {variant.name} failed: {e}")
+            failed_variants.append({"variant": variant.name, "error": str(e)})
 
     baseline_result = results_map.get(config.baseline.name)
     if baseline_result is None:
@@ -361,6 +376,7 @@ def run_feature_addition_experiment(
         experiment_name=config.name,
         baseline_result=baseline_result,
         variant_results=variant_results,
+        failed_variants=failed_variants,
         timestamp=datetime.now(UTC).isoformat(),
         config=config,
     )
