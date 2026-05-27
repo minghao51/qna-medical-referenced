@@ -75,7 +75,7 @@ def _require_authenticated_request(request: Request) -> None:
     summary="Get latest evaluation results",
     description="Retrieve all metrics and results from the most recent evaluation run",
 )
-def get_latest_evaluation() -> dict[str, Any]:
+def get_latest_evaluation(request: Request) -> dict[str, Any]:
     """Get the latest evaluation run results.
 
     Returns comprehensive data from the latest evaluation run including
@@ -110,6 +110,7 @@ def get_latest_evaluation() -> dict[str, Any]:
             }
         }
     """
+    _require_authenticated_request(request)
     try:
         return _get_evaluation_service().load_latest_evaluation()
     except FileNotFoundError as exc:
@@ -121,7 +122,7 @@ def get_latest_evaluation() -> dict[str, Any]:
     summary="List all evaluation runs",
     description="Get a list of all evaluation runs with basic metadata",
 )
-def get_evaluation_runs() -> list[dict[str, Any]]:
+def get_evaluation_runs(request: Request) -> list[dict[str, Any]]:
     """Get all evaluation runs with summary information.
 
     Returns a lightweight list of all runs with status and duration
@@ -153,6 +154,7 @@ def get_evaluation_runs() -> list[dict[str, Any]]:
             }
         ]
     """
+    _require_authenticated_request(request)
     return _get_evaluation_service().get_all_runs()
 
 
@@ -162,6 +164,7 @@ def get_evaluation_runs() -> list[dict[str, Any]]:
     description="Get historical evaluation metrics for trending analysis and performance monitoring",
 )
 def get_evaluation_history(
+    request: Request,
     limit: int = 10,
 ) -> dict[str, Any]:
     """Get historical evaluation metrics for trending analysis.
@@ -202,6 +205,7 @@ def get_evaluation_history(
             }
         }
     """
+    _require_authenticated_request(request)
     limit = max(1, min(int(limit), 100))
     service = _get_evaluation_service()
     local_runs = service.local_history_runs(limit)
@@ -217,7 +221,7 @@ def get_evaluation_history(
     summary="Get specific evaluation run",
     description="Get all metrics and results from a specific evaluation run",
 )
-def get_evaluation_run(run_dir: str) -> dict[str, Any]:
+def get_evaluation_run(run_dir: str, request: Request) -> dict[str, Any]:
     """Get a specific evaluation run by directory name.
 
     Returns comprehensive data from the specified evaluation run including
@@ -240,6 +244,7 @@ def get_evaluation_run(run_dir: str) -> dict[str, Any]:
     Example:
         GET /evaluation/run/250228T120000Z_abc123
     """
+    _require_authenticated_request(request)
     run_dir = _validate_run_dir(run_dir)
     try:
         return _get_evaluation_service().load_evaluation_run(run_dir)
@@ -252,7 +257,7 @@ def get_evaluation_run(run_dir: str) -> dict[str, Any]:
     summary="Get ablation study results",
     description="Get retrieval strategy comparison from ablation study",
 )
-def get_ablation_results() -> dict[str, Any]:
+def get_ablation_results(request: Request) -> dict[str, Any]:
     """Get ablation study results comparing different retrieval strategies.
 
     Returns results from ablation studies that compare different retrieval
@@ -290,6 +295,7 @@ def get_ablation_results() -> dict[str, Any]:
             ]
         }
     """
+    _require_authenticated_request(request)
     try:
         return _get_evaluation_service().load_ablation_results()
     except FileNotFoundError as exc:
@@ -304,7 +310,7 @@ def get_ablation_results() -> dict[str, Any]:
     summary="Get comprehensive ablation study results",
     description="Get all variant results from the focused ablation study with clean-state isolation",
 )
-def get_full_ablation_results() -> dict[str, Any]:
+def get_full_ablation_results(request: Request) -> dict[str, Any]:
     """Get comprehensive ablation study results.
 
     Scans all clean-state runs (2026-04-04+) in the ablation directory and
@@ -320,6 +326,7 @@ def get_full_ablation_results() -> dict[str, Any]:
     Example:
         GET /evaluation/ablation/full
     """
+    _require_authenticated_request(request)
     return _get_evaluation_service().load_full_ablation_results()
 
 
@@ -328,7 +335,7 @@ def get_full_ablation_results() -> dict[str, Any]:
     summary="Get detailed records for a stage",
     description="Get detailed records for debugging and drill-down",
 )
-def get_step_records(stage: str, limit: int = 100) -> dict[str, Any]:
+def get_step_records(stage: str, request: Request, limit: int = 100) -> dict[str, Any]:
     """Get detailed records for a specific pipeline stage.
 
     Returns individual records for a stage, useful for debugging
@@ -351,6 +358,7 @@ def get_step_records(stage: str, limit: int = 100) -> dict[str, Any]:
     Example:
         GET /evaluation/steps/l3/records?limit=50
     """
+    _require_authenticated_request(request)
     stage_name = _validate_stage(stage)
     limit = max(1, min(int(limit), 500))
     try:
@@ -364,7 +372,7 @@ def get_step_records(stage: str, limit: int = 100) -> dict[str, Any]:
     summary="Get L6 answer quality per-query records",
     description="Get detailed per-query records for L6 answer quality drill-down",
 )
-def get_l6_records(limit: int = 100) -> dict[str, Any]:
+def get_l6_records(request: Request, limit: int = 100) -> dict[str, Any]:
     """Get detailed per-query L6 answer quality records.
 
     Returns individual query evaluation records from DeepEval including
@@ -385,6 +393,7 @@ def get_l6_records(limit: int = 100) -> dict[str, Any]:
     Example:
         GET /evaluation/l6/records?limit=50
     """
+    _require_authenticated_request(request)
     try:
         return _get_evaluation_service().load_l6_records(limit)
     except FileNotFoundError as exc:
@@ -396,7 +405,7 @@ def get_l6_records(limit: int = 100) -> dict[str, Any]:
     summary="Get pipeline stage metrics",
     description="Get detailed metrics for a specific pipeline stage (L0-L5)",
 )
-def get_step_metrics(stage: str) -> dict[str, Any]:
+def get_step_metrics(stage: str, request: Request) -> dict[str, Any]:
     """Get metrics for a specific pipeline stage.
 
     Retrieves detailed step-level metrics for the specified pipeline stage.
@@ -425,13 +434,15 @@ def get_step_metrics(stage: str) -> dict[str, Any]:
             "quality_score": 0.92
         }
     """
+    _require_authenticated_request(request)
     stage_name = _validate_stage(stage)
     try:
         return _get_evaluation_service().load_step_metrics(stage_name)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("Failed to load step metrics for stage %s", stage_name)
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get(
@@ -439,7 +450,7 @@ def get_step_metrics(stage: str) -> dict[str, Any]:
     summary="Get DeepEval answer quality results",
     description="Get detailed LLM-judged answer quality metrics for a specific evaluation run",
 )
-def get_answer_quality_details(run_dir: str) -> dict[str, Any]:
+def get_answer_quality_details(run_dir: str, request: Request) -> dict[str, Any]:
     """Get detailed DeepEval results for a specific evaluation run.
 
     Returns per-query answer quality metrics including factual accuracy,
@@ -475,6 +486,7 @@ def get_answer_quality_details(run_dir: str) -> dict[str, Any]:
             ]
         }
     """
+    _require_authenticated_request(request)
     run_dir = _validate_run_dir(run_dir)
     try:
         return _get_evaluation_service().load_answer_quality_details(run_dir)
@@ -523,12 +535,17 @@ async def evaluate_single_answer(
             }
         }
     """
-    from deepeval.metrics.indicator import safe_a_measure
-    from deepeval.test_case import LLMTestCase
-
-    from src.evals.metrics.medical import METRIC_SPECS, create_medical_metrics
-
     _require_authenticated_request(request)
+    try:
+        from deepeval.metrics.indicator import safe_a_measure
+        from deepeval.test_case import LLMTestCase
+
+        from src.evals.metrics.medical import METRIC_SPECS, create_medical_metrics
+    except ModuleNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="DeepEval dependency is not installed. Run `uv sync --group evaluation`.",
+        ) from exc
     test_case = LLMTestCase(
         input=payload.query,
         actual_output=payload.answer,
@@ -551,6 +568,6 @@ async def evaluate_single_answer(
             }
         except Exception as e:
             logger.error("Failed to measure metric %s: %s", spec.key, e)
-            results[spec.key] = {"score": 0.0, "error": str(e)}
+            results[spec.key] = {"score": 0.0, "error": "Metric evaluation failed"}
 
     return {"query": payload.query, "answer": payload.answer, "metrics": results}

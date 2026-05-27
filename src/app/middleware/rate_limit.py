@@ -89,6 +89,7 @@ class SQLiteRateLimitBackend(RateLimitBackend):
         current = now or int(time.time())
         window_start = current - self.window_seconds + 1
         with get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
             self._cleanup(conn, current)
             recent_rows = conn.execute(
                 """
@@ -178,6 +179,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _build_rate_limit_key(self, request: Request, auth) -> tuple[str, int]:
         if auth:
             if self._is_bypass_auth(auth):
+                logger.info("Rate limit bypass used by key_id=%s", auth.key_id)
                 return f"auth-bypass:{auth.key_id}", 0
             return f"auth:{auth.key_id}", rate_limiter.requests_per_minute
 

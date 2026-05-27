@@ -48,7 +48,6 @@ from src.app.routes import (
 from src.app.security import validate_security_configuration
 from src.config import settings
 from src.infra.di import get_container, reset_container
-from src.infra.storage import FileChatHistoryStore
 from src.rag import initialize_runtime_index_async
 
 configure_logging(settings.app.log_level)
@@ -83,14 +82,15 @@ async def lifespan(app: FastAPI):
     container = get_container()
     app.state.container = container
 
-    if settings.wandb.wandb_api_key and not os.environ.get("WANDB_API_KEY"):
-        os.environ["WANDB_API_KEY"] = settings.wandb.wandb_api_key
+    _wandb_key = settings.wandb.wandb_api_key.get_secret_value()
+    if _wandb_key:
+        os.environ["WANDB_API_KEY"] = _wandb_key
 
     # Initialize LLM client
     app.state.llm_client = container.get_llm_client()
 
     # Initialize chat history store
-    app.state.chat_history_store = FileChatHistoryStore()
+    app.state.chat_history_store = container.get_chat_history_store()
 
     # Initialize vector store
     from src.rag.production_profile import apply_production_profile
@@ -149,8 +149,8 @@ def create_app() -> FastAPI:
             o.strip() for o in settings.api.cors_allowed_origins.split(",") if o.strip()
         ],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID", "X-API-Key"],
     )
     # Rate limiting (prevents abuse)
     app.add_middleware(RateLimitMiddleware)

@@ -1,8 +1,13 @@
 """Chat history management endpoints bound to a server-issued session cookie."""
 
+import logging
+import warnings
+
 from fastapi import APIRouter, Request, Response
 
 from src.app.session import ensure_chat_session, get_chat_session_id, rotate_chat_session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -39,6 +44,12 @@ def clear_history(request: Request, response: Response):
 )
 def get_history_legacy(session_id: str, request: Request, response: Response):
     del session_id
+    warnings.warn(
+        "GET /history/{session_id} is deprecated. Use GET /history instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.warning("Deprecated endpoint GET /history/{session_id} called")
     return get_history(request, response)
 
 
@@ -50,4 +61,10 @@ def get_history_legacy(session_id: str, request: Request, response: Response):
 )
 def clear_history_legacy(session_id: str, request: Request, response: Response):
     del session_id
+    warnings.warn(
+        "DELETE /history/{session_id} is deprecated. Use DELETE /history instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    logger.warning("Deprecated endpoint DELETE /history/{session_id} called")
     return clear_history(request, response)

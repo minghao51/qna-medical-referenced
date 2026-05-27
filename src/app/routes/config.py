@@ -7,7 +7,7 @@ and LLM parameters. Read-only — no mutation from the UI.
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
 from src.config import settings
 from src.ingestion.steps.chunking.config import is_structured_chunking_enabled
@@ -25,12 +25,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _require_authenticated_request(request: Request) -> None:
+    if getattr(request.state, "auth", None) is None:
+        raise HTTPException(status_code=401, detail="Missing X-API-Key header")
+
+
 @router.get(
     "/config",
     summary="Get current runtime configuration",
     description="Read-only snapshot of the active runtime configuration",
 )
-def get_config() -> dict:
+def get_config(request: Request) -> dict:
+    _require_authenticated_request(request)
     retrieval_cfg = get_runtime_retrieval_config()
 
     return {

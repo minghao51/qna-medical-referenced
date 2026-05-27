@@ -101,6 +101,11 @@ def _verify_secret(secret: str, hashed: str) -> bool:
         except (ValueError, TypeError):
             return False
     if len(hashed) == 64 and all(c in "0123456789abcdef" for c in hashed):
+        if not settings.is_development:
+            logger.error(
+                "Rejected legacy SHA256 API key hash outside development for security hardening."
+            )
+            return False
         logger.warning(
             "Authenticating with legacy SHA256 hash. This is deprecated for security reasons. "
             "Please migrate to bcrypt. Use upgrade_legacy_keys_to_bcrypt() to upgrade your keys."

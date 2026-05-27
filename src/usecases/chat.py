@@ -28,16 +28,21 @@ Example:
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from src.app.exceptions import UpstreamServiceError
+from src.config import settings
 from src.infra.llm import get_client
 from src.infra.storage.interfaces import ChatHistoryStore
 from src.rag import retrieve_context, retrieve_context_with_trace, retrieve_context_with_trace_async
 
 logger = logging.getLogger(__name__)
+
+MAX_MESSAGE_LENGTH = settings.api.max_message_length
+_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9\-]+$")
 
 
 def _build_history_context(history: list[dict[str, str]]) -> str:
@@ -111,6 +116,10 @@ def process_chat_message(
         - Updates pipeline trace with timing information if tracing enabled
     """
     resolved_session_id = session_id or "default"
+    if resolved_session_id != "default" and not _SESSION_ID_RE.match(resolved_session_id):
+        raise ValueError(f"Invalid session_id format: {resolved_session_id!r}")
+    if not message or len(message) > MAX_MESSAGE_LENGTH:
+        raise ValueError(f"message must be 1-{MAX_MESSAGE_LENGTH} characters")
     history = history_store.get_history(resolved_session_id)
     history_context = _build_history_context(history)
 

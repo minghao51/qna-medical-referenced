@@ -115,7 +115,8 @@ def get_experiment_results(experiment_name: str) -> dict[str, Any]:
     try:
         return json.loads(report_path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("Failed to read experiment results for %s", experiment_name)
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
 @router.get(

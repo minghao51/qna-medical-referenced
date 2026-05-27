@@ -11,7 +11,7 @@ class ChatRequest(BaseModel):
         max_length=128,
         description="Deprecated. Session ownership is determined by a server-issued cookie.",
     )
-    user_context: str | None = None
+    user_context: str | None = Field(None, max_length=2000)
 
     @field_validator("message", mode="before")
     @classmethod
