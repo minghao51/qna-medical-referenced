@@ -110,7 +110,8 @@ export interface ApiErrorPayload {
 }
 
 export interface HealthResponse {
-	status: string;
+	status: 'healthy' | 'degraded' | 'unhealthy';
+	ready: boolean;
 	runtime?: Record<string, unknown>;
 	vector_store?: {
 		initialized?: boolean;

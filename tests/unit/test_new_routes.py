@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from src.app.routes import config, documents, experiments
+from src.app.routes import config, documents, experiments, health
 
 
 def _make_request() -> Request:
@@ -245,3 +245,37 @@ class TestExperiments:
         with pytest.raises(HTTPException) as exc_info:
             experiments.get_experiment_config("nonexistent")
         assert exc_info.value.status_code == 404
+
+
+class TestHealthRoutes:
+    def test_health_degraded_when_vector_store_not_initialized(self, monkeypatch):
+        monkeypatch.setattr(
+            health,
+            "get_runtime_status",
+            lambda: {
+                "runtime": {"vector_store_initialized": False},
+                "vector_store": {"initialized": False, "signature": None, "config": {}},
+            },
+        )
+
+        result = health.health_check()
+
+        assert result["status"] == "degraded"
+        assert result["ready"] is False
+        assert result["vector_store"]["initialized"] is False
+
+    def test_health_healthy_when_vector_store_initialized(self, monkeypatch):
+        monkeypatch.setattr(
+            health,
+            "get_runtime_status",
+            lambda: {
+                "runtime": {"vector_store_initialized": True},
+                "vector_store": {"initialized": True, "signature": "sig", "config": {}},
+            },
+        )
+
+        result = health.health_check()
+
+        assert result["status"] == "healthy"
+        assert result["ready"] is True
+        assert result["vector_store"]["initialized"] is True

@@ -1,16 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/AppShell.svelte';
-	import DrillDownModal from '$lib/components/DrillDownModal.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import HealthScoreBadge from '$lib/components/HealthScoreBadge.svelte';
-	import IngestionTab from '$lib/components/IngestionTab.svelte';
 	import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte';
-	import QualityTab from '$lib/components/QualityTab.svelte';
-	import RetrievalTab from '$lib/components/RetrievalTab.svelte';
 	import TabNav from '$lib/components/TabNav.svelte';
-	import TrendingTab from '$lib/components/TrendingTab.svelte';
-	import AdvancedTab from '$lib/components/AdvancedTab.svelte';
 	import {
 		fetchHealthStatus,
 		getLatestEvaluation,
@@ -62,9 +56,43 @@
 	let drillDownModal = $state(emptyDrillDownState());
 	let healthStatus = $state<HealthResponse | null>(null);
 	let operationalNotice = $state('');
+	let DrillDownModalComponent = $state<typeof import('$lib/components/DrillDownModal.svelte').default | null>(null);
+	let IngestionTabComponent = $state<typeof import('$lib/components/IngestionTab.svelte').default | null>(null);
+	let RetrievalTabComponent = $state<typeof import('$lib/components/RetrievalTab.svelte').default | null>(null);
+	let QualityTabComponent = $state<typeof import('$lib/components/QualityTab.svelte').default | null>(null);
+	let AdvancedTabComponent = $state<typeof import('$lib/components/AdvancedTab.svelte').default | null>(null);
+	let TrendingTabComponent = $state<typeof import('$lib/components/TrendingTab.svelte').default | null>(null);
 
 	const healthScore = $derived(data ? calculateHealthScore(data) : 0);
 	const healthGrade = $derived(getHealthGrade(healthScore));
+
+	async function ensureActiveTabComponent(tab: EvalTabId) {
+		if (tab === 'ingestion' && !IngestionTabComponent) {
+			IngestionTabComponent = (await import('$lib/components/IngestionTab.svelte')).default;
+			return;
+		}
+		if (tab === 'retrieval' && !RetrievalTabComponent) {
+			RetrievalTabComponent = (await import('$lib/components/RetrievalTab.svelte')).default;
+			return;
+		}
+		if (tab === 'quality' && !QualityTabComponent) {
+			QualityTabComponent = (await import('$lib/components/QualityTab.svelte')).default;
+			return;
+		}
+		if (tab === 'advanced' && !AdvancedTabComponent) {
+			AdvancedTabComponent = (await import('$lib/components/AdvancedTab.svelte')).default;
+			return;
+		}
+		if (tab === 'trending' && !TrendingTabComponent) {
+			TrendingTabComponent = (await import('$lib/components/TrendingTab.svelte')).default;
+		}
+	}
+
+	async function ensureDrillDownModal() {
+		if (!DrillDownModalComponent) {
+			DrillDownModalComponent = (await import('$lib/components/DrillDownModal.svelte')).default;
+		}
+	}
 
 	function getStatusColor(status: string): string {
 		return status === 'ok' ? '#4caf50' : '#f44336';
@@ -111,7 +139,7 @@
 		try {
 			healthStatus = await fetchHealthStatus();
 			operationalNotice =
-				healthStatus.vector_store && healthStatus.vector_store.initialized === false
+				!healthStatus.ready
 					? 'Backend is up, but the runtime index is not ready yet.'
 					: '';
 		} catch (err) {
@@ -180,6 +208,7 @@
 		records: DrillDownRecord[] = [],
 		historicalData: DrillDownPoint[] = []
 	) {
+		void ensureDrillDownModal();
 		drillDownModal = {
 			open: true,
 			metric: metricName,
@@ -194,8 +223,13 @@
 		syncUrlState();
 	});
 
+	$effect(() => {
+		void ensureActiveTabComponent(activeTab);
+	});
+
 	onMount(async () => {
 		applyUrlStateFromLocation();
+		await ensureActiveTabComponent(activeTab);
 		await Promise.all([loadData(), loadHistory(), loadAblationResults(), loadHealth()]);
 		if (selectedRunKey && latestData && selectedRunKey !== selectionKey(latestData)) {
 			const selected = await loadRun(selectedRunKey);
@@ -264,42 +298,80 @@
 			<div class="error-panel">{error}</div>
 		{:else if !data || (!data.summary && !data.step_metrics && !data.retrieval_metrics)}
 			<EmptyState title="No evaluation data available" body="Run an evaluation to populate the dashboard." />
-		{:else}
-			{#if activeTab === 'ingestion'}
-				<IngestionTab {data} />
-			{:else if activeTab === 'retrieval'}
-				<RetrievalTab {data} onDrillDown={showMetricDrillDown} />
-			{:else if activeTab === 'quality'}
-				<QualityTab {data} onDrillDown={showMetricDrillDown} />
-			{:else if activeTab === 'advanced'}
-				<AdvancedTab {data} />
 			{:else}
-				<TrendingTab
-					{historyData}
-					{historyLoading}
-					{ablationData}
-					{ablationLoading}
-					{selectedRunKey}
-					{data}
-					{selectedTrendMetric}
-					onTrendMetricChange={(metric) => (selectedTrendMetric = metric)}
-					onSelectRun={selectRun}
-					onRefreshHistory={loadHistory}
-				/>
+				{#if activeTab === 'ingestion'}
+					{#if IngestionTabComponent}
+						{@const IngestionTab = IngestionTabComponent}
+						<IngestionTab {data} />
+					{:else}
+						<div class="loading-panel">
+							<LoadingSkeleton count={2} type="card" />
+						</div>
+					{/if}
+				{:else if activeTab === 'retrieval'}
+					{#if RetrievalTabComponent}
+						{@const RetrievalTab = RetrievalTabComponent}
+						<RetrievalTab {data} onDrillDown={showMetricDrillDown} />
+					{:else}
+						<div class="loading-panel">
+							<LoadingSkeleton count={2} type="card" />
+						</div>
+					{/if}
+				{:else if activeTab === 'quality'}
+					{#if QualityTabComponent}
+						{@const QualityTab = QualityTabComponent}
+						<QualityTab {data} onDrillDown={showMetricDrillDown} />
+					{:else}
+						<div class="loading-panel">
+							<LoadingSkeleton count={2} type="card" />
+						</div>
+					{/if}
+				{:else if activeTab === 'advanced'}
+					{#if AdvancedTabComponent}
+						{@const AdvancedTab = AdvancedTabComponent}
+						<AdvancedTab {data} />
+					{:else}
+						<div class="loading-panel">
+							<LoadingSkeleton count={2} type="card" />
+						</div>
+					{/if}
+				{:else}
+					{#if TrendingTabComponent}
+						{@const TrendingTab = TrendingTabComponent}
+						<TrendingTab
+							{historyData}
+							{historyLoading}
+							{ablationData}
+							{ablationLoading}
+							{selectedRunKey}
+							{data}
+							{selectedTrendMetric}
+							onTrendMetricChange={(metric) => (selectedTrendMetric = metric)}
+							onSelectRun={selectRun}
+							onRefreshHistory={loadHistory}
+						/>
+					{:else}
+						<div class="loading-panel">
+							<LoadingSkeleton count={2} type="card" />
+						</div>
+					{/if}
+				{/if}
 			{/if}
-		{/if}
-	</div>
+		</div>
 
-	<DrillDownModal
-		open={drillDownModal.open}
-		onclose={() => (drillDownModal.open = false)}
-		metric={drillDownModal.metric}
-		stage={drillDownModal.stage}
-		currentValue={drillDownModal.currentValue}
-		records={drillDownModal.records}
-		historicalData={drillDownModal.historicalData}
-	/>
-</AppShell>
+		{#if DrillDownModalComponent}
+			{@const DrillDownModal = DrillDownModalComponent}
+			<DrillDownModal
+				open={drillDownModal.open}
+				onclose={() => (drillDownModal.open = false)}
+				metric={drillDownModal.metric}
+				stage={drillDownModal.stage}
+				currentValue={drillDownModal.currentValue}
+				records={drillDownModal.records}
+				historicalData={drillDownModal.historicalData}
+			/>
+		{/if}
+	</AppShell>
 
 <style>
 	.eval-container {

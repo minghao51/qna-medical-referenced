@@ -1,12 +1,15 @@
 """Pytest integration tests for DeepEval medical metrics."""
 
 import pytest
-from deepeval import assert_test
-from deepeval.test_case import LLMTestCase
 
 from src.evals.metrics.medical import METRIC_SPECS
 
 pytestmark = [pytest.mark.deepeval, pytest.mark.slow, pytest.mark.live_api]
+
+deepeval = pytest.importorskip("deepeval")
+deepeval_test_case = pytest.importorskip("deepeval.test_case")
+assert_test = deepeval.assert_test
+LLMTestCase = deepeval_test_case.LLMTestCase
 
 
 def _metric_for(key: str):

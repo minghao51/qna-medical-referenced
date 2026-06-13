@@ -34,7 +34,14 @@ dependencies = [
 testpaths = ["tests"]
 pythonpath = ["."]
 minversion = "9.0"
-addopts = ["--strict-markers", "-ra", "--durations=10", "--import-mode=importlib"]
+addopts = [
+    "--strict-markers",
+    "-ra",
+    "--durations=10",
+    "--import-mode=importlib",
+    "--cov=src",
+    "--cov-report=term-missing:skip-covered",
+]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -106,6 +113,7 @@ no-build-isolation-package = ["grpcio"]
 
 [tool.mypy]
 python_version = "3.12"
+files = ["src", "tests"]
 warn_return_any = true
 warn_unused_ignores = true
 warn_redundant_casts = true

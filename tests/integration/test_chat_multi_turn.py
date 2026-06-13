@@ -15,6 +15,15 @@ def _fake_retrieve_context(query: str, top_k: int = 5, retrieval_options=None):
     return f"context for {query}", [{"label": f"Source for {query}"}]
 
 
+async def _fake_retrieve_context_with_trace_async(query: str, top_k: int = 5, hyde_client=None):
+    del top_k, hyde_client
+    return (
+        f"context for {query}",
+        [{"label": f"Source for {query}"}],
+        None,
+    )
+
+
 class DummyLLMClient:
     def generate(self, prompt: str, context: str) -> str:
         return f"answer:{prompt[:50]}"
@@ -30,6 +39,10 @@ def _build_client(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("src.app.factory.validate_security_configuration", lambda: None)
     monkeypatch.setattr("src.app.factory.initialize_runtime_index_async", lambda: None)
     monkeypatch.setattr("src.usecases.chat.retrieve_context", _fake_retrieve_context)
+    monkeypatch.setattr(
+        "src.usecases.chat.retrieve_context_with_trace_async",
+        _fake_retrieve_context_with_trace_async,
+    )
     monkeypatch.setattr(settings.api, "api_keys", "")
     monkeypatch.setattr(settings.api, "api_keys_json", None)
     monkeypatch.setattr(settings.api, "chat_session_cookie_name", "chat_session_id")

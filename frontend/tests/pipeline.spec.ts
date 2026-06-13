@@ -77,7 +77,7 @@ async function isBackendAvailable(request: APIRequestContext): Promise<boolean> 
 		const health = await healthResponse.json();
 		const root = await rootResponse.json();
 		return (
-			health?.status === 'healthy' &&
+			(health?.status === 'healthy' || health?.status === 'degraded') &&
 			root?.message === 'Health Screening Interpreter API is running'
 		);
 	} catch {
@@ -408,7 +408,9 @@ test.describe('API Integration', () => {
 		expect(response.status()).toBe(200);
 
 		const data = await response.json();
-		expect(data).toHaveProperty('status', 'healthy');
+		expect(data).toHaveProperty('status');
+		expect(['healthy', 'degraded']).toContain(data.status);
+		expect(typeof data.ready).toBe('boolean');
 	});
 
 	test('backend root endpoint responds', async ({ request }) => {

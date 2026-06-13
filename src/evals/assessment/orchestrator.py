@@ -23,6 +23,7 @@ from src.evals.dataset_builder import build_retrieval_dataset
 from src.evals.schemas import AssessmentConfig, AssessmentResult, AssessmentRunParams
 from src.experiments.wandb_tracking import log_assessment_to_wandb
 from src.rag import configure_runtime_for_experiment, initialize_runtime_index
+from src.rag.runtime_config import apply_runtime_config, build_default_runtime_config
 
 logger = logging.getLogger(__name__)
 
@@ -149,16 +150,6 @@ def _run_assessment_impl(
     sha256_file_fn: Callable[[str | Path | None], str | None] = sha256_file,
 ) -> AssessmentResult:
     start = time.time()
-    from src.ingestion.indexing.vector_store import set_vector_store_runtime_config
-    from src.ingestion.steps.chunk_text import (
-        set_source_chunk_configs,
-        set_structured_chunking_enabled,
-    )
-    from src.ingestion.steps.convert_html import (
-        set_html_extractor_mode,
-        set_page_classification_enabled,
-    )
-    from src.ingestion.steps.load_markdown import set_index_only_classified_pages
 
     thresholds = dict(DEFAULT_THRESHOLDS)
     if params.thresholds_file:
@@ -246,12 +237,12 @@ def _run_assessment_impl(
         logger.info("Skipping ingestion — reusing existing index")
         index_preparation = {"status": "skipped", "reason": "skip_ingestion_requested"}
     elif not config.experiment_config:
-        set_page_classification_enabled(not config.disable_page_classification)
-        set_index_only_classified_pages(not config.disable_page_classification)
-        set_html_extractor_mode("auto")
-        set_structured_chunking_enabled(not config.disable_structured_chunking)
-        set_source_chunk_configs(None)
-        set_vector_store_runtime_config(None)
+        apply_runtime_config(
+            build_default_runtime_config(
+                disable_page_classification=config.disable_page_classification,
+                disable_structured_chunking=config.disable_structured_chunking,
+            )
+        )
     else:
         embedding_index = config.experiment_config.get("embedding_index", {})
         vector_config = experiment_runtime.get("vector_store", {})

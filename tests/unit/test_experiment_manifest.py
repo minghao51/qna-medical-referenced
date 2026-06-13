@@ -6,7 +6,7 @@ from src.experiments.config import load_experiment_file, resolve_experiment_runs
 
 
 def _fake_step(stage: str, vector_path: str | None = None):
-    aggregate = {f"{stage}_ok": True}
+    aggregate: dict[str, object] = {f"{stage}_ok": True}
     if stage == "l3":
         aggregate.update({"chunk_size_config": 650, "chunk_overlap_config": 80})
     if stage == "l5":

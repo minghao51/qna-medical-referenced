@@ -1,8 +1,15 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Chart, registerables } from 'chart.js';
+	import {
+		ArcElement,
+		Chart,
+		DoughnutController,
+		Legend,
+		Title,
+		Tooltip
+	} from 'chart.js';
 
-	Chart.register(...registerables);
+	Chart.register(ArcElement, DoughnutController, Legend, Title, Tooltip);
 
 	type Props = {
 		distribution: Record<string, number>;

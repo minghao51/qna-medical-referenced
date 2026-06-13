@@ -105,19 +105,20 @@ class TestPDFExtractorStrategy:
 
     def test_extractor_strategy_persisted_in_metadata(self):
         loader = PDFLoader("data/raw")
-        set_pdf_extractor_strategy("pymupdf_pdfplumber")
+        set_pdf_extractor_strategy("pypdf_pdfplumber")
         set_pdf_table_extractor("camelot")
         docs = loader.load_all_pdfs()
         assert len(docs) > 0
         for doc in docs:
             meta = doc["metadata"]
-            assert meta.get("pdf_extractor_strategy") == "pymupdf_pdfplumber"
+            assert meta.get("pdf_extractor_strategy") == "pypdf_pdfplumber"
             assert meta.get("pdf_table_extractor") == "camelot"
         set_pdf_extractor_strategy("pypdf_pdfplumber")
         set_pdf_table_extractor("heuristic")
 
     def test_camelot_pages_tracked_in_metadata(self):
         loader = PDFLoader("data/raw")
+        set_pdf_extractor_strategy("pypdf_pdfplumber")
         set_pdf_table_extractor("camelot")
         docs = loader.load_all_pdfs()
         assert len(docs) > 0

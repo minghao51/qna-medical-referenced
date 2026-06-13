@@ -18,9 +18,15 @@ T = TypeVar("T", bound=BaseModel)
 DEFAULT_TIMEOUT = 30.0
 
 
-def _to_gemini_contents(prompt: str, context: str) -> list[dict[str, Any]]:
+def _to_gemini_contents(prompt: str, context: str) -> list[types.ContentDict | str]:
     messages = build_medical_messages(prompt, context)
-    return [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
+    return [
+        {
+            "role": str(m["role"]),
+            "parts": [{"text": str(m["content"] or "")}],
+        }
+        for m in messages
+    ]
 
 
 class GeminiClient:
@@ -43,7 +49,7 @@ class GeminiClient:
 
     async def a_generate_stream(self, prompt: str, context: str = ""):
         last_exception: Exception | None = None
-        contents = _to_gemini_contents(prompt, context)
+        contents = cast(Any, _to_gemini_contents(prompt, context))
         for attempt in range(_retry_max_retries()):
             try:
                 stream = await self.client.aio.models.generate_content_stream(
@@ -87,9 +93,10 @@ class GeminiClient:
         )
 
     def _generate_sync(self, prompt: str, context: str) -> str:
+        contents = cast(Any, _to_gemini_contents(prompt, context))
         response = self.client.models.generate_content(
             model=self.model,
-            contents=_to_gemini_contents(prompt, context),
+            contents=contents,
             config=types.GenerateContentConfig(
                 temperature=0.7,
                 max_output_tokens=2048,
@@ -100,9 +107,10 @@ class GeminiClient:
         return str(response.text)
 
     async def _generate_async(self, prompt: str, context: str) -> str:
+        contents = cast(Any, _to_gemini_contents(prompt, context))
         response = await self.client.aio.models.generate_content(
             model=self.model,
-            contents=_to_gemini_contents(prompt, context),
+            contents=contents,
             config=types.GenerateContentConfig(
                 temperature=0.7,
                 max_output_tokens=2048,
@@ -113,9 +121,10 @@ class GeminiClient:
         return str(response.text)
 
     def _generate_structured_sync(self, prompt: str, response_model: type[T], context: str) -> T:
+        contents = cast(Any, _to_gemini_contents(prompt, context))
         response = self.client.models.generate_content(
             model=self.model,
-            contents=_to_gemini_contents(prompt, context),
+            contents=contents,
             config=types.GenerateContentConfig(
                 temperature=0.7,
                 max_output_tokens=2048,
@@ -131,9 +140,10 @@ class GeminiClient:
     async def _generate_structured_async(
         self, prompt: str, response_model: type[T], context: str
     ) -> T:
+        contents = cast(Any, _to_gemini_contents(prompt, context))
         response = await self.client.aio.models.generate_content(
             model=self.model,
-            contents=_to_gemini_contents(prompt, context),
+            contents=contents,
             config=types.GenerateContentConfig(
                 temperature=0.7,
                 max_output_tokens=2048,

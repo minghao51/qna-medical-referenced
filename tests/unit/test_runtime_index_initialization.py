@@ -8,7 +8,7 @@ class _FakeVectorStore:
             "contents": list(contents or []),
             "index_metadata": {},
         }
-        self.last_indexing_stats = {}
+        self.last_indexing_stats: dict[str, int] = {}
         self.cleared = False
 
     def clear(self) -> None:

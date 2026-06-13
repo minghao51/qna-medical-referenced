@@ -2,11 +2,8 @@
 	import { onMount, tick } from 'svelte';
 	import type { ChatSource, Message, SourceDomainType, PipelineTrace as PipelineTraceType } from '$lib/types';
 	import AppShell from '$lib/components/AppShell.svelte';
-	import PipelinePanel from '$lib/components/PipelinePanel.svelte';
 	import ConfidenceBadge from '$lib/components/ConfidenceBadge.svelte';
 	import SourceQualityIndicator from '$lib/components/SourceQualityIndicator.svelte';
-	import SourceDistributionChart from '$lib/components/SourceDistributionChart.svelte';
-	import MarkdownRenderer from '$lib/components/MarkdownRenderer.svelte';
 	import { calculateConfidence, getDomainType } from '$lib/confidenceCalculator';
 	import {
 		fetchHealthStatus,
@@ -33,6 +30,9 @@
 	let sourcePanelTabs: Record<number, 'citations' | 'distribution'> = $state({});
 	let healthStatus: HealthResponse | null = $state(null);
 	let operationalNotice = $state('');
+	let PipelinePanelComponent = $state<typeof import('$lib/components/PipelinePanel.svelte').default | null>(null);
+	let SourceDistributionChartComponent = $state<typeof import('$lib/components/SourceDistributionChart.svelte').default | null>(null);
+	let MarkdownRendererComponent = $state<typeof import('$lib/components/MarkdownRenderer.svelte').default | null>(null);
 
 	type RenderableSource = {
 		canonicalLabel: string;
@@ -51,6 +51,9 @@
 	async function loadHistory() {
 		try {
 			const data = await getHistory();
+			if ((data.history as Message[]).some((message) => message.role === 'assistant')) {
+				void ensureMarkdownRenderer();
+			}
 			messages = data.history as Message[];
 			await tick();
 			scrollToBottom();
@@ -62,7 +65,7 @@
 	async function loadHealth() {
 		try {
 			healthStatus = await fetchHealthStatus();
-			if (healthStatus.vector_store && healthStatus.vector_store.initialized === false) {
+			if (!healthStatus.ready) {
 				operationalNotice = 'Backend is reachable, but the runtime index is not ready yet.';
 			} else {
 				operationalNotice = '';
@@ -75,6 +78,24 @@
 	async function scrollToBottom() {
 		if (messagesContainer) {
 			messagesContainer.scrollTop = messagesContainer.scrollHeight;
+		}
+	}
+
+	async function ensurePipelinePanel() {
+		if (!PipelinePanelComponent) {
+			PipelinePanelComponent = (await import('$lib/components/PipelinePanel.svelte')).default;
+		}
+	}
+
+	async function ensureSourceDistributionChart() {
+		if (!SourceDistributionChartComponent) {
+			SourceDistributionChartComponent = (await import('$lib/components/SourceDistributionChart.svelte')).default;
+		}
+	}
+
+	async function ensureMarkdownRenderer() {
+		if (!MarkdownRendererComponent) {
+			MarkdownRendererComponent = (await import('$lib/components/MarkdownRenderer.svelte')).default;
 		}
 	}
 
@@ -99,6 +120,7 @@
 			content: '',
 			timestamp: Date.now()
 		};
+		void ensureMarkdownRenderer();
 		messages = [...messages, assistantMessage];
 
 		try {
@@ -140,6 +162,7 @@
 							if (data.pipeline) {
 								assistantMessage.pipeline = data.pipeline;
 								showPipeline = true;
+								void ensurePipelinePanel();
 							}
 							if (data.error) {
 								const code = data.error_code ? `[${data.error_code}] ` : '';
@@ -252,6 +275,9 @@
 	}
 
 	function setSourceTab(index: number, tab: 'citations' | 'distribution') {
+		if (tab === 'distribution') {
+			void ensureSourceDistributionChart();
+		}
 		sourcePanelTabs = { ...sourcePanelTabs, [index]: tab };
 	}
 
@@ -373,12 +399,17 @@
 						</button>
 					{/if}
 				</div>
-				<div class="content">
-					{#if msg.role === 'assistant'}
-						<MarkdownRenderer content={msg.content} />
-					{:else}
-						{msg.content}
-					{/if}
+					<div class="content">
+						{#if msg.role === 'assistant'}
+							{#if MarkdownRendererComponent}
+								{@const MarkdownRenderer = MarkdownRendererComponent}
+								<MarkdownRenderer content={msg.content} />
+							{:else}
+								{msg.content}
+							{/if}
+						{:else}
+							{msg.content}
+						{/if}
 				</div>
 				{#if renderableSources.length > 0}
 					<div class="sources-panel">
@@ -438,17 +469,23 @@
 								{/each}
 							</ol>
 						{:else}
-							<div class="distribution-grid">
-								{#if Object.keys(typeDistribution).length > 0}
-									<div class="distribution-card">
-										<SourceDistributionChart distribution={typeDistribution} title="Source Types" height={180} />
-									</div>
-								{/if}
-								{#if Object.keys(classDistribution).length > 0}
-									<div class="distribution-card">
-										<SourceDistributionChart distribution={classDistribution} title="Source Classes" height={180} />
-									</div>
-								{/if}
+								<div class="distribution-grid">
+									{#if Object.keys(typeDistribution).length > 0}
+										<div class="distribution-card">
+											{#if SourceDistributionChartComponent}
+												{@const SourceDistributionChart = SourceDistributionChartComponent}
+												<SourceDistributionChart distribution={typeDistribution} title="Source Types" height={180} />
+											{/if}
+										</div>
+									{/if}
+									{#if Object.keys(classDistribution).length > 0}
+										<div class="distribution-card">
+											{#if SourceDistributionChartComponent}
+												{@const SourceDistributionChart = SourceDistributionChartComponent}
+												<SourceDistributionChart distribution={classDistribution} title="Source Classes" height={180} />
+											{/if}
+										</div>
+									{/if}
 								{#if Object.keys(typeDistribution).length === 0 && Object.keys(classDistribution).length === 0}
 									<p class="distribution-empty">No structured source distribution available yet.</p>
 								{/if}
@@ -457,11 +494,16 @@
 					</div>
 				{/if}
 				{#if hasPipeline(msg)}
-					<button
-						class="pipeline-btn"
-						onclick={() => (showPipeline = !showPipeline)}
-						class:active={showPipeline}
-					>
+						<button
+							class="pipeline-btn"
+							onclick={() => {
+								showPipeline = !showPipeline;
+								if (showPipeline) {
+									void ensurePipelinePanel();
+								}
+							}}
+							class:active={showPipeline}
+						>
 						{showPipeline ? 'Hide' : 'Show'} Pipeline Details
 					</button>
 					{@const retrievalCfg = extractRetrievalConfig(msg.pipeline!)}
@@ -517,12 +559,13 @@
 		</button>
 	</div>
 
-	{#if showPipeline && messages.length > 0}
-		{@const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && m.pipeline)}
-		{#if lastAssistantMsg?.pipeline}
-			<PipelinePanel pipeline={lastAssistantMsg.pipeline} isOpen={showPipeline} />
+		{#if showPipeline && messages.length > 0}
+			{@const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && m.pipeline)}
+			{#if lastAssistantMsg?.pipeline && PipelinePanelComponent}
+				{@const PipelinePanel = PipelinePanelComponent}
+				<PipelinePanel pipeline={lastAssistantMsg.pipeline} isOpen={showPipeline} />
+			{/if}
 		{/if}
-	{/if}
 </div>
 </AppShell>
 

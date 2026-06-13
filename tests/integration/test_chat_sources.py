@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from src.app.exceptions import UpstreamServiceError
 from src.app.factory import create_app
 from src.app.middleware.auth import APIKeyConfig
+from src.app.session import _verify_signed_session_id
 from src.config import settings
 from src.infra.storage.file_chat_history_store import FileChatHistoryStore
 from src.rag.formatting import build_chat_sources, build_context_and_sources
@@ -348,7 +349,10 @@ def test_history_routes_ignore_legacy_session_id_and_use_cookie_session(
     cookie_session_id = response.cookies.get("chat_session_id")
     assert cookie_session_id
 
-    store.save_message(cookie_session_id, "user", "hello")
+    resolved_session_id = _verify_signed_session_id(cookie_session_id)
+    assert resolved_session_id
+    client.cookies.set("chat_session_id", cookie_session_id)
+    store.save_message(resolved_session_id, "user", "hello")
     fetched = client.get("/history/arbitrary-session-id")
 
     assert fetched.status_code == 200

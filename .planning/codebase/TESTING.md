@@ -49,7 +49,7 @@ uv run pytest -m "not slow"
 # Lint check
 uv run ruff check
 
-# Type check
+# Type check (repo root; checks both src/ and tests/)
 uv run mypy
 
 # Security lint

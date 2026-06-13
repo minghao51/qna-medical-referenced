@@ -14,8 +14,8 @@ def test_vector_store_preserves_source_metadata_and_l5_distributions(tmp_path):
     def fake_embed_with_stats(texts, batch_size=10):
         return [[0.1, 0.2, 0.3] for _ in texts], {"provider": "fake", "batch_size": batch_size}
 
-    store._embed_with_stats = fake_embed_with_stats  # type: ignore[method-assign]
-    store._embed = lambda texts, batch_size=10: [[0.1, 0.2, 0.3] for _ in texts]  # type: ignore[method-assign]
+    store._embed_with_stats = fake_embed_with_stats
+    store._embed = lambda texts, batch_size=10: [[0.1, 0.2, 0.3] for _ in texts]
 
     store.add_documents(
         [

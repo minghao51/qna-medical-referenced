@@ -1,8 +1,17 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Chart, registerables } from 'chart.js';
+	import {
+		BarController,
+		BarElement,
+		CategoryScale,
+		Chart,
+		Legend,
+		LinearScale,
+		Title,
+		Tooltip
+	} from 'chart.js';
 
-	Chart.register(...registerables);
+	Chart.register(BarController, BarElement, CategoryScale, Legend, LinearScale, Title, Tooltip);
 
 	type Props = {
 		breakdown: Record<string, { hit_rate?: number; mrr?: number; count: number }>;

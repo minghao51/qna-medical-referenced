@@ -76,29 +76,20 @@ def set_source_chunk_configs(configs: dict | None) -> None:
     )
 
 
-def get_source_chunk_configs(strict_validation: bool = False) -> dict:
-    """Get source chunking configurations with optional validation.
-
-    Args:
-        strict_validation: If True, raises ValueError for invalid configs.
-            If False (default), logs warnings and resets to defaults.
-
-    Returns:
-        Dictionary of source type to chunking configuration.
-
-    Raises:
-        ValueError: If strict_validation=True and any config is invalid.
-    """
-    state = get_runtime_state()
+def resolve_source_chunk_configs(
+    override: dict | None,
+    *,
+    auto_select_strategy: bool,
+    strict_validation: bool = False,
+) -> dict:
     cfg = copy.deepcopy(DEFAULT_SOURCE_CHUNK_CONFIGS)
-    override = state.source_chunk_configs_override
     if override:
         for key, value in override.items():
             if key in cfg and isinstance(value, dict):
                 cfg[key].update(value)
             else:
                 cfg[key] = copy.deepcopy(value)
-    if state.auto_select_strategy:
+    if auto_select_strategy:
         for source_type, base_cfg in cfg.items():
             if isinstance(base_cfg, dict) and "strategy" in base_cfg:
                 recommended = RECOMMENDED_STRATEGIES.get(source_type)
@@ -139,3 +130,24 @@ def get_source_chunk_configs(strict_validation: bool = False) -> dict:
             "Chunking configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
         )
     return cfg
+
+
+def get_source_chunk_configs(strict_validation: bool = False) -> dict:
+    """Get source chunking configurations with optional validation.
+
+    Args:
+        strict_validation: If True, raises ValueError for invalid configs.
+            If False (default), logs warnings and resets to defaults.
+
+    Returns:
+        Dictionary of source type to chunking configuration.
+
+    Raises:
+        ValueError: If strict_validation=True and any config is invalid.
+    """
+    state = get_runtime_state()
+    return resolve_source_chunk_configs(
+        state.source_chunk_configs_override,
+        auto_select_strategy=bool(state.auto_select_strategy),
+        strict_validation=strict_validation,
+    )

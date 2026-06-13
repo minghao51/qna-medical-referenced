@@ -52,7 +52,7 @@
 			<div class="status-grid">
 				<section class="status-card overall">
 					<h2>Overall</h2>
-					<span class="status-dot" class:healthy={health.status === 'healthy'} class:unhealthy={health.status !== 'healthy'}></span>
+					<span class="status-dot" class:healthy={health.status === 'healthy'} class:unhealthy={health.status === 'unhealthy'} class:degraded={health.status === 'degraded'}></span>
 					<span class="status-label">{health.status.toUpperCase()}</span>
 					{#if lastChecked}
 						<p class="last-checked">Last checked: {lastChecked}</p>
@@ -184,6 +184,11 @@
 	.status-dot.unhealthy {
 		background: #ef4444;
 		box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+	}
+
+	.status-dot.degraded {
+		background: #f59e0b;
+		box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
 	}
 
 	.status-label {

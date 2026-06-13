@@ -68,22 +68,30 @@ class TestVectorStoreInitConcurrency:
     """Verify vector store initialization uses proper locking."""
 
     def test_concurrent_initialize_no_duplicate_builds(self, tmp_path, monkeypatch):
-        """Multiple threads calling initialize_runtime_index should not race."""
-        from src.ingestion.indexing.chroma_store import ChromaVectorStoreFactory
-
-        monkeypatch.setenv("CHROMA_PERSIST_DIRECTORY", str(tmp_path / "chroma"))
-        monkeypatch.setenv("DASHSCOPE_API_KEY", "test-api-key")
-
-        ChromaVectorStoreFactory.reset()
+        """Multiple threads calling initialize_runtime_index should not crash."""
         build_counts = {"count": 0}
         lock = threading.Lock()
 
         # Patch _build_index_from_sources to count invocations
-        import src.rag.runtime as runtime_mod
+        import src.rag.index as index_mod
 
-        def counting_build(vs):
+        class _FakeVectorStore:
+            def __init__(self):
+                self.documents = {"contents": [], "index_metadata": {}}
+                self.last_indexing_stats = {}
+
+            def clear(self):
+                self.documents = {"contents": [], "index_metadata": {}}
+                self.last_indexing_stats = {}
+
+        fake_store = _FakeVectorStore()
+        monkeypatch.setattr(index_mod, "get_vector_store", lambda: fake_store)
+
+        async def counting_build(vs):
             with lock:
                 build_counts["count"] += 1
+            vs.documents["contents"] = ["chunk-1"]
+            vs.last_indexing_stats = {"inserted": 1}
             # Simulate slow build to increase contention
             time.sleep(0.05)
             return {
@@ -94,28 +102,18 @@ class TestVectorStoreInitConcurrency:
                 "embedding_stats": {},
             }
 
-        monkeypatch.setattr(runtime_mod, "_build_index_from_sources", counting_build)
+        monkeypatch.setattr(index_mod, "_build_index_from_sources", counting_build)
 
         # Reset init state
         from src.config.context import get_runtime_state
 
         get_runtime_state().reset_vector_store_state()
 
-        # Mock get_vector_store to return empty store
-        from src.ingestion.indexing import chroma_store
-
-        original_get = chroma_store.get_vector_store
-
-        def mock_get_vector_store(config=None):
-            vs = original_get(config)
-            # Ensure empty so build is triggered
-            return vs
-
         errors: list[Exception] = []
 
         def init_store():
             try:
-                runtime_mod.initialize_runtime_index()
+                index_mod.initialize_runtime_index()
             except Exception as e:
                 errors.append(e)
 
@@ -126,13 +124,7 @@ class TestVectorStoreInitConcurrency:
             t.join()
 
         assert not errors, f"Concurrent init errors: {errors}"
-        # With proper locking, build should be called at most once
-        assert build_counts["count"] <= 1, (
-            f"Expected at most 1 build, got {build_counts['count']} — race condition detected"
-        )
-
-        # Cleanup
-        ChromaVectorStoreFactory.reset()
+        assert build_counts["count"] == 1
 
 
 class TestDiversityConcurrency:

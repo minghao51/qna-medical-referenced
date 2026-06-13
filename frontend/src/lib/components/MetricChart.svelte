@@ -1,8 +1,33 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Chart, registerables } from 'chart.js';
+	import {
+		BarController,
+		BarElement,
+		CategoryScale,
+		Chart,
+		Filler,
+		Legend,
+		LineController,
+		LineElement,
+		LinearScale,
+		PointElement,
+		Title,
+		Tooltip
+	} from 'chart.js';
 
-	Chart.register(...registerables);
+	Chart.register(
+		BarController,
+		BarElement,
+		CategoryScale,
+		Filler,
+		Legend,
+		LineController,
+		LineElement,
+		LinearScale,
+		PointElement,
+		Title,
+		Tooltip
+	);
 
 	type Props = {
 		type?: 'line' | 'bar';

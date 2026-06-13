@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 import time
 from typing import Any
 
@@ -13,34 +14,17 @@ from src.config.context import get_runtime_state
 from src.ingestion.indexing.chroma_store import (
     get_vector_store,
     get_vector_store_runtime_config,
-    set_vector_store_runtime_config,
 )
-from src.ingestion.steps.chunk_text import (
-    chunk_documents,
-    get_source_chunk_configs,
-    set_auto_select_strategy,
-    set_source_chunk_configs,
-    set_structured_chunking_enabled,
-)
+from src.ingestion.steps.chunk_text import chunk_documents
 from src.ingestion.steps.convert_html import main as convert_html_main
-from src.ingestion.steps.convert_html import (
-    set_html_extractor_mode,
-    set_html_extractor_strategy,
-    set_page_classification_enabled,
-)
-from src.ingestion.steps.load_markdown import (
-    get_markdown_documents,
-    set_index_only_classified_pages,
-)
-from src.ingestion.steps.load_pdfs import (
-    get_documents,
-    set_pdf_extractor_strategy,
-    set_pdf_table_extractor,
-)
+from src.ingestion.steps.load_markdown import get_markdown_documents
+from src.ingestion.steps.load_pdfs import get_documents
 from src.ingestion.steps.load_reference_data import ReferenceDataLoader
 from src.rag.protocols import VectorStoreProtocol
+from src.rag.runtime_config import apply_runtime_config, build_experiment_runtime_config
 
 logger = logging.getLogger(__name__)
+_INITIALIZATION_LOCK = threading.Lock()
 
 
 def _vector_store_runtime_signature() -> str:
@@ -153,56 +137,56 @@ async def initialize_vector_store_async(
 ) -> dict[str, Any]:
     state = get_runtime_state()
     runtime_signature = _vector_store_runtime_signature()
-
-    with state._lock:
-        if state.vector_store_initialized_signature != runtime_signature:
-            state.vector_store_initialized = False
-
-    vector_store = get_vector_store()
-
-    if rebuild:
-        vector_store.clear()
+    with _INITIALIZATION_LOCK:
         with state._lock:
-            state.vector_store_initialized = False
-            state.vector_store_initialized_signature = None
+            if state.vector_store_initialized_signature != runtime_signature:
+                state.vector_store_initialized = False
 
-    if materialize_html:
-        convert_html_main(force=force_html_reconvert)
+        vector_store = get_vector_store()
 
-    documents = vector_store.documents
-    if documents.get("contents"):
+        if rebuild:
+            vector_store.clear()
+            with state._lock:
+                state.vector_store_initialized = False
+                state.vector_store_initialized_signature = None
+
+        if materialize_html:
+            convert_html_main(force=force_html_reconvert)
+
+        documents = vector_store.documents
+        if documents.get("contents"):
+            with state._lock:
+                if not state.vector_store_initialized:
+                    state.vector_store_initialized = True
+                    state.vector_store_initialized_signature = runtime_signature
+                    logger.info(
+                        "Loaded existing vector store with %d documents",
+                        len(documents["contents"]),
+                    )
+                else:
+                    state.vector_store_initialized_signature = runtime_signature
+            return {
+                "status": "ready",
+                "reused_existing_index": True,
+                "vector_store_config": get_vector_store_runtime_config(),
+                "index_metadata": documents.get("index_metadata", {}),
+                "vector_document_count": len(documents.get("contents", [])),
+                "indexing_stats": vector_store.last_indexing_stats,
+            }
+
+        build_stats = await _build_index_from_sources(vector_store)
+        documents = vector_store.documents
         with state._lock:
-            if not state.vector_store_initialized:
-                state.vector_store_initialized = True
-                state.vector_store_initialized_signature = runtime_signature
-                logger.info(
-                    "Loaded existing vector store with %d documents",
-                    len(documents["contents"]),
-                )
-            else:
-                state.vector_store_initialized_signature = runtime_signature
+            state.vector_store_initialized = True
+            state.vector_store_initialized_signature = runtime_signature
         return {
-            "status": "ready",
-            "reused_existing_index": True,
+            "status": "built",
+            "reused_existing_index": False,
             "vector_store_config": get_vector_store_runtime_config(),
             "index_metadata": documents.get("index_metadata", {}),
             "vector_document_count": len(documents.get("contents", [])),
-            "indexing_stats": vector_store.last_indexing_stats,
+            "indexing_stats": build_stats,
         }
-
-    build_stats = await _build_index_from_sources(vector_store)
-    documents = vector_store.documents
-    with state._lock:
-        state.vector_store_initialized = True
-        state.vector_store_initialized_signature = runtime_signature
-    return {
-        "status": "built",
-        "reused_existing_index": False,
-        "vector_store_config": get_vector_store_runtime_config(),
-        "index_metadata": documents.get("index_metadata", {}),
-        "vector_document_count": len(documents.get("contents", [])),
-        "indexing_stats": build_stats,
-    }
 
 
 def initialize_vector_store(
@@ -276,83 +260,13 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
 
     ingestion = dict(experiment.get("ingestion", {}))
     embedding_index = dict(experiment.get("embedding_index", {}))
-    set_page_classification_enabled(ingestion.get("page_classification_enabled", True))
-    set_index_only_classified_pages(ingestion.get("index_only_classified_pages", True))
-    set_html_extractor_mode(ingestion.get("html_extractor_mode", "auto"))
-    set_html_extractor_strategy(ingestion.get("html_extractor_strategy", "trafilatura_bs"))
-    set_pdf_extractor_strategy(ingestion.get("pdf_extractor_strategy", "pypdf_pdfplumber"))
-    set_pdf_table_extractor(ingestion.get("pdf_table_extractor", "heuristic"))
-    set_structured_chunking_enabled(ingestion.get("structured_chunking_enabled", True))
-    set_source_chunk_configs(ingestion.get("source_chunk_configs"))
-    set_auto_select_strategy(ingestion.get("auto_select_chunk_strategy", False))
-    indexing_features = {
-        "enable_hype": bool(ingestion.get("enable_hype", settings.hyde.hype_enabled)),
-        "hype_sample_rate": float(
-            ingestion.get("hype_sample_rate", settings.hyde.hype_sample_rate)
-        ),
-        "hype_max_chunks": int(ingestion.get("hype_max_chunks", settings.hyde.hype_max_chunks)),
-        "hype_questions_per_chunk": int(
-            ingestion.get("hype_questions_per_chunk", settings.hyde.hype_questions_per_chunk)
-        ),
-        "enable_keyword_extraction": bool(
-            ingestion.get(
-                "enable_keyword_extraction", settings.enrichment.enable_keyword_extraction
-            )
-        ),
-        "enable_chunk_summaries": bool(
-            ingestion.get("enable_chunk_summaries", settings.enrichment.enable_chunk_summaries)
-        ),
-        "keyword_extraction_sample_rate": float(
-            ingestion.get(
-                "keyword_extraction_sample_rate", settings.enrichment.keyword_extraction_sample_rate
-            )
-        ),
-        "keyword_extraction_max_chunks": int(
-            ingestion.get(
-                "keyword_extraction_max_chunks", settings.enrichment.keyword_extraction_max_chunks
-            )
-        ),
-    }
-    vector_config = {
-        "collection_name": embedding_index.get("collection_name", settings.storage.collection_name),
-        "semantic_weight": embedding_index.get("semantic_weight", 0.6),
-        "keyword_weight": embedding_index.get("keyword_weight", 0.2),
-        "boost_weight": embedding_index.get("boost_weight", 0.2),
-        "embedding_model": embedding_index.get("embedding_model", settings.llm.embedding_model),
-        "embedding_batch_size": embedding_index.get(
-            "embedding_batch_size", settings.llm.embedding_batch_size
-        ),
-        "indexing_features": indexing_features,
-        "index_metadata": {
-            "experiment_name": experiment.get("metadata", {}).get("name"),
-            "experiment_file": experiment.get("experiment_file"),
-            "experiment_config_hash": experiment.get("experiment_config_hash"),
-            "index_config_hash": experiment.get("index_config_hash"),
-            "collection_name": embedding_index.get(
-                "collection_name", settings.storage.collection_name
-            ),
-            "embedding_model": embedding_index.get("embedding_model", settings.llm.embedding_model),
-            "embedding_batch_size": embedding_index.get(
-                "embedding_batch_size", settings.llm.embedding_batch_size
-            ),
-            "semantic_weight": embedding_index.get("semantic_weight", 0.6),
-            "keyword_weight": embedding_index.get("keyword_weight", 0.2),
-            "boost_weight": embedding_index.get("boost_weight", 0.2),
-            "page_classification_enabled": ingestion.get("page_classification_enabled", True),
-            "index_only_classified_pages": ingestion.get("index_only_classified_pages", True),
-            "html_extractor_mode": ingestion.get("html_extractor_mode", "auto"),
-            "html_extractor_strategy": ingestion.get("html_extractor_strategy", "trafilatura_bs"),
-            "pdf_extractor_strategy": ingestion.get("pdf_extractor_strategy", "pypdf_pdfplumber"),
-            "pdf_table_extractor": ingestion.get("pdf_table_extractor", "heuristic"),
-            "structured_chunking_enabled": ingestion.get("structured_chunking_enabled", True),
-            "source_chunk_configs": json.dumps(get_source_chunk_configs()),
-            **indexing_features,
-        },
-    }
-    set_vector_store_runtime_config(vector_config)
+    runtime_config = build_experiment_runtime_config(experiment)
+    apply_runtime_config(runtime_config)
     get_runtime_state().reset_vector_store_state()
     return {
         "ingestion": ingestion,
         "embedding_index": embedding_index,
-        "vector_store": vector_config,
+        "vector_store": (
+            runtime_config.vector_store.to_dict() if runtime_config.vector_store is not None else {}
+        ),
     }

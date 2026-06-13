@@ -66,7 +66,7 @@ The application uses a 3-layer config stack with `config/settings.yaml` as sourc
 | `.env` file | `DASHSCOPE_API_KEY=sk-...` | Medium |
 | `config/settings.yaml` | `llm: {model_name: qwen3.5-flash}` | Default |
 
-Legacy flat env var names (e.g., `MODEL_NAME`, `CORS_ALLOWED_ORIGINS`) are supported via `_LEGACY_FIELD_MAP` for backward compatibility.
+Environment overrides are expected to use the nested `APP__...` form (for example `APP__LLM__MODEL_NAME` and `APP__API__CORS_ALLOWED_ORIGINS`).
 
 ## Authentication
 

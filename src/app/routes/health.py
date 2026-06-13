@@ -14,8 +14,10 @@ def root():
 @router.get("/health")
 def health_check():
     runtime_status = get_runtime_status()
+    ready = bool(runtime_status["vector_store"]["initialized"])
     return {
-        "status": "healthy",
+        "status": "healthy" if ready else "degraded",
+        "ready": ready,
         "runtime": runtime_status["runtime"],
         "vector_store": runtime_status["vector_store"],
         "rate_limit": {
