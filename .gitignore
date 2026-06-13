@@ -33,6 +33,7 @@ logs/
 test-results/
 wandb/
 .coverage
+coverage.xml
 htmlcov/
 .hypothesis/
 .playwright-mcp/
