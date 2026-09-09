@@ -12,7 +12,7 @@ from src.ingestion.steps.download_web import (
     get_manifest_record_by_filename,
     get_manifest_record_by_logical_name,
 )
-from src.source_metadata import build_document_source_metadata
+from src.core.source_metadata import build_document_source_metadata
 
 
 def _is_index_only_classified_pages() -> bool:

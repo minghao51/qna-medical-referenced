@@ -242,7 +242,7 @@ def test_convert_main_computes_hashes_only_when_conversion_needed(monkeypatch, t
 
 
 def test_build_document_source_metadata_pdf_and_html_paths():
-    from src.source_metadata import build_document_source_metadata
+    from src.core.source_metadata import build_document_source_metadata
 
     pdf_meta = build_document_source_metadata(
         {"fallback_used_pages": 0},

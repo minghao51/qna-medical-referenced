@@ -25,7 +25,7 @@ from src.ingestion.indexing.keyword_index import (
 )
 from src.ingestion.indexing.search import rank_documents, reciprocal_rank_fusion
 from src.ingestion.indexing.text_utils import content_hash, sanitize_text, tokenize_text
-from src.source_metadata import (
+from src.core.source_metadata import (
     canonical_source_label,
     display_source_label,
     infer_domain,
