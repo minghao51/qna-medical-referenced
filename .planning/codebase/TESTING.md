@@ -111,7 +111,7 @@ tests/
 │   ├── test_thresholds.py
 │   ├── test_wandb_history.py
 │   ├── test_wandb_tracking.py
-│   └── ... (~50 files total)
+│   └── ... (65 files, flat — mirrored to package dirs in Phase 2)
 ├── integration/                         # Integration tests — DB, filesystem, HTTP
 │   ├── test_app_security.py
 │   ├── test_chat_multi_turn.py
@@ -138,7 +138,7 @@ tests/
 
 ### Test Grouping
 Tests are grouped into subdirectories by scope:
-- `tests/unit/` — fast, isolated tests (no I/O, no external deps) — ~50 files
+- `tests/unit/` — fast, isolated tests (no I/O, no external deps) — 65 files (flat layout; mirrored to package dirs in Phase 2)
 - `tests/integration/` — tests with DB, filesystem, or service stack — ~15 files
 - `tests/e2e/` — full end-to-end workflow tests — 2 files
 

@@ -1,5 +1,8 @@
 # Architecture
 
+> **Active refactor:** `docs/plans/20260910-structural-refactor-roadmap.md` (Phases 0–3).
+> Known violations marked below are scheduled there; this file is updated in the same PR as each change.
+
 ## Pattern
 
 **Layered Domain-Driven Design** with a FastAPI backend and SvelteKit frontend, following a pipeline-oriented architecture for RAG (Retrieval-Augmented Generation).
@@ -16,7 +19,7 @@ HTTP interface built on FastAPI. Contains routes, middleware, schemas, and error
 
 | Component | Location | Role |
 |-----------|----------|------|
-| Routes | `src/app/routes/` | REST API endpoint definitions (chat, health, history, evaluation) |
+| Routes | `src/app/routes/` | REST API endpoint definitions (chat, health, history, evaluation, config, experiments, documents — 7 routers mounted in `factory.py`) |
 | Middleware | `src/app/middleware/` | Cross-cutting concerns: auth (`APIKeyMiddleware`), rate limiting (`RateLimitMiddleware`), request tracing (`RequestIDMiddleware`) |
 | Schemas | `src/app/schemas/` | Pydantic request/response models |
 | Exceptions | `src/app/exceptions.py` | Domain exceptions (`AppError`, `UpstreamServiceError`, etc.) with FastAPI error handlers |
@@ -86,7 +89,11 @@ Offline data processing pipeline that transforms raw documents into searchable v
 | `search.py` | Cosine similarity, rank fusion, MMR diversification algorithms |
 | `text_utils.py` | Tokenization, acronym expansion, content hashing |
 | `migrate.py` | Migration utilities |
-| `vector_store.py` | Backward-compatibility shim re-exporting `ChromaVectorStore` |
+| `vector_store.py` | Backward-compatibility shim re-exporting `ChromaVectorStore` (deleted in Phase 1) |
+
+**Hamilton DAG tier** (`src/ingestion/components/`): thin DAG nodes (`01_download.py` … `06_embedding.py`) that delegate to the `steps/` implementations above. Files are digit-prefixed, so they **cannot be imported with normal syntax** — they are loaded via an `importlib` loop in `components/__init__.py`, and `pipeline.py` imports the private `_modules` list. This tier is renamed to `nodes/` with plain file names in Phase 1 (roadmap P1.2).
+
+> Stray shared module: `src/source_metadata.py` (URL sanitization + source metadata) sits at the `src/` root and is imported by both `ingestion/` and `rag/`. It moves to `src/core/` in Phase 1 (roadmap P1.1).
 
 ### 5. Infrastructure Layer (`src/infra/`)
 
@@ -145,10 +152,9 @@ Centralized settings management using Pydantic `BaseSettings` with YAML + env va
 
 | Module | Role |
 |--------|------|
-| `settings.py` | `Settings` class with 10 nested Pydantic models (AppConfig, ApiConfig, LLMConfig, StorageConfig, RetrievalConfig, HyDEConfig, EnrichmentConfig, RetryConfig, DeepEvalConfig, WandbConfig, ProductionConfig) — ~285 lines total. Loads from `config/settings.yaml` + env vars with `APP__` prefix |
+| `settings.py` | `Settings` class with nested Pydantic models (AppConfig, ApiConfig, LLMConfig, StorageConfig, RetrievalConfig, HyDEConfig, EnrichmentConfig, RetryConfig, DeepEvalConfig, WandbConfig, ProductionConfig) — ~224 lines. Loads from `config/settings.yaml` + env vars with `APP__` prefix |
 | `context.py` | `RuntimeState` — thread-safe mutable runtime state singleton for feature flags and runtime configuration |
 | `paths.py` | Canonical filesystem paths derived from settings |
-| `models/` | Split Pydantic model definitions (`api_config.py`, `llm_config.py`, `retrieval_config.py`, `storage_config.py`) |
 | `__init__.py` | Re-exports `settings` and path constants |
 
 **Config sources** (priority order):
@@ -269,7 +275,8 @@ src/
 ├── infra/        ← Infrastructure (DI, LLM clients, storage) — depends on config/
 ├── ingestion/    ← Data pipeline (download, convert, chunk, index) — depends on infra/, config/
 ├── rag/          ← Retrieval engine — depends on ingestion/, infra/, config/
-├── services/     ← Service abstractions (evaluation only) — depends on rag/, ingestion/, config/
+├── services/     ← Service abstractions (evaluation only) — depends on evals/ (folds into evals/ in Phase 1)
+├── source_metadata.py ← Shared URL/metadata helpers used by ingestion/ and rag/ (moves to core/ in Phase 1)
 └── usecases/     ← Use case orchestration — depends on rag/, infra/, app/
 ```
 
@@ -277,8 +284,8 @@ src/
 
 **Cross-boundary rules:**
 - `config/` never imports from other `src/` modules
-- `infra/` only depends on `config/`
+- `infra/` only depends on `config/` — **known violation**: `storage/file_chat_history_store.py:13` imports `StorageError` from `app/exceptions.py`; `usecases/chat.py:36` imports `UpstreamServiceError` from `app/` (fixed in Phase 1 P1.7, roadmap above)
 - `ingestion/` depends on `infra/` and `config/`
 - `rag/` depends on `ingestion/`, `infra/`, and `config/`
 - `app/` depends on `usecases/`, `infra/`, `rag/`, and `config/`
-- `services/` is an emerging abstraction layer that wraps `rag/` and `ingestion/`
+- `services/` currently depends on `evals/` only (artifact reading for the evaluation route); it is not a wrapper over `rag/` or `ingestion/`
