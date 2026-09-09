@@ -29,7 +29,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from src.app.schemas import EvaluateSingleRequest
-from src.services.evaluation_service import EvaluationService
+from src.evals.artifact_service import EvaluationService
 
 logger = logging.getLogger(__name__)
 

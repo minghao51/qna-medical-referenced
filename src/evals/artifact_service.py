@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,8 @@ from src.evals.assessment.l6_contract import (
     L6_ANSWER_QUALITY_ROWS,
     SUMMARY_L6_METRICS_KEY,
 )
-from src.services.base_service import BaseService
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=256)
@@ -20,7 +22,7 @@ def _read_json_cached(path_str: str, mtime_ns: int, size: int) -> Any:
     return json.loads(Path(path_str).read_text(encoding="utf-8"))
 
 
-class EvaluationService(BaseService):
+class EvaluationService:
     """Load and shape evaluation artifacts from the filesystem."""
 
     def __init__(
@@ -29,7 +31,6 @@ class EvaluationService(BaseService):
         latest_pointer: Path,
         comprehensive_ablation_dir: Path | None = None,
     ) -> None:
-        super().__init__()
         self._evals_dir = evals_dir
         self._latest_pointer = latest_pointer
         self._comprehensive_ablation_dir = comprehensive_ablation_dir or Path(
@@ -55,7 +56,7 @@ class EvaluationService(BaseService):
             stat = path.stat()
             return _read_json_cached(str(path.resolve()), stat.st_mtime_ns, stat.st_size)
         except Exception as exc:
-            self.logger.warning("Failed to read JSON from %s: %s", path, exc)
+            logger.warning("Failed to read JSON from %s: %s", path, exc)
             return {}
 
     def read_retrieval_metrics(self, run_dir: Path) -> dict[str, Any]:
@@ -112,7 +113,7 @@ class EvaluationService(BaseService):
                     }
                 )
             except Exception as exc:
-                self.logger.debug("Failed to read summary for run %s: %s", run_dir.name, exc)
+                logger.debug("Failed to read summary for run %s: %s", run_dir.name, exc)
                 result.append({"run_dir": str(run_dir.name), "status": "error", "source": "local"})
         return result
 
@@ -348,7 +349,7 @@ class EvaluationService(BaseService):
             manifest = self.read_json_if_exists(manifest_path)
             metrics = self.read_json_if_exists(metrics_path)
             if not isinstance(manifest, dict) or not isinstance(metrics, dict):
-                self.logger.warning("Failed to load run %s", run_dir.name)
+                logger.warning("Failed to load run %s", run_dir.name)
                 continue
 
             variant = manifest.get("experiment", {}).get("variant") or manifest.get("variant_name")
@@ -502,5 +503,5 @@ class EvaluationService(BaseService):
             try:
                 results.append(json.loads(line))
             except Exception as exc:
-                self.logger.debug("Failed to parse L6 result line: %s", exc)
+                logger.debug("Failed to parse L6 result line: %s", exc)
         return {"run_dir": run_dir_name, "results": results}
