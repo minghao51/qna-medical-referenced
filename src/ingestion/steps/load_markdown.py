@@ -12,12 +12,7 @@ from src.ingestion.steps.download_web import (
     get_manifest_record_by_filename,
     get_manifest_record_by_logical_name,
 )
-from src.source_metadata import (
-    canonical_source_label,
-    infer_domain,
-    infer_domain_type,
-    normalize_source_class,
-)
+from src.source_metadata import build_document_source_metadata
 
 
 def _is_index_only_classified_pages() -> bool:
@@ -57,24 +52,12 @@ class MarkdownLoader:
                 # Try by logical_name (md file stem)
                 manifest_record = get_manifest_record_by_logical_name(md_file.stem)
 
-            metadata = (artifact or {}).get("metadata", {}).copy()
-            if manifest_record:
-                metadata["logical_name"] = manifest_record.get("logical_name")
-                metadata["source_url"] = manifest_record.get("url")
-            metadata["source_type"] = "html"
-            metadata["domain"] = infer_domain(metadata.get("source_url"))
-            metadata["source_class"] = normalize_source_class(
-                md_file.name,
+            metadata = build_document_source_metadata(
+                (artifact or {}).get("metadata"),
+                source=md_file.name,
                 source_type="html",
-                explicit_class=metadata.get("source_class"),
-                page_type=metadata.get("page_type"),
-                logical_name=metadata.get("logical_name"),
-                domain=metadata.get("domain"),
+                manifest_record=manifest_record,
             )
-            metadata["canonical_label"] = canonical_source_label(
-                md_file.name, metadata.get("logical_name")
-            )
-            metadata["domain_type"] = infer_domain_type(metadata.get("domain"))
 
             documents.append(
                 {

@@ -56,7 +56,6 @@ class HTMLProcessorConfig:
     """HTML processing configuration."""
 
     extractor_strategy: str = "trafilatura_bs"
-    chain_depth: int | None = None
     page_classification_enabled: bool = True
     extractor_mode: str = "auto"
 
@@ -112,7 +111,6 @@ def get_html_processor_config() -> HTMLProcessorConfig:
     )
 
 
-EXTRACTOR_CHAIN_DEPTH: int | None = None
 DATA_DIR = DATA_RAW_DIR
 
 _REMOVAL_SELECTORS = [
@@ -335,8 +333,14 @@ def _boilerplate_ratio(text: str) -> float:
     return hits / max(1, len(lowered))
 
 
-def _fallback_extract(html_content: str) -> dict[str, Any]:
-    soup = BeautifulSoup(html_content, "html.parser")
+def _fallback_extract(html_content: str, soup: BeautifulSoup | None = None) -> dict[str, Any]:
+    """Extract structured content with BeautifulSoup.
+
+    ``soup`` allows callers that already parsed ``html_content`` (e.g. for page
+    classification) to pass the soup through instead of re-parsing the HTML.
+    """
+    if soup is None:
+        soup = BeautifulSoup(html_content, "html.parser")
     _remove_noise(soup)
     visible_text = _visible_text(soup)
     page_type = _classify_page(soup, visible_text)
@@ -349,6 +353,24 @@ def _fallback_extract(html_content: str) -> dict[str, Any]:
         "structured_blocks": blocks,
         "markdown": markdown,
     }
+
+
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
+
+
+def _rewrite_markdown_links(line: str) -> str:
+    """Strip tracking params from every ``[text](url)`` link on the line.
+
+    The URL pattern keeps one level of balanced parentheses (e.g.
+    ``https://en.wikipedia.org/wiki/Diabetes_(disambiguation)``) and consumes
+    at most the single unbalanced ``)`` that closes the markdown link, so
+    trailing text like ``](url_(note)) ...`` is never mangled.
+    """
+
+    def _clean(match: re.Match[str]) -> str:
+        return f"[{match.group(1)}]({_strip_tracking(match.group(2))})"
+
+    return _MD_LINK_RE.sub(_clean, line)
 
 
 def _should_use_fallback(primary_markdown: str, page_type: str, html_content: str) -> bool:
@@ -404,17 +426,20 @@ def convert_html_to_md(
         return None
 
     html_content = html_path.read_text(encoding="utf-8", errors="ignore")
+    # Parse once: the soup is reused for classification AND the fallback
+    # extraction below instead of re-parsing the same HTML.
     raw_soup = BeautifulSoup(html_content, "html.parser")
     page_type = _classify_page(raw_soup, _visible_text(raw_soup))
 
     cascade_markdown, cascade_meta, cascade_depth = _extract_markdown_cascade(html_content)
 
-    fallback = _fallback_extract(html_content)
+    fallback = _fallback_extract(html_content, soup=raw_soup)
     blocks = list(fallback["structured_blocks"])
     if repeated_hashes:
         blocks = _drop_repeated_boilerplate(blocks, repeated_hashes)
-    fallback["structured_blocks"] = blocks
-    fallback["markdown"] = _markdown_from_blocks(blocks)
+        # Re-render only when the boilerplate filter actually changed the blocks.
+        fallback["structured_blocks"] = blocks
+        fallback["markdown"] = _markdown_from_blocks(blocks)
 
     selected_extractor = cascade_meta.get("extractor_used", "beautifulsoup")
 
@@ -435,11 +460,8 @@ def convert_html_to_md(
     cleaned_lines: list[str] = []
     prev_empty = False
     for line in lines:
-        normalized = line.strip()
-        if normalized.startswith("[") and "](" in normalized:
-            link_text = normalized.split("](", 1)[0].lstrip("[")
-            link_url = normalized.split("](", 1)[1].rstrip(")")
-            line = f"[{link_text}]({_strip_tracking(link_url)})"
+        if line.strip().startswith("[") and "](" in line:
+            line = _rewrite_markdown_links(line)
         is_empty = not line.strip()
         if is_empty and prev_empty:
             continue
@@ -546,26 +568,26 @@ def main(force: bool = False):
     logger.info("Data directory: %s", DATA_DIR)
 
     html_files = get_html_files()
-    repeated_hashes = _compute_global_boilerplate_hashes(html_files)
+    # BS4-parsing every HTML file for global boilerplate hashes is expensive;
+    # skip it entirely when nothing will be converted (all .md already exist).
+    needs_conversion = force or any(
+        not html_path.with_suffix(".md").exists() for html_path in html_files
+    )
+    repeated_hashes = _compute_global_boilerplate_hashes(html_files) if needs_conversion else set()
     logger.info("Found %d HTML files", len(html_files))
 
     converted = 0
     skipped = 0
 
     for html_path in html_files:
-        md_path = html_path.with_suffix(".md")
-
-        if md_path.exists() and not force:
-            logger.info("Skipping (MD exists): %s", html_path.name)
-            skipped += 1
-            continue
-
-        logger.info("Converting: %s", html_path.name)
+        # convert_html_to_md returning None means "markdown already exists and
+        # not forced" — the single source of truth for skip accounting.
         result = convert_html_to_md(html_path, force=force, repeated_hashes=repeated_hashes)
         if result:
-            logger.info("  -> Saved: %s", result.name)
+            logger.info("Converted: %s -> %s", html_path.name, result.name)
             converted += 1
         else:
+            logger.info("Skipped (markdown exists): %s", html_path.name)
             skipped += 1
 
     logger.info("=" * 60)

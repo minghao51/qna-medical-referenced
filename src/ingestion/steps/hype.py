@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from src.ingestion.steps._utils import _weighted_sample_chunks
 
-if False:
+if TYPE_CHECKING:
     from src.infra.llm.qwen_client import QwenClient
 
 logger = logging.getLogger(__name__)

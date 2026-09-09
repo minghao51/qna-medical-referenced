@@ -124,6 +124,7 @@ async def _enrich_chunk_batch(
     client: QwenClient,
     enable_keywords: bool,
     enable_summaries: bool,
+    semaphore: asyncio.Semaphore,
 ) -> dict[str, dict[str, Any]]:
     """Enrich a batch of chunks with keywords and/or summaries.
 
@@ -132,6 +133,7 @@ async def _enrich_chunk_batch(
         client: QwenClient for LLM generation
         enable_keywords: Whether to extract keywords
         enable_summaries: Whether to generate summaries
+        semaphore: Caps concurrent LLM calls across all in-flight batches
 
     Returns:
         Dict mapping chunk_id -> {"keywords": [...], "summary": "..."}
@@ -139,7 +141,7 @@ async def _enrich_chunk_batch(
     results: dict[str, dict[str, Any]] = {}
 
     # Run synchronous generate in executor threads for concurrency
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     tasks = []
     for chunk in chunks_batch:
         prompt = ENRICH_PROMPT_TEMPLATE.format(chunk=chunk["content"])
@@ -147,8 +149,9 @@ async def _enrich_chunk_batch(
 
         async def generate_with_timeout(prompt=prompt, chunk_id=chunk_id) -> str:
             try:
-                async with asyncio.timeout(30):  # 30s timeout per chunk
-                    return await loop.run_in_executor(None, client.generate, prompt, "")
+                async with semaphore:
+                    async with asyncio.timeout(30):  # 30s timeout per chunk
+                        return await loop.run_in_executor(None, client.generate, prompt, "")
             except TimeoutError:
                 logger.warning("Enrichment timeout for chunk %s", chunk_id)
                 return ""
@@ -223,11 +226,23 @@ async def enrich_chunks(
     enrichment_results: dict[str, dict[str, Any]] = {}
     errors = 0
 
-    for i in range(0, len(sampled_chunks), ENRICH_BATCH_SIZE):
-        batch = sampled_chunks[i : i + ENRICH_BATCH_SIZE]
-        batch_results = await _enrich_chunk_batch(batch, client, enable_keywords, enable_summaries)
-        enrichment_results.update(batch_results)
-        errors += len(batch) - len(batch_results)
+    # Batches share one semaphore (sized like the old per-batch gather, so the
+    # max number of concurrent LLM calls — i.e. rate limiting — is unchanged)
+    # but now run concurrently instead of strictly one batch at a time.
+    semaphore = asyncio.Semaphore(max(1, ENRICH_BATCH_SIZE))
+    batches = [
+        sampled_chunks[i : i + ENRICH_BATCH_SIZE]
+        for i in range(0, len(sampled_chunks), ENRICH_BATCH_SIZE)
+    ]
+    batch_results = await asyncio.gather(
+        *(
+            _enrich_chunk_batch(batch, client, enable_keywords, enable_summaries, semaphore)
+            for batch in batches
+        )
+    )
+    for batch, batch_result in zip(batches, batch_results, strict=False):
+        enrichment_results.update(batch_result)
+        errors += len(batch) - len(batch_result)
 
     logger.info(
         f"Enrichment complete: {len(enrichment_results)} chunks enriched, "

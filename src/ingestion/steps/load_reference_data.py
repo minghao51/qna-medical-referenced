@@ -8,11 +8,15 @@ import logging
 from pathlib import Path
 
 from src.config import DATA_RAW_DIR
+from src.ingestion.steps.load_pdfs import read_pdf_with_pypdf
 from src.source_metadata import canonical_source_label
 
 logger = logging.getLogger(__name__)
 
 REQUIRED_CSV_COLUMNS = {"test_name", "normal_range", "unit", "category", "notes"}
+
+# Shared row rendering for both the flat-text and per-doc CSV loaders.
+REFERENCE_ROW_TEMPLATE = "{test_name}: {normal_range} {unit} ({category}) - {notes}"
 
 
 class ReferenceDataLoader:
@@ -41,8 +45,7 @@ class ReferenceDataLoader:
             if not self._validate_csv_columns(reader, csv_path):
                 return ""
             for row in reader:
-                line = f"{row['test_name']}: {row['normal_range']} {row['unit']} ({row['category']}) - {row['notes']}"
-                lines.append(line)
+                lines.append(REFERENCE_ROW_TEMPLATE.format(**row))
 
         return "Reference Ranges:\n" + "\n".join(lines)
 
@@ -58,7 +61,7 @@ class ReferenceDataLoader:
             if not self._validate_csv_columns(reader, csv_path):
                 return []
             for i, row in enumerate(reader):
-                content = f"{row['test_name']}: {row['normal_range']} {row['unit']} ({row['category']}) - {row['notes']}"
+                content = REFERENCE_ROW_TEMPLATE.format(**row)
                 docs.append(
                     {
                         "id": f"ref_range_{i}",
@@ -79,13 +82,10 @@ class ReferenceDataLoader:
         return docs
 
     def load_pdfs_text(self) -> str:
-        from pypdf import PdfReader
-
         texts = []
         for pdf_file in self.data_dir.glob("*.pdf"):
-            reader = PdfReader(str(pdf_file))
+            _, page_texts = read_pdf_with_pypdf(pdf_file)
             text = f"\n\n=== {pdf_file.name} ===\n\n"
-            for page in reader.pages:
-                text += page.extract_text() + "\n"
+            text += "".join(page_text + "\n" for page_text in page_texts)
             texts.append(text)
         return "\n".join(texts)

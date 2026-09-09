@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,43 @@ def canonical_source_label(source: str | None, logical_name: str | None = None) 
     if logical:
         return logical
     return fallback_source_label(source)
+
+
+def build_document_source_metadata(
+    base_metadata: dict[str, Any] | None,
+    *,
+    source: str,
+    source_type: str,
+    manifest_record: dict[str, Any] | None = None,
+    explicit_class: str | None = None,
+    page_type: str | None = None,
+) -> dict[str, Any]:
+    """Build the standard document-level source metadata shared by the loaders.
+
+    Applies manifest overrides (``logical_name`` / ``source_url``) on top of
+    ``base_metadata``, then derives ``source_type``, ``domain``,
+    ``source_class``, ``canonical_label`` and ``domain_type`` the same way for
+    every ingestion source (PDF, converted HTML, ...).
+    """
+    metadata = dict(base_metadata or {})
+    if manifest_record:
+        metadata["logical_name"] = manifest_record.get("logical_name")
+        metadata["source_url"] = manifest_record.get("url")
+    metadata["source_type"] = source_type
+    metadata["domain"] = infer_domain(metadata.get("source_url"))
+    metadata["source_class"] = normalize_source_class(
+        source,
+        source_type=source_type,
+        explicit_class=explicit_class
+        if explicit_class is not None
+        else metadata.get("source_class"),
+        page_type=page_type if page_type is not None else metadata.get("page_type"),
+        logical_name=metadata.get("logical_name"),
+        domain=metadata.get("domain"),
+    )
+    metadata["canonical_label"] = canonical_source_label(source, metadata.get("logical_name"))
+    metadata["domain_type"] = infer_domain_type(metadata.get("domain"))
+    return metadata
 
 
 def display_source_label(
