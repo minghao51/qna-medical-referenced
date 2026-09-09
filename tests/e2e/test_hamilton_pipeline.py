@@ -102,7 +102,7 @@ async def test_hamilton_pipeline_with_enrichment(hamilton_setup):
     Validates that HyPE question generation works through Hamilton DAG.
     """
     dr = build_ingestion_pipeline(
-        project_root=hamilton_setup.config.project_root,
+        project_root=hamilton_setup.config["project_root"],
         enable_hype=True,
         enable_keyword_extraction=False,
         enable_chunk_summaries=False,

@@ -5,52 +5,28 @@ Gold: enrich chunks with HyPE questions, keywords, and summaries.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
+
+from src.ingestion.steps._utils import run_async
 
 logger = logging.getLogger(__name__)
 
 
-def _run_async[T](coro: Coroutine[Any, Any, T]) -> T:
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-    if loop and loop.is_running():
-        import concurrent.futures
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, coro).result()
-    return asyncio.run(coro)
-
-
-def hype_questions_path(gold_data_path: str) -> str:
-    return str(Path(gold_data_path) / "hype_questions.parquet")
-
-
-def keyword_extractions_path(gold_data_path: str) -> str:
-    return str(Path(gold_data_path) / "keyword_extractions.parquet")
-
-
-def summaries_path(gold_data_path: str) -> str:
-    return str(Path(gold_data_path) / "summaries.parquet")
-
-
-def generate_hype_for_chunks(
+def hype_questions(
     all_chunks: list[dict[str, Any]],
     hype_config: dict[str, Any],
+    enable_hype: bool,
 ) -> dict[str, Any]:
     from src.infra.llm.qwen_client import get_client
     from src.ingestion.steps.hype import generate_hype_questions_for_chunks
 
-    if not all_chunks:
+    if not enable_hype or not all_chunks:
         return {}
 
     client = get_client()
-    hype_questions = _run_async(
+    return run_async(
         generate_hype_questions_for_chunks(
             chunks=all_chunks,
             client=client,
@@ -59,96 +35,61 @@ def generate_hype_for_chunks(
             questions_per_chunk=hype_config.get("questions_per_chunk", 2),
         )
     )
-    return hype_questions
 
 
-def apply_hype_questions(
+def enrichment_results(
+    all_chunks: list[dict[str, Any]],
+    enrichment_config: dict[str, Any],
+    enable_keyword_extraction: bool,
+    enable_chunk_summaries: bool,
+) -> dict[str, Any]:
+    from src.infra.llm.qwen_client import get_client
+    from src.ingestion.steps.enrich_chunks import enrich_chunks
+
+    if (not enable_keyword_extraction and not enable_chunk_summaries) or not all_chunks:
+        return {}
+
+    client = get_client()
+    return run_async(
+        enrich_chunks(
+            chunks=all_chunks,
+            client=client,
+            enable_keywords=enable_keyword_extraction,
+            enable_summaries=enable_chunk_summaries,
+            sample_rate=enrichment_config.get("sample_rate", 1.0),
+            max_chunks=enrichment_config.get("max_chunks", 500),
+        )
+    )
+
+
+def enriched_chunks(
     all_chunks: list[dict[str, Any]],
     hype_questions: dict[str, Any],
+    enrichment_results: dict[str, Any],
+    enable_keyword_extraction: bool,
+    enable_chunk_summaries: bool,
 ) -> list[dict[str, Any]]:
-    if not all_chunks or not hype_questions:
-        return all_chunks
-
-    hype_ids = set(hype_questions.keys())
-    for chunk in all_chunks:
-        if chunk["id"] in hype_ids:
-            chunk.setdefault("metadata", {})["hypothetical_questions"] = hype_questions[chunk["id"]]
-    return all_chunks
-
-
-def extract_keywords_for_chunks(
-    all_chunks: list[dict[str, Any]],
-    enrichment_config: dict[str, Any],
-) -> dict[str, Any]:
-    from src.infra.llm.qwen_client import get_client
-    from src.ingestion.steps.enrich_chunks import enrich_chunks
+    from src.ingestion.steps.enrich_chunks import apply_enrichment_to_chunks
 
     if not all_chunks:
-        return {}
+        return []
 
-    client = get_client()
-    results = _run_async(
-        enrich_chunks(
-            chunks=all_chunks,
-            client=client,
-            enable_keywords=True,
-            enable_summaries=False,
-            sample_rate=enrichment_config.get("sample_rate", 1.0),
-            max_chunks=enrichment_config.get("max_chunks", 500),
+    if hype_questions:
+        hype_ids = set(hype_questions.keys())
+        for chunk in all_chunks:
+            if chunk["id"] in hype_ids:
+                chunk.setdefault("metadata", {})["hypothetical_questions"] = hype_questions[
+                    chunk["id"]
+                ]
+
+    if enrichment_results:
+        apply_enrichment_to_chunks(
+            all_chunks,
+            enrichment_results,
+            enable_keywords=enable_keyword_extraction,
+            enable_summaries=enable_chunk_summaries,
         )
-    )
-    return results
 
-
-def apply_keyword_extractions(
-    all_chunks: list[dict[str, Any]],
-    keyword_extractions: dict[str, Any],
-) -> list[dict[str, Any]]:
-    if not all_chunks or not keyword_extractions:
-        return all_chunks
-
-    for chunk in all_chunks:
-        if chunk["id"] in keyword_extractions:
-            chunk.setdefault("metadata", {})["extracted_keywords"] = keyword_extractions[
-                chunk["id"]
-            ].get("keywords", [])
-    return all_chunks
-
-
-def generate_summaries_for_chunks(
-    all_chunks: list[dict[str, Any]],
-    enrichment_config: dict[str, Any],
-) -> dict[str, Any]:
-    from src.infra.llm.qwen_client import get_client
-    from src.ingestion.steps.enrich_chunks import enrich_chunks
-
-    if not all_chunks:
-        return {}
-
-    client = get_client()
-    results = _run_async(
-        enrich_chunks(
-            chunks=all_chunks,
-            client=client,
-            enable_keywords=False,
-            enable_summaries=True,
-            sample_rate=enrichment_config.get("sample_rate", 1.0),
-            max_chunks=enrichment_config.get("max_chunks", 500),
-        )
-    )
-    return results
-
-
-def apply_summaries(
-    all_chunks: list[dict[str, Any]],
-    summaries: dict[str, Any],
-) -> list[dict[str, Any]]:
-    if not all_chunks or not summaries:
-        return all_chunks
-
-    for chunk in all_chunks:
-        if chunk["id"] in summaries:
-            chunk.setdefault("metadata", {})["summary"] = summaries[chunk["id"]].get("summary", "")
     return all_chunks
 
 
@@ -158,26 +99,17 @@ def write_enriched_chunks(
 ) -> dict[str, Any]:
     import polars as pl
 
-    from src.ingestion.schemas.gold_models import EnrichedChunkGold
-
     Path(gold_chunks_dir).mkdir(parents=True, exist_ok=True)
-    for chunk in enriched_chunks:
-        try:
-            EnrichedChunkGold(
-                id=chunk.get("id", ""),
-                source=chunk.get("source", ""),
-                source_type=chunk.get("source_type", ""),
-                page=chunk.get("page"),
-                content=chunk.get("content", ""),
-                content_type=chunk.get("content_type", "paragraph"),
-                section_path=chunk.get("section_path", []),
-                quality_score=chunk.get("quality_score", 1.0),
-                metadata=chunk.get("metadata", {}),
-            )
-        except Exception as e:
-            logger.warning("Gold validation failed for chunk %s: %s", chunk.get("id"), e)
     path = Path(gold_chunks_dir) / "enriched_chunks.parquet"
-    df = pl.DataFrame(enriched_chunks)
+    if not enriched_chunks:
+        logger.warning("No enriched chunks to write; skipping %s", path)
+        return {
+            "enriched_count": 0,
+            "path": str(path),
+        }
+    # An empty dict infers a field-less struct that parquet cannot store.
+    rows = [{**c, "metadata": c.get("metadata") or None} for c in enriched_chunks]
+    df = pl.DataFrame(rows)
     df.write_parquet(path)
     return {
         "enriched_count": len(enriched_chunks),

@@ -33,51 +33,30 @@ def parse_pdf_document(pdf_path: str) -> dict[str, Any]:
 
 
 def all_pdf_documents(
-    all_pdf_downloads: list[str],
+    download_pdf_files: list[str],
 ) -> list[dict[str, Any]]:
-    from src.ingestion.schemas.bronze_models import DownloadedFileBronze
-
     results = []
-    for pdf_path in all_pdf_downloads:
+    for pdf_path in download_pdf_files:
         try:
-            result = parse_pdf_document(pdf_path)
-            DownloadedFileBronze(
-                url=result.get("path", ""),
-                local_path=result.get("path", ""),
-                file_type="pdf",
-                download_status="parsed",
-            )
-            results.append(result)
+            results.append(parse_pdf_document(pdf_path))
         except Exception as e:
             logger.warning("Failed to parse PDF %s: %s", pdf_path, e)
     return results
 
 
 def all_markdown_documents(
-    all_web_downloads: list[str],
+    convert_html_to_markdown: list[str],
 ) -> list[dict[str, Any]]:
-    from src.ingestion.schemas.bronze_models import DownloadedFileBronze
     from src.ingestion.steps.load_markdown import get_markdown_documents
 
-    docs = get_markdown_documents()
-    results = []
-    for d in docs:
-        result = {
+    return [
+        {
             "path": d.get("source", ""),
-            "text": d.get("extracted_text", ""),
+            "text": d.get("content", ""),
             "source_type": "markdown",
         }
-        try:
-            DownloadedFileBronze(
-                url=result["path"],
-                local_path=result["path"],
-                file_type="html",
-                download_status="parsed",
-            )
-        except Exception as e:
-            logger.warning("Bronze validation failed for %s: %s", result["path"], e)
-        results.append(result)
-    return results
+        for d in get_markdown_documents()
+    ]
 
 
 def silver_documents_parquet_path(
@@ -94,8 +73,6 @@ def write_silver_documents(
 ) -> dict[str, Any]:
     import polars as pl
 
-    from src.ingestion.schemas.silver_models import ExtractedDocumentSilver, SourceMetadataSilver
-
     Path(silver_documents_dir).mkdir(parents=True, exist_ok=True)
 
     pdf_df = pl.DataFrame(all_pdf_documents)
@@ -108,38 +85,6 @@ def write_silver_documents(
         pdf_df.write_parquet(pdf_path)
     if len(md_df) > 0:
         md_df.write_parquet(md_path)
-
-    for doc in all_pdf_documents:
-        try:
-            ExtractedDocumentSilver(
-                id=str(Path(doc.get("path", "")).stem),
-                source=doc.get("path", ""),
-                source_type="pdf",
-                extracted_text=doc.get("text", ""),
-                metadata=SourceMetadataSilver(
-                    source_type="pdf",
-                    source_class="document",
-                    canonical_label="parsed_pdf",
-                ),
-            )
-        except Exception as e:
-            logger.warning("Silver validation failed for PDF %s: %s", doc.get("path"), e)
-
-    for doc in all_markdown_documents:
-        try:
-            ExtractedDocumentSilver(
-                id=str(Path(doc.get("path", "")).stem),
-                source=doc.get("path", ""),
-                source_type="markdown",
-                extracted_text=doc.get("text", ""),
-                metadata=SourceMetadataSilver(
-                    source_type="markdown",
-                    source_class="document",
-                    canonical_label="parsed_markdown",
-                ),
-            )
-        except Exception as e:
-            logger.warning("Silver validation failed for MD %s: %s", doc.get("path"), e)
 
     return {
         "pdf_count": len(pdf_df),

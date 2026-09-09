@@ -1,81 +1,52 @@
 """Hamilton components for data ingestion pipeline.
 
-Bronze layer: raw immutable downloads.
+Bronze layer: raw immutable downloads written flat into DATA_RAW_DIR (data/raw).
+
+Each node both performs its download/conversion side effect and returns the
+glob of files it is responsible for, so downstream nodes order after the writes.
+``skip_download`` suppresses the side effect while keeping the glob, which is
+how ``--skip-download`` reuses an existing raw corpus.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from pathlib import Path
+
+from src.config import DATA_RAW_DIR
+from src.ingestion.steps._utils import run_async
 
 logger = logging.getLogger(__name__)
 
 
-def _run_async(coro):
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-    if loop and loop.is_running():
-        import concurrent.futures
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, coro).result()
-    return asyncio.run(coro)
-
-
-def bronze_data_path(project_root: Path) -> str:
-    return str(project_root / "data" / "01_bronze")
-
-
-def downloads_dir(bronze_data_path: str) -> str:
-    return str(Path(bronze_data_path) / "downloads")
-
-
-def raw_pdfs_dir(downloads_dir: str) -> str:
-    return str(Path(downloads_dir) / "pdf")
-
-
-def raw_html_dir(downloads_dir: str) -> str:
-    return str(Path(downloads_dir) / "html")
-
-
-def raw_markdown_dir(downloads_dir: str) -> str:
-    return str(Path(downloads_dir) / "markdown")
-
-
-def artifacts_dir(bronze_data_path: str) -> str:
-    return str(Path(bronze_data_path) / "artifacts")
-
-
-def download_web_content(
-    downloads_dir: str,
-    data_path: str = "data/raw",
-) -> list[str]:
+def download_web_content(skip_download: bool) -> list[str]:
     from src.ingestion.steps.download_web import main as download_main
 
-    Path(downloads_dir).mkdir(parents=True, exist_ok=True)
-    _run_async(download_main())
-    return [str(f) for f in Path(downloads_dir).glob("*.html")]
+    if not skip_download:
+        run_async(download_main())
+    return sorted(str(f) for f in DATA_RAW_DIR.glob("*.html"))
 
 
-def download_pdf_files(
-    raw_pdfs_dir: str,
-    data_path: str = "data/raw",
+def convert_html_to_markdown(
+    download_web_content: list[str],
+    force_html_convert: bool,
+    skip_download: bool,
 ) -> list[str]:
+    """Convert downloaded HTML to Markdown.
+
+    Takes ``download_web_content`` for ordering only (its value is the pre-
+    conversion html glob): the converter globs ``*.html`` itself, but must not
+    run until downloads have finished writing them.
+    """
+    from src.ingestion.steps.convert_html import main as convert_main
+
+    if not skip_download:
+        convert_main(force=force_html_convert)
+    return sorted(str(f) for f in DATA_RAW_DIR.glob("*.md"))
+
+
+def download_pdf_files(skip_download: bool) -> list[str]:
     from src.ingestion.steps.download_pdfs import main as download_pdfs_main
 
-    Path(raw_pdfs_dir).mkdir(parents=True, exist_ok=True)
-    _run_async(download_pdfs_main())
-    return [str(f) for f in Path(raw_pdfs_dir).glob("*.pdf")]
-
-
-def all_web_downloads(raw_html_dir: str) -> list[str]:
-    files = list(Path(raw_html_dir).glob("*.html"))
-    return [str(f) for f in files]
-
-
-def all_pdf_downloads(raw_pdfs_dir: str) -> list[str]:
-    files = list(Path(raw_pdfs_dir).glob("*.pdf"))
-    return [str(f) for f in files]
+    if not skip_download:
+        run_async(download_pdfs_main())
+    return sorted(str(f) for f in DATA_RAW_DIR.glob("*.pdf"))

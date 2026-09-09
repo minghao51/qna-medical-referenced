@@ -22,40 +22,39 @@ def gold_chunks_dir(gold_data_path: str) -> str:
     return str(Path(gold_data_path) / "chunks")
 
 
-def chunk_silver_documents(
-    silver_documents_dir: str,
-    source_type: str = "pdf",
+def _chunk_silver_documents(
+    parquet_path: str | None,
+    source_type: str,
 ) -> list[dict[str, Any]]:
-    from src.ingestion.schemas.silver_models import ExtractedDocumentSilver, SourceMetadataSilver
     from src.ingestion.steps.chunk_text import chunk_documents
 
-    if source_type == "pdf":
-        path = Path(silver_documents_dir) / "pdf_documents.parquet"
-    else:
-        path = Path(silver_documents_dir) / "markdown_documents.parquet"
-
-    if not path.exists():
+    if not parquet_path or not Path(parquet_path).exists():
         return []
 
-    df = pl.read_parquet(path)
+    df = pl.read_parquet(parquet_path)
     docs = df.to_dicts()
+    # The silver parquet schema (path/text/source_type) predates the chunker's
+    # doc-dict contract (source/content); adapt at this boundary.
     for doc in docs:
-        try:
-            ExtractedDocumentSilver(
-                id=str(Path(doc.get("path", "")).stem),
-                source=doc.get("path", ""),
-                source_type=source_type,
-                extracted_text=doc.get("text", ""),
-                metadata=SourceMetadataSilver(
-                    source_type=source_type,
-                    source_class="document",
-                    canonical_label="silver_to_gold",
-                ),
-            )
-        except Exception as e:
-            logger.warning("Silver validation failed for %s: %s", doc.get("path"), e)
+        doc.setdefault("source", doc.get("path", ""))
+        doc.setdefault("content", doc.get("text", ""))
     chunks = chunk_documents(docs)
     return chunks
+
+
+def pdf_chunks(write_silver_documents: dict[str, Any]) -> list[dict[str, Any]]:
+    """Chunk the silver PDF parquet written by ``write_silver_documents``.
+
+    Consuming the write node's output (rather than re-deriving the path from
+    config) makes the silver→gold handoff a real DAG edge, so executing any
+    gold-or-later node always parses and writes silver first.
+    """
+    return _chunk_silver_documents(write_silver_documents.get("pdf_path"), "pdf")
+
+
+def markdown_chunks(write_silver_documents: dict[str, Any]) -> list[dict[str, Any]]:
+    """Chunk the silver Markdown parquet written by ``write_silver_documents``."""
+    return _chunk_silver_documents(write_silver_documents.get("markdown_path"), "markdown")
 
 
 def all_chunks(
@@ -73,7 +72,15 @@ def write_gold_chunks(
 ) -> dict[str, Any]:
     Path(gold_chunks_dir).mkdir(parents=True, exist_ok=True)
     path = Path(gold_chunks_dir) / "raw_chunks.parquet"
-    df = pl.DataFrame(all_chunks)
+    if not all_chunks:
+        logger.warning("No chunks to write; skipping %s", path)
+        return {
+            "chunk_count": 0,
+            "path": str(path),
+        }
+    # An empty dict infers a field-less struct that parquet cannot store.
+    rows = [{**c, "metadata": c.get("metadata") or None} for c in all_chunks]
+    df = pl.DataFrame(rows)
     df.write_parquet(path)
     return {
         "chunk_count": len(all_chunks),
