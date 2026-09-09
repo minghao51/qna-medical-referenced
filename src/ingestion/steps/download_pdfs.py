@@ -8,15 +8,15 @@ Uses existing manifest from download_web.py for tracking.
 import asyncio
 import hashlib
 import logging
-import re
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
-
-import httpx
-import yaml
 
 from src.config import DATA_RAW_DIR
+from src.ingestion.steps._utils import (
+    download_with_retry,
+    load_sources_config,
+    register_manifest_record,
+    url_file_path,
+)
 from src.ingestion.steps.download_web import _load_manifest as _load_web_manifest
 from src.ingestion.steps.download_web import _manifest_indexes as _manifest_indexes_web
 from src.ingestion.steps.download_web import _manifest_lock
@@ -25,19 +25,16 @@ from src.ingestion.steps.download_web import normalize_url as normalize_url_web
 
 logger = logging.getLogger(__name__)
 
-MANIFEST_PATH = DATA_RAW_DIR / "download_manifest.json"
-SOURCES_CONFIG_PATH = Path(__file__).resolve().parents[3] / "config" / "sources.yaml"
+# Small bound so concurrent PDF downloads do not hammer the source hosts.
+_PDF_DOWNLOAD_CONCURRENCY = 4
 
-
-def _load_sources_config() -> dict:
-    if not SOURCES_CONFIG_PATH.exists():
-        return {}
-    with open(SOURCES_CONFIG_PATH, encoding="utf-8") as f:
-        return dict(yaml.safe_load(f) or {})
+_PDF_REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
 
 
 def _get_pdf_sources(group: str) -> list[tuple[str, str]]:
-    config = _load_sources_config()
+    config = load_sources_config()
     pdf = config.get("pdf_sources", {})
     entries = pdf.get(group, [])
     return [(e["url"], e["name"]) for e in entries if "url" in e and "name" in e]
@@ -48,13 +45,7 @@ def normalize_url(url: str) -> str:
 
 
 def get_file_path(url: str, extension: str = "pdf") -> Path:
-    url_hash = hashlib.md5(url.encode()).hexdigest()[:8]  # nosec B324
-    safe_name = re.sub(r"[^\w\-]", "_", url.split("/")[-1][:50])
-    if not safe_name or safe_name.endswith("_"):
-        safe_name = f"content_{url_hash}"
-    if not safe_name.endswith(f".{extension}"):
-        safe_name = f"{safe_name}.{extension}"
-    return cast(Path, DATA_RAW_DIR / safe_name)
+    return url_file_path(url, DATA_RAW_DIR, extension, include_hash_suffix=False)
 
 
 def _load_manifest() -> dict:
@@ -79,76 +70,31 @@ def _register_manifest_record(
     content_hash: str | None,
     status: str,
 ) -> None:
-    records = manifest.setdefault("records", [])
-    records.append(
-        {
-            "url": url,
-            "normalized_url": normalized_url,
-            "logical_name": logical_name,
-            "filename": file_path.name if file_path else None,
-            "content_hash": content_hash,
-            "status": status,
-            "record_type": "pdf_download",
-            "timestamp_utc": datetime.now(UTC).isoformat(),
-        }
+    register_manifest_record(
+        manifest=manifest,
+        url=url,
+        normalized_url=normalized_url,
+        logical_name=logical_name,
+        file_path=file_path,
+        content_hash=content_hash,
+        status=status,
+        extra_fields={"record_type": "pdf_download"},
     )
-
-
-def _is_transient_error(exc: Exception) -> bool:
-    if isinstance(exc, httpx.HTTPStatusError):
-        return bool(exc.response.status_code >= 500)
-    if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError)):
-        return True
-    return False
 
 
 async def download_pdf(url: str, timeout: int = 60, max_retries: int = 3) -> bytes | None:
     """Download PDF content from URL with retry for transient errors."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=headers) as client:
-        for attempt in range(max_retries):
-            try:
-                response = await client.get(url)
-                response.raise_for_status()
-                content_type = response.headers.get("content-type", "")
-                looks_like_pdf = response.content.startswith(b"%PDF")
-                if "pdf" not in content_type.lower() and not looks_like_pdf:
-                    logger.warning("Expected PDF but got %s for %s", content_type, url)
-                    return None
-                return bytes(response.content)
-            except httpx.HTTPStatusError as e:
-                if _is_transient_error(e) and attempt < max_retries - 1:
-                    delay = 2**attempt
-                    logger.warning(
-                        "Transient HTTP error (attempt %d/%d) for %s, retrying in %ds: %s",
-                        attempt + 1,
-                        max_retries,
-                        url,
-                        delay,
-                        e,
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-                logger.warning("HTTP error downloading %s: %s", url, e)
-                return None
-            except httpx.RequestError as e:
-                if _is_transient_error(e) and attempt < max_retries - 1:
-                    delay = 2**attempt
-                    logger.warning(
-                        "Transient request error (attempt %d/%d) for %s, retrying in %ds: %s",
-                        attempt + 1,
-                        max_retries,
-                        url,
-                        delay,
-                        e,
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-                logger.warning("Request error downloading %s: %s", url, e)
-                return None
+    response = await download_with_retry(
+        url, timeout=timeout, max_retries=max_retries, headers=_PDF_REQUEST_HEADERS
+    )
+    if response is None:
         return None
+    content_type = response.headers.get("content-type", "")
+    looks_like_pdf = response.content.startswith(b"%PDF")
+    if "pdf" not in content_type.lower() and not looks_like_pdf:
+        logger.warning("Expected PDF but got %s for %s", content_type, url)
+        return None
+    return bytes(response.content)
 
 
 async def download_pdf_if_not_exists(url: str, logical_name: str) -> Path | None:
@@ -217,28 +163,17 @@ async def download_pdf_if_not_exists(url: str, logical_name: str) -> Path | None
     return file_path
 
 
-async def extract_ace_guidelines_pdfs() -> list[Path]:
-    """Download ACE-HTA clinical guidelines as PDFs."""
-    pdfs = _get_pdf_sources("ace_guidelines")
+async def download_pdfs_group(sources_group: str) -> list[Path]:
+    """Download all configured PDFs for one sources.yaml group concurrently."""
+    pdfs = _get_pdf_sources(sources_group)
+    semaphore = asyncio.Semaphore(_PDF_DOWNLOAD_CONCURRENCY)
 
-    downloaded = []
-    for url, name in pdfs:
-        result = await download_pdf_if_not_exists(url, name)
-        if result:
-            downloaded.append(result)
-    return downloaded
+    async def _download_one(url: str, name: str) -> Path | None:
+        async with semaphore:
+            return await download_pdf_if_not_exists(url, name)
 
-
-async def extract_healthhub_pdfs() -> list[Path]:
-    """Download HealthHub PDFs."""
-    pdfs = _get_pdf_sources("healthhub")
-
-    downloaded = []
-    for url, name in pdfs:
-        result = await download_pdf_if_not_exists(url, name)
-        if result:
-            downloaded.append(result)
-    return downloaded
+    results = await asyncio.gather(*[_download_one(url, name) for url, name in pdfs])
+    return [r for r in results if r]
 
 
 def list_downloaded_pdfs() -> list[str]:
@@ -259,10 +194,10 @@ async def main():
     all_downloaded = []
 
     logger.info("[1/2] Downloading ACE-HTA Clinical Guidelines PDFs...")
-    all_downloaded.extend(await extract_ace_guidelines_pdfs())
+    all_downloaded.extend(await download_pdfs_group("ace_guidelines"))
 
     logger.info("[2/2] Downloading HealthHub PDFs...")
-    all_downloaded.extend(await extract_healthhub_pdfs())
+    all_downloaded.extend(await download_pdfs_group("healthhub"))
 
     logger.info("=" * 60)
     logger.info("Download complete! Total PDFs in data/raw: %d", len(list_downloaded_pdfs()))

@@ -59,6 +59,6 @@ def test_download_pdf_rejects_non_pdf_payload(monkeypatch):
         async def get(self, url: str):
             return FakeResponse()
 
-    monkeypatch.setattr(dp.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr("httpx.AsyncClient", FakeClient)
     content = asyncio.run(dp.download_pdf("https://example.com/file"))
     assert content is None
