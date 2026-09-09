@@ -2,7 +2,7 @@ import importlib
 
 
 def _import_enrich_module():
-    return importlib.import_module("src.ingestion.components.04_enrich")
+    return importlib.import_module("src.ingestion.nodes.enrich")
 
 
 class _FakeClient:

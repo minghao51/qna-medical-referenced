@@ -17,14 +17,6 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 
 from src.config import settings
-from src.ingestion.indexing.embedding import embed_texts, embed_texts_with_stats
-from src.ingestion.indexing.keyword_index import (
-    build_keyword_index,
-    build_term_frequencies,
-    keyword_score_with_extracted_keywords,
-)
-from src.ingestion.indexing.search import rank_documents, reciprocal_rank_fusion
-from src.ingestion.indexing.text_utils import content_hash, sanitize_text, tokenize_text
 from src.core.source_metadata import (
     canonical_source_label,
     display_source_label,
@@ -34,6 +26,14 @@ from src.core.source_metadata import (
     normalize_source_type,
     sanitize_external_url,
 )
+from src.ingestion.indexing.embedding import embed_texts, embed_texts_with_stats
+from src.ingestion.indexing.keyword_index import (
+    build_keyword_index,
+    build_term_frequencies,
+    keyword_score_with_extracted_keywords,
+)
+from src.ingestion.indexing.search import rank_documents, reciprocal_rank_fusion
+from src.ingestion.indexing.text_utils import content_hash, sanitize_text, tokenize_text
 
 logger = logging.getLogger(__name__)
 

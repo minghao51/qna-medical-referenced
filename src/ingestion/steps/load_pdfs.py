@@ -16,9 +16,9 @@ from pypdf import PdfReader
 
 from src.config import DATA_RAW_DIR
 from src.config.context import get_runtime_state
+from src.core.source_metadata import build_document_source_metadata
 from src.ingestion.artifacts import SourceArtifact, persist_source_artifact
 from src.ingestion.steps.download_web import get_manifest_record_by_filename
-from src.core.source_metadata import build_document_source_metadata
 
 logger = logging.getLogger(__name__)
 

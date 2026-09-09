@@ -45,9 +45,9 @@ def seeded_raw_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     raw.mkdir()
     (raw / "anemia_overview_a1b2c3d4.md").write_text(MARKDOWN_DOC, encoding="utf-8")
 
-    # Bronze globs (components) and the markdown/reference loaders read the
+    # Bronze globs (nodes) and the markdown/reference loaders read the
     # module-level DATA_RAW_DIR they imported; repoint all of them at tmp.
-    comp01 = importlib.import_module("src.ingestion.components.01_download")
+    comp01 = importlib.import_module("src.ingestion.nodes.download")
     monkeypatch.setattr(comp01, "DATA_RAW_DIR", raw)
     for module_name in ("load_markdown", "load_reference_data"):
         module = importlib.import_module(f"src.ingestion.steps.{module_name}")

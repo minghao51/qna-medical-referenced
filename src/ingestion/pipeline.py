@@ -16,7 +16,7 @@ from typing import Any
 from hamilton import driver
 from hamilton.execution import executors
 
-from src.ingestion.components import _modules
+from src.ingestion.nodes import NODE_MODULES
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ def build_ingestion_pipeline(
     """
     from src.config import settings
 
-    modules = _modules
+    modules = NODE_MODULES
 
     resolved_hype_config = hype_config or {
         "sample_rate": settings.hyde.hype_sample_rate,

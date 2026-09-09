@@ -8,8 +8,8 @@ import logging
 from pathlib import Path
 
 from src.config import DATA_RAW_DIR
-from src.ingestion.steps.load_pdfs import read_pdf_with_pypdf
 from src.core.source_metadata import canonical_source_label
+from src.ingestion.steps.load_pdfs import read_pdf_with_pypdf
 
 logger = logging.getLogger(__name__)
 
