@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-from src.evals import pipeline_assessment as pa
+from src.evals.assessment import (
+    orchestrator as pa,
+)
 from src.experiments.config import load_experiment_file, resolve_experiment_runs
 
 

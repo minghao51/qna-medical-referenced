@@ -1,7 +1,7 @@
 import pytest
 
+from src.ingestion.indexing.chroma_store import ChromaVectorStore
 from src.ingestion.indexing.text_utils import tokenize_text
-from src.ingestion.indexing.vector_store import VectorStore
 
 pytestmark = pytest.mark.live_api
 
@@ -9,7 +9,7 @@ pytestmark = pytest.mark.live_api
 class TestKeywordIndex:
     @pytest.fixture
     def vector_store(self):
-        store = VectorStore(
+        store = ChromaVectorStore(
             collection_name="test_keyword",
             semantic_weight=0.6,
             keyword_weight=0.2,

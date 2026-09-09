@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from src.evals import pipeline_assessment as pa
+from src.evals.assessment.retrieval_eval import evaluate_retrieval
 
 
 class _Doc:
@@ -50,7 +50,7 @@ def test_evaluate_retrieval_reports_dedup_and_unique_source_metrics(monkeypatch)
 
     monkeypatch.setattr(runtime, "retrieve_context_with_trace", fake_retrieve_context_with_trace)
 
-    rows, agg = pa.evaluate_retrieval(
+    rows, agg = evaluate_retrieval(
         [
             {
                 "query_id": "q1",
@@ -107,7 +107,7 @@ def test_evaluate_retrieval_reports_hyde_metrics(monkeypatch):
 
     monkeypatch.setattr(runtime, "retrieve_context_with_trace", fake_retrieve_hyde)
 
-    rows, agg = pa.evaluate_retrieval(
+    rows, agg = evaluate_retrieval(
         [
             {
                 "query_id": "q1",
@@ -157,7 +157,7 @@ def test_evaluate_retrieval_reports_no_hyde_when_disabled(monkeypatch):
 
     monkeypatch.setattr(runtime, "retrieve_context_with_trace", fake_retrieve_no_hyde)
 
-    rows, agg = pa.evaluate_retrieval(
+    rows, agg = evaluate_retrieval(
         [
             {
                 "query_id": "q1",
@@ -211,7 +211,7 @@ def test_evaluate_retrieval_reports_medical_expansion_and_rerank_metrics(monkeyp
 
     monkeypatch.setattr(runtime, "retrieve_context_with_trace", fake_retrieve)
 
-    rows, agg = pa.evaluate_retrieval(
+    rows, agg = evaluate_retrieval(
         [
             {
                 "query_id": "q2",

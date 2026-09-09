@@ -26,7 +26,7 @@ def _chunk_silver_documents(
     parquet_path: str | None,
     source_type: str,
 ) -> list[dict[str, Any]]:
-    from src.ingestion.steps.chunk_text import chunk_documents
+    from src.ingestion.steps.chunking import chunk_documents
 
     if not parquet_path or not Path(parquet_path).exists():
         return []

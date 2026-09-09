@@ -1,13 +1,13 @@
 import json
 
 from src.evals.checks.l5_index import assess_l5_index_quality
-from src.ingestion.indexing.vector_store import VectorStore
+from src.ingestion.indexing.chroma_store import ChromaVectorStore
 
 
 def test_vector_store_preserves_source_metadata_and_l5_distributions(tmp_path):
     vector_dir = tmp_path / "vectors"
     vector_dir.mkdir()
-    store = VectorStore(collection_name="test_source_metadata")
+    store = ChromaVectorStore(collection_name="test_source_metadata")
     store.embeddings_file = vector_dir / "test_source_metadata.json"
     store.clear()
 

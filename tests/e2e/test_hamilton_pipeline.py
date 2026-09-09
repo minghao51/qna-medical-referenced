@@ -9,7 +9,7 @@ from src.rag import initialize_runtime_index
 @pytest.fixture(scope="session")
 async def hamilton_setup(tmp_path):
     """Setup Hamilton pipeline for e2e tests."""
-    from src.ingestion.indexing.vector_store import get_vector_store
+    from src.ingestion.indexing.chroma_store import get_vector_store
 
     # Clear vector store for clean test
     vector_store = get_vector_store()
@@ -71,7 +71,7 @@ async def test_hamilton_e2e_complete_pipeline(hamilton_setup):
     assert embed_stats["inserted"] > 0
 
     # Verify vector store is populated
-    from src.ingestion.indexing.vector_store import get_vector_store
+    from src.ingestion.indexing.chroma_store import get_vector_store
 
     vector_store = get_vector_store()
     stats = vector_store.get_stats()

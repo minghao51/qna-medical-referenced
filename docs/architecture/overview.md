@@ -28,7 +28,7 @@ src/
     formatting.py         # source/context formatting helpers
 
   ingestion/              # Offline ingestion/indexing internals
-    pipeline.py           # compatibility shim to usecases.pipeline
+    pipeline.py           # (deleted) entrypoint is src/cli/ingest.py
     steps/                # download/convert/load/chunk/reference steps
       hype.py             # HyPE (index-time query expansion)
     indexing/             # vector store + embedding/search/persistence helpers

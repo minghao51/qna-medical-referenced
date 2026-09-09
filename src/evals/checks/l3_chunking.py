@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from src.evals.checks.shared import longest_suffix_prefix_overlap, safe_mean, safe_median
-from src.ingestion.steps.chunk_text import TextChunker
+from src.ingestion.steps.chunking import TextChunker
 from src.ingestion.steps.load_pdfs import get_documents
 
 

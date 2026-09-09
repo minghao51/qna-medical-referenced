@@ -19,6 +19,14 @@ from src.evals.artifacts import (
     update_run_index,
     write_latest_pointer,
 )
+from src.evals.checks import (
+    assess_l1_html_markdown_quality,
+    assess_l2_pdf_quality,
+    assess_l3_chunking_quality,
+    assess_l4_reference_quality,
+    assess_l5_index_quality,
+    audit_l0_download,
+)
 from src.evals.dataset_builder import build_retrieval_dataset
 from src.evals.schemas import AssessmentConfig, AssessmentResult, AssessmentRunParams
 from src.experiments.wandb_tracking import log_assessment_to_wandb
@@ -295,21 +303,34 @@ def _run_assessment_impl(
     store.write_json("manifest.json", manifest)
 
     l5_collection_name = experiment_runtime.get("vector_store", {}).get("collection_name")
-    if (
-        audit_l0_download_fn is None
-        or assess_l1_html_markdown_quality_fn is None
-        or assess_l2_pdf_quality_fn is None
-        or assess_l3_chunking_quality_fn is None
-        or assess_l4_reference_quality_fn is None
-        or assess_l5_index_quality_fn is None
-    ):
-        raise ValueError("Assessment stage functions must be provided")
-    audit_l0 = audit_l0_download_fn
-    assess_l1 = assess_l1_html_markdown_quality_fn
-    assess_l2 = assess_l2_pdf_quality_fn
-    assess_l3 = assess_l3_chunking_quality_fn
-    assess_l4 = assess_l4_reference_quality_fn
-    assess_l5 = assess_l5_index_quality_fn
+    # Stage checks default to the canonical implementations from
+    # src.evals.checks, resolved at call time so tests can monkeypatch the
+    # module attributes (the former src.evals.pipeline_assessment facade
+    # resolved them the same way).
+    audit_l0 = audit_l0_download_fn if audit_l0_download_fn is not None else audit_l0_download
+    assess_l1 = (
+        assess_l1_html_markdown_quality_fn
+        if assess_l1_html_markdown_quality_fn is not None
+        else assess_l1_html_markdown_quality
+    )
+    assess_l2 = (
+        assess_l2_pdf_quality_fn if assess_l2_pdf_quality_fn is not None else assess_l2_pdf_quality
+    )
+    assess_l3 = (
+        assess_l3_chunking_quality_fn
+        if assess_l3_chunking_quality_fn is not None
+        else assess_l3_chunking_quality
+    )
+    assess_l4 = (
+        assess_l4_reference_quality_fn
+        if assess_l4_reference_quality_fn is not None
+        else assess_l4_reference_quality
+    )
+    assess_l5 = (
+        assess_l5_index_quality_fn
+        if assess_l5_index_quality_fn is not None
+        else assess_l5_index_quality
+    )
     step_metrics = {
         "l0": audit_l0(),
         "l1": assess_l1(),
@@ -645,33 +666,24 @@ def run_assessment(
     assess_l3_chunking_quality_fn: Callable[[], dict[str, Any]] | None = None,
     assess_l4_reference_quality_fn: Callable[[], dict[str, Any]] | None = None,
     assess_l5_index_quality_fn: Callable[..., dict[str, Any]] | None = None,
-    build_retrieval_dataset_fn: Callable[..., dict[str, Any]] = build_retrieval_dataset,
-    evaluate_retrieval_fn: Callable[
-        ..., tuple[list[dict[str, Any]], dict[str, Any]]
-    ] = evaluate_retrieval,
-    evaluate_answers_fn: Callable[
-        ..., tuple[list[dict[str, Any]], dict[str, Any]]
-    ] = evaluate_answer_quality,
-    evaluate_thresholds_fn: Callable[..., list[dict[str, Any]]] = evaluate_thresholds,
-    git_head_fn: Callable[[], str | None] = git_head,
-    configure_runtime_for_experiment_fn: Callable[
-        [dict[str, Any] | None], dict[str, Any]
-    ] = configure_runtime_for_experiment,
-    initialize_runtime_index_fn: Callable[..., dict[str, Any]] = initialize_runtime_index,
-    log_assessment_to_wandb_fn: Callable[..., dict[str, Any]] = log_assessment_to_wandb,
-    run_retrieval_ablations_fn: Callable[..., dict[str, Any]] = run_retrieval_ablations,
-    run_hype_ablations_fn: Callable[..., dict[str, Any]] = run_hype_ablations,
-    run_keyword_ablations_fn: Callable[..., dict[str, Any]] = run_keyword_ablations,
-    run_keyword_ablations_with_reingest_fn: Callable[
-        ..., dict[str, Any]
-    ] = run_keyword_ablations_with_reingest,
-    run_hype_ablations_with_reingest_fn: Callable[
-        ..., dict[str, Any]
-    ] = run_hype_ablations_with_reingest,
-    run_reranking_ablations_fn: Callable[..., dict[str, Any]] = run_reranking_ablations,
-    run_diversity_sweep_fn: Callable[..., list[dict[str, Any]]] = run_diversity_sweep,
-    render_summary_fn: Callable[..., str] = render_summary,
-    sha256_file_fn: Callable[[str | Path | None], str | None] = sha256_file,
+    build_retrieval_dataset_fn: Callable[..., dict[str, Any]] | None = None,
+    evaluate_retrieval_fn: Callable[..., tuple[list[dict[str, Any]], dict[str, Any]]] | None = None,
+    evaluate_answers_fn: Callable[..., tuple[list[dict[str, Any]], dict[str, Any]]] | None = None,
+    evaluate_thresholds_fn: Callable[..., list[dict[str, Any]]] | None = None,
+    git_head_fn: Callable[[], str | None] | None = None,
+    configure_runtime_for_experiment_fn: Callable[[dict[str, Any] | None], dict[str, Any]]
+    | None = None,
+    initialize_runtime_index_fn: Callable[..., dict[str, Any]] | None = None,
+    log_assessment_to_wandb_fn: Callable[..., dict[str, Any]] | None = None,
+    run_retrieval_ablations_fn: Callable[..., dict[str, Any]] | None = None,
+    run_hype_ablations_fn: Callable[..., dict[str, Any]] | None = None,
+    run_keyword_ablations_fn: Callable[..., dict[str, Any]] | None = None,
+    run_keyword_ablations_with_reingest_fn: Callable[..., dict[str, Any]] | None = None,
+    run_hype_ablations_with_reingest_fn: Callable[..., dict[str, Any]] | None = None,
+    run_reranking_ablations_fn: Callable[..., dict[str, Any]] | None = None,
+    run_diversity_sweep_fn: Callable[..., list[dict[str, Any]]] | None = None,
+    render_summary_fn: Callable[..., str] | None = None,
+    sha256_file_fn: Callable[[str | Path | None], str | None] | None = None,
 ) -> AssessmentResult:
     params = AssessmentRunParams(
         artifact_dir=artifact_dir,
@@ -709,27 +721,67 @@ def run_assessment(
     )
     return _run_assessment_impl(
         params,
-        audit_l0_download_fn=audit_l0_download_fn,
-        assess_l1_html_markdown_quality_fn=assess_l1_html_markdown_quality_fn,
-        assess_l2_pdf_quality_fn=assess_l2_pdf_quality_fn,
-        assess_l3_chunking_quality_fn=assess_l3_chunking_quality_fn,
-        assess_l4_reference_quality_fn=assess_l4_reference_quality_fn,
-        assess_l5_index_quality_fn=assess_l5_index_quality_fn,
-        build_retrieval_dataset_fn=build_retrieval_dataset_fn,
-        evaluate_retrieval_fn=evaluate_retrieval_fn,
-        evaluate_answers_fn=evaluate_answers_fn,
-        evaluate_thresholds_fn=evaluate_thresholds_fn,
-        git_head_fn=git_head_fn,
-        configure_runtime_for_experiment_fn=configure_runtime_for_experiment_fn,
-        initialize_runtime_index_fn=initialize_runtime_index_fn,
-        log_assessment_to_wandb_fn=log_assessment_to_wandb_fn,
-        run_retrieval_ablations_fn=run_retrieval_ablations_fn,
-        run_hype_ablations_fn=run_hype_ablations_fn,
-        run_keyword_ablations_fn=run_keyword_ablations_fn,
-        run_keyword_ablations_with_reingest_fn=run_keyword_ablations_with_reingest_fn,
-        run_hype_ablations_with_reingest_fn=run_hype_ablations_with_reingest_fn,
-        run_reranking_ablations_fn=run_reranking_ablations_fn,
-        run_diversity_sweep_fn=run_diversity_sweep_fn,
-        render_summary_fn=render_summary_fn,
-        sha256_file_fn=sha256_file_fn,
+        audit_l0_download_fn=audit_l0_download_fn
+        if audit_l0_download_fn is not None
+        else audit_l0_download,
+        assess_l1_html_markdown_quality_fn=assess_l1_html_markdown_quality_fn
+        if assess_l1_html_markdown_quality_fn is not None
+        else assess_l1_html_markdown_quality,
+        assess_l2_pdf_quality_fn=assess_l2_pdf_quality_fn
+        if assess_l2_pdf_quality_fn is not None
+        else assess_l2_pdf_quality,
+        assess_l3_chunking_quality_fn=assess_l3_chunking_quality_fn
+        if assess_l3_chunking_quality_fn is not None
+        else assess_l3_chunking_quality,
+        assess_l4_reference_quality_fn=assess_l4_reference_quality_fn
+        if assess_l4_reference_quality_fn is not None
+        else assess_l4_reference_quality,
+        assess_l5_index_quality_fn=assess_l5_index_quality_fn
+        if assess_l5_index_quality_fn is not None
+        else assess_l5_index_quality,
+        build_retrieval_dataset_fn=build_retrieval_dataset_fn
+        if build_retrieval_dataset_fn is not None
+        else build_retrieval_dataset,
+        evaluate_retrieval_fn=evaluate_retrieval_fn
+        if evaluate_retrieval_fn is not None
+        else evaluate_retrieval,
+        evaluate_answers_fn=evaluate_answers_fn
+        if evaluate_answers_fn is not None
+        else evaluate_answer_quality,
+        evaluate_thresholds_fn=evaluate_thresholds_fn
+        if evaluate_thresholds_fn is not None
+        else evaluate_thresholds,
+        git_head_fn=git_head_fn if git_head_fn is not None else git_head,
+        configure_runtime_for_experiment_fn=configure_runtime_for_experiment_fn
+        if configure_runtime_for_experiment_fn is not None
+        else configure_runtime_for_experiment,
+        initialize_runtime_index_fn=initialize_runtime_index_fn
+        if initialize_runtime_index_fn is not None
+        else initialize_runtime_index,
+        log_assessment_to_wandb_fn=log_assessment_to_wandb_fn
+        if log_assessment_to_wandb_fn is not None
+        else log_assessment_to_wandb,
+        run_retrieval_ablations_fn=run_retrieval_ablations_fn
+        if run_retrieval_ablations_fn is not None
+        else run_retrieval_ablations,
+        run_hype_ablations_fn=run_hype_ablations_fn
+        if run_hype_ablations_fn is not None
+        else run_hype_ablations,
+        run_keyword_ablations_fn=run_keyword_ablations_fn
+        if run_keyword_ablations_fn is not None
+        else run_keyword_ablations,
+        run_keyword_ablations_with_reingest_fn=run_keyword_ablations_with_reingest_fn
+        if run_keyword_ablations_with_reingest_fn is not None
+        else run_keyword_ablations_with_reingest,
+        run_hype_ablations_with_reingest_fn=run_hype_ablations_with_reingest_fn
+        if run_hype_ablations_with_reingest_fn is not None
+        else run_hype_ablations_with_reingest,
+        run_reranking_ablations_fn=run_reranking_ablations_fn
+        if run_reranking_ablations_fn is not None
+        else run_reranking_ablations,
+        run_diversity_sweep_fn=run_diversity_sweep_fn
+        if run_diversity_sweep_fn is not None
+        else run_diversity_sweep,
+        render_summary_fn=render_summary_fn if render_summary_fn is not None else render_summary,
+        sha256_file_fn=sha256_file_fn if sha256_file_fn is not None else sha256_file,
     )

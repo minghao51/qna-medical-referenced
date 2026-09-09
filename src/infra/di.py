@@ -52,11 +52,11 @@ class ServiceContainer:
 
     def get_vector_store(self, config: dict[str, Any] | None = None) -> "VectorStoreProtocol":
         if self.vector_store is None or (config and config != self.vector_store_config):
-            from src.ingestion.indexing.vector_store import VectorStoreFactory
+            from src.ingestion.indexing.chroma_store import ChromaVectorStoreFactory
 
             effective_config = config or self.vector_store_config
             self.vector_store = cast(
-                "VectorStoreProtocol", VectorStoreFactory.get_vector_store(effective_config)
+                "VectorStoreProtocol", ChromaVectorStoreFactory.get_vector_store(effective_config)
             )
             if config:
                 self.vector_store_config = dict(config)
@@ -106,9 +106,9 @@ class ServiceContainer:
         self.html_processor_config = {}
         self.retrieval_config = {}
         self.vector_store_config = {}
-        from src.ingestion.indexing.vector_store import VectorStoreFactory
+        from src.ingestion.indexing.chroma_store import ChromaVectorStoreFactory
 
-        VectorStoreFactory.reset()
+        ChromaVectorStoreFactory.reset()
         reset_runtime_state()
         self.runtime_state = get_runtime_state()
 

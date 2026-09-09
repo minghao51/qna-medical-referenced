@@ -1,6 +1,6 @@
 import pytest
 
-from src.ingestion.steps.chunk_text import TextChunker, chunk_documents
+from src.ingestion.steps.chunking import TextChunker, chunk_documents
 
 
 class TestTextChunker:

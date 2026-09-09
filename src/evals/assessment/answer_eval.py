@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, cast
 from src.config import settings
 from src.evals.artifacts import to_serializable
 from src.evals.metrics import mean
-from src.ingestion.indexing.vector_store import get_vector_store_runtime_config
+from src.ingestion.indexing.chroma_store import get_vector_store_runtime_config
 
 logger = logging.getLogger(__name__)
 

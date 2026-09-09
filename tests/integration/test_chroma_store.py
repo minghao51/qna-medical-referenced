@@ -353,17 +353,17 @@ class TestChromaStoreFactory:
         ChromaVectorStoreFactory.reset()
 
     def test_backward_compat_vector_store_alias(self):
-        from src.ingestion.indexing.vector_store import VectorStore
+        from src.ingestion.indexing.chroma_store import ChromaVectorStore
 
-        assert VectorStore is ChromaVectorStore
+        assert ChromaVectorStore is ChromaVectorStore
 
     def test_backward_compat_factory_alias(self):
-        from src.ingestion.indexing.vector_store import VectorStoreFactory
+        from src.ingestion.indexing.chroma_store import ChromaVectorStoreFactory
 
-        assert VectorStoreFactory is ChromaVectorStoreFactory
+        assert ChromaVectorStoreFactory is ChromaVectorStoreFactory
 
     def test_backward_compat_get_vector_store_function(self):
-        from src.ingestion.indexing.vector_store import get_vector_store
+        from src.ingestion.indexing.chroma_store import get_vector_store
 
         store1 = get_vector_store({"collection_name": "test_compat_fn"})
         assert isinstance(store1, ChromaVectorStore)

@@ -1,7 +1,7 @@
 import json
 
 from src.config.context import reset_runtime_state
-from src.ingestion.indexing.vector_store import (
+from src.ingestion.indexing.chroma_store import (
     get_vector_store_runtime_config,
     set_vector_store_runtime_config,
 )

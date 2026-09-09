@@ -1,7 +1,7 @@
 import pytest
 
+from src.ingestion.indexing.chroma_store import ChromaVectorStore
 from src.ingestion.indexing.search import rank_documents
-from src.ingestion.indexing.vector_store import VectorStore
 from src.rag.diversification import diversify_results
 from src.rag.runtime import _extend_with_hype_questions
 
@@ -43,7 +43,7 @@ def testdiversify_results_can_be_disabled():
 
 
 def test_search_hypothetical_questions_only_returns_query_relevant_matches():
-    store = VectorStore(collection_name="test_hype_search")
+    store = ChromaVectorStore(collection_name="test_hype_search")
     store.clear()
     store.documents = {
         "ids": ["a", "b"],

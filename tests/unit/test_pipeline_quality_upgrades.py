@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from src.evals.dataset_builder import build_retrieval_dataset
-from src.ingestion.steps.chunk_text import TextChunker
+from src.ingestion.steps.chunking import TextChunker
 from src.ingestion.steps.convert_html import _compute_global_boilerplate_hashes, _fallback_extract
 from src.ingestion.steps.load_pdfs import PDFLoader
 

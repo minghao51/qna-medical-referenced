@@ -1,6 +1,6 @@
 import pytest
 
-from src.ingestion.indexing.vector_store import VectorStore
+from src.ingestion.indexing.chroma_store import ChromaVectorStore
 
 pytestmark = pytest.mark.live_api
 
@@ -8,7 +8,7 @@ pytestmark = pytest.mark.live_api
 class TestRetrieval:
     @pytest.fixture
     def vector_store(self):
-        store = VectorStore(
+        store = ChromaVectorStore(
             collection_name="test_retrieval",
             semantic_weight=0.6,
             keyword_weight=0.2,
@@ -111,7 +111,7 @@ class TestRetrieval:
         assert len(keyword_results) > 0
 
     def test_hybrid_vs_semantic_only(self, vector_store):
-        store_no_hybrid = VectorStore(
+        store_no_hybrid = ChromaVectorStore(
             collection_name="test_retrieval",
             semantic_weight=1.0,
             keyword_weight=0.0,
@@ -132,7 +132,7 @@ class TestRetrieval:
         store_no_hybrid.clear()
 
     def test_acronym_query_favors_keyword(self, vector_store):
-        store = VectorStore(
+        store = ChromaVectorStore(
             collection_name="test_acronym",
             semantic_weight=0.3,
             keyword_weight=0.5,
@@ -189,7 +189,7 @@ class TestRetrieval:
         assert isinstance(results, list)
 
     def test_empty_store_handling(self):
-        store = VectorStore(
+        store = ChromaVectorStore(
             collection_name="test_empty", semantic_weight=0.6, keyword_weight=0.2, boost_weight=0.2
         )
         store.clear()
@@ -201,7 +201,7 @@ class TestRetrieval:
         store.clear()
 
     def test_weight_parameterization(self, vector_store):
-        store_semantic = VectorStore(
+        store_semantic = ChromaVectorStore(
             collection_name="test_weights_sem",
             semantic_weight=1.0,
             keyword_weight=0.0,

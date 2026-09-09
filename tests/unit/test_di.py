@@ -38,7 +38,7 @@ class TestServiceContainer:
         container = ServiceContainer()
         container.html_processor_config = {"key": "val"}
         with (
-            patch("src.ingestion.indexing.vector_store.VectorStoreFactory") as mock_factory,
+            patch("src.ingestion.indexing.chroma_store.ChromaVectorStoreFactory") as mock_factory,
             patch("src.infra.di.reset_runtime_state"),
         ):
             mock_factory.reset.return_value = None
@@ -52,7 +52,7 @@ class TestServiceContainer:
     def test_get_vector_store_with_config(self):
         container = ServiceContainer()
         mock_store = MagicMock()
-        with patch("src.ingestion.indexing.vector_store.VectorStoreFactory") as mock_factory:
+        with patch("src.ingestion.indexing.chroma_store.ChromaVectorStoreFactory") as mock_factory:
             mock_factory.get_vector_store.return_value = mock_store
             result = container.get_vector_store({"collection": "test"})
             assert result is mock_store

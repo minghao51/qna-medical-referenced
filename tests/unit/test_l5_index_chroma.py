@@ -6,8 +6,7 @@ import pytest
 
 from src.config import settings
 from src.evals.checks.l5_index import assess_l5_index_quality
-from src.ingestion.indexing.chroma_store import ChromaVectorStoreFactory
-from src.ingestion.indexing.vector_store import VectorStore
+from src.ingestion.indexing.chroma_store import ChromaVectorStore, ChromaVectorStoreFactory
 
 TEST_COLLECTION = "test_l5_chroma_unit"
 
@@ -17,7 +16,7 @@ def chroma_store(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(settings.storage, "chroma_persist_directory", str(tmp_path / "chroma"))
     monkeypatch.setattr(settings.storage, "chroma_server_host", "")
     ChromaVectorStoreFactory.reset()
-    store = VectorStore(collection_name=TEST_COLLECTION)
+    store = ChromaVectorStore(collection_name=TEST_COLLECTION)
     store.clear()
 
     def fake_embed_with_stats(texts, batch_size=10, model=None):

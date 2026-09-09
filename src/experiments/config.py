@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 from src.config import settings
-from src.ingestion.steps.chunk_text import DEFAULT_SOURCE_CHUNK_CONFIGS
+from src.ingestion.steps.chunking import DEFAULT_SOURCE_CHUNK_CONFIGS
 from src.rag import get_runtime_retrieval_config
 
 SUPPORTED_SCHEMA_VERSIONS = {1}

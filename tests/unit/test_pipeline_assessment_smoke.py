@@ -4,8 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from src.evals import pipeline_assessment as pa
 from src.evals.artifacts import ArtifactStore, build_run_identity, to_serializable
+from src.evals.assessment import (
+    orchestrator as pa,
+)
 from src.evals.schemas import AssessmentConfig
 
 pytestmark = pytest.mark.smoke

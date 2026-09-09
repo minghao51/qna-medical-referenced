@@ -16,8 +16,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.ingestion.indexing.vector_store import VectorStore
-from src.ingestion.steps.chunk_text import chunk_documents
+from src.ingestion.indexing.chroma_store import ChromaVectorStore
+from src.ingestion.steps.chunking import chunk_documents
 from src.ingestion.steps.convert_html import (
     convert_html_to_md,
     get_html_extractor_strategy,
@@ -133,7 +133,7 @@ def test_retrieval_with_empty_vector_store():
     """Test that retrieval with empty vector store doesn't crash."""
     with tempfile.TemporaryDirectory():
         # Create empty vector store
-        store = VectorStore(collection_name="test_empty", embedding_model="text-embedding-v4")
+        store = ChromaVectorStore(collection_name="test_empty", embedding_model="text-embedding-v4")
 
         # Try search with no documents
         results = store.similarity_search("test query", top_k=5, search_mode="semantic_only")

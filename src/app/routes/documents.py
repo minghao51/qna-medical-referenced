@@ -10,7 +10,7 @@ from typing import Any, cast
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.config.context import get_runtime_state
-from src.ingestion.indexing.vector_store import get_vector_store
+from src.ingestion.indexing.chroma_store import get_vector_store
 
 logger = logging.getLogger(__name__)
 

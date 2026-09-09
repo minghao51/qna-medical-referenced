@@ -15,7 +15,7 @@ from src.ingestion.indexing.chroma_store import (
     get_vector_store,
     get_vector_store_runtime_config,
 )
-from src.ingestion.steps.chunk_text import chunk_documents
+from src.ingestion.steps.chunking import chunk_documents
 from src.ingestion.steps.convert_html import main as convert_html_main
 from src.ingestion.steps.load_markdown import get_markdown_documents
 from src.ingestion.steps.load_pdfs import get_documents

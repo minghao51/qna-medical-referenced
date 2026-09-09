@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.config import settings
-from src.ingestion.indexing.vector_store import set_vector_store_runtime_config
-from src.ingestion.steps.chunk_text import set_auto_select_strategy, set_source_chunk_configs
+from src.ingestion.indexing.chroma_store import set_vector_store_runtime_config
+from src.ingestion.steps.chunking import set_auto_select_strategy, set_source_chunk_configs
 from src.ingestion.steps.chunking.config import (
     resolve_source_chunk_configs,
     set_structured_chunking_enabled,

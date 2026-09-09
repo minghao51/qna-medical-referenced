@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from src.ingestion.indexing.vector_store import VectorStore
+from src.ingestion.indexing.chroma_store import ChromaVectorStore
 
 requires_live_api = pytest.mark.live_api
 
@@ -10,7 +10,7 @@ requires_live_api = pytest.mark.live_api
 class TestEmbedding:
     @pytest.fixture
     def vector_store(self):
-        store = VectorStore(
+        store = ChromaVectorStore(
             collection_name="test_embedding",
             semantic_weight=0.6,
             keyword_weight=0.2,
