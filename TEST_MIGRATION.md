@@ -179,6 +179,43 @@ pytest -m smoke
 - Update CI to run smoke tests on every PR, not just after other jobs
 - Monitor test execution times and adjust slow markers as needed
 
+## Vector Store Migration Status (JSON → ChromaDB)
+
+Separate from the test restructuring above: status of the one-time JSON → ChromaDB
+data migration script (`src/ingestion/indexing/migrate.py`).
+
+### Fixed
+
+- **Metadata loss (C5):** list-valued metadata fields (`section_path`,
+  `hypothetical_questions`, `extracted_keywords`) are now migrated as native
+  ChromaDB lists — exactly how `ChromaVectorStore.add_documents` writes them —
+  so HyPE retrieval (`search_hypothetical_questions`) and the
+  extracted-keywords BM25 boost behave identically on migrated data.
+  Proven by the round-trip test
+  `tests/integration/test_chroma_migration.py::TestMigrationRoundTrip`.
+- **`index_metadata` gap:** the legacy JSON snapshot's index metadata
+  (embedding model, config hash) is now written onto the Chroma collection
+  (same mechanism as `ChromaVectorStore.set_index_metadata`), so L5 eval
+  provenance survives migration.
+- **Corrupt snapshots abort:** ids/embeddings/documents length mismatches now
+  abort with an error listing the counts instead of silently padding missing
+  embeddings with `[]` and missing documents with `''`.
+- **`content_hash` realignment:** hashes are recomputed from the stored text
+  (matching `add_documents`); the legacy `content_hashes` JSON array is a
+  sorted set and was never aligned with ids.
+- **Scaffolding removed:** dead duplicate-skip logic and the broken `sys.path`
+  hack were removed from `migrate.py`; `src/ingestion/indexing/persistence.py`
+  (uncalled JSON load/save helpers) was deleted.
+
+### Remaining end-state work (NOT yet — only once no legacy JSON stores remain)
+
+- Delete `src/ingestion/indexing/migrate.py` (the one-time migration script itself).
+- Delete the `src/ingestion/indexing/vector_store.py` backward-compatibility
+  shim (re-export of `chroma_store`) and update its importers.
+- Delete the legacy `embeddings_file` JSON snapshot machinery in
+  `chroma_store.py` (`embeddings_file` property, `_persist_legacy_snapshot`,
+  `_remove_legacy_snapshot`).
+
 ---
 
-**Last Updated:** 2026-04-20
+**Last Updated:** 2026-09-09

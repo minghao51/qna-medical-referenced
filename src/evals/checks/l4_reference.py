@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import re
 from collections import Counter
 from pathlib import Path
@@ -28,34 +29,46 @@ def assess_l4_reference_quality(data_raw_dir: Path | None = None) -> dict[str, A
     duplicate_names: Counter[str] = Counter()
     complete_rows = 0
     parseable_ranges = 0
-    findings = []
+    findings: list[dict[str, Any]] = []
 
-    with open(csv_path, encoding="utf-8", errors="ignore") as handle:
-        reader = csv.DictReader(handle)
-        fieldnames = reader.fieldnames or []
-        missing_cols = sorted(REQUIRED_CSV_COLUMNS - set(fieldnames))
-        if missing_cols:
-            findings.append(
-                {"severity": "error", "message": f"Missing columns: {missing_cols}", "stage": "L4"}
-            )
-        for idx, row in enumerate(reader):
-            test_name = (row.get("test_name") or "").strip()
-            duplicate_names[test_name.lower()] += 1
-            values = {k: (row.get(k) or "").strip() for k in REQUIRED_CSV_COLUMNS}
-            is_complete = all(values.values())
-            complete_rows += int(is_complete)
-            range_value = values.get("normal_range", "")
-            parseable = bool(re.search(r"\d", range_value))
-            parseable_ranges += int(parseable)
-            records.append(
-                {
-                    "row_index": idx,
-                    "test_name": test_name,
-                    "is_complete": is_complete,
-                    "normal_range_parseable": parseable,
-                    "notes_empty": not bool(values.get("notes")),
-                }
-            )
+    raw = csv_path.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("utf-8", errors="replace")
+        findings.append(
+            {
+                "severity": "warning",
+                "message": "Reference CSV is not valid UTF-8; undecodable bytes were replaced with U+FFFD",
+                "stage": "L4",
+            }
+        )
+
+    reader = csv.DictReader(io.StringIO(text))
+    fieldnames = reader.fieldnames or []
+    missing_cols = sorted(REQUIRED_CSV_COLUMNS - set(fieldnames))
+    if missing_cols:
+        findings.append(
+            {"severity": "error", "message": f"Missing columns: {missing_cols}", "stage": "L4"}
+        )
+    for idx, row in enumerate(reader):
+        test_name = (row.get("test_name") or "").strip()
+        duplicate_names[test_name.lower()] += 1
+        values = {k: (row.get(k) or "").strip() for k in REQUIRED_CSV_COLUMNS}
+        is_complete = all(values.values())
+        complete_rows += int(is_complete)
+        range_value = values.get("normal_range", "")
+        parseable = bool(re.search(r"\d", range_value))
+        parseable_ranges += int(parseable)
+        records.append(
+            {
+                "row_index": idx,
+                "test_name": test_name,
+                "is_complete": is_complete,
+                "normal_range_parseable": parseable,
+                "notes_empty": not bool(values.get("notes")),
+            }
+        )
 
     row_count = len(records)
     duplicate_entries = sum(

@@ -22,12 +22,10 @@ from typing import Any, cast
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
+from src.config import settings
+from src.ingestion.indexing.text_utils import content_hash
 
-from src.config import settings  # noqa: E402
-
-MetadataValue = str | int | float | bool | None
+MetadataValue = str | int | float | bool | list[str] | list[int] | list[float] | list[bool]
 MetadataMap = dict[str, MetadataValue]
 
 
@@ -61,19 +59,27 @@ def migrate(
     embeddings = data.get("embeddings", [])
     documents = data.get("documents", data.get("contents", []))
     metadatas = data.get("metadatas", [])
-    content_hashes = data.get("content_hashes", [])
 
     if not ids:
         print("[WARN] JSON file is empty. Nothing to migrate.")
-        return {"attempted": 0, "inserted": 0, "skipped": 0}
+        return {"attempted": 0, "inserted": 0}
+
+    if len(embeddings) != len(ids) or len(documents) != len(ids):
+        print(f"[ERROR] Corrupt JSON snapshot {json_file}: array length mismatch.", file=sys.stderr)
+        print(
+            f"    ids: {len(ids)}, embeddings: {len(embeddings)}, documents: {len(documents)}",
+            file=sys.stderr,
+        )
+        print("    Aborting. Re-export the snapshot from the legacy store.", file=sys.stderr)
+        sys.exit(1)
 
     client = chromadb.PersistentClient(
         path=str(chroma_dir),
         settings=ChromaSettings(allow_reset=True),
     )
 
-    existing = client.get_or_create_collection(name=collection_name, embedding_function=None)
-    existing_count = existing.count()
+    collection = client.get_or_create_collection(name=collection_name, embedding_function=None)
+    existing_count = collection.count()
 
     if existing_count > 0:
         print(
@@ -86,57 +92,56 @@ def migrate(
         )
         sys.exit(1)
 
-    collection = client.get_or_create_collection(
-        name=collection_name,
-        embedding_function=None,
-    )
-
-    existing_ids_set = (
-        set(existing_ids) if (existing_ids := collection.get(include=[]).get("ids")) else set()
-    )
-
     to_insert_ids = []
     to_insert_embeddings = []
     to_insert_documents = []
     to_insert_metadatas: list[MetadataMap] = []
 
-    skipped_duplicate_id = 0
-    skipped_duplicate_content = 0
-
     for i, doc_id in enumerate(ids):
-        if doc_id in existing_ids_set:
-            skipped_duplicate_id += 1
-            continue
-        content_hash_val = content_hashes[i] if i < len(content_hashes) else None
         raw_meta = dict(metadatas[i]) if i < len(metadatas) else {}
+        # Mirror ChromaVectorStore.add_documents (chroma_store.py) so migrated
+        # metadata round-trips identically to pipeline-written metadata:
+        # keep scalars AND non-empty lists (section_path, hypothetical_questions,
+        # extracted_keywords, ...) — ChromaDB stores lists natively and
+        # chroma_store reads them back as lists (no JSON string encoding).
+        # Drop None values (Collection.add rejects them, unlike upsert) and
+        # empty lists (ChromaDB rejects those, add_documents drops them too).
         meta: MetadataMap = {}
         for k, v in raw_meta.items():
-            if isinstance(v, (bool, int, float, str)) or v is None:
-                meta[str(k)] = v
-        if content_hash_val:
-            meta["content_hash"] = content_hash_val
+            if v is None:
+                continue
+            if isinstance(v, list) and len(v) == 0:
+                continue
+            meta[str(k)] = v
+        # The JSON "content_hashes" array is a sorted set, NOT aligned with
+        # ids, so never index it positionally. Recompute from the stored
+        # (already sanitized) text — the exact computation add_documents uses.
+        meta["content_hash"] = content_hash(documents[i])
 
         to_insert_ids.append(doc_id)
-        to_insert_embeddings.append(embeddings[i] if i < len(embeddings) else [])
-        to_insert_documents.append(documents[i] if i < len(documents) else "")
-        for k, v in list(meta.items()):
-            if v is None:
-                del meta[k]
+        to_insert_embeddings.append(embeddings[i])
+        to_insert_documents.append(documents[i])
         to_insert_metadatas.append(meta)
 
     if to_insert_ids:
         collection.add(
             ids=to_insert_ids,
-            embeddings=to_insert_embeddings,
+            embeddings=cast(Any, to_insert_embeddings),
             documents=to_insert_documents,
             metadatas=cast(Any, to_insert_metadatas),
         )
 
+    # Persist index provenance (embedding model, config hash, ...) on the
+    # collection, exactly as ChromaVectorStore.set_index_metadata does
+    # (collection.modify(metadata=...)); l5_index.py recovers it from the
+    # Chroma collection metadata.
+    index_metadata = data.get("index_metadata") or {}
+    if index_metadata:
+        collection.modify(metadata=index_metadata)
+
     report = {
         "attempted": len(ids),
         "inserted": len(to_insert_ids),
-        "skipped_duplicate_id": skipped_duplicate_id,
-        "skipped_duplicate_content": skipped_duplicate_content,
         "json_file": str(json_file),
         "chroma_collection": collection_name,
         "chroma_persist_directory": str(chroma_dir),
@@ -146,10 +151,8 @@ def migrate(
     print("[OK] Migration complete.")
     print(f"    Attempted:  {report['attempted']}")
     print(f"    Inserted:   {report['inserted']}")
-    print(
-        f"    Skipped:    {report['skipped_duplicate_id']} duplicate IDs, "
-        f"{report['skipped_duplicate_content']} duplicate content"
-    )
+    if index_metadata:
+        print(f"    Index metadata: {sorted(index_metadata)}")
     print(f"    ChromaDB count after migration: {final_count}")
     print()
     print(f"    JSON file still at: {json_file}")

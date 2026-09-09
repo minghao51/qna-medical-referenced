@@ -62,13 +62,13 @@ def skip_without_real_apis(real_api_config):
 def temp_vector_store():
     """Create a temporary vector store for testing."""
     with tempfile.TemporaryDirectory() as tmpdir:
+        import src.config
+
         original_vector_dir = None
         try:
             # Import and save original vector dir
-            from src.ingestion.indexing import persistence
-
-            original_vector_dir = persistence.VECTOR_DIR
-            persistence.VECTOR_DIR = Path(tmpdir)
+            original_vector_dir = src.config.VECTOR_DIR
+            src.config.VECTOR_DIR = Path(tmpdir)
 
             # Create test collection
             test_config = {
@@ -87,7 +87,7 @@ def temp_vector_store():
         finally:
             # Restore original vector dir
             if original_vector_dir:
-                persistence.VECTOR_DIR = original_vector_dir
+                src.config.VECTOR_DIR = original_vector_dir
 
 
 @pytest.fixture
