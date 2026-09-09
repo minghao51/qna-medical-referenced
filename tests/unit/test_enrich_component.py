@@ -35,7 +35,7 @@ class TestHypeQuestions:
 
         monkeypatch.setattr("src.infra.llm.qwen_client.get_client", lambda: _FakeClient())
         monkeypatch.setattr(
-            "src.ingestion.steps.hype.generate_hype_questions_for_chunks", fake_generate
+            "src.ingestion.steps.hypothetical_questions.generate_hype_questions_for_chunks", fake_generate
         )
 
         chunks = [{"id": "c1", "content": "text"}]

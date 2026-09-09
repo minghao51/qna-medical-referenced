@@ -55,7 +55,7 @@ async def _build_index_from_sources(vector_store: VectorStoreProtocol) -> dict[s
         from src.infra.llm.qwen_client import get_client
 
     if indexing_features.get("enable_hype"):
-        from src.ingestion.steps.hype import generate_hype_questions_for_chunks
+        from src.ingestion.steps.hypothetical_questions import generate_hype_questions_for_chunks
 
         hype_questions = await generate_hype_questions_for_chunks(
             chunks=chunked_docs,

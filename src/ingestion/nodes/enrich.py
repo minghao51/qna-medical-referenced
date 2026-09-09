@@ -20,7 +20,7 @@ def hype_questions(
     enable_hype: bool,
 ) -> dict[str, Any]:
     from src.infra.llm.qwen_client import get_client
-    from src.ingestion.steps.hype import generate_hype_questions_for_chunks
+    from src.ingestion.steps.hypothetical_questions import generate_hype_questions_for_chunks
 
     if not enable_hype or not all_chunks:
         return {}
