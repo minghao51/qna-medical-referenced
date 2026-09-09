@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from src.ingestion.indexing.chroma_store import ChromaVectorStore
+from src.ingestion.indexing.chroma_store import _FILTERED_PAGE_SIZE, ChromaVectorStore
 
-pytestmark = pytest.mark.live_api
+
+# No live_api gate: the Qwen embedding API is stubbed via the
+# fake_chroma_embeddings fixture; ChromaDB itself runs for real.
+@pytest.fixture(autouse=True)
+def _offline_embeddings(fake_chroma_embeddings):
+    """Deterministic offline embeddings for every test in this module."""
 
 
 class TestChromaSearch:
@@ -167,6 +172,204 @@ class TestChromaSearch:
     def test_empty_query_returns_empty_or_all(self, store):
         results = store.similarity_search("", top_k=5)
         assert isinstance(results, list)
+
+    def test_keyword_score_computed_once_per_traced_query(self, store):
+        """The traced path must not run BM25 twice for the same query."""
+        calls = {"count": 0}
+        original = store._keyword_score
+
+        def counting(query):
+            calls["count"] += 1
+            return original(query)
+
+        store._keyword_score = counting
+        try:
+            _, trace = store.similarity_search_with_trace(
+                "cholesterol", top_k=3, search_mode="rrf_hybrid"
+            )
+        finally:
+            del store._keyword_score
+        assert calls["count"] == 1
+        assert "keyword_timing_ms" in trace
+
+
+class TestFilteredUnfilteredConsistency:
+    """A filter matching the whole corpus must not change rankings."""
+
+    @pytest.fixture
+    def store(self):
+        s = ChromaVectorStore(collection_name="test_chroma_filter_consistency")
+        s.clear()
+        s.add_documents(
+            [
+                {
+                    "id": "plain_doc",
+                    "content": "Aspirin therapy reduces fever and mild pain in adults.",
+                    "source": "plain.pdf",
+                    "page": 1,
+                },
+                {
+                    "id": "keyword_doc",
+                    "content": "Aspirin dosing guidance for secondary prevention.",
+                    "source": "kw.pdf",
+                    "page": 1,
+                    "metadata": {"extracted_keywords": ["Aspirin", "Fever"]},
+                },
+            ]
+        )
+        yield s
+        s.clear()
+
+    def test_bm25_ranking_identical_with_and_without_filter(self, store):
+        query = "aspirin fever"
+        unfiltered, _ = store.similarity_search_with_trace(query, top_k=2, search_mode="bm25_only")
+        filtered, _ = store.similarity_search_with_trace(
+            query, top_k=2, search_mode="bm25_only", filter={"page": 1}
+        )
+        # The extracted-keywords BM25 boost applies to filtered queries too,
+        # so the same candidate set ranks identically.
+        assert [r["id"] for r in filtered] == [r["id"] for r in unfiltered]
+        assert [r["keyword_score"] for r in filtered] == [r["keyword_score"] for r in unfiltered]
+
+    def test_semantic_ranking_identical_with_and_without_filter(self, store):
+        query = "aspirin fever"
+        unfiltered, _ = store.similarity_search_with_trace(
+            query, top_k=2, search_mode="semantic_only"
+        )
+        filtered, _ = store.similarity_search_with_trace(
+            query, top_k=2, search_mode="semantic_only", filter={"page": 1}
+        )
+        assert [r["id"] for r in filtered] == [r["id"] for r in unfiltered]
+        assert [r["semantic_score"] for r in filtered] == [r["semantic_score"] for r in unfiltered]
+
+
+class TestFilteredSearchPagination:
+    """Filtered candidate sets must not be truncated at one page."""
+
+    def test_filtered_search_beyond_page_cap(self):
+        store = ChromaVectorStore(collection_name="test_chroma_pagination")
+        store.clear()
+        total_docs = _FILTERED_PAGE_SIZE + 1
+        docs = [
+            {
+                "id": f"bulk_{i}",
+                "content": f"Bulk document number {i} about generic topics.",
+                "source": "bulk.pdf",
+                "page": 1,
+            }
+            for i in range(total_docs)
+        ]
+        store.add_documents(docs)
+        try:
+            results = store.similarity_search(
+                "bulk document generic",
+                top_k=total_docs,
+                search_mode="bm25_only",
+                filter={"source": "bulk.pdf"},
+            )
+            assert len(results) == total_docs
+            ids = [r["id"] for r in results]
+            assert len(set(ids)) == total_docs
+
+            # Same collection via the semantic filtered path: the full
+            # candidate set is fetched (paginated) and ranked.
+            semantic = store.similarity_search(
+                "bulk document generic",
+                top_k=total_docs,
+                search_mode="semantic_only",
+                filter={"source": "bulk.pdf"},
+            )
+            assert len(semantic) == total_docs
+        finally:
+            store.clear()
+
+
+class TestHypotheticalQuestionCache:
+    @pytest.fixture
+    def store(self):
+        s = ChromaVectorStore(collection_name="test_chroma_hype_cache")
+        s.clear()
+        yield s
+        s.clear()
+
+    def test_stored_questions_not_retokenized_per_query(self, store):
+        store.add_documents(
+            [
+                {
+                    "id": "hype_cache_doc",
+                    "content": "Content about statins.",
+                    "source": "hype_cache.pdf",
+                    "metadata": {
+                        "hypothetical_questions": [
+                            "What is the recommended statin dosage?",
+                            "When should statins be prescribed?",
+                        ]
+                    },
+                }
+            ]
+        )
+        calls = {"count": 0}
+        original = store._tokenize
+
+        def counting(text):
+            calls["count"] += 1
+            return original(text)
+
+        store._tokenize = counting
+        try:
+            store.search_hypothetical_questions("statin dosage")
+            after_first = calls["count"]
+            store.search_hypothetical_questions("statin dosage")
+        finally:
+            del store._tokenize
+        # Only the query is tokenized per search; the stored questions were
+        # tokenized once when the cache was built.
+        assert after_first == 1
+        assert calls["count"] == 2
+
+
+class TestListDocumentsPaginated:
+    def test_totals_and_counts_without_second_fetch(self):
+        store = ChromaVectorStore(collection_name="test_chroma_paged_totals")
+        store.clear()
+        store.add_documents(
+            [
+                {
+                    "id": "pdf1",
+                    "content": "Pdf one content.",
+                    "source": "a.pdf",
+                    "metadata": {"source_type": "pdf"},
+                },
+                {
+                    "id": "csv1",
+                    "content": "Csv one content.",
+                    "source": "b.csv",
+                    "metadata": {"source_type": "csv"},
+                },
+                {
+                    "id": "pdf2",
+                    "content": "Pdf two content.",
+                    "source": "c.pdf",
+                    "metadata": {"source_type": "pdf"},
+                },
+            ]
+        )
+        try:
+            all_page = store.list_documents_paginated(limit=2, offset=0)
+            assert all_page["total"] == 3
+            assert len(all_page["items"]) == 2
+            assert all_page["source_type_counts"] == {"pdf": 2, "csv": 1}
+
+            pdf_page = store.list_documents_paginated(limit=10, offset=0, source_type="pdf")
+            assert pdf_page["total"] == 2
+            assert {item["id"] for item in pdf_page["items"]} == {"pdf1", "pdf2"}
+            assert pdf_page["source_type_counts"] == {"pdf": 2}
+
+            second_page = store.list_documents_paginated(limit=2, offset=2)
+            assert second_page["total"] == 3
+            assert len(second_page["items"]) == 1
+        finally:
+            store.clear()
 
 
 class TestChromaMetadataFields:

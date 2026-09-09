@@ -21,41 +21,11 @@ from src.ingestion.indexing.embedding import embed_texts, embed_texts_with_stats
 from src.ingestion.indexing.keyword_index import (
     build_keyword_index,
     build_term_frequencies,
-    keyword_score,
     keyword_score_with_extracted_keywords,
 )
-
-logger = logging.getLogger(__name__)
-
-# Module-level cache for query embeddings (same query → same embedding).
-# Shared across all ChromaStore instances since embedding is model-deterministic.
-_embed_cache: dict[str, list[float]] = {}
-_EMBED_CACHE_MAX = 256
-
-
-def _get_cached_query_embedding(query: str, model: str) -> list[float]:
-    """Return embedding for query, using a simple size-bounded cache."""
-    cache_key = f"{model}::{query}"
-    if cache_key in _embed_cache:
-        return _embed_cache[cache_key]
-    result = embed_texts([query], batch_size=1, model=model)[0]
-    if len(_embed_cache) >= _EMBED_CACHE_MAX:
-        _embed_cache.pop(next(iter(_embed_cache)))
-    _embed_cache[cache_key] = result
-    return result
-
-
-from src.ingestion.indexing.search import (  # noqa: E402
-    cosine_similarity,
-    rank_documents,
-    reciprocal_rank_fusion,
-)
-from src.ingestion.indexing.text_utils import (  # noqa: E402
-    content_hash,
-    sanitize_text,
-    tokenize_text,
-)
-from src.source_metadata import (  # noqa: E402
+from src.ingestion.indexing.search import rank_documents, reciprocal_rank_fusion
+from src.ingestion.indexing.text_utils import content_hash, sanitize_text, tokenize_text
+from src.source_metadata import (
     canonical_source_label,
     display_source_label,
     infer_domain,
@@ -65,11 +35,34 @@ from src.source_metadata import (  # noqa: E402
     sanitize_external_url,
 )
 
+logger = logging.getLogger(__name__)
+
 _VALID_SEARCH_MODES = {"rrf_hybrid", "semantic_only", "bm25_only"}
+
+# Page size used when fetching all documents matching a metadata filter.
+# ChromaDB's collection.query has no offset parameter and its n_results cap
+# silently truncated large filtered candidate sets, so filtered searches
+# paginate collection.get instead (final ranking is exact cosine/BM25 over
+# the fetched candidates either way).
+_FILTERED_PAGE_SIZE = 1000
 
 
 def _source_type_for(source: str) -> str:
     return normalize_source_type(source)
+
+
+def _extracted_keywords_from_metadata(
+    metadatas: list[dict[str, Any] | None],
+) -> list[list[str] | None]:
+    """Per-document lowercased extracted keywords (None when absent)."""
+    extracted: list[list[str] | None] = []
+    for meta in metadatas:
+        kws = meta.get("extracted_keywords") if meta else None
+        if isinstance(kws, list):
+            extracted.append([str(k).lower() for k in kws])
+        else:
+            extracted.append(None)
+    return extracted
 
 
 def _source_class_for(source: str, metadata: dict | None = None) -> str:
@@ -95,8 +88,14 @@ class ChromaVectorStore:
         - Content hashes maintained in-memory for deduplication
 
     Search:
-        - Semantic: ChromaDB ANN query using pre-computed query embedding
-        - Keyword: Custom BM25 from keyword_index.py (unchanged)
+        - Semantic: exact cosine similarity computed in Python between the
+          query embedding and every candidate document embedding. ChromaDB
+          is used as the document/embedding store, not as an ANN index;
+          filtered queries fetch all matching documents via paginated
+          collection.get calls
+        - Keyword: custom BM25 from keyword_index.py with the
+          extracted-keywords boost, applied identically for filtered and
+          unfiltered queries
         - Fusion: RRF (unchanged)
         - Reranking: MMR in runtime.py (unchanged)
     """
@@ -141,7 +140,12 @@ class ChromaVectorStore:
             name=self.collection_name,
             embedding_function=None,
         )
-        self._index_metadata: dict[str, Any] = dict(index_metadata or {})
+        # When no index metadata is supplied, adopt what the collection
+        # already persists so provenance survives cold restarts. The factory
+        # passes ``{}`` for "unset", which is treated the same as None.
+        self._index_metadata: dict[str, Any] = (
+            dict(index_metadata) if index_metadata else dict(self._collection.metadata or {})
+        )
         self.content_hashes: set[str] = set()
         self._id_set: set[str] = set()
         self._doc_ids: list[str] = []
@@ -152,10 +156,14 @@ class ChromaVectorStore:
         self.keyword_index: dict[str, list[int]] = {}
         self._doc_term_freqs: dict[int, dict[str, int]] = {}
         self._extracted_keywords_list: list[list[str] | None] = []
+        self._hypothetical_question_cache: (
+            list[tuple[float, list[tuple[frozenset[str], str]]]] | None
+        ) = None
         self._index_dirty = True
         self.last_indexing_stats: dict[str, Any] = {}
 
-        self._load_content_hashes()
+        # A single full scan of the collection seeds the id set, content
+        # hashes, and the document mirrors in one pass.
         self._rebuild_index_if_needed()
         if self._index_metadata and self._index_metadata != dict(self._collection.metadata or {}):
             self._apply_index_metadata()
@@ -187,21 +195,20 @@ class ChromaVectorStore:
 
     @property
     def documents(self) -> dict[str, Any]:
-        all_data = cast(
-            dict[str, Any],
-            self._collection.get(include=["documents", "metadatas", "embeddings"]),
-        )
-        docs: list[Any] = all_data.get("documents") or []
-        metas: list[Any] = all_data.get("metadatas") or []
-        embs_raw = all_data.get("embeddings")
-        embs: list[Any] = embs_raw if embs_raw is not None else []
-        ids: list[Any] = all_data.get("ids") or []
+        """Full document payload, served from the in-memory mirrors.
+
+        The mirrors are refreshed from ChromaDB when dirty and embeddings
+        are lazy-loaded once, so callers no longer re-fetch the entire
+        collection (embeddings included) on every access.
+        """
+        self._rebuild_index_if_needed()
+        self._ensure_embeddings_loaded()
         return {
-            "ids": list(ids),
-            "contents": list(docs),
-            "embeddings": [e.tolist() if hasattr(e, "tolist") else e for e in embs],
-            "metadatas": list(metas),
-            "index_metadata": self._index_metadata,
+            "ids": list(self._doc_ids),
+            "contents": list(self._doc_contents),
+            "embeddings": [list(emb) for emb in self._doc_embeddings],
+            "metadatas": [dict(meta) for meta in self._doc_metadatas],
+            "index_metadata": dict(self._index_metadata),
         }
 
     @documents.setter
@@ -247,15 +254,6 @@ class ChromaVectorStore:
         self._rebuild_index_if_needed()
         self._persist_legacy_snapshot()
 
-    def _load_content_hashes(self) -> None:
-        all_data = cast(dict[str, Any], self._collection.get(include=["metadatas"]))
-        ids: list[Any] = all_data.get("ids", []) or []
-        metas: list[Any] = all_data.get("metadatas", []) or []
-        for doc_id, meta in zip(ids, metas, strict=False):
-            self._id_set.add(doc_id)
-            if meta and "content_hash" in meta:
-                self.content_hashes.add(str(meta["content_hash"]))
-
     def _apply_index_metadata(self) -> None:
         if self._index_metadata:
             self._collection.modify(metadata=self._index_metadata)
@@ -263,44 +261,30 @@ class ChromaVectorStore:
     def _tokenize(self, text: str) -> list[str]:
         return tokenize_text(text)
 
-    def _rebuild_index_if_needed(self, include_embeddings: bool = False) -> None:
-        if self._index_dirty:
-            include_fields = ["documents", "metadatas"]
-            if include_embeddings:
-                include_fields.append("embeddings")
+    def _rebuild_index_if_needed(self) -> None:
+        """Refresh mirrors from ChromaDB (single pass) when the index is dirty.
 
-            all_data = cast(dict[str, Any], self._collection.get(include=cast(Any, include_fields)))
-            ids: list[Any] = all_data.get("ids", []) or []
-            docs: list[Any] = all_data.get("documents", []) or []
-            metas: list[Any] = all_data.get("metadatas", []) or []
-            self._doc_ids = list(ids)
-            self._doc_contents = list(docs)
-            self._doc_metadatas = [dict(meta or {}) for meta in metas]
-
-            if include_embeddings:
-                embs_raw = all_data.get("embeddings")
-                embs: list[Any] = embs_raw if embs_raw is not None else []
-                self._doc_embeddings = [
-                    emb.tolist() if hasattr(emb, "tolist") else emb for emb in embs
-                ]
-            else:
-                self._doc_embeddings = []
-
-            self._doc_id_to_index = {doc_id: idx for idx, doc_id in enumerate(self._doc_ids)}
-            self.keyword_index = build_keyword_index(self._doc_contents, self._tokenize)
-            self._doc_term_freqs = build_term_frequencies(self._doc_contents, self._tokenize)
-            # Extract keywords from metadata for each document
-            self._extracted_keywords_list = []
-            for meta in self._doc_metadatas:
-                if meta and "extracted_keywords" in meta:
-                    kws = meta["extracted_keywords"]
-                    if isinstance(kws, list):
-                        self._extracted_keywords_list.append([str(k).lower() for k in kws])
-                    else:
-                        self._extracted_keywords_list.append(None)
-                else:
-                    self._extracted_keywords_list.append(None)
-            self._index_dirty = False
+        Also seeds the id set and content-hash set from collection metadata,
+        so a cold start recovers deduplication state in the same scan.
+        """
+        if not self._index_dirty:
+            return
+        all_data = cast(
+            dict[str, Any], self._collection.get(include=cast(Any, ["documents", "metadatas"]))
+        )
+        ids: list[Any] = all_data.get("ids", []) or []
+        docs: list[Any] = all_data.get("documents", []) or []
+        metas: list[Any] = all_data.get("metadatas", []) or []
+        self._doc_ids = list(ids)
+        self._doc_contents = list(docs)
+        self._doc_metadatas = [dict(meta or {}) for meta in metas]
+        self._doc_embeddings = []
+        self._id_set = set(self._doc_ids)
+        for meta in self._doc_metadatas:
+            if "content_hash" in meta:
+                self.content_hashes.add(str(meta["content_hash"]))
+        self._rebuild_in_memory_indexes()
+        self._index_dirty = False
 
     def _ensure_embeddings_loaded(self) -> None:
         """Lazy-load embeddings only when needed for semantic search."""
@@ -317,13 +301,28 @@ class ChromaVectorStore:
         self._doc_id_to_index = {doc_id: idx for idx, doc_id in enumerate(self._doc_ids)}
         self.keyword_index = build_keyword_index(self._doc_contents, self._tokenize)
         self._doc_term_freqs = build_term_frequencies(self._doc_contents, self._tokenize)
-        self._extracted_keywords_list = []
+        self._extracted_keywords_list = _extracted_keywords_from_metadata(self._doc_metadatas)
+        self._hypothetical_question_cache = self._build_hypothetical_question_cache()
+
+    def _build_hypothetical_question_cache(
+        self,
+    ) -> list[tuple[float, list[tuple[frozenset[str], str]]]]:
+        """Pre-tokenize hypothetical questions so per-query search is cheap.
+
+        Rebuilt on every mirror rebuild (add/clear/cold start), which keeps
+        the cache in sync with the stored questions.
+        """
+        cache: list[tuple[float, list[tuple[frozenset[str], str]]]] = []
         for meta in self._doc_metadatas:
-            kws = meta.get("extracted_keywords") if meta else None
-            if isinstance(kws, list):
-                self._extracted_keywords_list.append([str(k).lower() for k in kws])
-            else:
-                self._extracted_keywords_list.append(None)
+            questions = meta.get("hypothetical_questions") if meta else None
+            if not isinstance(questions, list) or not questions:
+                continue
+            quality_score = float(meta.get("quality_score", 1.0))
+            entries = [
+                (frozenset(self._tokenize(str(question))), str(question)) for question in questions
+            ]
+            cache.append((quality_score, entries))
+        return cache
 
     def _get_all_documents(self) -> list[str]:
         self._rebuild_index_if_needed()
@@ -428,7 +427,6 @@ class ChromaVectorStore:
         stats: dict[str, Any] = {
             "attempted": len(documents),
             "inserted": 0,
-            "skipped_duplicate_id": 0,
             "skipped_duplicate_content": 0,
             "embedding_stats": embedding_stats,
         }
@@ -468,24 +466,83 @@ class ChromaVectorStore:
                 metadatas=cast(Any, to_upsert_metadatas),
             )
 
-            # Incrementally update keyword index for new documents
+            # Incrementally update the mirrors to match Chroma upsert
+            # semantics: an existing doc_id is replaced in place, a new one
+            # is appended. Appending unconditionally would leave stale and
+            # fresh copies of the same id both ranking in unfiltered
+            # searches and duplicated in documents_for_ranking.
+            embeddings_loaded = len(self._doc_embeddings) == len(self._doc_ids)
             for doc_id, text, meta, embedding in zip(
                 to_upsert_ids,
                 to_upsert_documents,
                 to_upsert_metadatas,
                 to_upsert_embeddings,
-                strict=False,
+                strict=True,
             ):
-                self._doc_ids.append(doc_id)
-                self._doc_contents.append(text)
-                self._doc_metadatas.append(meta)
-                self._doc_embeddings.append(embedding)
+                existing_idx = self._doc_id_to_index.get(doc_id)
+                if existing_idx is not None:
+                    old_hash = self._doc_metadatas[existing_idx].get("content_hash")
+                    if old_hash is not None:
+                        self.content_hashes.discard(str(old_hash))
+                    self._doc_contents[existing_idx] = text
+                    self._doc_metadatas[existing_idx] = meta
+                    if embeddings_loaded:
+                        self._doc_embeddings[existing_idx] = embedding
+                else:
+                    self._doc_ids.append(doc_id)
+                    self._doc_contents.append(text)
+                    self._doc_metadatas.append(meta)
+                    if embeddings_loaded:
+                        self._doc_embeddings.append(embedding)
             self._rebuild_in_memory_indexes()
         else:
             self._index_dirty = True
         self.last_indexing_stats = stats
         self._persist_legacy_snapshot()
         return stats
+
+    @staticmethod
+    def _base_result_fields(
+        documents_for_ranking: dict[str, list[Any]],
+        idx: int,
+    ) -> dict[str, Any]:
+        """Fields shared by similarity_search and similarity_search_with_trace."""
+        meta = documents_for_ranking["metadatas"][idx]
+        source = meta.get("source", "unknown")
+        logical_name = meta.get("logical_name")
+        canonical_label = meta.get("canonical_label")
+        page = meta.get("page")
+        display_label = display_source_label(
+            source,
+            logical_name=logical_name,
+            canonical_label=canonical_label,
+            page=page,
+        )
+        return {
+            "id": documents_for_ranking["ids"][idx],
+            "content": documents_for_ranking["contents"][idx],
+            "source": source,
+            "page": page,
+            "logical_name": logical_name,
+            "canonical_label": canonical_label,
+            "display_label": display_label,
+            "source_url": meta.get("source_url"),
+            "source_type": meta.get("source_type"),
+            "source_class": meta.get("source_class"),
+            "domain": meta.get("domain"),
+            "domain_type": meta.get("domain_type"),
+            "metadata": {
+                "logical_name": logical_name,
+                "display_label": display_label,
+                "source_url": meta.get("source_url"),
+                "canonical_label": canonical_label,
+                "source_type": meta.get("source_type"),
+                "source_class": meta.get("source_class"),
+                "page_type": meta.get("page_type"),
+                "domain": meta.get("domain"),
+                "domain_type": meta.get("domain_type"),
+            },
+        }
 
     def similarity_search(
         self,
@@ -501,67 +558,81 @@ class ChromaVectorStore:
         self._rebuild_index_if_needed()
 
         mode = (search_mode or ("rrf_hybrid" if hybrid else "semantic_only")).lower()
-        ranked, _, documents_for_ranking, _ = self._search_ranked(
+        ranked, _, documents_for_ranking = self._search_ranked(
             query, search_mode=mode, filter=filter
         )
         top_scores = ranked[:top_k]
 
         results = []
         for score_info in top_scores:
-            idx = score_info["idx"]
-            meta = documents_for_ranking["metadatas"][idx]
-            source = meta.get("source", "unknown")
-            logical_name = meta.get("logical_name")
-            canonical_label = meta.get("canonical_label")
-            page = meta.get("page")
-            display_label = display_source_label(
-                source,
-                logical_name=logical_name,
-                canonical_label=canonical_label,
-                page=page,
-            )
-            results.append(
+            result = self._base_result_fields(documents_for_ranking, score_info["idx"])
+            meta = documents_for_ranking["metadatas"][score_info["idx"]]
+            result.update(
                 {
-                    "id": documents_for_ranking["ids"][idx],
-                    "content": documents_for_ranking["contents"][idx],
-                    "source": source,
-                    "page": page,
                     "score": score_info.get("combined_score", 0.0),
                     "semantic_rank": score_info.get("semantic_rank"),
                     "bm25_rank": score_info.get("bm25_rank"),
                     "fused_rank": score_info.get("fused_rank"),
                     "source_prior": score_info.get("source_prior", 0.0),
                     "quality_score": meta.get("quality_score", 1.0),
-                    "logical_name": logical_name,
-                    "canonical_label": canonical_label,
-                    "display_label": display_label,
-                    "source_url": meta.get("source_url"),
-                    "source_type": meta.get("source_type"),
-                    "source_class": meta.get("source_class"),
-                    "domain": meta.get("domain"),
-                    "domain_type": meta.get("domain_type"),
-                    "metadata": {
-                        "logical_name": logical_name,
-                        "display_label": display_label,
-                        "source_url": meta.get("source_url"),
-                        "canonical_label": canonical_label,
-                        "source_type": meta.get("source_type"),
-                        "source_class": meta.get("source_class"),
-                        "page_type": meta.get("page_type"),
-                        "domain": meta.get("domain"),
-                        "domain_type": meta.get("domain_type"),
-                    },
                 }
             )
+            results.append(result)
         return results
+
+    def _fetch_filtered_documents(
+        self, filter: dict, *, include_embeddings: bool
+    ) -> tuple[list[str], list[str], list[list[float]], list[dict[str, Any]]]:
+        """Fetch every document matching ``filter``, paginating past the cap.
+
+        ChromaDB's collection.query has no offset parameter and its
+        n_results bound would silently truncate large filtered candidate
+        sets, so candidates are fetched with paginated collection.get
+        calls instead. Final ranking is exact cosine/BM25 over the fetched
+        candidates either way.
+        """
+        include: list[str] = ["documents", "metadatas"]
+        if include_embeddings:
+            include.append("embeddings")
+        ids: list[str] = []
+        docs: list[str] = []
+        embeddings: list[list[float]] = []
+        metadatas: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            page = cast(
+                dict[str, Any],
+                self._collection.get(
+                    where=filter,
+                    limit=_FILTERED_PAGE_SIZE,
+                    offset=offset,
+                    include=cast(Any, include),
+                ),
+            )
+            page_ids = list(page.get("ids") or [])
+            ids.extend(page_ids)
+            docs.extend(page.get("documents") or [])
+            metadatas.extend(page.get("metadatas") or [])
+            if include_embeddings:
+                raw_embs = page.get("embeddings")
+                if raw_embs is not None:
+                    embeddings.extend(
+                        emb.tolist() if hasattr(emb, "tolist") else emb for emb in raw_embs
+                    )
+            if len(page_ids) < _FILTERED_PAGE_SIZE:
+                break
+            offset += len(page_ids)
+        return ids, docs, embeddings, metadatas
 
     def _search_ranked(
         self, query: str, search_mode: str, filter: dict | None = None
-    ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, list[Any]], list[float]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, list[Any]]]:
         self._rebuild_index_if_needed()
         mode = (search_mode or "rrf_hybrid").lower()
         if mode not in _VALID_SEARCH_MODES:
-            mode = "rrf_hybrid"
+            raise ValueError(
+                f"Invalid search_mode {search_mode!r}; valid modes are {sorted(_VALID_SEARCH_MODES)}"
+            )
         trace_info: dict[str, Any] = {"search_mode": mode, "embedding_model": self.embedding_model}
 
         use_semantic = mode != "bm25_only"
@@ -569,7 +640,9 @@ class ChromaVectorStore:
         if use_semantic:
             try:
                 embedding_start = time.time()
-                query_embedding = _get_cached_query_embedding(query, self.embedding_model)
+                # Query-embedding caching is handled by embedding.py's
+                # thread-safe LRU (keyed by model + text).
+                query_embedding = embed_texts([query], batch_size=1, model=self.embedding_model)[0]
                 trace_info["query_embedding_timing_ms"] = int(
                     (time.time() - embedding_start) * 1000
                 )
@@ -580,48 +653,25 @@ class ChromaVectorStore:
         else:
             trace_info["query_embedding_timing_ms"] = 0
 
+        keyword_start = time.time()
         if filter is not None:
-            if use_semantic:
-                if query_embedding is None:
-                    raise ValueError("query_embedding must not be None when use_semantic is True")
-                query_result = cast(
-                    dict[str, Any],
-                    self._collection.query(
-                        query_embeddings=cast(Any, [query_embedding]),
-                        n_results=1000,
-                        where=filter,
-                        include=["documents", "metadatas", "embeddings", "distances"],
-                    ),
-                )
-                chroma_ids = list(query_result.get("ids", [[]])[0])
-                chroma_docs = list(query_result.get("documents", [[]])[0])
-                chroma_embeddings = query_result.get("embeddings", [[]])[0]
-                chroma_metadatas = list(query_result.get("metadatas", [[]])[0])
-                chroma_distances: list[float] = list(query_result.get("distances", [[]])[0])
-            else:
-                get_result = cast(
-                    dict[str, Any],
-                    self._collection.get(
-                        where=filter,
-                        include=["documents", "metadatas", "embeddings"],
-                    ),
-                )
-                chroma_ids = list(get_result.get("ids", []))
-                chroma_docs = list(get_result.get("documents", []))
-                chroma_embeddings = get_result.get("embeddings", [])
-                chroma_metadatas = list(get_result.get("metadatas", []))
-                chroma_distances = []
+            chroma_ids, chroma_docs, chroma_embeddings, chroma_metadatas = (
+                self._fetch_filtered_documents(filter, include_embeddings=use_semantic)
+            )
             filtered_term_freqs = build_term_frequencies(chroma_docs, self._tokenize)
             filtered_keyword_index = build_keyword_index(chroma_docs, self._tokenize)
-            keyword_scores = keyword_score(
+            # Score with the same extracted-keywords-aware BM25 as the
+            # unfiltered path so a query ranks identically with and
+            # without a filter.
+            keyword_scores = keyword_score_with_extracted_keywords(
                 query,
                 contents=chroma_docs,
                 keyword_index=filtered_keyword_index,
                 doc_term_freqs=filtered_term_freqs,
                 tokenize=self._tokenize,
+                extracted_keywords_list=_extracted_keywords_from_metadata(chroma_metadatas),
             )
         else:
-            self._rebuild_index_if_needed()
             # Lazy-load embeddings only when needed for semantic search
             if use_semantic:
                 self._ensure_embeddings_loaded()
@@ -629,15 +679,14 @@ class ChromaVectorStore:
             chroma_docs = list(self._doc_contents)
             chroma_embeddings = list(self._doc_embeddings)
             chroma_metadatas = list(self._doc_metadatas)
-            chroma_distances = []
             keyword_scores = self._keyword_score(query)
+        trace_info["keyword_timing_ms"] = int((time.time() - keyword_start) * 1000)
 
-        chroma_embeddings_raw: list[Any] = chroma_embeddings
         documents_for_ranking: dict[str, list[Any]] = {
             "ids": chroma_ids,
             "contents": list(chroma_docs),
             "embeddings": [
-                emb.tolist() if hasattr(emb, "tolist") else emb for emb in chroma_embeddings_raw
+                emb.tolist() if hasattr(emb, "tolist") else emb for emb in chroma_embeddings
             ],
             "metadatas": list(chroma_metadatas),
         }
@@ -685,10 +734,7 @@ class ChromaVectorStore:
             "bm25": len(keyword_ranked),
             "final": len(ranked),
         }
-        return ranked, trace_info, documents_for_ranking, chroma_distances
-
-    def _cosine_similarity(self, a: list[float], b: list[float]) -> float:
-        return cosine_similarity(a, b)
+        return ranked, trace_info, documents_for_ranking
 
     def similarity_search_with_trace(
         self,
@@ -715,12 +761,8 @@ class ChromaVectorStore:
             trace_info["timing_ms"] = int((time.time() - start_time) * 1000)
             return [], trace_info
 
-        keyword_start = time.time()
-        _ = self._keyword_score(query)
-        trace_info["keyword_timing_ms"] = int((time.time() - keyword_start) * 1000)
-
         semantic_start = time.time()
-        ranked, search_trace, documents_for_ranking, _ = self._search_ranked(
+        ranked, search_trace, documents_for_ranking = self._search_ranked(
             query, search_mode=mode, filter=filter
         )
         trace_info.update(search_trace)
@@ -732,24 +774,10 @@ class ChromaVectorStore:
 
         results = []
         for rank, score_info in enumerate(top_scores, start=1):
-            idx = score_info["idx"]
-            meta = documents_for_ranking["metadatas"][idx]
-            source = meta.get("source", "unknown")
-            logical_name = meta.get("logical_name")
-            canonical_label = meta.get("canonical_label")
-            page = meta.get("page")
-            display_label = display_source_label(
-                source,
-                logical_name=logical_name,
-                canonical_label=canonical_label,
-                page=page,
-            )
-            results.append(
+            result = self._base_result_fields(documents_for_ranking, score_info["idx"])
+            meta = documents_for_ranking["metadatas"][score_info["idx"]]
+            result.update(
                 {
-                    "id": documents_for_ranking["ids"][idx],
-                    "content": documents_for_ranking["contents"][idx],
-                    "source": source,
-                    "page": page,
                     "semantic_score": round(score_info.get("semantic_score", 0.0), 4),
                     "keyword_score": round(score_info.get("keyword_score", 0.0), 4),
                     "source_prior": round(score_info.get("source_prior", 0.0), 4),
@@ -764,27 +792,9 @@ class ChromaVectorStore:
                     "quality_score": round(float(meta.get("quality_score", 1.0)), 4),
                     "content_type": meta.get("content_type", "paragraph"),
                     "section_path": meta.get("section_path", []),
-                    "logical_name": logical_name,
-                    "canonical_label": canonical_label,
-                    "display_label": display_label,
-                    "source_url": meta.get("source_url"),
-                    "source_type": meta.get("source_type"),
-                    "source_class": meta.get("source_class"),
-                    "domain": meta.get("domain"),
-                    "domain_type": meta.get("domain_type"),
-                    "metadata": {
-                        "logical_name": logical_name,
-                        "display_label": display_label,
-                        "source_url": meta.get("source_url"),
-                        "canonical_label": canonical_label,
-                        "source_type": meta.get("source_type"),
-                        "source_class": meta.get("source_class"),
-                        "page_type": meta.get("page_type"),
-                        "domain": meta.get("domain"),
-                        "domain_type": meta.get("domain_type"),
-                    },
                 }
             )
+            results.append(result)
 
         trace_info["timing_ms"] = int((time.time() - start_time) * 1000)
         return results, trace_info
@@ -805,12 +815,10 @@ class ChromaVectorStore:
 
         scored: list[tuple[float, str]] = []
         self._rebuild_index_if_needed()
-        for _i, meta in enumerate(self._doc_metadatas):
-            if not meta:
-                continue
-            quality_score = float(meta.get("quality_score", 1.0))
-            for question in meta.get("hypothetical_questions", []):
-                question_tokens = set(self._tokenize(question))
+        # Stored questions are pre-tokenized in the cache, which is rebuilt
+        # whenever documents are added, cleared, or the mirrors refreshed.
+        for quality_score, entries in self._hypothetical_question_cache or []:
+            for question_tokens, question in entries:
                 overlap = len(query_tokens & question_tokens)
                 if overlap <= 0:
                     continue
@@ -855,13 +863,6 @@ class ChromaVectorStore:
                 include=["documents", "metadatas"],
             ),
         )
-        count_result = cast(
-            dict[str, Any],
-            self._collection.get(
-                where=where_filter,
-                include=["metadatas"],
-            ),
-        )
 
         ids = list(page_result.get("ids") or [])
         contents = list(page_result.get("documents") or [])
@@ -884,12 +885,25 @@ class ChromaVectorStore:
                 }
             )
 
+        # Totals and per-type counts come from the in-memory mirrors instead
+        # of a second full-collection fetch. _build_source_type_filter only
+        # produces equality filters, so mirror matching is equivalent.
+        self._rebuild_index_if_needed()
+        if where_filter is not None:
+            matching_metadatas = [
+                meta
+                for meta in self._doc_metadatas
+                if meta.get("source_type") == where_filter["source_type"]
+            ]
+        else:
+            matching_metadatas = list(self._doc_metadatas)
+
         source_type_counts: dict[str, int] = {}
-        for metadata in count_result.get("metadatas") or []:
+        for metadata in matching_metadatas:
             key = str((metadata or {}).get("source_type") or "unknown")
             source_type_counts[key] = source_type_counts.get(key, 0) + 1
 
-        total = len(count_result.get("ids") or [])
+        total = len(matching_metadatas)
         return {
             "total": total,
             "items": items,
@@ -929,6 +943,7 @@ class ChromaVectorStore:
         self.keyword_index = {}
         self._doc_term_freqs = {}
         self._extracted_keywords_list = []
+        self._hypothetical_question_cache = []
         self._index_metadata = {}
         self._index_dirty = False
         self.last_indexing_stats = {}

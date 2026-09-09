@@ -4,6 +4,35 @@ from pathlib import Path
 
 import pytest
 
+
+def _ensure_nltk_stopwords_available() -> None:
+    """Ensure the NLTK 'stopwords' corpus resolves without network access.
+
+    src/ingestion/indexing/text_utils.py loads English stopwords at import
+    time. On machines without ``nltk.download('stopwords')`` (e.g. CI
+    runners), fall back to the vendored copy under
+    tests/integration/fixtures/nltk_data. Must run before any module that
+    imports src.ingestion.indexing (i.e. at conftest import time).
+    """
+    try:
+        from nltk.corpus import stopwords
+
+        stopwords.words("english")
+        return
+    except LookupError:
+        pass
+
+    import nltk.data
+
+    nltk.data.path.append(str(Path(__file__).parent / "integration" / "fixtures" / "nltk_data"))
+    from nltk.corpus import stopwords as vendored_stopwords
+
+    vendored_stopwords.words("english")  # fail fast if the vendored copy is broken
+
+
+_ensure_nltk_stopwords_available()
+
+
 if "APP__LLM__DASHSCOPE_API_KEY" not in os.environ or not os.environ.get(
     "APP__LLM__DASHSCOPE_API_KEY"
 ):

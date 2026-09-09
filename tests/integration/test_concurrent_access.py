@@ -97,7 +97,6 @@ class TestVectorStoreInitConcurrency:
             return {
                 "attempted": 0,
                 "inserted": 0,
-                "skipped_duplicate_id": 0,
                 "skipped_duplicate_content": 0,
                 "embedding_stats": {},
             }

@@ -118,12 +118,9 @@ async def _build_index_from_sources(vector_store: VectorStoreProtocol) -> dict[s
     stats["hype_chunk_count"] = hype_chunk_count
     stats["enriched_chunk_count"] = enriched_chunk_count
     logger.info(
-        "Indexed document chunks "
-        "(attempted=%d, inserted=%d, "
-        "duplicate_id=%d, duplicate_content=%d)",
+        "Indexed document chunks (attempted=%d, inserted=%d, duplicate_content=%d)",
         stats["attempted"],
         stats["inserted"],
-        stats["skipped_duplicate_id"],
         stats["skipped_duplicate_content"],
     )
     return stats
