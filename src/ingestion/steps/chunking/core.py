@@ -17,7 +17,7 @@ from src.ingestion.steps.chunking.helpers import (
     split_markdown_sections,
     split_table_rows,
 )
-from src.ingestion.steps.chunking.strategies import find_recursive_split
+from src.ingestion.steps.chunking.strategies import CHUNKING_STRATEGIES, find_recursive_split
 
 if TYPE_CHECKING:
     from src.ingestion.steps.chunking.chonkie_adapter import ChonkieChunkerAdapter
@@ -34,16 +34,7 @@ class TextChunker:
         - chonkie_late: Chonkie's LateChunker using Qwen embeddings
     """
 
-    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = frozenset(
-        {
-            "recursive",
-            "custom_recursive",
-            "chonkie_recursive",
-            "chonkie_semantic",
-            "chonkie_late",
-            "medical_semantic",
-        }
-    )
+    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = CHUNKING_STRATEGIES
 
     def __init__(
         self,
@@ -74,6 +65,11 @@ class TextChunker:
         self.min_chunk_size = min_chunk_size
         self.embedding_model = embedding_model or "text-embedding-v4"
         self._chonkie_adapter: ChonkieChunkerAdapter | None = None
+        # Per-config chunkers built by chunk_documents_with_configs, keyed by
+        # the resolved (chunk_size, chunk_overlap, strategy, min_chunk_size,
+        # embedding_model) tuple so repeated configs reuse chunkers (and their
+        # lazily built chonkie adapters / embedding clients).
+        self._config_chunker_cache: dict[tuple[int, int, str, int, str], TextChunker] = {}
 
     @property
     def chonkie_adapter(self) -> ChonkieChunkerAdapter | None:
@@ -169,7 +165,11 @@ class TextChunker:
                     }
                 )
 
-            start = end - self.chunk_overlap if end < text_length else text_length
+            # Guarantee forward progress even for degenerate configs (e.g. overlap >=
+            # chunk_size) or splitters that return end close to start: never move
+            # backwards and never stall on the same start offset.
+            new_start = end - self.chunk_overlap if end < text_length else text_length
+            start = max(start + 1, new_start)
 
         return chunks
 
@@ -212,6 +212,7 @@ class TextChunker:
         chunks: list[dict] = []
         chunk_index = start_chunk_index
         block_group_limit = max(900, self.chunk_size)
+        source_kind_for_doc = self._source_kind(source)
         for block in blocks:
             block_text = str(block.get("text", "")).strip()
             if not block_text:
@@ -242,7 +243,7 @@ class TextChunker:
                             section_path=section_path,
                             quality_score=quality_score,
                             parent_block_ids=[block_id],
-                            source_type=self._source_kind(source),
+                            source_type=source_kind_for_doc,
                             doc_metadata=doc_metadata,
                         )
                     )
@@ -264,7 +265,7 @@ class TextChunker:
                                 section_path=section_path,
                                 quality_score=quality_score,
                                 parent_block_ids=[block_id],
-                                source_type=self._source_kind(source),
+                                source_type=source_kind_for_doc,
                                 doc_metadata=doc_metadata,
                             )
                         )
@@ -282,7 +283,7 @@ class TextChunker:
                             section_path=section_path,
                             quality_score=quality_score,
                             parent_block_ids=[block_id],
-                            source_type=self._source_kind(source),
+                            source_type=source_kind_for_doc,
                             doc_metadata=doc_metadata,
                         )
                     )
@@ -305,11 +306,14 @@ class TextChunker:
             chunks.extend(split_chunks)
             chunk_index += len(split_chunks)
 
+        # build_block_chunk already emits previous_chunk_id/next_chunk_id/
+        # section_sibling_rank/source_type placeholders; only the actual sibling
+        # linkage needs to be filled in here (the low-quality filter re-links
+        # again after dropping chunks).
         for idx, chunk in enumerate(chunks):
             chunk["previous_chunk_id"] = chunks[idx - 1]["id"] if idx > 0 else None
             chunk["next_chunk_id"] = chunks[idx + 1]["id"] if idx + 1 < len(chunks) else None
             chunk["section_sibling_rank"] = idx
-            chunk["source_type"] = self._source_kind(source)
         return chunks
 
     def _filter_low_quality_chunks(self, chunks: list[dict]) -> list[dict]:
@@ -348,13 +352,9 @@ class TextChunker:
         source_chunk_configs: dict | None = None,
     ) -> list[dict]:
         all_chunks = []
-        cfg_map = copy.deepcopy(config.DEFAULT_SOURCE_CHUNK_CONFIGS)
-        if source_chunk_configs:
-            for key, value in source_chunk_configs.items():
-                if key in cfg_map and isinstance(value, dict):
-                    cfg_map[key].update(value)
-                else:
-                    cfg_map[key] = dict(value)
+        cfg_map = config.resolve_source_chunk_configs(
+            source_chunk_configs, auto_select_strategy=False
+        )
         for doc in documents:
             source = doc.get("source", "unknown")
             doc_id = doc.get("id", "doc")
@@ -362,17 +362,7 @@ class TextChunker:
             doc_chunk_index = 0
             source_key = self._source_kind(source)
             active_cfg = cfg_map.get(source_key, cfg_map.get("default", {}))
-            doc_chunker = (
-                self
-                if self._matches_self_config(active_cfg)
-                else TextChunker(
-                    chunk_size=int(active_cfg.get("chunk_size", self.chunk_size)),  # type: ignore[call-overload]
-                    chunk_overlap=int(active_cfg.get("chunk_overlap", self.chunk_overlap)),  # type: ignore[call-overload]
-                    strategy=str(active_cfg.get("strategy", self.strategy)),
-                    min_chunk_size=int(active_cfg.get("min_chunk_size", self.min_chunk_size)),  # type: ignore[call-overload]
-                    embedding_model=str(active_cfg.get("embedding_model", self.embedding_model)),
-                )
-            )
+            doc_chunker = self._chunker_for_config(active_cfg)
 
             if "pages" in doc:
                 for page_data in doc["pages"]:
@@ -446,13 +436,33 @@ class TextChunker:
 
         return all_chunks
 
-    def _matches_self_config(self, cfg: dict) -> bool:
+    def _chunker_for_config(self, cfg: dict) -> TextChunker:
+        """Return a chunker for the resolved per-source config, cached by config."""
+        key = self._config_key(cfg)
+        if key == self._self_config_key():
+            return self
+        chunker = self._config_chunker_cache.get(key)
+        if chunker is None:
+            chunker = TextChunker(*key)
+            self._config_chunker_cache[key] = chunker
+        return chunker
+
+    def _config_key(self, cfg: dict) -> tuple[int, int, str, int, str]:
         return (
-            int(cfg.get("chunk_size", self.chunk_size)) == self.chunk_size
-            and int(cfg.get("chunk_overlap", self.chunk_overlap)) == self.chunk_overlap
-            and str(cfg.get("strategy", self.strategy)) == self.strategy
-            and int(cfg.get("min_chunk_size", self.min_chunk_size)) == self.min_chunk_size
-            and str(cfg.get("embedding_model", self.embedding_model)) == self.embedding_model
+            int(cfg.get("chunk_size", self.chunk_size)),
+            int(cfg.get("chunk_overlap", self.chunk_overlap)),
+            str(cfg.get("strategy", self.strategy)),
+            int(cfg.get("min_chunk_size", self.min_chunk_size)),
+            str(cfg.get("embedding_model", self.embedding_model)),
+        )
+
+    def _self_config_key(self) -> tuple[int, int, str, int, str]:
+        return (
+            self.chunk_size,
+            self.chunk_overlap,
+            self.strategy,
+            self.min_chunk_size,
+            self.embedding_model,
         )
 
     @staticmethod

@@ -76,11 +76,9 @@ def split_list_items(text: str) -> list[str]:
             continue
 
         is_new_item = bool(re.match(r"^\s*(?:[-*•]|\d+[.)])\s+", line))
-        if is_new_item and current:
-            items.append("\n".join(current).strip())
-            current = [line]
-            continue
         if is_new_item:
+            if current:
+                items.append("\n".join(current).strip())
             current = [line]
             continue
         if current:
@@ -101,15 +99,44 @@ def group_list_items(items: list[str], max_chars: int) -> list[str]:
 
     groups: list[str] = []
     current: list[str] = []
+    # Running length of "\n".join(current) plus its leading/trailing whitespace
+    # counts, so the stripped candidate length is derived without re-joining.
+    current_len = 0
+    head_ws = 0
+    tail_ws = 0
     limit = max(1, max_chars)
 
     for item in items:
-        candidate = "\n".join([*current, item]).strip()
-        if current and len(candidate) > limit:
-            groups.append("\n".join(current).strip())
+        item_len = len(item)
+        item_head_ws = item_len - len(item.lstrip())
+        item_tail_ws = item_len - len(item.rstrip())
+        item_is_whitespace = item_head_ws == item_len
+
+        if current:
+            candidate_len = current_len + 1 + item_len
+            # Joining with "\n" only extends the leading whitespace run when the
+            # accumulated text is whitespace-only, and the trailing run when the
+            # new item is whitespace-only.
+            candidate_head_ws = (
+                current_len + 1 + item_head_ws if current_len == head_ws else head_ws
+            )
+            candidate_tail_ws = tail_ws + 1 + item_len if item_is_whitespace else item_tail_ws
+            if candidate_len - candidate_head_ws - candidate_tail_ws > limit:
+                groups.append("\n".join(current).strip())
+                current = [item]
+                current_len = item_len
+                head_ws = item_head_ws
+                tail_ws = item_tail_ws
+                continue
+            current.append(item)
+            current_len = candidate_len
+            head_ws = candidate_head_ws
+            tail_ws = candidate_tail_ws
+        else:
             current = [item]
-            continue
-        current.append(item)
+            current_len = item_len
+            head_ws = item_head_ws
+            tail_ws = item_tail_ws
 
     if current:
         groups.append("\n".join(current).strip())
@@ -133,19 +160,29 @@ def split_table_rows(
     data_rows = rows[1:]
     groups: list[dict[str, object]] = []
     current_rows: list[str] = []
+    # Running sum of row lengths, so the joined candidate length is derived
+    # without re-joining rows on every append. All rows are stripped and
+    # non-empty, so "\n".join(...) needs no further stripping.
+    current_rows_len = 0
+    header_extra = len(header) + 1 if repeat_header else 0
 
     def build_group(rows_for_group: list[str], header_repeated: bool) -> dict[str, object]:
         lines = [header, *rows_for_group] if header_repeated else rows_for_group
         return {"text": "\n".join(lines).strip(), "header_repeated": header_repeated}
 
     for row in data_rows:
-        candidate_rows = [*current_rows, row]
-        candidate_group = build_group(candidate_rows, repeat_header)
-        if current_rows and len(str(candidate_group["text"])) > max_chars:
-            groups.append(build_group(current_rows, repeat_header))
-            current_rows = [row]
-            continue
-        current_rows = candidate_rows
+        if current_rows:
+            # len("\n".join([header?, *current_rows, row])) without building it:
+            # one separator per accumulated row plus one for the new row (and
+            # one more for the repeated header).
+            candidate_len = current_rows_len + len(row) + len(current_rows) + header_extra
+            if candidate_len > max_chars:
+                groups.append(build_group(current_rows, repeat_header))
+                current_rows = [row]
+                current_rows_len = len(row)
+                continue
+        current_rows.append(row)
+        current_rows_len += len(row)
 
     if current_rows:
         groups.append(build_group(current_rows, repeat_header))

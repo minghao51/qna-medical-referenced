@@ -1,8 +1,36 @@
-"""Chunk split strategies."""
+"""Chunk split strategies and the strategy registry."""
 
 from __future__ import annotations
 
 import re
+
+# Single source of truth for every chunking strategy selectable end-to-end
+# (config validation, TextChunker, docs). Strategies:
+# - recursive (default) / custom_recursive: in-house recursive chunker with
+#   quality scoring
+# - chonkie_recursive / chonkie_semantic / chonkie_late: chonkie-backed
+# - medical_semantic: chonkie_semantic + medical structure rules (needs spacy)
+CHUNKING_STRATEGIES: frozenset[str] = frozenset(
+    {
+        "recursive",
+        "custom_recursive",
+        "chonkie_recursive",
+        "chonkie_semantic",
+        "chonkie_late",
+        "medical_semantic",
+    }
+)
+
+# Strategies ChonkieChunkerAdapter handles directly. "medical_semantic" is
+# deliberately absent: it goes through MedicalSemanticChunkerAdapter, which
+# subclasses the adapter and forwards "chonkie_semantic" to it.
+CHONKIE_ADAPTER_STRATEGIES: frozenset[str] = frozenset(
+    {
+        "chonkie_recursive",
+        "chonkie_semantic",
+        "chonkie_late",
+    }
+)
 
 
 def find_recursive_split(

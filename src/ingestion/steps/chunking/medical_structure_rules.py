@@ -7,10 +7,7 @@ during chunking: lab value tables, drug dosing sections, clinical note headers.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, ClassVar
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from typing import ClassVar
 
 
 class MedicalStructureRules:
@@ -174,37 +171,6 @@ class MedicalStructureRules:
 
         return sorted(set(positions))
 
-    def should_avoid_split(self, text: str, split_pos: int) -> bool:
-        """Check if split at position would break medical structure.
-
-        Args:
-            text: Full text
-            split_pos: Proposed split position
-
-        Returns:
-            True if split should be avoided
-        """
-        before = text[:split_pos]
-        after = text[split_pos:]
-
-        # Don't split in middle of dosing section
-        if self.contains_dosing_info(before) and self.contains_dosing_info(after):
-            # Check if split would separate dosage from administration info
-            before_lines = before.split("\n")
-            if before_lines and self.contains_dosing_info(before_lines[-1]):
-                return True
-
-        # Don't split lab tables
-        if self.is_lab_table(before) or self.is_lab_table(after):
-            # Check if we're mid-table (has table markers on both sides)
-            before_lines = before.split("\n")
-            if "|" in before_lines:
-                after_first_line = after.split("\n")[0] if after else ""
-                if "|" in after_first_line:
-                    return True
-
-        return False
-
     def get_chunk_preservation_score(self, chunk: str) -> float:
         """Score chunk on how well it preserves medical structure.
 
@@ -255,30 +221,3 @@ def get_medical_structure_rules(min_chunk_size: int = 100) -> MedicalStructureRu
         Configured MedicalStructureRules instance
     """
     return MedicalStructureRules(min_chunk_size=min_chunk_size)
-
-
-def create_medical_boundary_filter(
-    rules: MedicalStructureRules | None = None,
-) -> Callable[[str, int, int], bool]:
-    """Create a boundary filter function for chunking.
-
-    Returns a function compatible with chunking boundary decisions.
-
-    Args:
-        rules: MedicalStructureRules instance (created if None)
-
-    Returns:
-        Function that takes (text, start, end) and returns True if split allowed
-    """
-    if rules is None:
-        rules = get_medical_structure_rules()
-
-    def boundary_filter(text: str, start: int, end: int) -> bool:
-        """Check if split from start to end is allowed."""
-        # Get the proposed split position
-        split_pos = end
-
-        # Avoid splits that break medical structure
-        return not rules.should_avoid_split(text, split_pos)
-
-    return boundary_filter

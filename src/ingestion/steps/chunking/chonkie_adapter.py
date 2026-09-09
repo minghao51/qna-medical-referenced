@@ -11,7 +11,9 @@ from typing import Any, ClassVar
 
 from chonkie import LateChunker, Pipeline, SemanticChunker
 
+from src.ingestion.steps.chunking.helpers import build_block_chunk, source_kind
 from src.ingestion.steps.chunking.qwen_embedding_wrapper import QwenEmbeddings
+from src.ingestion.steps.chunking.strategies import CHONKIE_ADAPTER_STRATEGIES
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +26,7 @@ class ChonkieChunkerAdapter:
     chunking strategies.
     """
 
-    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = frozenset(
-        {
-            "chonkie_recursive",
-            "chonkie_semantic",
-            "chonkie_late",
-            "medical_semantic",
-        }
-    )
+    SUPPORTED_STRATEGIES: ClassVar[frozenset[str]] = CHONKIE_ADAPTER_STRATEGIES
 
     def __init__(
         self,
@@ -123,18 +118,16 @@ class ChonkieChunkerAdapter:
             chonkie_chunks = self._chunker.chunk(text)
 
         chunks = [
-            {
-                "id": f"{doc_id}_p{page}_chunk_{idx}",
-                "source": source,
-                "page": page,
-                "content": chunk.text,
-                "content_type": "paragraph",
-                "chunk_index": idx,
-                "char_count": len(chunk.text),
-                "token_count_estimate": (
+            _normalize_chunk(
+                text=chunk.text,
+                source=source,
+                doc_id=doc_id,
+                page=page,
+                chunk_index=idx,
+                token_count=(
                     chunk.token_count if hasattr(chunk, "token_count") else len(chunk.text.split())
                 ),
-            }
+            )
             for idx, chunk in enumerate(chonkie_chunks)
         ]
 
@@ -180,6 +173,44 @@ class ChonkieChunkerAdapter:
                 enriched_chunk = dict(chunk)
                 enriched_chunk["content"] = enriched_content
                 enriched_chunk["char_count"] = len(enriched_content)
+                enriched_chunk["token_count_estimate"] = len(enriched_content.split())
                 enriched_chunks.append(enriched_chunk)
 
         return enriched_chunks
+
+
+def _normalize_chunk(
+    *,
+    text: str,
+    source: str,
+    doc_id: str,
+    page: int,
+    chunk_index: int,
+    token_count: int,
+) -> dict[str, Any]:
+    """Build a chunk dict with the same schema the custom chunker emits.
+
+    Uses helpers.build_block_chunk as the single schema definition. Chonkie
+    chunk text is preserved byte-for-byte (build_block_chunk strips, so
+    content-derived fields are restored afterwards), and chonkie chunks carry
+    no source offsets, so start_char/end_char default to the chunk's own
+    extent.
+    """
+    chunk = build_block_chunk(
+        text=text,
+        source=source,
+        doc_id=doc_id,
+        page=page,
+        chunk_index=chunk_index,
+        content_type="paragraph",
+        section_path=[],
+        quality_score=1.0,
+        parent_block_ids=[],
+        source_type=source_kind(source),
+    )
+    chunk["content"] = text
+    chunk["end_char"] = len(text)
+    chunk["char_count"] = len(text)
+    chunk["token_count_estimate"] = token_count
+    chunk["extractor"] = None
+    return chunk

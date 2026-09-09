@@ -12,7 +12,18 @@ from typing import Any
 import numpy as np
 from chonkie.embeddings.base import BaseEmbeddings
 
-from src.ingestion.indexing.embedding import embed_texts
+from src.ingestion.indexing.embedding import EXPECTED_EMBEDDING_DIM, embed_texts
+
+# Models routed through embed_texts are always requested at the fixed width
+# EXPECTED_EMBEDDING_DIM (see the `dimensions=` argument of the API call), so
+# known models never need a live probe for their dimension.
+_KNOWN_MODEL_DIMENSIONS: dict[str, int] = {
+    "text-embedding-v4": EXPECTED_EMBEDDING_DIM,
+}
+
+# Dimensions discovered by probing unknown models, shared across instances so
+# each model probes the live API at most once per process.
+_PROBED_MODEL_DIMENSIONS: dict[str, int] = {}
 
 
 class QwenEmbeddings(BaseEmbeddings):
@@ -39,7 +50,8 @@ class QwenEmbeddings(BaseEmbeddings):
         Args:
             model: Qwen embedding model name
             batch_size: Number of texts to embed per API call
-            dimensions: Embedding dimensions (auto-detected if None)
+            dimensions: Embedding dimensions (resolved without a live API call
+                for known models, probed once otherwise)
         """
         super().__init__()
         self.model = model
@@ -48,10 +60,17 @@ class QwenEmbeddings(BaseEmbeddings):
 
     @property
     def dimension(self) -> int:
-        """Get embedding dimensions, auto-detecting if not set."""
+        """Get embedding dimensions without a live API call for known models."""
         if self._dimensions is None:
-            dummy_emb = embed_texts(["test"], batch_size=1, model=self.model)
-            self._dimensions = len(dummy_emb[0])
+            cached = _KNOWN_MODEL_DIMENSIONS.get(self.model) or _PROBED_MODEL_DIMENSIONS.get(
+                self.model
+            )
+            if cached is None:
+                # Unknown model: probe once, then share the result process-wide.
+                dummy_emb = embed_texts(["test"], batch_size=1, model=self.model)
+                cached = len(dummy_emb[0])
+                _PROBED_MODEL_DIMENSIONS[self.model] = cached
+            self._dimensions = cached
         return self._dimensions
 
     def embed(self, text: str) -> np.ndarray:

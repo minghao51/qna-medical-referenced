@@ -6,16 +6,11 @@ import copy
 import logging
 
 from src.config.context import get_runtime_state
+from src.ingestion.steps.chunking.strategies import CHUNKING_STRATEGIES
 
 logger = logging.getLogger(__name__)
 
-_VALID_STRATEGIES = {
-    "custom_recursive",
-    "chonkie_semantic",
-    "chonkie_recursive",
-    "chonkie_late",
-    "medical_semantic",
-}
+_VALID_STRATEGIES = CHUNKING_STRATEGIES
 
 DEFAULT_SOURCE_CHUNK_CONFIGS = {
     "pdf": {
@@ -108,6 +103,28 @@ def resolve_source_chunk_configs(
             else:
                 logger.warning("%s Resetting to 512.", msg)
                 chunk_cfg["chunk_size"] = 512
+        # Overlap must stay strictly below a quarter of chunk_size, otherwise the
+        # chunker's advance loop can stall (start never moves forward).
+        effective_size = chunk_cfg.get("chunk_size", 0)
+        if not isinstance(effective_size, int):
+            effective_size = 512
+        overlap_limit = max(1, effective_size // 4)
+        chunk_overlap = chunk_cfg.get("chunk_overlap", 0)
+        if (
+            not isinstance(chunk_overlap, int)
+            or chunk_overlap < 0
+            or chunk_overlap >= overlap_limit
+        ):
+            safe_overlap = min(32, effective_size // 8)
+            msg = (
+                f"Invalid chunk_overlap={chunk_overlap} for {source_type}. "
+                f"Must be int with 0 <= chunk_overlap < {overlap_limit}."
+            )
+            if strict_validation:
+                errors.append(msg)
+            else:
+                logger.warning("%s Resetting to %d.", msg, safe_overlap)
+                chunk_cfg["chunk_overlap"] = safe_overlap
         min_size = chunk_cfg.get("min_chunk_size", 0)
         if not isinstance(min_size, int) or min_size < 10:
             msg = f"Invalid min_chunk_size={min_size} for {source_type}. Must be int >= 10."

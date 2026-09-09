@@ -124,34 +124,6 @@ class MedicalEntityDetector:
 
         return entities
 
-    def get_boundary_hints(self, text: str) -> list[tuple[int, str]]:
-        """Get chunk boundary hints based on entity detection.
-
-        Returns positions where chunks should preferentially break
-        to keep medical entities intact.
-
-        Args:
-            text: Text to analyze
-
-        Returns:
-            List of (position, reason) tuples. Position is char offset.
-        """
-        entities = self.detect_entities(text)
-        hints = []
-
-        for ent in entities:
-            # Add hint BEFORE entity (prefer not to break before entity starts)
-            if ent["start"] > 0:
-                hints.append((ent["start"], f"before_{ent['label'].lower()}"))
-
-            # Add hint AFTER entity (prefer not to break until entity ends)
-            if ent["end"] < len(text):
-                hints.append((ent["end"], f"after_{ent['label'].lower()}"))
-
-        # Sort by position
-        hints.sort(key=lambda x: x[0])
-        return hints
-
     def should_keep_together(self, text_segment: str) -> bool:
         """Check if text segment contains entities that should stay together.
 
