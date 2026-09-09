@@ -36,7 +36,7 @@ Orchestration logic that coordinates domain operations. Each use case represents
 | Use Case | File | Flow |
 |----------|------|------|
 | Chat | `src/usecases/chat.py` | Retrieve history → RAG retrieval → LLM generation → persist history → return response (sync + streaming) |
-| Pipeline | `src/usecases/pipeline.py` | CLI-driven sequential pipeline: download → convert → load → chunk → enrich → embed → index |
+| Pipeline | `src/usecases/pipeline.py` | CLI-driven Hamilton DAG pipeline (compat shim → `src/cli/ingest.py` → `src/ingestion/pipeline.py`): download → convert → load → chunk → enrich → embed → index |
 
 ### 3. RAG Layer (`src/rag/`)
 
@@ -85,7 +85,6 @@ Offline data processing pipeline that transforms raw documents into searchable v
 | `keyword_index.py` | BM25 keyword search with medical entity boosting |
 | `search.py` | Cosine similarity, rank fusion, MMR diversification algorithms |
 | `text_utils.py` | Tokenization, acronym expansion, content hashing |
-| `persistence.py` | Index persistence helpers |
 | `migrate.py` | Migration utilities |
 | `vector_store.py` | Backward-compatibility shim re-exporting `ChromaVectorStore` |
 
@@ -200,7 +199,7 @@ User → Frontend (SvelteKit)
 
 ```
 CLI: python -m src.cli.ingest
-  → src/usecases/pipeline.py: run_pipeline()
+  → src/ingestion/pipeline.py: build_ingestion_pipeline() (Hamilton DAG, single driver)
     → L0: download_web.py → data/raw/*.html
     → L0b: download_pdfs.py → data/raw/*.pdf
     → L1: convert_html.py → data/processed/*.md

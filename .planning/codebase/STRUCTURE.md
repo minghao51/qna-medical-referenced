@@ -203,7 +203,6 @@ qna_medical_referenced/
 │   │   │   ├── keyword_index.py      # BM25 keyword search + medical entity boosting
 │   │   │   ├── search.py             # Similarity, rank fusion, MMR algorithms
 │   │   │   ├── text_utils.py         # Tokenization, acronyms, content hashing
-│   │   │   ├── persistence.py        # Index persistence helpers
 │   │   │   └── migrate.py            # Migration utilities
 │   │   └── steps/                    # Pipeline step implementations
 │   │       ├── chunk_text.py         # Chunking orchestrator

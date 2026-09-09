@@ -66,4 +66,5 @@ Tests are organized into three tiers:
 
 - Live-model behavior depends on `DASHSCOPE_API_KEY`.
 - Tests marked `live_api` require real API access.
+- ChromaDB store/search/migration tests run **offline** in CI with stubbed embeddings (deterministic vectors via the `fake_chroma_embeddings` fixture in `tests/integration/conftest.py`); NLTK stopwords resolve from a vendored copy in `tests/integration/fixtures/nltk_data`.
 - If retrieval-oriented tests fail because the index is missing, rebuild with `uv run python -m src.cli.ingest`.
