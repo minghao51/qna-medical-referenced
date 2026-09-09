@@ -103,7 +103,10 @@ qna_medical_referenced/
 │   └── manual/                       # Manual operation scripts
 ├── src/                              # Python backend source code
 │   ├── __init__.py
-│   ├── source_metadata.py            # Source metadata inference (labels, domains, types)
+│   ├── core/                         # Shared kernel (depends on nothing)
+│   │   ├── __init__.py
+│   │   ├── exceptions.py             # Layer-agnostic domain exceptions (AppError, StorageError, …)
+│   │   └── source_metadata.py        # Source metadata inference (labels, domains, types)
 │   ├── app/                          # HTTP/API layer
 │   │   ├── __init__.py
 │   │   ├── exceptions.py             # AppError hierarchy + FastAPI error handlers
@@ -145,12 +148,11 @@ qna_medical_referenced/
 │   ├── evals/                        # Evaluation framework
 │   │   ├── __init__.py
 │   │   ├── artifacts.py              # Eval artifact management
+│   │   ├── artifact_service.py       # EvaluationService — loads/shapes eval artifacts for routes
 │   │   ├── dataset_builder.py        # Build eval datasets from sources
 │   │   ├── deepeval_models.py        # DeepEval integration models
-│   │   ├── pipeline_assessment.py    # Pipeline-level assessment
-│   │   ├── schemas.py                # Eval data models
-│   │   ├── step_checks.py            # Per-step quality checks
-│   │   ├── assessment/               # Assessment orchestration
+│   │   │   ├── schemas.py                # Eval data models
+│   │   │   ├── assessment/               # Assessment orchestration
 │   │   │   ├── orchestrator.py       # End-to-end eval orchestration (~645 lines)
 │   │   │   ├── answer_eval.py        # LLM-as-judge answer evaluation
 │   │   │   ├── retrieval_eval.py     # Retrieval quality evaluation (~765 lines)
@@ -196,21 +198,26 @@ qna_medical_referenced/
 │   ├── ingestion/                    # Data processing pipeline
 │   │   ├── __init__.py
 │   │   ├── artifacts.py              # Ingestion artifact management
+│   │   ├── nodes/                    # Hamilton DAG nodes (one per canonical stage)
+│   │   │   ├── download.py           # L0 download node
+│   │   │   ├── parse.py              # L1/L2 parse node
+│   │   │   ├── chunk.py              # L3 chunk node
+│   │   │   ├── enrich.py             # L3b/c enrich + HyPE node
+│   │   │   ├── reference.py          # L4 reference node
+│   │   │   └── embedding.py          # L5 embed node
 │   │   ├── indexing/                 # Vector indexing subsystem
 │   │   │   ├── chroma_store.py       # ChromaVectorStore — hybrid search (~1010 lines)
-│   │   │   ├── vector_store.py       # Backward-compat shim → chroma_store
 │   │   │   ├── embedding.py          # Text embedding (Qwen API)
 │   │   │   ├── keyword_index.py      # BM25 keyword search + medical entity boosting
 │   │   │   ├── search.py             # Similarity, rank fusion, MMR algorithms
 │   │   │   ├── text_utils.py         # Tokenization, acronyms, content hashing
 │   │   │   └── migrate.py            # Migration utilities
 │   │   └── steps/                    # Pipeline step implementations
-│   │       ├── chunk_text.py         # Chunking orchestrator
 │   │       ├── convert_html.py       # HTML → Markdown conversion
 │   │       ├── download_pdfs.py      # PDF downloading
 │   │       ├── download_web.py       # Web content downloading
 │   │       ├── enrich_chunks.py      # LLM keyword extraction + summarization
-│   │       ├── hype.py               # HyPE question generation
+│   │       ├── hypothetical_questions.py # HyPE index-time question generation
 │   │       ├── load_markdown.py      # Markdown document loader
 │   │       ├── load_pdfs.py          # PDF document loader
 │   │       ├── load_reference_data.py # Medical reference range loader
@@ -242,11 +249,7 @@ qna_medical_referenced/
 │   │       ├── classifier.py         # Query type classifier (~315 lines)
 │   │       ├── router.py             # Retrieval parameter router (~250 lines)
 │   │       └── strategies.py         # Routing strategies (~200 lines)
-│   ├── services/                     # Service layer (trimmed)
-│   │   ├── __init__.py
-│   │   ├── base_service.py           # BaseService with logging
-│   │   └── evaluation_service.py     # Evaluation service
-│   └── usecases/                     # Use case orchestration
+│   └── usecases/                     # Use case orchestration (chat only)
 │       ├── __init__.py
 │       ├── chat.py                   # Chat processing (sync + streaming)
 │       └── pipeline.py               # Offline ingestion pipeline orchestration
@@ -294,11 +297,11 @@ qna_medical_referenced/
 | Chat endpoint (SSE) | `src/app/routes/chat.py` |
 | Chat use case | `src/usecases/chat.py` |
 | DI container | `src/infra/di.py` |
-| Ingestion pipeline | `src/usecases/pipeline.py` |
+| Ingestion pipeline | `src/cli/ingest.py` → `src/ingestion/pipeline.py` |
 | LLM client | `src/infra/llm/qwen_client.py` |
 | Production entrypoint | `src/cli/serve_production.py` |
 | Docker entrypoint | `Dockerfile` (CMD: `python -m src.cli.serve_production`) |
-| Source metadata logic | `src/source_metadata.py` |
+| Source metadata logic | `src/core/source_metadata.py` |
 | Trace/data models | `src/rag/trace_models.py` |
 | Evaluation orchestrator | `src/evals/assessment/orchestrator.py` |
 | Experiment config | `src/experiments/experiment_config.py` |
@@ -331,7 +334,7 @@ qna_medical_referenced/
 - **Imports**: Relative within package (`from src.config import settings`), absolute for external libs
 - **Module-level singletons**: `settings` (config), `get_runtime_state()` (runtime), `get_container()` (DI)
 - **Re-export pattern**: Each package has `__init__.py` that re-exports key symbols
-- **Backward-compat shims**: `src/ingestion/indexing/vector_store.py` re-exports `chroma_store.py`; `settings.py` has `_LEGACY_FIELD_MAP` for flat → nested env var migration
+- **Backward-compat**: compat shims were deleted in Phase 1 (roadmap P1.5); `settings.py` retains `_LEGACY_FIELD_MAP` for flat → nested env var migration
 - **Pydantic models**: Used for schemas (`src/app/schemas/`), trace models (`src/rag/trace_models.py`), nested config (`src/config/models/`), and settings (`src/config/settings.py`)
 - **Protocol-based interfaces**: `ChatHistoryStore` in `src/infra/storage/interfaces.py`
 - **Dataclass-based config**: `RetrievalDiversityConfig`, `RuntimeRetrievalConfig`
@@ -378,10 +381,9 @@ qna_medical_referenced/
 | Runtime state | `src/config/context.py` |
 | Evaluation | `src/evals/` |
 | Experiments / ablation | `src/experiments/` |
-| Service wrappers | `src/services/` |
 | CLI commands | `src/cli/` |
 | Utility scripts | `scripts/` |
-| Source metadata | `src/source_metadata.py` |
+| Source metadata | `src/core/source_metadata.py` |
 | Unit tests | `tests/unit/` |
 | Integration tests | `tests/integration/` |
 | E2E tests | `tests/e2e/` |

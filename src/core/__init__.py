@@ -6,12 +6,16 @@ Anything imported by two or more top-level packages belongs here.
 See docs/plans/20260910-structural-refactor-roadmap.md §3.2.
 """
 
+from src.core.exceptions import AppError, StorageError, UpstreamServiceError
 from src.core.source_metadata import (
     build_document_source_metadata,
     canonical_source_label,
 )
 
 __all__ = [
+    "AppError",
+    "StorageError",
+    "UpstreamServiceError",
     "build_document_source_metadata",
     "canonical_source_label",
 ]

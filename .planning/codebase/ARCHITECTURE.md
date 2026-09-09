@@ -39,7 +39,8 @@ Orchestration logic that coordinates domain operations. Each use case represents
 | Use Case | File | Flow |
 |----------|------|------|
 | Chat | `src/usecases/chat.py` | Retrieve history → RAG retrieval → LLM generation → persist history → return response (sync + streaming) |
-| Pipeline | `src/usecases/pipeline.py` | CLI-driven Hamilton DAG pipeline (compat shim → `src/cli/ingest.py` → `src/ingestion/pipeline.py`): download → convert → load → chunk → enrich → embed → index |
+
+The historical `usecases/pipeline.py` compat shim was deleted in Phase 1; the ingestion entrypoint is `src/cli/ingest.py` (→ `src/ingestion/pipeline.py`).
 
 ### 3. RAG Layer (`src/rag/`)
 
@@ -89,11 +90,8 @@ Offline data processing pipeline that transforms raw documents into searchable v
 | `search.py` | Cosine similarity, rank fusion, MMR diversification algorithms |
 | `text_utils.py` | Tokenization, acronym expansion, content hashing |
 | `migrate.py` | Migration utilities |
-| `vector_store.py` | Backward-compatibility shim re-exporting `ChromaVectorStore` (deleted in Phase 1) |
 
-**Hamilton DAG tier** (`src/ingestion/components/`): thin DAG nodes (`01_download.py` … `06_embedding.py`) that delegate to the `steps/` implementations above. Files are digit-prefixed, so they **cannot be imported with normal syntax** — they are loaded via an `importlib` loop in `components/__init__.py`, and `pipeline.py` imports the private `_modules` list. This tier is renamed to `nodes/` with plain file names in Phase 1 (roadmap P1.2).
-
-> Stray shared module: `src/source_metadata.py` (URL sanitization + source metadata) sits at the `src/` root and is imported by both `ingestion/` and `rag/`. It moves to `src/core/` in Phase 1 (roadmap P1.1).
+**Hamilton DAG tier** (`src/ingestion/nodes/`): thin DAG nodes (`download.py`, `parse.py`, `chunk.py`, `enrich.py`, `reference.py`, `embedding.py` — one per canonical stage, see `docs/architecture/pipeline-stages.md`) that delegate to the `steps/` implementations above. Renamed from digit-prefixed `components/` in Phase 1; normal imports, public `NODE_MODULES` list.
 
 ### 5. Infrastructure Layer (`src/infra/`)
 
@@ -163,16 +161,11 @@ Centralized settings management using Pydantic `BaseSettings` with YAML + env va
 3. `.env` file (via dotenvx)
 4. `config/settings.yaml` (defaults)
 
-### 9. Services Layer (`src/services/`)
+### 9. (removed) Services Layer
 
-Service abstraction layer (partially adopted, **recently trimmed**).
-
-| Module | Role |
-|--------|------|
-| `base_service.py` | `BaseService` with logging |
-| `evaluation_service.py` | Evaluation orchestration service |
-
-**Note:** `RAGService` and `VectorStoreService` were removed. The main chat flow calls `src/rag/runtime.py` and `src/usecases/chat.py` directly. The DI container (`src/infra/di.py`) manages service lifecycle.
+The `src/services/` layer was folded into `evals/` in Phase 1: `EvaluationService` (artifact
+reading for the evaluation route) lives at `src/evals/artifact_service.py`; `BaseService` was
+deleted. The main chat flow calls `src/rag/runtime.py` and `src/usecases/chat.py` directly.
 
 ## Data Flow Through the System
 
@@ -240,7 +233,7 @@ CLI: python -m src.cli.eval_pipeline
 
 1. **`ChatHistoryStore` (Protocol)** — `src/infra/storage/interfaces.py:8` — Interface for chat history persistence. Implemented by `FileChatHistoryStore` with per-session message truncation.
 
-2. **`ServiceContainer`** — `src/infra/di.py:29` — DI container managing lazy-initialized services (vector store, LLM client, configs). Global singleton via `get_container()`.
+2. **`ServiceContainer`** — `src/infra/di.py` — DI container managing lazy-initialized services (vector store, LLM client, configs). Used only by `app/factory.py`; **scheduled for deletion in Phase 3** (replaced by real constructor injection).
 
 3. **`RuntimeState`** — `src/config/context.py:11` — Thread-safe mutable runtime state with property-based access. Manages feature flags and runtime configuration overrides.
 
@@ -250,7 +243,7 @@ CLI: python -m src.cli.eval_pipeline
 
 6. **`ChromaVectorStore`** — `src/ingestion/indexing/chroma_store.py` — Core vector store with hybrid search, BM25 + semantic + RRF fusion (~1010 lines).
 
-7. **`BaseService`** — `src/services/base_service.py:9` — Service base class with logging. Subclassed by `EvaluationService`.
+7. **`EvaluationService`** — `src/evals/artifact_service.py` — loads and shapes evaluation artifacts for the evaluation route.
 
 ## Entry Points
 
@@ -270,22 +263,21 @@ src/
 ├── app/          ← HTTP layer (routes, middleware, schemas) — depends on usecases/, config/
 ├── cli/          ← CLI entry points — thin wrappers calling usecases/ or uvicorn
 ├── config/       ← Settings (YAML + env vars), paths, runtime state — no business logic dependencies
+├── core/         ← Shared kernel: source_metadata, layer-agnostic exceptions — depends on nothing
 ├── evals/        ← Evaluation framework — depends on rag/, infra/, config/
 ├── experiments/  ← Ablation/experiment management — depends on evals/, config/
 ├── infra/        ← Infrastructure (DI, LLM clients, storage) — depends on config/
 ├── ingestion/    ← Data pipeline (download, convert, chunk, index) — depends on infra/, config/
 ├── rag/          ← Retrieval engine — depends on ingestion/, infra/, config/
-├── services/     ← Service abstractions (evaluation only) — depends on evals/ (folds into evals/ in Phase 1)
-├── source_metadata.py ← Shared URL/metadata helpers used by ingestion/ and rag/ (moves to core/ in Phase 1)
-└── usecases/     ← Use case orchestration — depends on rag/, infra/, app/
+└── usecases/     ← Use case orchestration (chat only) — depends on rag/, infra/, core/
 ```
 
 **Dependency direction:** `cli/` → `usecases/` → `rag/` → `ingestion/` → `infra/` → `config/`. The `app/` layer calls into `usecases/`. `config/` is the deepest layer with no business logic dependencies.
 
 **Cross-boundary rules:**
 - `config/` never imports from other `src/` modules
-- `infra/` only depends on `config/` — **known violation**: `storage/file_chat_history_store.py:13` imports `StorageError` from `app/exceptions.py`; `usecases/chat.py:36` imports `UpstreamServiceError` from `app/` (fixed in Phase 1 P1.7, roadmap above)
+- `infra/` depends only on `config/` and `core/` (layer-agnostic exceptions moved to `core/exceptions.py` in Phase 1; `app/exceptions.py` re-exports them)
 - `ingestion/` depends on `infra/` and `config/`
 - `rag/` depends on `ingestion/`, `infra/`, and `config/`
 - `app/` depends on `usecases/`, `infra/`, `rag/`, and `config/`
-- `services/` currently depends on `evals/` only (artifact reading for the evaluation route); it is not a wrapper over `rag/` or `ingestion/`
+- `services/` was folded into `evals/` in Phase 1 (`EvaluationService` → `evals/artifact_service.py`); the layer no longer exists

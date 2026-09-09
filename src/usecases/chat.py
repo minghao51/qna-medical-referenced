@@ -33,8 +33,8 @@ import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from src.app.exceptions import UpstreamServiceError
 from src.config import settings
+from src.core.exceptions import UpstreamServiceError
 from src.infra.llm import get_client
 from src.infra.storage.interfaces import ChatHistoryStore
 from src.rag import retrieve_context, retrieve_context_with_trace, retrieve_context_with_trace_async
