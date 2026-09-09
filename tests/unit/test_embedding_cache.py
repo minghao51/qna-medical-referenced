@@ -10,14 +10,16 @@ class _DummyEmbeddingsAPI:
     def __init__(self):
         self.calls = []
 
-    def create(self, *, model, input, dimensions):
+    def create(self, *, model, input, dimensions, timeout=None):
         self.calls.append({"model": model, "input": list(input), "dimensions": dimensions})
         return type(
             "Response",
             (),
             {
                 "data": [
-                    _DummyEmbeddingItem([float(idx), float(len(text))])
+                    _DummyEmbeddingItem(
+                        [float(idx)] + [0.0] * (embedding.EXPECTED_EMBEDDING_DIM - 1)
+                    )
                     for idx, text in enumerate(input, start=1)
                 ]
             },

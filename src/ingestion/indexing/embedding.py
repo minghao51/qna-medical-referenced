@@ -1,15 +1,35 @@
 """Embedding helpers for the vector store using Qwen models."""
 
+import logging
 import time
 from collections import OrderedDict
 from threading import Lock
+from typing import Any
 
+import openai
 from openai import OpenAI
 
 from src.config import settings
 
+logger = logging.getLogger(__name__)
+
 EMBEDDING_MODEL = settings.llm.embedding_model
+
 _EMBEDDING_CACHE_MAX_ENTRIES = 512
+
+# All embeddings are requested at this width (see `dimensions=` in the API call
+# below) and the vector store assumes it. No settings knob exists for the
+# embedding dimension yet; if the model or requested width changes, update it.
+EXPECTED_EMBEDDING_DIM = 768
+
+_EMBEDDING_TIMEOUT_SECONDS = 30.0
+_RETRYABLE_EMBEDDING_ERRORS = (
+    openai.APITimeoutError,
+    openai.APIConnectionError,
+    openai.RateLimitError,
+    openai.InternalServerError,
+)
+
 _embedding_cache: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
 _embedding_cache_lock = Lock()
 
@@ -43,6 +63,33 @@ def _cache_put(model_name: str, text: str, embedding: list[float]) -> None:
         _embedding_cache.move_to_end(key)
         while len(_embedding_cache) > _EMBEDDING_CACHE_MAX_ENTRIES:
             _embedding_cache.popitem(last=False)
+
+
+def _create_embeddings_with_retry(client: OpenAI, model_name: str, batch: list[str]) -> Any:
+    """Call embeddings.create with a timeout and bounded retry on transient errors."""
+    max_retries = max(1, int(settings.retry.max_retries))
+    for attempt in range(max_retries):
+        try:
+            return client.embeddings.create(
+                model=model_name,
+                input=batch,
+                dimensions=EXPECTED_EMBEDDING_DIM,
+                timeout=_EMBEDDING_TIMEOUT_SECONDS,
+            )
+        except _RETRYABLE_EMBEDDING_ERRORS as e:
+            if attempt >= max_retries - 1:
+                raise
+            delay = settings.retry.retry_delay * (2**attempt)
+            logger.warning(
+                "Transient embedding error (attempt %d/%d) for model %s, retrying in %.1fs: %s",
+                attempt + 1,
+                max_retries,
+                model_name,
+                delay,
+                e,
+            )
+            time.sleep(delay)
+    raise RuntimeError("Unexpected error in embedding retry logic")
 
 
 def embed_texts_with_stats(
@@ -86,9 +133,14 @@ def embed_texts_with_stats(
         for i in range(0, len(uncached_items), batch_size):
             batch_items = uncached_items[i : i + batch_size]
             batch = [text for _, text in batch_items]
-            response = client.embeddings.create(model=model_name, input=batch, dimensions=768)
+            response = _create_embeddings_with_retry(client, model_name, batch)
             for (idx, text), item in zip(batch_items, response.data, strict=True):
                 embedding = item.embedding
+                if len(embedding) != EXPECTED_EMBEDDING_DIM:
+                    raise ValueError(
+                        f"Embedding model {model_name!r} returned dimension "
+                        f"{len(embedding)}, expected {EXPECTED_EMBEDDING_DIM}"
+                    )
                 all_embeddings[idx] = embedding
                 _cache_put(model_name, text, embedding)
 

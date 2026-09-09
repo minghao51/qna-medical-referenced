@@ -38,6 +38,38 @@ def test_cosine_similarity_zero_vectors():
     assert cosine_similarity(a, b) == 0.0
 
 
+def test_cosine_similarity_raises_on_length_mismatch():
+    """Regression: mismatched vector lengths must raise instead of truncating."""
+    a = [1.0, 2.0, 3.0]
+    b = [1.0, 2.0]
+    with pytest.raises(ValueError, match=r"zip\(\)"):
+        cosine_similarity(a, b)
+
+
+def test_rank_documents_raises_when_query_and_doc_embedding_lengths_differ():
+    """Regression: semantic ranking must fail loudly on dimension mismatch."""
+    documents = {
+        "ids": ["doc1", "doc2"],
+        "contents": ["content1", "content2"],
+        "embeddings": [[0.5, 0.5, 0.5], [0.2, 0.2, 0.2]],
+        "metadatas": [
+            {"source_class": "guideline_pdf"},
+            {"source_class": "guideline_html"},
+        ],
+    }
+    with pytest.raises(ValueError, match=r"zip\(\)"):
+        rank_documents(
+            documents=documents,
+            keyword_scores={},
+            query_embedding=[1.0, 0.0],
+            use_semantic=True,
+            hybrid=False,
+            semantic_weight=0.5,
+            keyword_weight=0.5,
+            boost_weight=0.0,
+        )
+
+
 def test_source_prior_for_known_sources():
     """Source prior should return correct values for known sources."""
     assert source_prior_for("guideline_pdf") == 0.15
