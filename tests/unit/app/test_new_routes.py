@@ -101,7 +101,7 @@ class TestDocuments:
             def documents(self):
                 raise Exception("chroma not available")
 
-        monkeypatch.setattr(documents, "get_vector_store", lambda: BrokenStore())
+        monkeypatch.setattr(documents, "get_vector_store", lambda request: BrokenStore())
 
         req = _make_request()
         req.state.auth = {"role": "admin"}
@@ -118,7 +118,7 @@ class TestDocuments:
 
         mock_store = MagicMock()
         mock_store.get_document_by_id.return_value = None
-        monkeypatch.setattr(documents, "get_vector_store", lambda: mock_store)
+        monkeypatch.setattr(documents, "get_vector_store", lambda request: mock_store)
 
         req = _make_request()
         req.state.auth = {"role": "admin"}
@@ -150,7 +150,7 @@ class TestDocuments:
             "source_type_counts": {"pdf": 2},
             "index_metadata": {"version": "v1"},
         }
-        monkeypatch.setattr(documents, "get_vector_store", lambda: mock_store)
+        monkeypatch.setattr(documents, "get_vector_store", lambda request: mock_store)
 
         req = _make_request()
         req.state.auth = {"role": "admin"}

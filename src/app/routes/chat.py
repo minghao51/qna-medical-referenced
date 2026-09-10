@@ -21,6 +21,7 @@ import logging
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
+from src.app.dependencies import get_chat_history_store, get_llm_client
 from src.app.logging import log_event
 from src.app.schemas import ChatRequest
 from src.app.session import ensure_chat_session, get_chat_session_id
@@ -40,8 +41,8 @@ async def chat_stream_generator(
     sent_terminal_event = False
     try:
         session_id = request.state.chat_session_id or get_chat_session_id(request) or "default"
-        llm_client = getattr(request.app.state, "llm_client", None)
-        history_store = request.app.state.chat_history_store
+        llm_client = get_llm_client(request)
+        history_store = get_chat_history_store(request)
 
         async for content, metadata in stream_chat_message(
             llm_client=llm_client,

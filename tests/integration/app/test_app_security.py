@@ -482,7 +482,7 @@ def test_documents_endpoint_uses_paginated_store_contract(monkeypatch, tmp_path:
     from src.config.context import get_runtime_state
 
     get_runtime_state().vector_store_initialized = True
-    monkeypatch.setattr("src.app.routes.documents.get_vector_store", lambda: _FakeStore())
+    monkeypatch.setattr("src.app.routes.documents.get_vector_store", lambda request: _FakeStore())
 
     response = client.get(
         "/documents?limit=10&offset=0&source_type=pdf", headers={"X-API-Key": "secret-key"}

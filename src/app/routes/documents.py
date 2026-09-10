@@ -9,19 +9,19 @@ from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from src.app.dependencies import get_vector_store
 from src.config.context import get_runtime_state
-from src.ingestion.indexing.chroma_store import get_vector_store
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _check_store(request_id: str | None = None) -> Any:
+def _check_store(request: Request, request_id: str | None = None) -> Any:
     if not get_runtime_state().vector_store_initialized:
         raise HTTPException(status_code=503, detail="Vector store not initialized")
     try:
-        return get_vector_store()
+        return get_vector_store(request)
     except Exception as exc:
         logger.exception("Vector store unavailable (request_id=%s)", request_id)
         raise HTTPException(status_code=503, detail="Vector store unavailable") from exc
@@ -39,7 +39,7 @@ def list_documents(
     source_type: str | None = None,
 ) -> dict[str, Any]:
     request_id = getattr(request.state, "request_id", None)
-    store = _check_store(request_id)
+    store = _check_store(request, request_id)
 
     try:
         paged = store.list_documents_paginated(
@@ -68,7 +68,7 @@ def list_documents(
 )
 def get_document(doc_id: str, request: Request) -> dict[str, Any]:
     request_id = getattr(request.state, "request_id", None)
-    store = _check_store(request_id)
+    store = _check_store(request, request_id)
 
     try:
         result = store.get_document_by_id(doc_id)

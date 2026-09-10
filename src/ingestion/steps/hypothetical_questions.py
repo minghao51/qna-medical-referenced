@@ -15,6 +15,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, cast
 
+from src.infra.llm.hypothetical_questions import generate_hypothetical_questions
 from src.ingestion.steps._utils import _weighted_sample_chunks
 
 if TYPE_CHECKING:
@@ -44,8 +45,6 @@ async def generate_hype_questions_for_chunks(
     Returns:
         Dict mapping chunk_id -> list of hypothetical question strings
     """
-    from src.rag.hyde import generate_hypothetical_questions
-
     sampled_chunks = _weighted_sample_chunks(chunks, sample_rate, max_chunks, label="HyPE sampling")
     if not sampled_chunks:
         return {}

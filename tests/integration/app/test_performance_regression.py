@@ -15,6 +15,10 @@ from src.config import settings
 from src.infra.storage.file_chat_history_store import FileChatHistoryStore
 
 
+class _DummyLLMClient:
+    """Minimal stand-in; stream_chat_message is mocked in the tests below."""
+
+
 def _build_client(monkeypatch, tmp_path: Path) -> TestClient:
     monkeypatch.setattr("src.app.factory.validate_security_configuration", lambda: None)
     monkeypatch.setattr("src.app.factory.initialize_runtime_index_async", lambda: None)
@@ -23,6 +27,7 @@ def _build_client(monkeypatch, tmp_path: Path) -> TestClient:
     monkeypatch.setattr(settings.api, "api_keys_json", None)
     APIKeyConfig.reload()
     app = create_app()
+    app.state.llm_client = _DummyLLMClient()
     app.state.chat_history_store = FileChatHistoryStore(tmp_path / "chat_history.json")
     monkeypatch.setattr(
         "src.app.middleware.rate_limit.rate_limiter",
@@ -87,7 +92,7 @@ def test_documents_endpoint_memory_regression_guard(monkeypatch, tmp_path: Path)
     from src.config.context import get_runtime_state
 
     get_runtime_state().vector_store_initialized = True
-    monkeypatch.setattr("src.app.routes.documents.get_vector_store", lambda: _FakeStore())
+    monkeypatch.setattr("src.app.routes.documents.get_vector_store", lambda request: _FakeStore())
     client = _build_client(monkeypatch, tmp_path)
 
     tracemalloc.start()

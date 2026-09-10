@@ -5,6 +5,7 @@ import warnings
 
 from fastapi import APIRouter, Request, Response
 
+from src.app.dependencies import get_chat_history_store
 from src.app.session import ensure_chat_session, get_chat_session_id, rotate_chat_session
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,8 @@ router = APIRouter()
 )
 def get_history(request: Request, response: Response):
     session_id = ensure_chat_session(request, response)
-    return {"history": request.app.state.chat_history_store.get_history(session_id)}
+    history_store = get_chat_history_store(request)
+    return {"history": history_store.get_history(session_id)}
 
 
 @router.delete(
@@ -30,7 +32,7 @@ def get_history(request: Request, response: Response):
 def clear_history(request: Request, response: Response):
     session_id = get_chat_session_id(request)
     if session_id:
-        request.app.state.chat_history_store.clear_history(session_id)
+        get_chat_history_store(request).clear_history(session_id)
     next_session_id = rotate_chat_session(response)
     request.state.chat_session_id = next_session_id
     return {"status": "cleared"}

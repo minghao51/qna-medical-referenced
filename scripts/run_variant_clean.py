@@ -64,10 +64,8 @@ def clean_html_artifacts() -> None:
 def reset_global_state() -> None:
     """Reset all global state modules to defaults."""
     from src.config.context import reset_runtime_state
-    from src.infra.di import reset_container
     from src.rag import reset_runtime_index_state
 
-    reset_container()
     reset_runtime_state()
     reset_runtime_index_state()
 
