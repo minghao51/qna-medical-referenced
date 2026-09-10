@@ -1,4 +1,4 @@
-from src.evals.assessment.retrieval_eval import reranking_ablation_configs
+from src.experiments.ablations import reranking_ablation_configs
 from src.rag import query_expansion as query_exp_mod
 from src.rag import retrieval as ret_mod
 from src.rag import runtime

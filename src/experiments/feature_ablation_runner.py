@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from src.evals import run_assessment
-from src.evals.assessment.retrieval_eval import (
+from src.experiments.ablations import (
     hype_ablation_configs,
     keyword_ablation_configs,
     reranking_ablation_configs,

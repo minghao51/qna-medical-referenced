@@ -44,8 +44,8 @@ from .l6_contract import (  # noqa: E402
     SUMMARY_L6_STATUS_KEY,
 )
 from .reporting import git_head, render_summary, sha256_file  # noqa: E402
-from .retrieval_eval import (  # noqa: E402
-    evaluate_retrieval,
+from .retrieval_eval import evaluate_retrieval  # noqa: E402
+from src.experiments.ablations import (  # noqa: E402
     run_diversity_sweep,
     run_hype_ablations,
     run_hype_ablations_with_reingest,
