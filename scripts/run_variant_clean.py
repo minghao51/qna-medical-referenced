@@ -74,13 +74,6 @@ def reset_global_state() -> None:
 
     ChromaVectorStoreFactory.reset()
 
-    # Reset chunking config
-    import src.ingestion.steps.chunking.config as chunking_config
-
-    chunking_config.set_source_chunk_configs(None)
-    chunking_config.set_structured_chunking_enabled(True)
-    chunking_config.set_auto_select_strategy(False)
-
     print("  Reset all global state")
 
 

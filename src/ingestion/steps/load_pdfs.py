@@ -70,18 +70,6 @@ def get_pdf_table_extractor() -> str:
     return _pdf_table_extractor()
 
 
-def set_pdf_extractor_strategy(strategy: str) -> None:
-    valid = {"pypdf_pdfplumber", "pymupdf_pdfplumber"}
-    resolved = strategy if strategy in valid else "pypdf_pdfplumber"
-    get_runtime_state().pdf_extractor_strategy = resolved
-
-
-def set_pdf_table_extractor(extractor: str) -> None:
-    valid = {"heuristic", "camelot"}
-    resolved = extractor if extractor in valid else "heuristic"
-    get_runtime_state().pdf_table_extractor = resolved
-
-
 def _normalize_lines(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip()]
 

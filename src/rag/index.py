@@ -15,13 +15,13 @@ from src.ingestion.indexing.chroma_store import (
     get_vector_store,
     get_vector_store_runtime_config,
 )
+from src.ingestion.runtime_config import apply_runtime_config, build_experiment_runtime_config
 from src.ingestion.steps.chunking import chunk_documents
 from src.ingestion.steps.convert_html import main as convert_html_main
 from src.ingestion.steps.load_markdown import get_markdown_documents
 from src.ingestion.steps.load_pdfs import get_documents
 from src.ingestion.steps.load_reference_data import ReferenceDataLoader
 from src.rag.protocols import VectorStoreProtocol
-from src.rag.runtime_config import apply_runtime_config, build_experiment_runtime_config
 
 logger = logging.getLogger(__name__)
 _INITIALIZATION_LOCK = threading.Lock()

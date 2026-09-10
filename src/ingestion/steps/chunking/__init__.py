@@ -3,9 +3,6 @@
 from src.ingestion.steps.chunking.config import (
     DEFAULT_SOURCE_CHUNK_CONFIGS,
     get_source_chunk_configs,
-    set_auto_select_strategy,
-    set_source_chunk_configs,
-    set_structured_chunking_enabled,
 )
 from src.ingestion.steps.chunking.core import TextChunker, chunk_documents
 
@@ -15,9 +12,6 @@ __all__ = [
     "chunk_documents",
     "get_chonkie_chunker",
     "get_source_chunk_configs",
-    "set_auto_select_strategy",
-    "set_source_chunk_configs",
-    "set_structured_chunking_enabled",
 ]
 
 

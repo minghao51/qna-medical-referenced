@@ -5,7 +5,7 @@ from src.ingestion.indexing.chroma_store import (
     get_vector_store_runtime_config,
     set_vector_store_runtime_config,
 )
-from src.rag.runtime_config import (
+from src.ingestion.runtime_config import (
     apply_runtime_config,
     build_default_runtime_config,
     build_experiment_runtime_config,

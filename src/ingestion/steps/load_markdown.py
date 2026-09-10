@@ -75,7 +75,3 @@ class MarkdownLoader:
 def get_markdown_documents() -> list[dict]:
     loader = MarkdownLoader()
     return loader.load_all_markdown()
-
-
-def set_index_only_classified_pages(enabled: bool) -> None:
-    get_runtime_state().index_only_classified_pages = bool(enabled)

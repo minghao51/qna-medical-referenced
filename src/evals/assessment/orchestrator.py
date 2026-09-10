@@ -44,8 +44,8 @@ from src.experiments.ablations import run_keyword_ablations as _run_keyword_abla
 from src.experiments.ablations import run_reranking_ablations as _run_reranking_ablations
 from src.experiments.ablations import run_retrieval_ablations as _run_retrieval_ablations
 from src.experiments.wandb_tracking import log_assessment_to_wandb
+from src.ingestion.runtime_config import apply_runtime_config, build_default_runtime_config
 from src.rag import configure_runtime_for_experiment, initialize_runtime_index
-from src.rag.runtime_config import apply_runtime_config, build_default_runtime_config
 
 logger = logging.getLogger(__name__)
 

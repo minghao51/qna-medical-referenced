@@ -10,15 +10,26 @@ from pathlib import Path
 
 import pytest
 
+from src.config.context import get_runtime_state
+from src.ingestion.runtime_config import (
+    PdfRuntimeConfig,
+    RuntimeConfig,
+    apply_runtime_config,
+)
 from src.ingestion.steps import load_pdfs
 from src.ingestion.steps.load_pdfs import (
     PDFLoader,
     get_documents,
     get_pdf_extractor_strategy,
     get_pdf_table_extractor,
-    set_pdf_extractor_strategy,
-    set_pdf_table_extractor,
 )
+
+
+def _set_pdf_extractors(strategy: str, table_extractor: str) -> None:
+    """Write the PDF extractor overlay directly (setters died in roadmap P3.3)."""
+    state = get_runtime_state()
+    state.pdf_extractor_strategy = strategy
+    state.pdf_table_extractor = table_extractor
 
 # --- synthetic PDF generation -------------------------------------------------
 
@@ -125,8 +136,7 @@ def pdf_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture
 def baseline_extractors():
     yield
-    set_pdf_extractor_strategy("pypdf_pdfplumber")
-    set_pdf_table_extractor("heuristic")
+    _set_pdf_extractors("pypdf_pdfplumber", "heuristic")
 
 
 class TestPDFLoader:
@@ -241,26 +251,27 @@ class _FakeCamelotTable:
 
 
 class TestPDFExtractorStrategy:
-    def test_set_pdf_extractor_strategy_valid(self):
-        set_pdf_extractor_strategy("pymupdf_pdfplumber")
+    def test_apply_runtime_config_pdf_strategy_valid(self, baseline_extractors):
+        apply_runtime_config(RuntimeConfig(pdf=PdfRuntimeConfig(extractor_strategy="pymupdf_pdfplumber")))
         assert get_pdf_extractor_strategy() == "pymupdf_pdfplumber"
 
-    def test_set_pdf_extractor_strategy_invalid_defaults_to_baseline(self):
-        set_pdf_extractor_strategy("invalid_strategy")
+    def test_apply_runtime_config_invalid_strategy_defaults_to_baseline(self, baseline_extractors):
+        apply_runtime_config(RuntimeConfig(pdf=PdfRuntimeConfig(extractor_strategy="invalid_strategy")))
         assert get_pdf_extractor_strategy() == "pypdf_pdfplumber"
 
-    def test_set_pdf_table_extractor_valid(self):
-        set_pdf_table_extractor("camelot")
+    def test_apply_runtime_config_table_extractor_valid(self, baseline_extractors):
+        apply_runtime_config(RuntimeConfig(pdf=PdfRuntimeConfig(table_extractor="camelot")))
         assert get_pdf_table_extractor() == "camelot"
 
-    def test_set_pdf_table_extractor_invalid_defaults_to_heuristic(self):
-        set_pdf_table_extractor("invalid")
+    def test_apply_runtime_config_invalid_table_extractor_defaults_to_heuristic(
+        self, baseline_extractors
+    ):
+        apply_runtime_config(RuntimeConfig(pdf=PdfRuntimeConfig(table_extractor="invalid")))
         assert get_pdf_table_extractor() == "heuristic"
 
     def test_extractor_strategy_persisted_in_metadata(self, pdf_dir, baseline_extractors):
         loader = PDFLoader(pdf_dir)
-        set_pdf_extractor_strategy("pypdf_pdfplumber")
-        set_pdf_table_extractor("camelot")
+        _set_pdf_extractors("pypdf_pdfplumber", "camelot")
         docs = loader.load_all_pdfs()
         assert len(docs) > 0
         for doc in docs:
@@ -270,8 +281,7 @@ class TestPDFExtractorStrategy:
 
     def test_camelot_pages_tracked_in_metadata(self, pdf_dir, baseline_extractors):
         loader = PDFLoader(pdf_dir)
-        set_pdf_extractor_strategy("pypdf_pdfplumber")
-        set_pdf_table_extractor("camelot")
+        _set_pdf_extractors("pypdf_pdfplumber", "camelot")
         docs = loader.load_all_pdfs()
         assert len(docs) > 0
         for doc in docs:
@@ -293,8 +303,7 @@ class TestPDFExtractorStrategy:
         monkeypatch.setattr(load_pdfs, "persist_source_artifact", lambda artifact: None)
         # Enable the camelot code path even though the optional dep is absent.
         monkeypatch.setattr(load_pdfs, "camelot", object())
-        set_pdf_extractor_strategy("pypdf_pdfplumber")
-        set_pdf_table_extractor("camelot")
+        _set_pdf_extractors("pypdf_pdfplumber", "camelot")
 
         def fake_extract(self, pdf_path, page_num):
             # Camelot only succeeds on page 2; page 1 attempt finds nothing.

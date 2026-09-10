@@ -16,13 +16,18 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from src.config.context import get_runtime_state
 from src.ingestion.indexing.chroma_store import ChromaVectorStore
 from src.ingestion.steps.chunking import chunk_documents
 from src.ingestion.steps.convert_html import (
     convert_html_to_md,
     get_html_extractor_strategy,
-    set_html_extractor_strategy,
 )
+
+
+def _set_html_extractor_strategy(strategy: str) -> None:
+    """Write the HTML extractor overlay directly (setters died in roadmap P3.3)."""
+    get_runtime_state().html_extractor_strategy = strategy
 from src.ingestion.steps.load_pdfs import get_documents
 
 # =============================================================================
@@ -356,22 +361,32 @@ def test_none_metadata_values():
 
 
 class TestHTMLExtractorStrategy:
-    def test_set_html_extractor_strategy_valid(self):
-        set_html_extractor_strategy("html2md_trafilatura_bs")
+    def test_html_extractor_strategy_valid(self):
+        _set_html_extractor_strategy("html2md_trafilatura_bs")
         assert get_html_extractor_strategy() == "html2md_trafilatura_bs"
 
-    def test_set_html_extractor_strategy_invalid_defaults_to_baseline(self):
-        set_html_extractor_strategy("invalid_strategy")
+    def test_invalid_strategy_defaults_to_baseline_via_apply(self):
+        # Normalization (invalid -> baseline) lives in the runtime-config
+        # applier since the per-step setters were deleted (roadmap P3.3).
+        from src.ingestion.runtime_config import (
+            HtmlRuntimeConfig,
+            RuntimeConfig,
+            apply_runtime_config,
+        )
+
+        apply_runtime_config(
+            RuntimeConfig(html=HtmlRuntimeConfig(extractor_strategy="invalid_strategy"))
+        )
         assert get_html_extractor_strategy() == "trafilatura_bs"
 
-    def test_set_html_extractor_strategy_all_valid(self):
+    def test_html_extractor_strategy_all_valid(self):
         for strategy in [
             "trafilatura_bs",
             "html2md_trafilatura_bs",
             "readability_bs",
             "full_cascade",
         ]:
-            set_html_extractor_strategy(strategy)
+            _set_html_extractor_strategy(strategy)
             assert get_html_extractor_strategy() == strategy
 
     def test_cascade_depth_written_to_artifact(self, tmp_path: Path):
@@ -382,7 +397,7 @@ class TestHTMLExtractorStrategy:
         test_html = tmp_path / "test_page.html"
         test_html.write_text(html_content, encoding="utf-8")
 
-        set_html_extractor_strategy("trafilatura_bs")
+        _set_html_extractor_strategy("trafilatura_bs")
         result = convert_html_to_md(test_html, force=True)
 
         if result:
@@ -396,13 +411,11 @@ class TestHTMLExtractorStrategy:
             assert "html_extractor_strategy" in meta
 
     def test_selected_extractor_written_to_artifact(self, tmp_path: Path):
-        from src.ingestion.steps.convert_html import set_html_extractor_strategy
-
         html_content = "<html><body><p>Simple paragraph content here.</p></body></html>"
         test_html = tmp_path / "simple_page.html"
         test_html.write_text(html_content, encoding="utf-8")
 
-        set_html_extractor_strategy("trafilatura_bs")
+        _set_html_extractor_strategy("trafilatura_bs")
         result = convert_html_to_md(test_html, force=True)
 
         if result:

@@ -1,27 +1,24 @@
-"""Runtime configuration orchestration helpers."""
+"""Runtime configuration orchestration for the ingestion subsystem.
+
+Moved from ``src/rag/runtime_config.py`` in Phase 3 (roadmap P3.3): the
+applier writes the sanctioned ``RuntimeState`` overlay in ``config/``
+directly (with the normalization formerly spread across per-step
+``set_*`` wrappers, which were deleted). ``rag`` no longer pushes into
+``ingestion.steps``; it calls this module like every other consumer.
+"""
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass, field
 from typing import Any
 
 from src.config import settings
-from src.ingestion.indexing.chroma_store import set_vector_store_runtime_config
-from src.ingestion.steps.chunking import set_auto_select_strategy, set_source_chunk_configs
+from src.config.context import get_runtime_state
+from src.ingestion.indexing.factory import set_vector_store_runtime_config
 from src.ingestion.steps.chunking.config import (
     resolve_source_chunk_configs,
-    set_structured_chunking_enabled,
-)
-from src.ingestion.steps.convert_html import (
-    set_html_extractor_mode,
-    set_html_extractor_strategy,
-    set_page_classification_enabled,
-)
-from src.ingestion.steps.load_markdown import set_index_only_classified_pages
-from src.ingestion.steps.load_pdfs import (
-    set_pdf_extractor_strategy,
-    set_pdf_table_extractor,
 )
 
 
@@ -230,16 +227,51 @@ def build_experiment_runtime_config(experiment: dict[str, Any]) -> RuntimeConfig
     )
 
 
+_VALID_HTML_EXTRACTOR_STRATEGIES = {"trafilatura_bs", "html2md_trafilatura_bs", "readability_bs", "full_cascade"}
+_VALID_HTML_EXTRACTOR_MODES = {"auto", "primary_only", "fallback_only"}
+_VALID_PDF_EXTRACTOR_STRATEGIES = {"pypdf_pdfplumber", "pymupdf_pdfplumber"}
+_VALID_PDF_TABLE_EXTRACTORS = {"heuristic", "camelot"}
+
+
 def apply_runtime_config(config: RuntimeConfig) -> None:
-    set_page_classification_enabled(config.html.page_classification_enabled)
-    set_index_only_classified_pages(config.chunking.index_only_classified_pages)
-    set_html_extractor_mode(config.html.extractor_mode)
-    set_html_extractor_strategy(config.html.extractor_strategy)
-    set_pdf_extractor_strategy(config.pdf.extractor_strategy)
-    set_pdf_table_extractor(config.pdf.table_extractor)
-    set_structured_chunking_enabled(config.chunking.structured_chunking_enabled)
-    set_source_chunk_configs(config.chunking.source_chunk_configs)
-    set_auto_select_strategy(config.chunking.auto_select_strategy)
+    """Apply a runtime-config snapshot to the ``RuntimeState`` overlay.
+
+    Values are normalized exactly as the deleted per-step ``set_*``
+    wrappers did: invalid extractor choices fall back to the baseline
+    default instead of being stored.
+    """
+    state = get_runtime_state()
+
+    state.page_classification_enabled = bool(config.html.page_classification_enabled)
+    state.index_only_classified_pages = bool(config.chunking.index_only_classified_pages)
+
+    html_mode = str(config.html.extractor_mode or "auto").strip().lower()
+    state.html_extractor_mode = html_mode if html_mode in _VALID_HTML_EXTRACTOR_MODES else "auto"
+    state.html_extractor_strategy = (
+        config.html.extractor_strategy
+        if config.html.extractor_strategy in _VALID_HTML_EXTRACTOR_STRATEGIES
+        else "trafilatura_bs"
+    )
+
+    state.pdf_extractor_strategy = (
+        config.pdf.extractor_strategy
+        if config.pdf.extractor_strategy in _VALID_PDF_EXTRACTOR_STRATEGIES
+        else "pypdf_pdfplumber"
+    )
+    state.pdf_table_extractor = (
+        config.pdf.table_extractor
+        if config.pdf.table_extractor in _VALID_PDF_TABLE_EXTRACTORS
+        else "heuristic"
+    )
+
+    state.structured_chunking_enabled = bool(config.chunking.structured_chunking_enabled)
+    state.source_chunk_configs_override = (
+        copy.deepcopy(config.chunking.source_chunk_configs)
+        if config.chunking.source_chunk_configs is not None
+        else None
+    )
+    state.auto_select_strategy = bool(config.chunking.auto_select_strategy)
+
     set_vector_store_runtime_config(
         config.vector_store.to_dict() if config.vector_store is not None else None
     )
