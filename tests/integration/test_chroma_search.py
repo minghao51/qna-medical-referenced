@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.ingestion.indexing.chroma_store import _FILTERED_PAGE_SIZE, ChromaVectorStore
+from src.ingestion.indexing.store import _FILTERED_PAGE_SIZE, ChromaVectorStore
 
 
 # No live_api gate: the Qwen embedding API is stubbed via the

@@ -57,7 +57,7 @@ def fake_chroma_embeddings(monkeypatch, tmp_path):
     real, so store semantics are genuinely exercised without any API key or
     network.
     """
-    import src.ingestion.indexing.chroma_store as chroma_store
+    import src.ingestion.indexing.store as chroma_store
     from src.config import settings
 
     def fake_embed_texts(texts, batch_size=10, model=None):
