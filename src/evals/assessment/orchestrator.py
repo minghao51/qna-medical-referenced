@@ -6,7 +6,7 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +35,16 @@ from src.rag.runtime_config import apply_runtime_config, build_default_runtime_c
 
 logger = logging.getLogger(__name__)
 
+from src.experiments.ablations import (  # noqa: E402
+    run_diversity_sweep,
+    run_hype_ablations,
+    run_hype_ablations_with_reingest,
+    run_keyword_ablations,
+    run_keyword_ablations_with_reingest,
+    run_reranking_ablations,
+    run_retrieval_ablations,
+)
+
 from .answer_eval import evaluate_answer_quality  # noqa: E402
 from .l6_contract import (  # noqa: E402
     L6_ANSWER_QUALITY_METRICS,
@@ -45,15 +55,6 @@ from .l6_contract import (  # noqa: E402
 )
 from .reporting import git_head, render_summary, sha256_file  # noqa: E402
 from .retrieval_eval import evaluate_retrieval  # noqa: E402
-from src.experiments.ablations import (  # noqa: E402
-    run_diversity_sweep,
-    run_hype_ablations,
-    run_hype_ablations_with_reingest,
-    run_keyword_ablations,
-    run_keyword_ablations_with_reingest,
-    run_reranking_ablations,
-    run_retrieval_ablations,
-)
 from .thresholds import DEFAULT_THRESHOLDS, evaluate_thresholds  # noqa: E402
 
 __all__ = ["evaluate_answer_quality", "run_assessment"]
@@ -120,510 +121,655 @@ def _build_input_provenance(
     }
 
 
-def _run_assessment_impl(
-    params: AssessmentRunParams,
-    *,
-    audit_l0_download_fn: Callable[[], dict[str, Any]] | None = None,
-    assess_l1_html_markdown_quality_fn: Callable[[], dict[str, Any]] | None = None,
-    assess_l2_pdf_quality_fn: Callable[[], dict[str, Any]] | None = None,
-    assess_l3_chunking_quality_fn: Callable[[], dict[str, Any]] | None = None,
-    assess_l4_reference_quality_fn: Callable[[], dict[str, Any]] | None = None,
-    assess_l5_index_quality_fn: Callable[..., dict[str, Any]] | None = None,
-    build_retrieval_dataset_fn: Callable[..., dict[str, Any]] = build_retrieval_dataset,
-    evaluate_retrieval_fn: Callable[
-        ..., tuple[list[dict[str, Any]], dict[str, Any]]
-    ] = evaluate_retrieval,
-    evaluate_answers_fn: Callable[
-        ..., tuple[list[dict[str, Any]], dict[str, Any]]
-    ] = evaluate_answer_quality,
-    evaluate_thresholds_fn: Callable[..., list[dict[str, Any]]] = evaluate_thresholds,
-    git_head_fn: Callable[[], str | None] = git_head,
-    configure_runtime_for_experiment_fn: Callable[
-        [dict[str, Any] | None], dict[str, Any]
-    ] = configure_runtime_for_experiment,
-    initialize_runtime_index_fn: Callable[..., dict[str, Any]] = initialize_runtime_index,
-    log_assessment_to_wandb_fn: Callable[..., dict[str, Any]] = log_assessment_to_wandb,
-    run_retrieval_ablations_fn: Callable[..., dict[str, Any]] = run_retrieval_ablations,
-    run_hype_ablations_fn: Callable[..., dict[str, Any]] = run_hype_ablations,
-    run_keyword_ablations_fn: Callable[..., dict[str, Any]] = run_keyword_ablations,
-    run_keyword_ablations_with_reingest_fn: Callable[
-        ..., dict[str, Any]
-    ] = run_keyword_ablations_with_reingest,
-    run_hype_ablations_with_reingest_fn: Callable[
-        ..., dict[str, Any]
-    ] = run_hype_ablations_with_reingest,
-    run_reranking_ablations_fn: Callable[..., dict[str, Any]] = run_reranking_ablations,
-    run_diversity_sweep_fn: Callable[..., list[dict[str, Any]]] = run_diversity_sweep,
-    render_summary_fn: Callable[..., str] = render_summary,
-    sha256_file_fn: Callable[[str | Path | None], str | None] = sha256_file,
-) -> AssessmentResult:
-    start = time.time()
+@dataclass
+class AssessmentPipeline:
+    """Staged, dependency-injected end-to-end assessment pipeline.
 
-    thresholds = dict(DEFAULT_THRESHOLDS)
-    if params.thresholds_file:
-        thresholds.update(json.loads(Path(params.thresholds_file).read_text(encoding="utf-8")))
+    Decomposed from a single ~490-line function in Phase 2 (roadmap P2.4).
+    Each stage is a small method with explicit inputs/outputs; ``run``
+    composes them. The module-level ``run_assessment`` is the default
+    composition: it resolves overrides from this module's namespace at
+    call time, which keeps ``monkeypatch.setattr`` on this module working.
+    """
 
-    _api_key = settings.llm.dashscope_api_key.get_secret_value()
-    key_available = bool(_api_key)
-    resolved_include_answer_eval = (
-        bool(params.include_answer_eval)
-        if params.include_answer_eval is not None
-        else key_available
+    audit_l0_download_fn: Callable[[], dict[str, Any]] = audit_l0_download
+    assess_l1_html_markdown_quality_fn: Callable[[], dict[str, Any]] = (
+        assess_l1_html_markdown_quality
     )
-    resolved_retrieval_options = dict(params.retrieval_options or {})
-    if params.disable_bm25:
-        resolved_retrieval_options["search_mode"] = "semantic_only"
-    elif params.retrieval_mode != "rrf_hybrid":
-        resolved_retrieval_options["search_mode"] = params.retrieval_mode
-    config = AssessmentConfig(
-        artifact_dir=Path(params.artifact_dir),
-        name=params.name,
-        dataset_path=Path(params.dataset_path) if params.dataset_path else None,
-        top_k=params.top_k,
-        max_synthetic_questions=params.max_synthetic_questions,
-        disable_llm_generation=params.disable_llm_generation,
-        disable_llm_judging=params.disable_llm_judging,
-        include_answer_eval=resolved_include_answer_eval,
-        sample_docs_per_source_type=params.sample_docs_per_source_type,
-        seed=params.seed,
-        max_queries=params.max_queries,
-        sample_seed=params.sample_seed,
-        reuse_cached_dataset=params.reuse_cached_dataset,
-        fail_on_thresholds=params.fail_on_thresholds,
-        thresholds=thresholds,
-        retrieval_options=resolved_retrieval_options,
-        dataset_split=params.dataset_split,
-        min_label_confidence=params.min_label_confidence,
-        retrieval_mode=params.retrieval_mode,
-        disable_page_classification=params.disable_page_classification,
-        disable_structured_chunking=params.disable_structured_chunking,
-        disable_bm25=params.disable_bm25,
-        export_failed_generations=params.export_failed_generations,
-        run_retrieval_ablations=params.run_retrieval_ablations,
-        run_hype_ablations=params.run_hype_ablations,
-        run_keyword_ablations=params.run_keyword_ablations,
-        run_reranking_ablations=params.run_reranking_ablations,
-        run_diversity_sweep=params.run_diversity_sweep,
-        diversity_sweep=dict(params.diversity_sweep or {}),
-        experiment_config=params.experiment_config,
-        force_rerun=params.force_rerun,
-        skip_ingestion=params.skip_ingestion,
+    assess_l2_pdf_quality_fn: Callable[[], dict[str, Any]] = assess_l2_pdf_quality
+    assess_l3_chunking_quality_fn: Callable[[], dict[str, Any]] = assess_l3_chunking_quality
+    assess_l4_reference_quality_fn: Callable[[], dict[str, Any]] = assess_l4_reference_quality
+    assess_l5_index_quality_fn: Callable[..., dict[str, Any]] = assess_l5_index_quality
+    build_retrieval_dataset_fn: Callable[..., dict[str, Any]] = build_retrieval_dataset
+    evaluate_retrieval_fn: Callable[..., tuple[list[dict[str, Any]], dict[str, Any]]] = (
+        evaluate_retrieval
     )
-    config_payload = asdict(config)
-    git_revision = git_head_fn()
-    input_provenance = _build_input_provenance(
-        dataset_path=config.dataset_path,
-        raw_data_dir=DATA_RAW_DIR,
-        sha256_file_fn=sha256_file_fn,
+    evaluate_answers_fn: Callable[..., tuple[list[dict[str, Any]], dict[str, Any]]] = (
+        evaluate_answer_quality
     )
-    run_identity = build_run_identity(
-        config={"assessment": config_payload, "input_provenance": input_provenance},
-        git_head=git_revision,
+    evaluate_thresholds_fn: Callable[..., list[dict[str, Any]]] = evaluate_thresholds
+    git_head_fn: Callable[[], str | None] = git_head
+    configure_runtime_for_experiment_fn: Callable[[dict[str, Any] | None], dict[str, Any]] = (
+        configure_runtime_for_experiment
     )
-    reusable_run_dir = (
-        None if config.force_rerun else find_reusable_run(config.artifact_dir, run_identity)
+    initialize_runtime_index_fn: Callable[..., dict[str, Any]] = initialize_runtime_index
+    log_assessment_to_wandb_fn: Callable[..., dict[str, Any]] = log_assessment_to_wandb
+    run_retrieval_ablations_fn: Callable[..., dict[str, Any]] = run_retrieval_ablations
+    run_hype_ablations_fn: Callable[..., dict[str, Any]] = run_hype_ablations
+    run_keyword_ablations_fn: Callable[..., dict[str, Any]] = run_keyword_ablations
+    run_keyword_ablations_with_reingest_fn: Callable[..., dict[str, Any]] = (
+        run_keyword_ablations_with_reingest
     )
-    if reusable_run_dir is not None:
-        write_latest_pointer(config.artifact_dir, reusable_run_dir)
-        reused_summary = _load_json_if_exists(reusable_run_dir / "summary.json")
-        reused_summary["dedup"] = {
-            "reused_existing_run": True,
-            "matched_run_dir": str(reusable_run_dir),
+    run_hype_ablations_with_reingest_fn: Callable[..., dict[str, Any]] = (
+        run_hype_ablations_with_reingest
+    )
+    run_reranking_ablations_fn: Callable[..., dict[str, Any]] = run_reranking_ablations
+    run_diversity_sweep_fn: Callable[..., list[dict[str, Any]]] = run_diversity_sweep
+    render_summary_fn: Callable[..., str] = render_summary
+    sha256_file_fn: Callable[[str | Path | None], str | None] = sha256_file
+
+    def run(self, params: AssessmentRunParams) -> AssessmentResult:
+        """Compose all stages; returns early when a reusable run matches."""
+        start = time.time()
+
+        (config, config_payload, git_revision, input_provenance, run_identity, key_available) = (
+            self._resolve_config(params)
+        )
+
+        reusable = self._reusable_result(config, run_identity)
+        if reusable is not None:
+            return reusable
+
+        experiment_runtime, index_preparation = self._prepare_index(config)
+
+        store = ArtifactStore(config.artifact_dir, config.name)
+        manifest = self._seed_manifest(
+            store,
+            config,
+            config_payload,
+            git_revision,
+            input_provenance,
+            run_identity,
+            key_available,
+            index_preparation,
+            start,
+        )
+
+        step_metrics, step_findings, vector_path, vector_file_sha256, l5_agg = (
+            self._run_step_checks(config, experiment_runtime)
+        )
+        l5_collection_name = experiment_runtime.get("vector_store", {}).get("collection_name")
+
+        dataset, generation_attempts, dataset_stats = self._build_dataset(
+            config, vector_file_sha256
+        )
+
+        retrieval = self._run_retrieval_stage(config, dataset, l5_collection_name)
+
+        l6_answer_quality_rows, l6_answer_quality_metrics = self._run_answer_eval(
+            config, dataset, vector_file_sha256
+        )
+
+        return self._finalize(
+            config=config,
+            start=start,
+            run_identity=run_identity,
+            store=store,
+            manifest=manifest,
+            step_metrics=step_metrics,
+            step_findings=step_findings,
+            vector_path=vector_path,
+            vector_file_sha256=vector_file_sha256,
+            l5_agg=l5_agg,
+            dataset=dataset,
+            dataset_stats=dataset_stats,
+            generation_attempts=generation_attempts,
+            retrieval=retrieval,
+            l6_answer_quality_rows=l6_answer_quality_rows,
+            l6_answer_quality_metrics=l6_answer_quality_metrics,
+        )
+
+    def _resolve_config(
+        self, params: AssessmentRunParams
+    ) -> tuple[AssessmentConfig, dict[str, Any], str | None, dict[str, Any], dict[str, Any], bool]:
+        """Stage 1: resolve run parameters into an AssessmentConfig + provenance."""
+        thresholds = dict(DEFAULT_THRESHOLDS)
+        if params.thresholds_file:
+            thresholds.update(json.loads(Path(params.thresholds_file).read_text(encoding="utf-8")))
+
+        _api_key = settings.llm.dashscope_api_key.get_secret_value()
+        key_available = bool(_api_key)
+        resolved_include_answer_eval = (
+            bool(params.include_answer_eval)
+            if params.include_answer_eval is not None
+            else key_available
+        )
+        resolved_retrieval_options = dict(params.retrieval_options or {})
+        if params.disable_bm25:
+            resolved_retrieval_options["search_mode"] = "semantic_only"
+        elif params.retrieval_mode != "rrf_hybrid":
+            resolved_retrieval_options["search_mode"] = params.retrieval_mode
+        config = AssessmentConfig(
+            artifact_dir=Path(params.artifact_dir),
+            name=params.name,
+            dataset_path=Path(params.dataset_path) if params.dataset_path else None,
+            top_k=params.top_k,
+            max_synthetic_questions=params.max_synthetic_questions,
+            disable_llm_generation=params.disable_llm_generation,
+            disable_llm_judging=params.disable_llm_judging,
+            include_answer_eval=resolved_include_answer_eval,
+            sample_docs_per_source_type=params.sample_docs_per_source_type,
+            seed=params.seed,
+            max_queries=params.max_queries,
+            sample_seed=params.sample_seed,
+            reuse_cached_dataset=params.reuse_cached_dataset,
+            fail_on_thresholds=params.fail_on_thresholds,
+            thresholds=thresholds,
+            retrieval_options=resolved_retrieval_options,
+            dataset_split=params.dataset_split,
+            min_label_confidence=params.min_label_confidence,
+            retrieval_mode=params.retrieval_mode,
+            disable_page_classification=params.disable_page_classification,
+            disable_structured_chunking=params.disable_structured_chunking,
+            disable_bm25=params.disable_bm25,
+            export_failed_generations=params.export_failed_generations,
+            run_retrieval_ablations=params.run_retrieval_ablations,
+            run_hype_ablations=params.run_hype_ablations,
+            run_keyword_ablations=params.run_keyword_ablations,
+            run_reranking_ablations=params.run_reranking_ablations,
+            run_diversity_sweep=params.run_diversity_sweep,
+            diversity_sweep=dict(params.diversity_sweep or {}),
+            experiment_config=params.experiment_config,
+            force_rerun=params.force_rerun,
+            skip_ingestion=params.skip_ingestion,
+        )
+        config_payload = asdict(config)
+        git_revision = self.git_head_fn()
+        input_provenance = _build_input_provenance(
+            dataset_path=config.dataset_path,
+            raw_data_dir=DATA_RAW_DIR,
+            sha256_file_fn=self.sha256_file_fn,
+        )
+        run_identity = build_run_identity(
+            config={"assessment": config_payload, "input_provenance": input_provenance},
+            git_head=git_revision,
+        )
+        return config, config_payload, git_revision, input_provenance, run_identity, key_available
+
+    def _reusable_result(
+        self, config: AssessmentConfig, run_identity: dict[str, Any]
+    ) -> AssessmentResult | None:
+        """Stage 2: return a previous equivalent run's result, if any."""
+        reusable_run_dir = (
+            None if config.force_rerun else find_reusable_run(config.artifact_dir, run_identity)
+        )
+        if reusable_run_dir is not None:
+            write_latest_pointer(config.artifact_dir, reusable_run_dir)
+            reused_summary = _load_json_if_exists(reusable_run_dir / "summary.json")
+            reused_summary["dedup"] = {
+                "reused_existing_run": True,
+                "matched_run_dir": str(reusable_run_dir),
+                "run_identity": run_identity,
+                "force_rerun": False,
+            }
+            return AssessmentResult(
+                run_dir=reusable_run_dir,
+                status=str(reused_summary.get("status", "ok")),
+                failed_thresholds=_load_failed_thresholds_for_run(reusable_run_dir),
+                summary=reused_summary,
+            )
+
+    def _prepare_index(self, config: AssessmentConfig) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Stage 3: configure the runtime index (or skip per config)."""
+        experiment_runtime = self.configure_runtime_for_experiment_fn(config.experiment_config)
+        index_preparation: dict[str, Any] = {"status": "not_requested"}
+        if config.skip_ingestion:
+            logger.info("Skipping ingestion — reusing existing index")
+            index_preparation = {"status": "skipped", "reason": "skip_ingestion_requested"}
+        elif not config.experiment_config:
+            apply_runtime_config(
+                build_default_runtime_config(
+                    disable_page_classification=config.disable_page_classification,
+                    disable_structured_chunking=config.disable_structured_chunking,
+                )
+            )
+        else:
+            embedding_index = config.experiment_config.get("embedding_index", {})
+            vector_config = experiment_runtime.get("vector_store", {})
+            vector_path = Path("data/vectors") / (
+                f"{vector_config.get('collection_name', settings.storage.collection_name)}.json"
+            )
+            existing_index_hash = None
+            if vector_path.exists():
+                try:
+                    payload = json.loads(vector_path.read_text(encoding="utf-8"))
+                    existing_index_hash = (payload.get("index_metadata", {}) or {}).get(
+                        "index_config_hash"
+                    )
+                except Exception as e:
+                    logger.debug("Failed to load vector index hash from %s: %s", vector_path, e)
+                    existing_index_hash = None
+            rebuild_policy = str(
+                embedding_index.get("rebuild_policy", "if_missing_or_stale")
+            ).lower()
+            should_rebuild = rebuild_policy == "always"
+            if rebuild_policy in {"if_missing_or_stale", "auto"}:
+                should_rebuild = (not vector_path.exists()) or (
+                    existing_index_hash != config.experiment_config.get("index_config_hash")
+                )
+            if rebuild_policy == "never" and existing_index_hash not in {
+                None,
+                config.experiment_config.get("index_config_hash"),
+            }:
+                raise ValueError("Experiment index configuration does not match existing index")
+            index_preparation = self.initialize_runtime_index_fn(
+                rebuild=should_rebuild,
+                materialize_html=bool(embedding_index.get("materialize_html", True)),
+                force_html_reconvert=should_rebuild,
+            )
+        return experiment_runtime, index_preparation
+
+    def _seed_manifest(
+        self,
+        store: ArtifactStore,
+        config: AssessmentConfig,
+        config_payload: dict[str, Any],
+        git_revision: str | None,
+        input_provenance: dict[str, Any],
+        run_identity: dict[str, Any],
+        key_available: bool,
+        index_preparation: dict[str, Any],
+        start: float,
+    ) -> dict[str, Any]:
+        """Stage 4: create the artifact store and write the initial manifest."""
+        store = ArtifactStore(config.artifact_dir, config.name)
+        manifest = {
+            "config": config_payload,
+            "git_head": git_revision,
             "run_identity": run_identity,
-            "force_rerun": False,
+            "input_provenance": input_provenance,
+            "dashscope_key_present": key_available,
+            "started_at_epoch_s": start,
+            "experiment": {
+                "file": (config.experiment_config or {}).get("experiment_file"),
+                "variant": (config.experiment_config or {}).get("variant_name"),
+                "config_hash": (config.experiment_config or {}).get("experiment_config_hash"),
+                "index_config_hash": (config.experiment_config or {}).get("index_config_hash"),
+            },
+            "index_preparation": index_preparation,
         }
-        return AssessmentResult(
-            run_dir=reusable_run_dir,
-            status=str(reused_summary.get("status", "ok")),
-            failed_thresholds=_load_failed_thresholds_for_run(reusable_run_dir),
-            summary=reused_summary,
-        )
+        store.write_json("manifest.json", manifest)
+        return manifest
 
-    experiment_runtime = configure_runtime_for_experiment_fn(config.experiment_config)
-    index_preparation: dict[str, Any] = {"status": "not_requested"}
-    if config.skip_ingestion:
-        logger.info("Skipping ingestion — reusing existing index")
-        index_preparation = {"status": "skipped", "reason": "skip_ingestion_requested"}
-    elif not config.experiment_config:
-        apply_runtime_config(
-            build_default_runtime_config(
-                disable_page_classification=config.disable_page_classification,
-                disable_structured_chunking=config.disable_structured_chunking,
-            )
-        )
-    else:
-        embedding_index = config.experiment_config.get("embedding_index", {})
-        vector_config = experiment_runtime.get("vector_store", {})
-        vector_path = Path("data/vectors") / (
-            f"{vector_config.get('collection_name', settings.storage.collection_name)}.json"
-        )
-        existing_index_hash = None
-        if vector_path.exists():
-            try:
-                payload = json.loads(vector_path.read_text(encoding="utf-8"))
-                existing_index_hash = (payload.get("index_metadata", {}) or {}).get(
-                    "index_config_hash"
-                )
-            except Exception as e:
-                logger.debug("Failed to load vector index hash from %s: %s", vector_path, e)
-                existing_index_hash = None
-        rebuild_policy = str(embedding_index.get("rebuild_policy", "if_missing_or_stale")).lower()
-        should_rebuild = rebuild_policy == "always"
-        if rebuild_policy in {"if_missing_or_stale", "auto"}:
-            should_rebuild = (not vector_path.exists()) or (
-                existing_index_hash != config.experiment_config.get("index_config_hash")
-            )
-        if rebuild_policy == "never" and existing_index_hash not in {
-            None,
-            config.experiment_config.get("index_config_hash"),
-        }:
-            raise ValueError("Experiment index configuration does not match existing index")
-        index_preparation = initialize_runtime_index_fn(
-            rebuild=should_rebuild,
-            materialize_html=bool(embedding_index.get("materialize_html", True)),
-            force_html_reconvert=should_rebuild,
-        )
-
-    store = ArtifactStore(config.artifact_dir, config.name)
-    manifest = {
-        "config": config_payload,
-        "git_head": git_revision,
-        "run_identity": run_identity,
-        "input_provenance": input_provenance,
-        "dashscope_key_present": key_available,
-        "started_at_epoch_s": start,
-        "experiment": {
-            "file": (config.experiment_config or {}).get("experiment_file"),
-            "variant": (config.experiment_config or {}).get("variant_name"),
-            "config_hash": (config.experiment_config or {}).get("experiment_config_hash"),
-            "index_config_hash": (config.experiment_config or {}).get("index_config_hash"),
-        },
-        "index_preparation": index_preparation,
-    }
-    store.write_json("manifest.json", manifest)
-
-    l5_collection_name = experiment_runtime.get("vector_store", {}).get("collection_name")
-    # Stage checks default to the canonical implementations from
-    # src.evals.checks, resolved at call time so tests can monkeypatch the
-    # module attributes (the former src.evals.pipeline_assessment facade
-    # resolved them the same way).
-    audit_l0 = audit_l0_download_fn if audit_l0_download_fn is not None else audit_l0_download
-    assess_l1 = (
-        assess_l1_html_markdown_quality_fn
-        if assess_l1_html_markdown_quality_fn is not None
-        else assess_l1_html_markdown_quality
-    )
-    assess_l2 = (
-        assess_l2_pdf_quality_fn if assess_l2_pdf_quality_fn is not None else assess_l2_pdf_quality
-    )
-    assess_l3 = (
-        assess_l3_chunking_quality_fn
-        if assess_l3_chunking_quality_fn is not None
-        else assess_l3_chunking_quality
-    )
-    assess_l4 = (
-        assess_l4_reference_quality_fn
-        if assess_l4_reference_quality_fn is not None
-        else assess_l4_reference_quality
-    )
-    assess_l5 = (
-        assess_l5_index_quality_fn
-        if assess_l5_index_quality_fn is not None
-        else assess_l5_index_quality
-    )
-    step_metrics = {
-        "l0": audit_l0(),
-        "l1": assess_l1(),
-        "l2": assess_l2(),
-        "l3": assess_l3(),
-        "l4": assess_l4(),
-        "l5": assess_l5(collection_name=l5_collection_name) if l5_collection_name else assess_l5(),
-    }
-    step_findings: list[dict[str, Any]] = []
-    for stage in step_metrics.values():
-        step_findings.extend(stage.get("findings", []))
-    l5_agg = step_metrics.get("l5", {}).get("aggregate", {})
-    vector_path = l5_agg.get("vector_path")
-    vector_file_sha256 = sha256_file_fn(vector_path)
-
-    dataset_bundle = build_retrieval_dataset_fn(
-        dataset_path=config.dataset_path,
-        enable_llm_generation=not config.disable_llm_generation,
-        max_synthetic_questions=config.max_synthetic_questions,
-        sample_docs_per_source_type=config.sample_docs_per_source_type,
-        seed=config.seed,
-        max_queries=config.max_queries,
-        sample_seed=config.sample_seed,
-        reuse_cached_dataset=config.reuse_cached_dataset,
-        reuse_requirements={
-            "experiment_index_config_hash": (
-                (config.experiment_config or {}).get("index_config_hash")
+    def _run_step_checks(
+        self, config: AssessmentConfig, experiment_runtime: dict[str, Any]
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], Any, str | None, dict[str, Any]]:
+        """Stage 5: run L0-L5 per-stage quality checks."""
+        l5_collection_name = experiment_runtime.get("vector_store", {}).get("collection_name")
+        step_metrics = {
+            "l0": self.audit_l0_download_fn(),
+            "l1": self.assess_l1_html_markdown_quality_fn(),
+            "l2": self.assess_l2_pdf_quality_fn(),
+            "l3": self.assess_l3_chunking_quality_fn(),
+            "l4": self.assess_l4_reference_quality_fn(),
+            "l5": (
+                self.assess_l5_index_quality_fn(collection_name=l5_collection_name)
+                if l5_collection_name
+                else self.assess_l5_index_quality_fn()
             ),
-            "vector_file_sha256": vector_file_sha256,
-        },
-        artifact_dir=config.artifact_dir,
-        dataset_split=config.dataset_split,
-        min_label_confidence=config.min_label_confidence,
-    )
-    dataset = dataset_bundle["dataset"]
-    generation_attempts = dataset_bundle.get("generation_attempts", [])
-    dataset_stats = dataset_bundle.get("stats", {})
+        }
+        step_findings: list[dict[str, Any]] = []
+        for stage in step_metrics.values():
+            step_findings.extend(stage.get("findings", []))
+        l5_agg = step_metrics.get("l5", {}).get("aggregate", {})
+        vector_path = l5_agg.get("vector_path")
+        vector_file_sha256 = self.sha256_file_fn(vector_path)
+        return step_metrics, step_findings, vector_path, vector_file_sha256, l5_agg
 
-    if config.retrieval_options:
-        retrieval_rows, retrieval_metrics = evaluate_retrieval_fn(
-            dataset, config.top_k, retrieval_options=config.retrieval_options
-        )
-    else:
-        retrieval_rows, retrieval_metrics = evaluate_retrieval_fn(dataset, config.top_k)
-    retrieval_ablations: dict[str, Any] = {}
-    if config.run_retrieval_ablations:
-        retrieval_ablations = run_retrieval_ablations_fn(
-            dataset, config.top_k, base_options=config.retrieval_options
-        )
-    hype_ablations: dict[str, Any] = {}
-    if config.run_hype_ablations:
-        if config.experiment_config:
-
-            def _rebuild_hype_index(hype_config, collection_name):
-                exp = dict(config.experiment_config or {})
-                ingestion = dict(exp.get("ingestion", {}))
-                ingestion.update(hype_config)
-                exp["ingestion"] = ingestion
-                embedding_index = dict(exp.get("embedding_index", {}))
-                embedding_index["collection_name"] = collection_name
-                exp["embedding_index"] = embedding_index
-                configure_runtime_for_experiment_fn(exp)
-                initialize_runtime_index_fn(
-                    rebuild=True, materialize_html=True, force_html_reconvert=True
-                )
-
-            hype_ablations = run_hype_ablations_with_reingest_fn(
-                dataset,
-                config.top_k,
-                base_options=config.retrieval_options,
-                base_collection_name=l5_collection_name,
-                reconfigure_and_rebuild_fn=_rebuild_hype_index,
-            )
-        else:
-            hype_ablations = run_hype_ablations_fn(
-                dataset, config.top_k, base_options=config.retrieval_options
-            )
-    reranking_ablations: dict[str, Any] = {}
-    if config.run_reranking_ablations:
-        reranking_ablations = run_reranking_ablations_fn(
-            dataset, config.top_k, base_options=config.retrieval_options
-        )
-    keyword_ablations: dict[str, Any] = {}
-    if config.run_keyword_ablations:
-        if config.experiment_config:
-
-            def _rebuild_keyword_index(enrichment_config, collection_name):
-                exp = dict(config.experiment_config or {})
-                ingestion = dict(exp.get("ingestion", {}))
-                ingestion.update(enrichment_config)
-                exp["ingestion"] = ingestion
-                embedding_index = dict(exp.get("embedding_index", {}))
-                embedding_index["collection_name"] = collection_name
-                exp["embedding_index"] = embedding_index
-                configure_runtime_for_experiment_fn(exp)
-                initialize_runtime_index_fn(
-                    rebuild=True, materialize_html=True, force_html_reconvert=False
-                )
-
-            keyword_ablations = run_keyword_ablations_with_reingest_fn(
-                dataset,
-                config.top_k,
-                base_options=config.retrieval_options,
-                base_collection_name=l5_collection_name,
-                reconfigure_and_rebuild_fn=_rebuild_keyword_index,
-            )
-        else:
-            keyword_ablations = run_keyword_ablations_fn(
-                dataset, config.top_k, base_options=config.retrieval_options
-            )
-    diversity_sweep_rows: list[dict[str, Any]] = []
-    if config.run_diversity_sweep:
-        diversity_sweep_rows = run_diversity_sweep_fn(
-            dataset,
-            config.top_k,
-            base_options=config.retrieval_options,
-            mmr_lambda_values=config.diversity_sweep.get("mmr_lambda_values"),
-            overfetch_multipliers=config.diversity_sweep.get("overfetch_multipliers"),
-            max_chunks_per_source_page_values=config.diversity_sweep.get(
-                "max_chunks_per_source_page_values"
-            ),
-            max_chunks_per_source_values=config.diversity_sweep.get("max_chunks_per_source_values"),
-        )
-    l3_agg = step_metrics.get("l3", {}).get("aggregate", {})
-    l6_answer_quality_rows: list[dict[str, Any]] = []
-    l6_answer_quality_metrics: dict[str, Any] = {"status": "skipped", "reason": "disabled"}
-    if config.include_answer_eval and not config.disable_llm_judging:
-        l6_answer_quality_rows, l6_answer_quality_metrics = evaluate_answers_fn(
-            dataset,
-            config.top_k,
-            cache_dir=Path(settings.deepeval.deepeval_cache_dir),
-            retrieval_options=config.retrieval_options,
-            cache_namespace={
-                "retrieval_mode": config.retrieval_mode,
+    def _build_dataset(
+        self, config: AssessmentConfig, vector_file_sha256: str | None
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        """Stage 6: build (or reuse) the retrieval evaluation dataset."""
+        dataset_bundle = self.build_retrieval_dataset_fn(
+            dataset_path=config.dataset_path,
+            enable_llm_generation=not config.disable_llm_generation,
+            max_synthetic_questions=config.max_synthetic_questions,
+            sample_docs_per_source_type=config.sample_docs_per_source_type,
+            seed=config.seed,
+            max_queries=config.max_queries,
+            sample_seed=config.sample_seed,
+            reuse_cached_dataset=config.reuse_cached_dataset,
+            reuse_requirements={
                 "experiment_index_config_hash": (
                     (config.experiment_config or {}).get("index_config_hash")
                 ),
-                "experiment_variant": ((config.experiment_config or {}).get("variant_name")),
                 "vector_file_sha256": vector_file_sha256,
             },
+            artifact_dir=config.artifact_dir,
+            dataset_split=config.dataset_split,
+            min_label_confidence=config.min_label_confidence,
         )
-    elif config.disable_llm_judging:
-        l6_answer_quality_metrics = {"status": "skipped", "reason": "llm_judging_disabled"}
+        dataset = dataset_bundle["dataset"]
+        generation_attempts = dataset_bundle.get("generation_attempts", [])
+        dataset_stats = dataset_bundle.get("stats", {})
+        return dataset, generation_attempts, dataset_stats
 
-    failed_thresholds = evaluate_thresholds_fn(
-        step_metrics,
-        retrieval_metrics,
-        l6_answer_quality_metrics,
-        config.thresholds,
-    )
-    step_findings.extend(
-        {
-            "severity": "error",
-            "stage": "threshold",
-            "message": f"{f['metric']} below threshold",
-            **f,
-        }
-        for f in failed_thresholds
-    )
-
-    dataset_file = dataset_stats.get("dataset_path") or (
-        str(config.dataset_path) if config.dataset_path else None
-    )
-    manifest["runtime_retrieval"] = retrieval_metrics.get("retrieval_options", {})
-    manifest["dataset"] = dataset_stats
-    manifest["chunking"] = {
-        "chunk_size_config": l3_agg.get("chunk_size_config"),
-        "chunk_overlap_config": l3_agg.get("chunk_overlap_config"),
-        "structured_chunking_enabled": not config.disable_structured_chunking,
-        "source_chunk_configs": (
-            (config.experiment_config or {}).get("ingestion", {}).get("source_chunk_configs")
-        ),
-        "page_classification_enabled": not config.disable_page_classification,
-        "html_extractor_mode": (
-            (config.experiment_config or {}).get("ingestion", {}).get("html_extractor_mode")
-        ),
-    }
-    index_metadata: dict[str, Any] = {}
-    if vector_path and Path(vector_path).exists():
-        try:
-            index_payload = json.loads(Path(vector_path).read_text(encoding="utf-8"))
-            index_metadata = index_payload.get("index_metadata", {}) or {}
-        except Exception as e:
-            logger.debug("Failed to load index metadata from %s: %s", vector_path, e)
-            index_metadata = {}
-    manifest["index_provenance"] = {
-        "collection_name": index_metadata.get("collection_name", settings.storage.collection_name),
-        "vector_path": vector_path,
-        "vector_file_mtime_epoch_s": Path(vector_path).stat().st_mtime
-        if vector_path and Path(vector_path).exists()
-        else None,
-        "doc_counts_by_source_type": l5_agg.get("source_distribution", {}),
-        "dedupe_effect_estimate": l5_agg.get("dedupe_effect_estimate"),
-        "index_config_hash": index_metadata.get("index_config_hash"),
-        "embedding_model": index_metadata.get("embedding_model"),
-        "embedding_batch_size": index_metadata.get("embedding_batch_size"),
-        "semantic_weight": index_metadata.get("semantic_weight"),
-        "keyword_weight": index_metadata.get("keyword_weight"),
-        "boost_weight": index_metadata.get("boost_weight"),
-        "page_classification_enabled": index_metadata.get("page_classification_enabled"),
-        "index_only_classified_pages": index_metadata.get("index_only_classified_pages"),
-        "html_extractor_mode": index_metadata.get("html_extractor_mode"),
-        "structured_chunking_enabled": index_metadata.get("structured_chunking_enabled"),
-        "source_chunk_configs": (
-            (lambda v: json.loads(v) if isinstance(v, str) else v)(
-                index_metadata.get("source_chunk_configs")
+    def _run_retrieval_stage(
+        self,
+        config: AssessmentConfig,
+        dataset: list[dict[str, Any]],
+        l5_collection_name: str | None,
+    ) -> dict[str, Any]:
+        """Stage 7: retrieval metrics + ablation families (with re-ingest closures)."""
+        if config.retrieval_options:
+            retrieval_rows, retrieval_metrics = self.evaluate_retrieval_fn(
+                dataset, config.top_k, retrieval_options=config.retrieval_options
             )
-        ),
-        "observed_embedding_dim": l5_agg.get("embedding_dim"),
-        "indexing_stats": index_preparation.get("indexing_stats", {}),
-    }
-    manifest["checksums"] = {
-        "vector_file_sha256": vector_file_sha256,
-        "dataset_file_sha256": sha256_file_fn(dataset_file),
-    }
-    store.write_json("manifest.json", manifest)
+        else:
+            retrieval_rows, retrieval_metrics = self.evaluate_retrieval_fn(dataset, config.top_k)
+        retrieval_ablations: dict[str, Any] = {}
+        if config.run_retrieval_ablations:
+            retrieval_ablations = self.run_retrieval_ablations_fn(
+                dataset, config.top_k, base_options=config.retrieval_options
+            )
+        hype_ablations: dict[str, Any] = {}
+        if config.run_hype_ablations:
+            if config.experiment_config:
 
-    store.write_json("step_metrics.json", step_metrics)
-    store.write_json("step_findings.json", step_findings)
-    store.write_jsonl("html_metrics.jsonl", step_metrics["l1"].get("records", []))
-    store.write_jsonl("pdf_metrics.jsonl", step_metrics["l2"].get("records", []))
-    store.write_jsonl("chunk_metrics.jsonl", step_metrics["l3"].get("records", []))
-    store.write_json("reference_metrics.json", step_metrics["l4"])
-    store.write_json("index_metrics.json", step_metrics["l5"])
-    store.write_json("retrieval_dataset.json", dataset)
-    if config.export_failed_generations:
-        store.write_jsonl("retrieval_dataset_generation.jsonl", generation_attempts)
-    else:
-        store.write_jsonl(
-            "retrieval_dataset_generation.jsonl",
-            [row for row in generation_attempts if row.get("status") == "accepted"],
+                def _rebuild_hype_index(hype_config, collection_name):
+                    exp = dict(config.experiment_config or {})
+                    ingestion = dict(exp.get("ingestion", {}))
+                    ingestion.update(hype_config)
+                    exp["ingestion"] = ingestion
+                    embedding_index = dict(exp.get("embedding_index", {}))
+                    embedding_index["collection_name"] = collection_name
+                    exp["embedding_index"] = embedding_index
+                    self.configure_runtime_for_experiment_fn(exp)
+                    self.initialize_runtime_index_fn(
+                        rebuild=True, materialize_html=True, force_html_reconvert=True
+                    )
+
+                hype_ablations = self.run_hype_ablations_with_reingest_fn(
+                    dataset,
+                    config.top_k,
+                    base_options=config.retrieval_options,
+                    base_collection_name=l5_collection_name,
+                    reconfigure_and_rebuild_fn=_rebuild_hype_index,
+                )
+            else:
+                hype_ablations = self.run_hype_ablations_fn(
+                    dataset, config.top_k, base_options=config.retrieval_options
+                )
+        reranking_ablations: dict[str, Any] = {}
+        if config.run_reranking_ablations:
+            reranking_ablations = self.run_reranking_ablations_fn(
+                dataset, config.top_k, base_options=config.retrieval_options
+            )
+        keyword_ablations: dict[str, Any] = {}
+        if config.run_keyword_ablations:
+            if config.experiment_config:
+
+                def _rebuild_keyword_index(enrichment_config, collection_name):
+                    exp = dict(config.experiment_config or {})
+                    ingestion = dict(exp.get("ingestion", {}))
+                    ingestion.update(enrichment_config)
+                    exp["ingestion"] = ingestion
+                    embedding_index = dict(exp.get("embedding_index", {}))
+                    embedding_index["collection_name"] = collection_name
+                    exp["embedding_index"] = embedding_index
+                    self.configure_runtime_for_experiment_fn(exp)
+                    self.initialize_runtime_index_fn(
+                        rebuild=True, materialize_html=True, force_html_reconvert=False
+                    )
+
+                keyword_ablations = self.run_keyword_ablations_with_reingest_fn(
+                    dataset,
+                    config.top_k,
+                    base_options=config.retrieval_options,
+                    base_collection_name=l5_collection_name,
+                    reconfigure_and_rebuild_fn=_rebuild_keyword_index,
+                )
+            else:
+                keyword_ablations = self.run_keyword_ablations_fn(
+                    dataset, config.top_k, base_options=config.retrieval_options
+                )
+        diversity_sweep_rows: list[dict[str, Any]] = []
+        if config.run_diversity_sweep:
+            diversity_sweep_rows = self.run_diversity_sweep_fn(
+                dataset,
+                config.top_k,
+                base_options=config.retrieval_options,
+                mmr_lambda_values=config.diversity_sweep.get("mmr_lambda_values"),
+                overfetch_multipliers=config.diversity_sweep.get("overfetch_multipliers"),
+                max_chunks_per_source_page_values=config.diversity_sweep.get(
+                    "max_chunks_per_source_page_values"
+                ),
+                max_chunks_per_source_values=config.diversity_sweep.get(
+                    "max_chunks_per_source_values"
+                ),
+            )
+        return {
+            "retrieval_rows": retrieval_rows,
+            "retrieval_metrics": retrieval_metrics,
+            "retrieval_ablations": retrieval_ablations,
+            "hype_ablations": hype_ablations,
+            "reranking_ablations": reranking_ablations,
+            "keyword_ablations": keyword_ablations,
+            "diversity_sweep_rows": diversity_sweep_rows,
+        }
+
+    def _run_answer_eval(
+        self,
+        config: AssessmentConfig,
+        dataset: list[dict[str, Any]],
+        vector_file_sha256: str | None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Stage 8: L6 answer-quality evaluation (LLM-as-judge)."""
+        l6_answer_quality_rows: list[dict[str, Any]] = []
+        l6_answer_quality_metrics: dict[str, Any] = {"status": "skipped", "reason": "disabled"}
+        if config.include_answer_eval and not config.disable_llm_judging:
+            l6_answer_quality_rows, l6_answer_quality_metrics = self.evaluate_answers_fn(
+                dataset,
+                config.top_k,
+                cache_dir=Path(settings.deepeval.deepeval_cache_dir),
+                retrieval_options=config.retrieval_options,
+                cache_namespace={
+                    "retrieval_mode": config.retrieval_mode,
+                    "experiment_index_config_hash": (
+                        (config.experiment_config or {}).get("index_config_hash")
+                    ),
+                    "experiment_variant": ((config.experiment_config or {}).get("variant_name")),
+                    "vector_file_sha256": vector_file_sha256,
+                },
+            )
+        elif config.disable_llm_judging:
+            l6_answer_quality_metrics = {"status": "skipped", "reason": "llm_judging_disabled"}
+        return l6_answer_quality_rows, l6_answer_quality_metrics
+
+    def _finalize(
+        self,
+        *,
+        config: AssessmentConfig,
+        start: float,
+        run_identity: dict[str, Any],
+        store: ArtifactStore,
+        manifest: dict[str, Any],
+        step_metrics: dict[str, Any],
+        step_findings: list[dict[str, Any]],
+        vector_path: Any,
+        vector_file_sha256: str | None,
+        l5_agg: dict[str, Any],
+        dataset: list[dict[str, Any]],
+        dataset_stats: dict[str, Any],
+        generation_attempts: list[dict[str, Any]],
+        retrieval: dict[str, Any],
+        l6_answer_quality_rows: list[dict[str, Any]],
+        l6_answer_quality_metrics: dict[str, Any],
+    ) -> AssessmentResult:
+        """Stage 9: thresholds, manifest enrichment, artifacts, summary, tracking."""
+        retrieval_rows = retrieval["retrieval_rows"]
+        retrieval_metrics = retrieval["retrieval_metrics"]
+        retrieval_ablations = retrieval["retrieval_ablations"]
+        hype_ablations = retrieval["hype_ablations"]
+        reranking_ablations = retrieval["reranking_ablations"]
+        keyword_ablations = retrieval["keyword_ablations"]
+        diversity_sweep_rows = retrieval["diversity_sweep_rows"]
+        index_preparation = manifest.get("index_preparation", {})
+        l3_agg = step_metrics.get("l3", {}).get("aggregate", {})
+        failed_thresholds = self.evaluate_thresholds_fn(
+            step_metrics,
+            retrieval_metrics,
+            l6_answer_quality_metrics,
+            config.thresholds,
         )
-    store.write_jsonl("retrieval_results.jsonl", retrieval_rows)
-    store.write_json("retrieval_metrics.json", retrieval_metrics)
-    store.write_json("retrieval_ablations.json", retrieval_ablations)
-    store.write_json("hype_ablations.json", hype_ablations)
-    store.write_json("keyword_ablations.json", keyword_ablations)
-    store.write_json("reranking_ablations.json", reranking_ablations)
-    store.write_json("retrieval_diversity_sweep.json", diversity_sweep_rows)
-    store.write_jsonl(L6_ANSWER_QUALITY_ROWS, l6_answer_quality_rows)
-    store.write_json(L6_ANSWER_QUALITY_METRICS, l6_answer_quality_metrics)
+        step_findings.extend(
+            {
+                "severity": "error",
+                "stage": "threshold",
+                "message": f"{f['metric']} below threshold",
+                **f,
+            }
+            for f in failed_thresholds
+        )
 
-    summary = {
-        "run_dir": str(store.run_dir),
-        "duration_s": round(time.time() - start, 3),
-        "retrieval_metrics": retrieval_metrics,
-        "retrieval_ablations": retrieval_ablations,
-        "hype_ablations": hype_ablations,
-        "keyword_ablations": keyword_ablations,
-        "reranking_ablations": reranking_ablations,
-        "retrieval_diversity_sweep_top": diversity_sweep_rows[:5],
-        SUMMARY_L6_METRICS_KEY: l6_answer_quality_metrics,
-        SUMMARY_L6_ENABLED_KEY: bool(config.include_answer_eval),
-        SUMMARY_L6_STATUS_KEY: l6_answer_quality_metrics.get("status", "unknown"),
-        "failed_thresholds_count": len(failed_thresholds),
-        "status": "failed" if (failed_thresholds and config.fail_on_thresholds) else "ok",
-        "dedup": {
-            "reused_existing_run": False,
-            "run_identity": run_identity,
-            "force_rerun": bool(config.force_rerun),
-        },
-    }
-    store.write_text(
-        "summary.md",
-        render_summary_fn(
+        dataset_file = dataset_stats.get("dataset_path") or (
+            str(config.dataset_path) if config.dataset_path else None
+        )
+        manifest["runtime_retrieval"] = retrieval_metrics.get("retrieval_options", {})
+        manifest["dataset"] = dataset_stats
+        manifest["chunking"] = {
+            "chunk_size_config": l3_agg.get("chunk_size_config"),
+            "chunk_overlap_config": l3_agg.get("chunk_overlap_config"),
+            "structured_chunking_enabled": not config.disable_structured_chunking,
+            "source_chunk_configs": (
+                (config.experiment_config or {}).get("ingestion", {}).get("source_chunk_configs")
+            ),
+            "page_classification_enabled": not config.disable_page_classification,
+            "html_extractor_mode": (
+                (config.experiment_config or {}).get("ingestion", {}).get("html_extractor_mode")
+            ),
+        }
+        index_metadata: dict[str, Any] = {}
+        if vector_path and Path(vector_path).exists():
+            try:
+                index_payload = json.loads(Path(vector_path).read_text(encoding="utf-8"))
+                index_metadata = index_payload.get("index_metadata", {}) or {}
+            except Exception as e:
+                logger.debug("Failed to load index metadata from %s: %s", vector_path, e)
+                index_metadata = {}
+        manifest["index_provenance"] = {
+            "collection_name": index_metadata.get(
+                "collection_name", settings.storage.collection_name
+            ),
+            "vector_path": vector_path,
+            "vector_file_mtime_epoch_s": Path(vector_path).stat().st_mtime
+            if vector_path and Path(vector_path).exists()
+            else None,
+            "doc_counts_by_source_type": l5_agg.get("source_distribution", {}),
+            "dedupe_effect_estimate": l5_agg.get("dedupe_effect_estimate"),
+            "index_config_hash": index_metadata.get("index_config_hash"),
+            "embedding_model": index_metadata.get("embedding_model"),
+            "embedding_batch_size": index_metadata.get("embedding_batch_size"),
+            "semantic_weight": index_metadata.get("semantic_weight"),
+            "keyword_weight": index_metadata.get("keyword_weight"),
+            "boost_weight": index_metadata.get("boost_weight"),
+            "page_classification_enabled": index_metadata.get("page_classification_enabled"),
+            "index_only_classified_pages": index_metadata.get("index_only_classified_pages"),
+            "html_extractor_mode": index_metadata.get("html_extractor_mode"),
+            "structured_chunking_enabled": index_metadata.get("structured_chunking_enabled"),
+            "source_chunk_configs": (
+                (lambda v: json.loads(v) if isinstance(v, str) else v)(
+                    index_metadata.get("source_chunk_configs")
+                )
+            ),
+            "observed_embedding_dim": l5_agg.get("embedding_dim"),
+            "indexing_stats": index_preparation.get("indexing_stats", {}),
+        }
+        manifest["checksums"] = {
+            "vector_file_sha256": vector_file_sha256,
+            "dataset_file_sha256": self.sha256_file_fn(dataset_file),
+        }
+        store.write_json("manifest.json", manifest)
+
+        store.write_json("step_metrics.json", step_metrics)
+        store.write_json("step_findings.json", step_findings)
+        store.write_jsonl("html_metrics.jsonl", step_metrics["l1"].get("records", []))
+        store.write_jsonl("pdf_metrics.jsonl", step_metrics["l2"].get("records", []))
+        store.write_jsonl("chunk_metrics.jsonl", step_metrics["l3"].get("records", []))
+        store.write_json("reference_metrics.json", step_metrics["l4"])
+        store.write_json("index_metrics.json", step_metrics["l5"])
+        store.write_json("retrieval_dataset.json", dataset)
+        if config.export_failed_generations:
+            store.write_jsonl("retrieval_dataset_generation.jsonl", generation_attempts)
+        else:
+            store.write_jsonl(
+                "retrieval_dataset_generation.jsonl",
+                [row for row in generation_attempts if row.get("status") == "accepted"],
+            )
+        store.write_jsonl("retrieval_results.jsonl", retrieval_rows)
+        store.write_json("retrieval_metrics.json", retrieval_metrics)
+        store.write_json("retrieval_ablations.json", retrieval_ablations)
+        store.write_json("hype_ablations.json", hype_ablations)
+        store.write_json("keyword_ablations.json", keyword_ablations)
+        store.write_json("reranking_ablations.json", reranking_ablations)
+        store.write_json("retrieval_diversity_sweep.json", diversity_sweep_rows)
+        store.write_jsonl(L6_ANSWER_QUALITY_ROWS, l6_answer_quality_rows)
+        store.write_json(L6_ANSWER_QUALITY_METRICS, l6_answer_quality_metrics)
+
+        summary = {
+            "run_dir": str(store.run_dir),
+            "duration_s": round(time.time() - start, 3),
+            "retrieval_metrics": retrieval_metrics,
+            "retrieval_ablations": retrieval_ablations,
+            "hype_ablations": hype_ablations,
+            "keyword_ablations": keyword_ablations,
+            "reranking_ablations": reranking_ablations,
+            "retrieval_diversity_sweep_top": diversity_sweep_rows[:5],
+            SUMMARY_L6_METRICS_KEY: l6_answer_quality_metrics,
+            SUMMARY_L6_ENABLED_KEY: bool(config.include_answer_eval),
+            SUMMARY_L6_STATUS_KEY: l6_answer_quality_metrics.get("status", "unknown"),
+            "failed_thresholds_count": len(failed_thresholds),
+            "status": "failed" if (failed_thresholds and config.fail_on_thresholds) else "ok",
+            "dedup": {
+                "reused_existing_run": False,
+                "run_identity": run_identity,
+                "force_rerun": bool(config.force_rerun),
+            },
+        }
+        store.write_text(
+            "summary.md",
+            self.render_summary_fn(
+                step_metrics=step_metrics,
+                retrieval_metrics=retrieval_metrics,
+                l6_answer_quality_metrics=l6_answer_quality_metrics,
+                dataset_stats=dataset_stats,
+                failed_thresholds=failed_thresholds,
+            ),
+        )
+        tracking_info = self.log_assessment_to_wandb_fn(
+            experiment=config.experiment_config,
+            summary=summary,
+            manifest=manifest,
             step_metrics=step_metrics,
             retrieval_metrics=retrieval_metrics,
             l6_answer_quality_metrics=l6_answer_quality_metrics,
-            dataset_stats=dataset_stats,
+            run_dir=store.run_dir,
             failed_thresholds=failed_thresholds,
-        ),
-    )
-    tracking_info = log_assessment_to_wandb_fn(
-        experiment=config.experiment_config,
-        summary=summary,
-        manifest=manifest,
-        step_metrics=step_metrics,
-        retrieval_metrics=retrieval_metrics,
-        l6_answer_quality_metrics=l6_answer_quality_metrics,
-        run_dir=store.run_dir,
-        failed_thresholds=failed_thresholds,
-    )
-    manifest["tracking"] = {"wandb": tracking_info}
-    summary["tracking"] = {"wandb": tracking_info}
-    store.write_json("manifest.json", manifest)
-    store.write_json("summary.json", summary)
-    store.write_latest_pointer()
-    update_run_index(config.artifact_dir, run_identity=run_identity, run_dir=store.run_dir)
+        )
+        manifest["tracking"] = {"wandb": tracking_info}
+        summary["tracking"] = {"wandb": tracking_info}
+        store.write_json("manifest.json", manifest)
+        store.write_json("summary.json", summary)
+        store.write_latest_pointer()
+        update_run_index(config.artifact_dir, run_identity=run_identity, run_dir=store.run_dir)
 
-    status = "failed" if (failed_thresholds and config.fail_on_thresholds) else "ok"
-    return AssessmentResult(
-        run_dir=store.run_dir, status=status, failed_thresholds=failed_thresholds, summary=summary
-    )
+        status = "failed" if (failed_thresholds and config.fail_on_thresholds) else "ok"
+        return AssessmentResult(
+            run_dir=store.run_dir,
+            status=status,
+            failed_thresholds=failed_thresholds,
+            summary=summary,
+        )
 
 
 def run_assessment(
@@ -719,8 +865,7 @@ def run_assessment(
         skip_ingestion=skip_ingestion,
         experiment_config=experiment_config,
     )
-    return _run_assessment_impl(
-        params,
+    return AssessmentPipeline(
         audit_l0_download_fn=audit_l0_download_fn
         if audit_l0_download_fn is not None
         else audit_l0_download,
@@ -784,4 +929,4 @@ def run_assessment(
         else run_diversity_sweep,
         render_summary_fn=render_summary_fn if render_summary_fn is not None else render_summary,
         sha256_file_fn=sha256_file_fn if sha256_file_fn is not None else sha256_file,
-    )
+    ).run(params)
