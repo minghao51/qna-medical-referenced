@@ -8,6 +8,104 @@ Every PR must keep `ruff`, `mypy`, `pytest` green. Docs are updated **in the sam
 
 ---
 
+## ⚡ EXECUTION STATUS (updated 2026-09-10, end of Phase 2)
+
+**Phases 0–2 are COMPLETE. Phase 3 is pending.** A fresh agent should read this
+section, then §3 (target architecture), then the Phase 3 work orders.
+
+### Branch / commit state
+
+Stacked branches, not yet merged to `main` (merge sequentially, oldest first):
+
+```
+main
+└── refactor/phase-0-docs        (1 commit)  19ee6c0  docs truth-sync + stage vocabulary
+    └── refactor/phase-1-structure (7 commits) af0d2c3..4b58330  core/, nodes/, shims, services fold
+        └── refactor/phase-2-structure (5 commits) 137a21d..4323bf4  ablations/, chroma split,
+                                                     AssessmentPipeline, test mirroring
+```
+
+Working tree clean. 13 commits total.
+
+### Task status
+
+| Task | State | Commit | Notes |
+|------|-------|--------|-------|
+| P0.1–P0.3 docs truth-sync | ✅ done | 19ee6c0 | ARCHITECTURE/STRUCTURE/TESTING patched; `l6_contract.py` gained `STAGE_*` constants; `docs/architecture/pipeline-stages.md` created |
+| P1.1 `src/core/` + source_metadata | ✅ done | af0d2c3 | 6 importers re-pointed |
+| P1.2 `components/` → `nodes/` | ✅ done | 1a1061c | plain names, normal imports, public `NODE_MODULES` |
+| P1.3 di.py protocol dedup | ✅ done | 55b2ec3 | rag protocol is TYPE_CHECKING-only (no runtime infra→rag edge) |
+| P1.4 services/ → evals/ | ✅ done | 30679d4 | `evals/artifact_service.py`; BaseService deleted |
+| P1.5 five shim deletions | ✅ done | d475de2 | ~30 files re-pointed; orchestrator resolves fn deps from module namespace at CALL TIME (monkeypatch-safe) |
+| P1.6 hype → hypothetical_questions.py | ✅ done | 656e452 | symbol names + settings keys unchanged (keys → P3.6) |
+| P1.7 exceptions → core | ✅ done | 4b58330 | infra→app and usecases→app violations gone |
+| P2.1 experiment_config → addition_config | ✅ done | 137a21d | renamed + de-deprecated (it is NOT a duplicate of config.py — see commit) |
+| P2.2 ablations → experiments/ablations/ | ✅ done | eb10b97 | retrieval_eval.py now pure metrics (470 lines, was 831); assessment/__init__ gained real lazy exports |
+| P2.3 chroma_store split | ✅ done ⚠️ | 87b3f2c | store.py(802)+hype_index.py+listing.py+factory.py+re-export(24). **DEVIATION: legacy JSON snapshot path KEPT** — load-bearing for tests/l5 consumers; needs dedicated test rework before deletion |
+| P2.4 AssessmentPipeline | ✅ done | 1e2fba1 | 9 staged methods, 23 ctor-injected fn fields; `run_assessment` = monkeypatch-friendly default composition |
+| P2.5 convert_html split | ✅ no-op | (in 4323bf4 msg) | `main(force)` already library-quality; real fix is P3.3. Rationale in roadmap body |
+| P2.6 test mirroring | ✅ done | 4323bf4 | unit+integration mirrored to package dirs; 2 `__file__`-relative fixture paths adjusted |
+| P3.1 real constructor injection | ⬜ pending | | **start here** |
+| P3.3 setter-channel kill (+P3.6 keys) | ⬜ pending | | after P3.1 |
+| P3.2 Hamilton delegation + parity gate | ⬜ pending | | after P3.3 — mandatory baseline diff |
+| P3.4 import-linter contract | ⬜ pending | | last — asserts end state |
+
+### Verification baselines (must hold after every Phase 3 step)
+
+- `pytest tests/unit` → **540 passed, 8 skipped**
+- `pytest tests/integration` → **92 passed, 56 skipped** (skips = env-key/deps, pre-existing)
+- `ruff check src/ tests/ scripts/` → clean
+- mypy: **2 pre-existing errors** in `ingestion/indexing/store.py` (list invariance, `_extracted_keywords_from_metadata`) — present before the refactor on `main`; do not "fix" incidentally, do not add new ones
+- P3.2 additionally requires the **parity gate** (§Phase 3)
+
+### Gotchas discovered during execution (read before Phase 3)
+
+1. **Ruff F401 eats re-exports.** Re-export modules must use alias form
+   (`from x import Y as Y`) or ruff --fix deletes them mid-session (hit in P1.7).
+2. **Monkeypatch contract:** tests patch *module attributes* on
+   `evals/assessment/orchestrator` (and other modules). Any refactor must keep
+   dependency resolution reading module attrs at call time — never bind fn
+   defaults at def time (hit twice in P1.5/P2.4).
+3. **Patch targets moved with the split:** chroma internals are patched at
+   `src.ingestion.indexing.store` / `...indexing.factory` now, not `chroma_store`.
+4. **`rg -r` is the replace-DISPLAY flag**, not recursion — it silently mangles
+   output (hit in P1.5). Use plain `rg` + `grep` for verification greps.
+5. **Env gaps (pre-existing):** `scipy` and `deepeval` are not installed in the
+   dev venv (eval extras group). Imports of `experiments/metric_utils` and
+   deepeval-dependent tests fail/skip — not regressions.
+6. **`tests/integration/conftest.py` fixtures** patch `indexing.store.embed_texts` —
+   keep that target valid when touching embedding wiring in P3.1.
+7. **Docs-in-same-PR policy held** for Phases 0–2: `.planning/codebase/*` and
+   `docs/architecture/*` are current as of 4323bf4. ARCHITECTURE.md still
+   documents `di.py` as "scheduled for deletion in Phase 3" — keep that true.
+8. **Hamilton driver** is constructed in `ingestion/pipeline.py::build_ingestion_pipeline`
+   via `NODE_MODULES`; tests exercise it through `tests/integration/ingestion/test_dag_functional.py`.
+
+### Phase 3 next-work checklist (pinned order)
+
+1. **P3.1** real constructor injection: `app/factory.py` = composition root
+   (construct LLMClient/ChatHistoryStore/ChromaVectorStore → `app.state` →
+   FastAPI `Depends`); delete `infra/di.py` (169 lines); remove
+   `llm_client or get_client()` fallbacks in `usecases/chat.py:~137,~236`;
+   offline paths construct at their own edge; relocate
+   `generate_hypothetical_questions` out of `rag/hyde.py` (kills last ingestion→rag edge).
+2. **P3.3** full setter kill: delete `rag/runtime_config.py` cross-package setters
+   + `convert_html.py` strategy/mode globals; steps take explicit params from a
+   config snapshot; `app/routes/config.py` goes through a usecase facade;
+   **P3.6**: `settings.hyde.*` → `settings.hype.*` via pydantic alias + warning.
+3. **P3.2** Hamilton delegation: `run_ingestion(config)` library entry with cached
+   driver in `ingestion/pipeline.py`; `rag/index.py::initialize_vector_store_async`
+   delegates via `asyncio.to_thread`; delete `_build_index_from_sources` +
+   `materialize_html` param; preserve signature-check skip + `get_runtime_status`.
+   **Run the parity gate before merge** (baseline on current branch first!).
+4. **P3.4** import-linter: `cli > app > usecases > {rag,evals,experiments} >
+   {ingestion,infra} > core > config` + forbids (infra→app, ingestion→rag,
+   usecases→cli); wire into `ci.yml`.
+5. Rewrite ARCHITECTURE.md boundaries section to the final state; mark roadmap
+   phases complete in this file.
+
+---
+
 ## 1. Why this refactor exists
 
 Three structural debts dominate onboarding cost for a fresh dev or agent:
