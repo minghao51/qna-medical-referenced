@@ -1,30 +1,20 @@
-"""Experiment configuration schema for feature addition experiments.
+"""Feature-addition experiment schema (variants vs baseline).
 
-Defines YAML schema for configuring feature addition experiments
-that test new features against a baseline.
-
-.. deprecated::
-    This module defines a simplified experiment schema that overlaps with the
-    versioned YAML configuration loaded by ``src.experiments.config``.  New
-    experiments should prefer the versioned schema.  This module will be
-    removed in a future release once ``feature_addition_runner`` is migrated.
+Defines the YAML schema for feature-addition experiments that test new
+features against a baseline. This is a separate schema from the versioned
+ablation-experiment loader in ``src.experiments.config``: addition experiments
+compare named variants (chunking strategy / query understanding / overrides)
+against a baseline, while ``config.py`` loads versioned single-run experiment
+files. Consumers: ``feature_addition_runner.py`` / ``run_addition.py``.
 """
 
 from __future__ import annotations
 
 import dataclasses
-import warnings
 from pathlib import Path
 from typing import Any
 
 import yaml
-
-warnings.warn(
-    "src.experiments.experiment_config is deprecated. "
-    "Use the versioned experiment config in src.experiments.config instead.",
-    DeprecationWarning,
-    stacklevel=2,
-)
 
 
 @dataclasses.dataclass

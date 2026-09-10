@@ -176,7 +176,7 @@ qna_medical_referenced/
 │   │   ├── __init__.py
 │   │   ├── comparison_report.py      # Cross-experiment comparison
 │   │   ├── config.py                 # YAML config loading
-│   │   ├── experiment_config.py      # Experiment config models
+│   │   ├── addition_config.py       # Feature-addition experiment schema (variants vs baseline)
 │   │   ├── feature_ablation_runner.py # Feature ablation execution
 │   │   ├── feature_addition_runner.py # Feature addition experiments
 │   │   ├── metric_utils.py           # Metric computation helpers
@@ -304,7 +304,7 @@ qna_medical_referenced/
 | Source metadata logic | `src/core/source_metadata.py` |
 | Trace/data models | `src/rag/trace_models.py` |
 | Evaluation orchestrator | `src/evals/assessment/orchestrator.py` |
-| Experiment config | `src/experiments/experiment_config.py` |
+| Feature-addition schema | `src/experiments/addition_config.py` |
 | Frontend main page | `frontend/src/routes/+page.svelte` |
 | Frontend package config | `frontend/package.json` |
 | Pre-commit hooks | `.pre-commit-config.yaml` |

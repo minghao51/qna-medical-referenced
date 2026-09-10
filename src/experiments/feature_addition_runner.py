@@ -8,18 +8,14 @@ from __future__ import annotations
 
 import copy
 import logging
-import warnings as _warnings
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from src.evals import run_assessment
+from src.experiments.addition_config import ExperimentConfig, ExperimentVariant
 from src.experiments.config import build_run_assessment_kwargs, resolve_experiment_runs
-
-with _warnings.catch_warnings():
-    _warnings.simplefilter("ignore", DeprecationWarning)
-    from src.experiments.experiment_config import ExperimentConfig, ExperimentVariant
 from src.experiments.metric_utils import resolve_metric_key
 
 logger = logging.getLogger(__name__)

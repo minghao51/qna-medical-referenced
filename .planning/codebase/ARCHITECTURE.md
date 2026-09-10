@@ -134,7 +134,7 @@ Ablation study and experiment management.
 
 | Module | Role |
 |--------|------|
-| `experiment_config.py` | Experiment config models |
+| `addition_config.py` | Feature-addition experiment schema (variants vs baseline) |
 | `config.py` | Experiment configuration loading (YAML) |
 | `feature_ablation_runner.py` | Feature ablation study execution |
 | `feature_addition_runner.py` | Feature addition experiments |
