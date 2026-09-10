@@ -55,7 +55,7 @@ The retrieval-augmented generation engine. This is the core domain logic — **r
 | `query_expansion.py` | Lexical/medical query expansion, HyDE async wrapper | ~125 lines |
 | `retrieval.py` | Candidate retrieval from vector store + result merging | ~115 lines |
 | `formatting.py` | Formats retrieved chunks into context strings and `ChatSource` citations | ~90 lines |
-| `hyde.py` | HyDE (Hypothetical Document Embeddings) — generates hypothetical answers | ~305 lines |
+| `hyde.py` | HyDE (Hypothetical Document Embeddings) query-time expansion; index-time HyPE question generation moved to `infra/llm/hypothetical_questions.py` (P3.1) | ~180 lines |
 | `reranker.py` | Cross-encoder reranking using sentence-transformers | ~155 lines |
 | `medical_expansion.py` | Medical term expansion provider (currently noop) | ~60 lines |
 | `production_profile.py` | Applies tuned retrieval profiles from ablation studies | ~115 lines |
@@ -99,9 +99,9 @@ Technical infrastructure and cross-cutting concerns.
 
 | Module | Role |
 |--------|------|
-| `di.py` | `ServiceContainer` — simple DI container with lazy initialization for vector store, LLM client, retrieval config |
 | `llm/qwen_client.py` | Qwen/DashScope OpenAI-compatible LLM client (sync + async streaming) |
 | `llm/litellm_client.py` | LiteLLM client for multi-provider support (OpenRouter, etc.) |
+| `llm/hypothetical_questions.py` | HyPE index-time hypothetical question generation (moved from `rag/hyde.py` in P3.1) |
 | `storage/interfaces.py` | `ChatHistoryStore` Protocol (interface) for storage abstraction |
 | `storage/chat_history_store.py` | Abstract base for chat history |
 | `storage/file_chat_history_store.py` | JSON file-backed chat history implementation with per-session message truncation |
@@ -233,7 +233,7 @@ CLI: python -m src.cli.eval_pipeline
 
 1. **`ChatHistoryStore` (Protocol)** — `src/infra/storage/interfaces.py:8` — Interface for chat history persistence. Implemented by `FileChatHistoryStore` with per-session message truncation.
 
-2. **`ServiceContainer`** — `src/infra/di.py` — DI container managing lazy-initialized services (vector store, LLM client, configs). Used only by `app/factory.py`; **scheduled for deletion in Phase 3** (replaced by real constructor injection).
+2. **Composition root (app lifespan)** — `src/app/factory.py::lifespan` — the only server-side place that constructs concrete dependencies (`LLMClient`, `FileChatHistoryStore`, `ChromaVectorStore` via the factory singleton); stashes them on `app.state`. Routes receive them through the accessors in `src/app/dependencies.py` (roadmap P3.1; replaced the deleted `infra/di.py` `ServiceContainer`).
 
 3. **`RuntimeState`** — `src/config/context.py:11` — Thread-safe mutable runtime state with property-based access. Manages feature flags and runtime configuration overrides.
 

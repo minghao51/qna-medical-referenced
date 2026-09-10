@@ -45,7 +45,7 @@
 - Boolean variables: prefixed with `enable_`, `is_`, `has_`, `should_` (e.g., `enable_reranking`, `is_development`)
 
 ### Classes
-- PascalCase (e.g., `ChatSource`, `RetrievedDocument`, `PipelineTrace`, `RuntimeState`, `ServiceContainer`)
+- PascalCase (e.g., `ChatSource`, `RetrievedDocument`, `PipelineTrace`, `RuntimeState`, `AssessmentPipeline`)
 - Pydantic models: PascalCase (e.g., `ChatRequest`, `ChatResponse`, `Settings`, `ApiConfig`, `LLMConfig`)
 - Dataclasses: PascalCase (e.g., `RuntimeRetrievalConfig`, `RetrievalDiversityConfig`, `AssessmentConfig`)
 - Exceptions: suffix with `Error` (e.g., `AppError`, `InvalidInputError`, `UpstreamServiceError`)
@@ -113,13 +113,13 @@
 - `create_app()` in `src/app/factory.py` builds the FastAPI app
 - Middleware added in specific order: CORS → RateLimit → APIKey → RequestID
 - Lifespan context manager handles startup/shutdown
-- `app.state` holds runtime services (llm_client, chat_history_store, container)
+- `app.state` holds runtime services (llm_client, chat_history_store, vector_store)
 
 ### Dependency Injection
-- `ServiceContainer` dataclass in `src/infra/di.py` manages lazy-initialized services
-- Global singleton via `get_container()` / `reset_container()`
-- Factory pattern for vector stores: `VectorStoreFactory.get_vector_store(config)`
-- Constructor injection in services (e.g., `EvaluationService`)
+- `app/factory.py::lifespan` is the composition root: constructs `LLMClient`, `FileChatHistoryStore`, and the `ChromaVectorStore` factory singleton onto `app.state` (roadmap P3.1; replaced the deleted `infra/di.py` container)
+- Routes read dependencies via accessors in `src/app/dependencies.py` — no module-level `get_*()` fallbacks on the request path
+- Offline paths (CLI, evals, experiments, Hamilton nodes) construct dependencies at their own edge using the same builders
+- Constructor injection in pipelines (e.g., `AssessmentPipeline` fn fields)
 
 ### Configuration
 - **3-layer config stack:**

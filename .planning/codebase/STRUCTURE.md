@@ -109,8 +109,9 @@ qna_medical_referenced/
 │   │   └── source_metadata.py        # Source metadata inference (labels, domains, types)
 │   ├── app/                          # HTTP/API layer
 │   │   ├── __init__.py
+│   │   ├── dependencies.py          # Route accessors for app.state deps (P3.1)
 │   │   ├── exceptions.py             # AppError hierarchy + FastAPI error handlers
-│   │   ├── factory.py                # FastAPI app factory (create_app), lifespan, middleware setup
+│   │   ├── factory.py                # FastAPI app factory (create_app), lifespan = composition root, middleware setup
 │   │   ├── logging.py                # Structured logging configuration
 │   │   ├── security.py               # API key auth (bcrypt + legacy SHA256), AuthContext, APIKeyRecord
 │   │   ├── session.py                # Anonymous session cookie management
@@ -185,11 +186,12 @@ qna_medical_referenced/
 │   │   └── wandb_tracking.py         # W&B experiment tracking
 │   ├── infra/                        # Infrastructure layer
 │   │   ├── __init__.py
-│   │   ├── di.py                     # ServiceContainer (DI), lazy service initialization
 │   │   ├── llm/                      # LLM client implementations
-│   │   │   ├── __init__.py           # get_client() factory
+│   │   │   ├── __init__.py           # get_client() provider factory
 │   │   │   ├── qwen_client.py        # Qwen/DashScope OpenAI-compatible client
-│   │   │   └── litellm_client.py     # LiteLLM multi-provider client (OpenRouter)
+│   │   │   ├── gemini_client.py      # Google Gemini client
+│   │   │   ├── litellm_client.py     # LiteLLM multi-provider client (OpenRouter)
+│   │   │   └── hypothetical_questions.py # HyPE index-time question generation (P3.1)
 │   │   └── storage/                  # Storage implementations
 │   │       ├── __init__.py
 │   │       ├── interfaces.py         # ChatHistoryStore Protocol
@@ -206,7 +208,11 @@ qna_medical_referenced/
 │   │   │   ├── reference.py          # L4 reference node
 │   │   │   └── embedding.py          # L5 embed node
 │   │   ├── indexing/                 # Vector indexing subsystem
-│   │   │   ├── chroma_store.py       # ChromaVectorStore — hybrid search (~1010 lines)
+│   │   │   ├── chroma_store.py       # Thin re-export of the split modules below
+│   │   │   ├── store.py              # ChromaVectorStore core: client, CRUD, mirrors, BM25
+│   │   │   ├── hype_index.py         # HyPE hypothetical-question search mixin
+│   │   │   ├── listing.py            # Paginated document listing mixin (/documents)
+│   │   │   ├── factory.py            # Signature-cached ChromaVectorStore singleton factory
 │   │   │   ├── embedding.py          # Text embedding (Qwen API)
 │   │   │   ├── keyword_index.py      # BM25 keyword search + medical entity boosting
 │   │   │   ├── search.py             # Similarity, rank fusion, MMR algorithms
@@ -240,7 +246,7 @@ qna_medical_referenced/
 │   │   ├── query_expansion.py        # Lexical/medical query expansion (~125 lines)
 │   │   ├── retrieval.py              # Candidate retrieval + result merging (~115 lines)
 │   │   ├── formatting.py             # Context formatting + source citation building
-│   │   ├── hyde.py                   # HyDE query expansion (~305 lines)
+│   │   ├── hyde.py                   # HyDE query expansion (~180 lines; HyPE question gen moved to infra/llm/ in P3.1)
 │   │   ├── medical_expansion.py      # Medical term expansion provider (noop)
 │   │   ├── production_profile.py     # Production profile application
 │   │   ├── reranker.py               # Cross-encoder reranking
@@ -296,7 +302,7 @@ qna_medical_referenced/
 | Vector store (ChromaDB) | `src/ingestion/indexing/chroma_store.py` |
 | Chat endpoint (SSE) | `src/app/routes/chat.py` |
 | Chat use case | `src/usecases/chat.py` |
-| DI container | `src/infra/di.py` |
+| DI composition root | `src/app/factory.py` (lifespan) + `src/app/dependencies.py` (route accessors) |
 | Ingestion pipeline | `src/cli/ingest.py` → `src/ingestion/pipeline.py` |
 | LLM client | `src/infra/llm/qwen_client.py` |
 | Production entrypoint | `src/cli/serve_production.py` |
@@ -332,7 +338,7 @@ qna_medical_referenced/
 ### Code Conventions
 
 - **Imports**: Relative within package (`from src.config import settings`), absolute for external libs
-- **Module-level singletons**: `settings` (config), `get_runtime_state()` (runtime), `get_container()` (DI)
+- **Module-level singletons**: `settings` (config), `get_runtime_state()` (runtime), `ChromaVectorStoreFactory` (vector store). The DI container was deleted in Phase 3 (roadmap P3.1) — server dependencies are constructed by the app lifespan and read via `src/app/dependencies.py` accessors
 - **Re-export pattern**: Each package has `__init__.py` that re-exports key symbols
 - **Backward-compat**: compat shims were deleted in Phase 1 (roadmap P1.5); `settings.py` retains `_LEGACY_FIELD_MAP` for flat → nested env var migration
 - **Pydantic models**: Used for schemas (`src/app/schemas/`), trace models (`src/rag/trace_models.py`), nested config (`src/config/models/`), and settings (`src/config/settings.py`)
@@ -375,7 +381,7 @@ qna_medical_referenced/
 | Data ingestion pipeline | `src/ingestion/` |
 | Vector store | `src/ingestion/indexing/chroma_store.py` |
 | LLM integration | `src/infra/llm/` |
-| DI / service container | `src/infra/di.py` |
+| DI / composition root | `src/app/factory.py` (lifespan) + `src/app/dependencies.py` (accessors) |
 | Storage abstractions | `src/infra/storage/` |
 | Configuration | `src/config/` + `config/settings.yaml` |
 | Runtime state | `src/config/context.py` |

@@ -18,7 +18,7 @@
 
 **Mutable Module-Level Global State:**
 - Issue: Multiple modules use `set_*()` functions mutating globals for runtime configuration
-- Files: `src/ingestion/steps/convert_html.py`, `src/ingestion/steps/load_pdfs.py`, `src/ingestion/steps/load_markdown.py`, `src/ingestion/steps/chunk_text.py`, `src/rag/reranker.py`, `src/infra/di.py`, `src/config/settings.py:284`
+- Files: `src/ingestion/steps/convert_html.py`, `src/ingestion/steps/load_pdfs.py`, `src/ingestion/steps/load_markdown.py`, `src/rag/reranker.py`, `src/config/settings.py:284`
 - Impact: Breaks thread safety, creates hidden coupling, fragile testing
 - Fix approach: Consolidate runtime config into a `RuntimeConfig` dataclass passed explicitly
 

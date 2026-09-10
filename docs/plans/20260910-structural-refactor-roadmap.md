@@ -8,10 +8,11 @@ Every PR must keep `ruff`, `mypy`, `pytest` green. Docs are updated **in the sam
 
 ---
 
-## ⚡ EXECUTION STATUS (updated 2026-09-10, end of Phase 2)
+## ⚡ EXECUTION STATUS (updated after P3.1)
 
-**Phases 0–2 are COMPLETE. Phase 3 is pending.** A fresh agent should read this
-section, then §3 (target architecture), then the Phase 3 work orders.
+**Phases 0–2 and P3.1 are COMPLETE. Phase 3 continues with P3.3 → P3.2 → P3.4.**
+A fresh agent should read this section, then §3 (target architecture), then the
+remaining Phase 3 work orders.
 
 ### Branch / commit state
 
@@ -21,11 +22,13 @@ Stacked branches, not yet merged to `main` (merge sequentially, oldest first):
 main
 └── refactor/phase-0-docs        (1 commit)  19ee6c0  docs truth-sync + stage vocabulary
     └── refactor/phase-1-structure (7 commits) af0d2c3..4b58330  core/, nodes/, shims, services fold
-        └── refactor/phase-2-structure (5 commits) 137a21d..4323bf4  ablations/, chroma split,
+        └── refactor/phase-2-structure (5 commits) 137a21d..659923e  ablations/, chroma split,
                                                      AssessmentPipeline, test mirroring
+            └── refactor/phase-3-structure (3 commits) de9c2e0..docs  mypy-baseline fix,
+                                                     P3.1 constructor injection, docs sync
 ```
 
-Working tree clean. 13 commits total.
+Working tree clean. 16 commits total.
 
 ### Task status
 
@@ -45,14 +48,14 @@ Working tree clean. 13 commits total.
 | P2.4 AssessmentPipeline | ✅ done | 1e2fba1 | 9 staged methods, 23 ctor-injected fn fields; `run_assessment` = monkeypatch-friendly default composition |
 | P2.5 convert_html split | ✅ no-op | (in 4323bf4 msg) | `main(force)` already library-quality; real fix is P3.3. Rationale in roadmap body |
 | P2.6 test mirroring | ✅ done | 4323bf4 | unit+integration mirrored to package dirs; 2 `__file__`-relative fixture paths adjusted |
-| P3.1 real constructor injection | ⬜ pending | | **start here** |
-| P3.3 setter-channel kill (+P3.6 keys) | ⬜ pending | | after P3.1 |
+| P3.1 real constructor injection | ✅ done | 2733b20 | preceded by de9c2e0 (mypy-baseline fix; also fixed a real P2.4 shadowing bug — see commit). `app/dependencies.py` accessors; di.py + 21 tests deleted; HyPE gen → `infra/llm/hypothetical_questions.py`; last ingestion→rag edge gone |
+| P3.3 setter-channel kill (+P3.6 keys) | ⬜ pending | | **start here** |
 | P3.2 Hamilton delegation + parity gate | ⬜ pending | | after P3.3 — mandatory baseline diff |
 | P3.4 import-linter contract | ⬜ pending | | last — asserts end state |
 
 ### Verification baselines (must hold after every Phase 3 step)
 
-- `pytest tests/unit` → **540 passed, 8 skipped**
+- `pytest tests/unit` → **521 passed, 8 skipped** (was 540: +2 orchestrator-composition tests, −21 di-container tests deleted with `di.py` in P3.1)
 - `pytest tests/integration` → **92 passed, 56 skipped** (skips = env-key/deps, pre-existing)
 - `ruff check src/ tests/ scripts/` → clean
 - mypy: **2 pre-existing errors** in `ingestion/indexing/store.py` (list invariance, `_extracted_keywords_from_metadata`) — present before the refactor on `main`; do not "fix" incidentally, do not add new ones
@@ -75,20 +78,21 @@ Working tree clean. 13 commits total.
    deepeval-dependent tests fail/skip — not regressions.
 6. **`tests/integration/conftest.py` fixtures** patch `indexing.store.embed_texts` —
    keep that target valid when touching embedding wiring in P3.1.
-7. **Docs-in-same-PR policy held** for Phases 0–2: `.planning/codebase/*` and
-   `docs/architecture/*` are current as of 4323bf4. ARCHITECTURE.md still
-   documents `di.py` as "scheduled for deletion in Phase 3" — keep that true.
+7. **Docs-in-same-PR policy held** for Phases 0–2 and P3.1: `.planning/codebase/*`
+   and `docs/architecture/*` are current as of the P3.1 docs commit. The
+   ARCHITECTURE.md "di.py scheduled for deletion in Phase 3" note is resolved
+   (deleted in P3.1).
 8. **Hamilton driver** is constructed in `ingestion/pipeline.py::build_ingestion_pipeline`
    via `NODE_MODULES`; tests exercise it through `tests/integration/ingestion/test_dag_functional.py`.
 
 ### Phase 3 next-work checklist (pinned order)
 
-1. **P3.1** real constructor injection: `app/factory.py` = composition root
-   (construct LLMClient/ChatHistoryStore/ChromaVectorStore → `app.state` →
-   FastAPI `Depends`); delete `infra/di.py` (169 lines); remove
-   `llm_client or get_client()` fallbacks in `usecases/chat.py:~137,~236`;
-   offline paths construct at their own edge; relocate
-   `generate_hypothetical_questions` out of `rag/hyde.py` (kills last ingestion→rag edge).
+1. ~~**P3.1** real constructor injection~~ ✅ **done** (2733b20): composition root =
+   `app/factory.py` lifespan constructing onto `app.state`; accessors in
+   `app/dependencies.py`; `infra/di.py` deleted; `usecases/chat.py` fallbacks
+   removed; `generate_hypothetical_questions` → `infra/llm/hypothetical_questions.py`
+   (last ingestion→rag edge gone). Offline edges keep constructing at their own
+   edge (rag/index.py, Hamilton nodes, evals) — intentional per D3.2=B.
 2. **P3.3** full setter kill: delete `rag/runtime_config.py` cross-package setters
    + `convert_html.py` strategy/mode globals; steps take explicit params from a
    config snapshot; `app/routes/config.py` goes through a usecase facade;
