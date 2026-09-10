@@ -13,7 +13,9 @@ Priority order (first wins):
 """
 
 import functools
+import warnings
 from pathlib import Path
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import (
@@ -96,12 +98,31 @@ class RetrievalConfig(BaseModel):
 
 
 class HyDEConfig(BaseModel):
+    """Query-time HyDE settings (hypothetical document expansion).
+
+    The index-time HyPE fields formerly lived here. They moved to
+    ``HypeConfig`` (``settings.hype``) in Phase 3 (roadmap P3.6). The old
+    ``hyde.hype_*`` keys still load -- ``Settings.model_post_init`` warns
+    and migrates them onto ``settings.hype``.
+    """
+
     hyde_enabled: bool = False
     hyde_max_length: int = 200
+
+    # Deprecated load-compat aliases (roadmap P3.6).
     hype_enabled: bool = False
     hype_sample_rate: float = 0.1
     hype_max_chunks: int = 500
     hype_questions_per_chunk: int = 2
+
+
+class HypeConfig(BaseModel):
+    """Index-time HyPE settings (hypothetical questions at ingestion)."""
+
+    enabled: bool = False
+    sample_rate: float = 0.1
+    max_chunks: int = 500
+    questions_per_chunk: int = 2
 
 
 class EnrichmentConfig(BaseModel):
@@ -160,12 +181,47 @@ class Settings(BaseSettings):
     storage: StorageConfig = Field(default_factory=StorageConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     hyde: HyDEConfig = Field(default_factory=HyDEConfig)
+    hype: HypeConfig = Field(default_factory=HypeConfig)
     enrichment: EnrichmentConfig = Field(default_factory=EnrichmentConfig)
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     deepeval: DeepEvalConfig = Field(default_factory=DeepEvalConfig)
     wandb: WandbConfig = Field(default_factory=WandbConfig)
     production: ProductionConfig = Field(default_factory=ProductionConfig)
+
+    # Mapping of deprecated hyde.hype_* fields -> settings.hype fields (P3.6).
+    _HYPE_MIGRATION: ClassVar[dict[str, str]] = {
+        "hype_enabled": "enabled",
+        "hype_sample_rate": "sample_rate",
+        "hype_max_chunks": "max_chunks",
+        "hype_questions_per_chunk": "questions_per_chunk",
+    }
+
+    def model_post_init(self, __context: Any) -> None:
+        deprecated_set = [
+            old for old in self._HYPE_MIGRATION if old in self.hyde.model_fields_set
+        ]
+        if deprecated_set:
+            warnings.warn(
+                "settings.hyde.hype_* moved to settings.hype.* "
+                "(e.g. settings.hype.sample_rate; yaml key 'hype:'); the old "
+                "keys are deprecated and will be removed after Phase 3",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            # "Explicitly set" cannot be read off model_fields_set: the
+            # shipped settings.yaml defines the whole hype: block, which
+            # marks every field as set. Migrate only onto fields still
+            # holding their HypeConfig defaults (i.e. not customized via
+            # the new keys).
+            defaults = HypeConfig()
+            updates: dict[str, Any] = {}
+            for old in deprecated_set:
+                new = self._HYPE_MIGRATION[old]
+                if getattr(self.hype, new) == getattr(defaults, new):
+                    updates[new] = getattr(self.hyde, old)
+            if updates:
+                self.hype = self.hype.model_copy(update=updates)
 
     @classmethod
     def settings_customise_sources(

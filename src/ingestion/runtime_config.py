@@ -121,13 +121,13 @@ def build_experiment_runtime_config(experiment: dict[str, Any]) -> RuntimeConfig
         auto_select_strategy=chunking.auto_select_strategy,
     )
     indexing_features = {
-        "enable_hype": bool(ingestion.get("enable_hype", settings.hyde.hype_enabled)),
+        "enable_hype": bool(ingestion.get("enable_hype", settings.hype.enabled)),
         "hype_sample_rate": float(
-            ingestion.get("hype_sample_rate", settings.hyde.hype_sample_rate)
+            ingestion.get("hype_sample_rate", settings.hype.sample_rate)
         ),
-        "hype_max_chunks": int(ingestion.get("hype_max_chunks", settings.hyde.hype_max_chunks)),
+        "hype_max_chunks": int(ingestion.get("hype_max_chunks", settings.hype.max_chunks)),
         "hype_questions_per_chunk": int(
-            ingestion.get("hype_questions_per_chunk", settings.hyde.hype_questions_per_chunk)
+            ingestion.get("hype_questions_per_chunk", settings.hype.questions_per_chunk)
         ),
         "enable_keyword_extraction": bool(
             ingestion.get(

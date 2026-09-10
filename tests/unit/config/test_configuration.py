@@ -14,10 +14,10 @@ def test_retrieval_config_defaults():
 
 def test_hype_config_defaults():
     """Test HyPE configuration defaults."""
-    assert settings.hyde.hype_enabled is False
-    assert settings.hyde.hype_sample_rate == 0.1
-    assert settings.hyde.hype_max_chunks == 500
-    assert settings.hyde.hype_questions_per_chunk == 2
+    assert settings.hype.enabled is False
+    assert settings.hype.sample_rate == 0.1
+    assert settings.hype.max_chunks == 500
+    assert settings.hype.questions_per_chunk == 2
 
 
 def test_hyde_config_defaults():
@@ -73,3 +73,30 @@ def test_deepeval_configuration():
     assert settings.deepeval.deepeval_metric_concurrency > 0
     assert settings.deepeval.deepeval_metric_timeout_seconds > 0
     assert settings.deepeval.deepeval_cache_dir
+
+
+def test_hyde_hype_deprecated_keys_migrate_with_warning():
+    """Old hyde.hype_* keys still load, warn, and seed settings.hype (P3.6)."""
+    import warnings
+
+    from src.config.settings import Settings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        s = Settings(hyde={"hype_sample_rate": 0.7, "hype_max_chunks": 42})
+    assert s.hype.sample_rate == 0.7
+    assert s.hype.max_chunks == 42
+    assert s.hype.enabled is False  # untouched default
+    assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+
+def test_explicit_hype_group_wins_over_deprecated_keys():
+    """Explicit hype.* values are not clobbered by deprecated hyde.hype_* keys."""
+    import warnings
+
+    from src.config.settings import Settings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        s = Settings(hyde={"hype_sample_rate": 0.7}, hype={"sample_rate": 0.9})
+    assert s.hype.sample_rate == 0.9

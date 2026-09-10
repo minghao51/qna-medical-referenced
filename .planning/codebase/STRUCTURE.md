@@ -200,6 +200,7 @@ qna_medical_referenced/
 │   ├── ingestion/                    # Data processing pipeline
 │   │   ├── __init__.py
 │   │   ├── artifacts.py              # Ingestion artifact management
+│   │   ├── runtime_config.py         # Runtime-config snapshot builder + applier (moved from rag/, P3.3)
 │   │   ├── nodes/                    # Hamilton DAG nodes (one per canonical stage)
 │   │   │   ├── download.py           # L0 download node
 │   │   │   ├── parse.py              # L1/L2 parse node
@@ -255,10 +256,10 @@ qna_medical_referenced/
 │   │       ├── classifier.py         # Query type classifier (~315 lines)
 │   │       ├── router.py             # Retrieval parameter router (~250 lines)
 │   │       └── strategies.py         # Routing strategies (~200 lines)
-│   └── usecases/                     # Use case orchestration (chat only)
+│   └── usecases/                     # Use case orchestration
 │       ├── __init__.py
 │       ├── chat.py                   # Chat processing (sync + streaming)
-│       └── pipeline.py               # Offline ingestion pipeline orchestration
+│       └── runtime_config.py         # Read-only runtime-config view facade (P3.3)
 ├── tests/                            # Python test suite
 │   ├── conftest.py                   # Global fixtures and hooks
 │   ├── fixtures/                     # Test data fixtures
@@ -373,7 +374,7 @@ qna_medical_referenced/
 | HTTP routes | `src/app/routes/` |
 | Middleware | `src/app/middleware/` |
 | Request/response schemas | `src/app/schemas/` |
-| Business logic / use cases | `src/usecases/` |
+| Business logic / use cases | `src/usecases/` (chat, runtime-config view) |
 | RAG retrieval | `src/rag/` |
 | RAG config | `src/rag/config.py` |
 | Index init | `src/rag/index.py` |

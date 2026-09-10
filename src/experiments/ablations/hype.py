@@ -87,9 +87,9 @@ def run_hype_ablations_with_reingest(
     for name, options in configs:
         hype_config = {
             "enable_hype": options.get("enable_hype", False),
-            "hype_sample_rate": options.get("hype_sample_rate", settings.hyde.hype_sample_rate),
+            "hype_sample_rate": options.get("hype_sample_rate", settings.hype.sample_rate),
             "hype_questions_per_chunk": options.get(
-                "hype_questions_per_chunk", settings.hyde.hype_questions_per_chunk
+                "hype_questions_per_chunk", settings.hype.questions_per_chunk
             ),
         }
         variant_collection = f"{collection_base}_{name}"

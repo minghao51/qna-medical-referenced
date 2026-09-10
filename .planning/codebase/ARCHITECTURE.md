@@ -74,8 +74,8 @@ Offline data processing pipeline that transforms raw documents into searchable v
 | L0b | `steps/download_pdfs.py` | Download PDF documents |
 | L1 | `steps/convert_html.py` | Convert HTML to Markdown (trafilatura/BS4) |
 | L2 | `steps/load_pdfs.py`, `steps/load_markdown.py` | Load and parse documents into structured format |
-| L3 | `steps/chunk_text.py` → `steps/chunking/` | Chunk documents (structured, medical-semantic, or simple strategies) |
-| L3b | `steps/hype.py` | Generate HyPE (Hypothetical Prompt Embedding) questions |
+| L3 | `steps/chunking/` | Chunk documents (structured, medical-semantic, or simple strategies) |
+| L3b | `steps/hypothetical_questions.py` | Generate HyPE (Hypothetical Prompt Embedding) questions |
 | L3c | `steps/enrich_chunks.py` | LLM-based keyword extraction and summarization |
 | L4 | `steps/load_reference_data.py` | Load medical reference ranges |
 | L5 | `indexing/` | Embed and store in ChromaDB |
@@ -150,7 +150,7 @@ Centralized settings management using Pydantic `BaseSettings` with YAML + env va
 
 | Module | Role |
 |--------|------|
-| `settings.py` | `Settings` class with nested Pydantic models (AppConfig, ApiConfig, LLMConfig, StorageConfig, RetrievalConfig, HyDEConfig, EnrichmentConfig, RetryConfig, DeepEvalConfig, WandbConfig, ProductionConfig) — ~224 lines. Loads from `config/settings.yaml` + env vars with `APP__` prefix |
+| `settings.py` | `Settings` class with nested Pydantic models (AppConfig, ApiConfig, LLMConfig, StorageConfig, RetrievalConfig, HyDEConfig, HypeConfig, EnrichmentConfig, RetryConfig, DeepEvalConfig, WandbConfig, ProductionConfig) — loads from `config/settings.yaml` + env vars with `APP__` prefix. Deprecated `hyde.hype_*` keys are migrated onto `settings.hype` with a warning (roadmap P3.6) |
 | `context.py` | `RuntimeState` — thread-safe mutable runtime state singleton for feature flags and runtime configuration |
 | `paths.py` | Canonical filesystem paths derived from settings |
 | `__init__.py` | Re-exports `settings` and path constants |

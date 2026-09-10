@@ -52,9 +52,9 @@ def build_ingestion_pipeline(
     modules = NODE_MODULES
 
     resolved_hype_config = hype_config or {
-        "sample_rate": settings.hyde.hype_sample_rate,
-        "max_chunks": settings.hyde.hype_max_chunks,
-        "questions_per_chunk": settings.hyde.hype_questions_per_chunk,
+        "sample_rate": settings.hype.sample_rate,
+        "max_chunks": settings.hype.max_chunks,
+        "questions_per_chunk": settings.hype.questions_per_chunk,
     }
     resolved_enrichment_config = enrichment_config or {
         "sample_rate": settings.enrichment.keyword_extraction_sample_rate,

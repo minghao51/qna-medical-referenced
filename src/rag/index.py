@@ -61,12 +61,12 @@ async def _build_index_from_sources(vector_store: VectorStoreProtocol) -> dict[s
             chunks=chunked_docs,
             client=get_client(),
             sample_rate=float(
-                indexing_features.get("hype_sample_rate", settings.hyde.hype_sample_rate)
+                indexing_features.get("hype_sample_rate", settings.hype.sample_rate)
             ),
-            max_chunks=int(indexing_features.get("hype_max_chunks", settings.hyde.hype_max_chunks)),
+            max_chunks=int(indexing_features.get("hype_max_chunks", settings.hype.max_chunks)),
             questions_per_chunk=int(
                 indexing_features.get(
-                    "hype_questions_per_chunk", settings.hyde.hype_questions_per_chunk
+                    "hype_questions_per_chunk", settings.hype.questions_per_chunk
                 )
             ),
         )

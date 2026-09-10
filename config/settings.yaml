@@ -105,11 +105,12 @@ hyde:
   hyde_enabled: false
   hyde_max_length: 200  # Maximum words in hypothetical answer
 
+hype:
   # HYPE: Generate hypothetical questions during ingestion
-  hype_enabled: false
-  hype_sample_rate: 0.1              # Fraction of chunks to process (0.0-1.0)
-  hype_max_chunks: 500               # Maximum chunks to process
-  hype_questions_per_chunk: 2        # Questions per chunk
+  enabled: false
+  sample_rate: 0.1              # Fraction of chunks to process (0.0-1.0)
+  max_chunks: 500               # Maximum chunks to process
+  questions_per_chunk: 2        # Questions per chunk
 
 # =============================================================================
 # Document Enrichment Configuration

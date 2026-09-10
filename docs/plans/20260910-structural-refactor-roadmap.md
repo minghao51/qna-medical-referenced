@@ -10,7 +10,7 @@ Every PR must keep `ruff`, `mypy`, `pytest` green. Docs are updated **in the sam
 
 ## ⚡ EXECUTION STATUS (updated after P3.1)
 
-**Phases 0–2 and P3.1 are COMPLETE. Phase 3 continues with P3.3 → P3.2 → P3.4.**
+**Phases 0–2, P3.1, and P3.3 (+P3.6) are COMPLETE. Phase 3 continues with P3.2 → P3.4.**
 A fresh agent should read this section, then §3 (target architecture), then the
 remaining Phase 3 work orders.
 
@@ -24,8 +24,8 @@ main
     └── refactor/phase-1-structure (7 commits) af0d2c3..4b58330  core/, nodes/, shims, services fold
         └── refactor/phase-2-structure (5 commits) 137a21d..659923e  ablations/, chroma split,
                                                      AssessmentPipeline, test mirroring
-            └── refactor/phase-3-structure (3 commits) de9c2e0..docs  mypy-baseline fix,
-                                                     P3.1 constructor injection, docs sync
+            └── refactor/phase-3-structure (6 commits) de9c2e0..docs  mypy-baseline fix, P3.1 injection,
+                                                     P3.3 setter kill + P3.6, docs sync
 ```
 
 Working tree clean. 16 commits total.
@@ -49,13 +49,13 @@ Working tree clean. 16 commits total.
 | P2.5 convert_html split | ✅ no-op | (in 4323bf4 msg) | `main(force)` already library-quality; real fix is P3.3. Rationale in roadmap body |
 | P2.6 test mirroring | ✅ done | 4323bf4 | unit+integration mirrored to package dirs; 2 `__file__`-relative fixture paths adjusted |
 | P3.1 real constructor injection | ✅ done | 2733b20 | preceded by de9c2e0 (mypy-baseline fix; also fixed a real P2.4 shadowing bug — see commit). `app/dependencies.py` accessors; di.py + 21 tests deleted; HyPE gen → `infra/llm/hypothetical_questions.py`; last ingestion→rag edge gone |
-| P3.3 setter-channel kill (+P3.6 keys) | ⬜ pending | | **start here** |
+| P3.3 setter-channel kill (+P3.6 keys) | ✅ done | 988bed7 | applier → `ingestion/runtime_config.py` (writes RuntimeState directly); 9 step setters deleted; config route via `usecases/runtime_config.py`; P3.6 `settings.hype` split in follow-up commit |
 | P3.2 Hamilton delegation + parity gate | ⬜ pending | | after P3.3 — mandatory baseline diff |
 | P3.4 import-linter contract | ⬜ pending | | last — asserts end state |
 
 ### Verification baselines (must hold after every Phase 3 step)
 
-- `pytest tests/unit` → **521 passed, 8 skipped** (was 540: +2 orchestrator-composition tests, −21 di-container tests deleted with `di.py` in P3.1)
+- `pytest tests/unit` → **523 passed, 8 skipped** (521 + 2 settings-migration tests from P3.6)
 - `pytest tests/integration` → **92 passed, 56 skipped** (skips = env-key/deps, pre-existing)
 - `ruff check src/ tests/ scripts/` → clean
 - mypy: **2 pre-existing errors** in `ingestion/indexing/store.py` (list invariance, `_extracted_keywords_from_metadata`) — present before the refactor on `main`; do not "fix" incidentally, do not add new ones
@@ -93,10 +93,11 @@ Working tree clean. 16 commits total.
    removed; `generate_hypothetical_questions` → `infra/llm/hypothetical_questions.py`
    (last ingestion→rag edge gone). Offline edges keep constructing at their own
    edge (rag/index.py, Hamilton nodes, evals) — intentional per D3.2=B.
-2. **P3.3** full setter kill: delete `rag/runtime_config.py` cross-package setters
-   + `convert_html.py` strategy/mode globals; steps take explicit params from a
-   config snapshot; `app/routes/config.py` goes through a usecase facade;
-   **P3.6**: `settings.hyde.*` → `settings.hype.*` via pydantic alias + warning.
+2. **P3.3** full setter kill ✅ **done** (988bed7, 1b809ab, P3.6 commit): runtime-config
+   applier moved to `ingestion/runtime_config.py` writing `RuntimeState`
+   directly; 9 per-step `set_*` wrappers deleted; `app/routes/config.py`
+   reads through `usecases/runtime_config.py` facade (no app→ingestion);
+   `settings.hype.*` split from `hyde` (deprecated-key migration + warning).
 3. **P3.2** Hamilton delegation: `run_ingestion(config)` library entry with cached
    driver in `ingestion/pipeline.py`; `rag/index.py::initialize_vector_store_async`
    delegates via `asyncio.to_thread`; delete `_build_index_from_sources` +
