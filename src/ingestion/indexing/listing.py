@@ -6,13 +6,25 @@ Mixin for ChromaVectorStore: serves the /documents routes.
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from chromadb.api import Collection
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentListingMixin:
     """Paginated document listing and single-document lookup."""
+
+    if TYPE_CHECKING:
+        # Attributes and helpers provided by the ChromaVectorStore host
+        # (store.py); declared here so the mixin contract type-checks.
+        _collection: Collection
+        _doc_metadatas: list[dict[str, Any]]
+        _index_metadata: dict[str, Any]
+        _rebuild_index_if_needed: Callable[[], None]
 
     @staticmethod
     def _build_source_type_filter(source_type: str | None) -> dict[str, Any] | None:

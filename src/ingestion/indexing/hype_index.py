@@ -7,12 +7,25 @@ questions stored in chunk metadata at ingestion time.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
 
 class HypotheticalQuestionSearchMixin:
     """Search hypothetical questions stored in chunk metadata."""
+
+    if TYPE_CHECKING:
+        # Attributes and helpers provided by the ChromaVectorStore host
+        # (store.py); declared here so the mixin contract type-checks.
+        _doc_ids: list[str]
+        _doc_metadatas: list[dict[str, Any]]
+        _tokenize: Callable[[str], list[str]]
+        _rebuild_index_if_needed: Callable[[], None]
+        _hypothetical_question_cache: (
+            list[tuple[float, list[tuple[frozenset[str], str]]]] | None
+        )
 
     def _build_hypothetical_question_cache(
         self,

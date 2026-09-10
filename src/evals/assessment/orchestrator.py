@@ -29,21 +29,25 @@ from src.evals.checks import (
 )
 from src.evals.dataset_builder import build_retrieval_dataset
 from src.evals.schemas import AssessmentConfig, AssessmentResult, AssessmentRunParams
+
+# Underscore aliases: the bare names collide with the boolean kwargs of
+# run_assessment() (run_retrieval_ablations=True, ...), which shadowed
+# these functions inside the default-composition body and injected False
+# into the AssessmentPipeline fn fields.
+from src.experiments.ablations import run_diversity_sweep as _run_diversity_sweep
+from src.experiments.ablations import run_hype_ablations as _run_hype_ablations
+from src.experiments.ablations import (
+    run_hype_ablations_with_reingest,
+    run_keyword_ablations_with_reingest,
+)
+from src.experiments.ablations import run_keyword_ablations as _run_keyword_ablations
+from src.experiments.ablations import run_reranking_ablations as _run_reranking_ablations
+from src.experiments.ablations import run_retrieval_ablations as _run_retrieval_ablations
 from src.experiments.wandb_tracking import log_assessment_to_wandb
 from src.rag import configure_runtime_for_experiment, initialize_runtime_index
 from src.rag.runtime_config import apply_runtime_config, build_default_runtime_config
 
 logger = logging.getLogger(__name__)
-
-from src.experiments.ablations import (  # noqa: E402
-    run_diversity_sweep,
-    run_hype_ablations,
-    run_hype_ablations_with_reingest,
-    run_keyword_ablations,
-    run_keyword_ablations_with_reingest,
-    run_reranking_ablations,
-    run_retrieval_ablations,
-)
 
 from .answer_eval import evaluate_answer_quality  # noqa: E402
 from .l6_contract import (  # noqa: E402
@@ -154,17 +158,17 @@ class AssessmentPipeline:
     )
     initialize_runtime_index_fn: Callable[..., dict[str, Any]] = initialize_runtime_index
     log_assessment_to_wandb_fn: Callable[..., dict[str, Any]] = log_assessment_to_wandb
-    run_retrieval_ablations_fn: Callable[..., dict[str, Any]] = run_retrieval_ablations
-    run_hype_ablations_fn: Callable[..., dict[str, Any]] = run_hype_ablations
-    run_keyword_ablations_fn: Callable[..., dict[str, Any]] = run_keyword_ablations
+    run_retrieval_ablations_fn: Callable[..., dict[str, Any]] = _run_retrieval_ablations
+    run_hype_ablations_fn: Callable[..., dict[str, Any]] = _run_hype_ablations
+    run_keyword_ablations_fn: Callable[..., dict[str, Any]] = _run_keyword_ablations
     run_keyword_ablations_with_reingest_fn: Callable[..., dict[str, Any]] = (
         run_keyword_ablations_with_reingest
     )
     run_hype_ablations_with_reingest_fn: Callable[..., dict[str, Any]] = (
         run_hype_ablations_with_reingest
     )
-    run_reranking_ablations_fn: Callable[..., dict[str, Any]] = run_reranking_ablations
-    run_diversity_sweep_fn: Callable[..., list[dict[str, Any]]] = run_diversity_sweep
+    run_reranking_ablations_fn: Callable[..., dict[str, Any]] = _run_reranking_ablations
+    run_diversity_sweep_fn: Callable[..., list[dict[str, Any]]] = _run_diversity_sweep
     render_summary_fn: Callable[..., str] = render_summary
     sha256_file_fn: Callable[[str | Path | None], str | None] = sha256_file
 
@@ -231,7 +235,7 @@ class AssessmentPipeline:
 
     def _resolve_config(
         self, params: AssessmentRunParams
-    ) -> tuple[AssessmentConfig, dict[str, Any], str | None, dict[str, Any], dict[str, Any], bool]:
+    ) -> tuple[AssessmentConfig, dict[str, Any], str | None, dict[str, Any], str, bool]:
         """Stage 1: resolve run parameters into an AssessmentConfig + provenance."""
         thresholds = dict(DEFAULT_THRESHOLDS)
         if params.thresholds_file:
@@ -297,7 +301,7 @@ class AssessmentPipeline:
         return config, config_payload, git_revision, input_provenance, run_identity, key_available
 
     def _reusable_result(
-        self, config: AssessmentConfig, run_identity: dict[str, Any]
+        self, config: AssessmentConfig, run_identity: str
     ) -> AssessmentResult | None:
         """Stage 2: return a previous equivalent run's result, if any."""
         reusable_run_dir = (
@@ -318,6 +322,7 @@ class AssessmentPipeline:
                 failed_thresholds=_load_failed_thresholds_for_run(reusable_run_dir),
                 summary=reused_summary,
             )
+        return None
 
     def _prepare_index(self, config: AssessmentConfig) -> tuple[dict[str, Any], dict[str, Any]]:
         """Stage 3: configure the runtime index (or skip per config)."""
@@ -376,7 +381,7 @@ class AssessmentPipeline:
         config_payload: dict[str, Any],
         git_revision: str | None,
         input_provenance: dict[str, Any],
-        run_identity: dict[str, Any],
+        run_identity: str,
         key_available: bool,
         index_preparation: dict[str, Any],
         start: float,
@@ -591,7 +596,7 @@ class AssessmentPipeline:
         *,
         config: AssessmentConfig,
         start: float,
-        run_identity: dict[str, Any],
+        run_identity: str,
         store: ArtifactStore,
         manifest: dict[str, Any],
         step_metrics: dict[str, Any],
@@ -908,13 +913,13 @@ def run_assessment(
         else log_assessment_to_wandb,
         run_retrieval_ablations_fn=run_retrieval_ablations_fn
         if run_retrieval_ablations_fn is not None
-        else run_retrieval_ablations,
+        else _run_retrieval_ablations,
         run_hype_ablations_fn=run_hype_ablations_fn
         if run_hype_ablations_fn is not None
-        else run_hype_ablations,
+        else _run_hype_ablations,
         run_keyword_ablations_fn=run_keyword_ablations_fn
         if run_keyword_ablations_fn is not None
-        else run_keyword_ablations,
+        else _run_keyword_ablations,
         run_keyword_ablations_with_reingest_fn=run_keyword_ablations_with_reingest_fn
         if run_keyword_ablations_with_reingest_fn is not None
         else run_keyword_ablations_with_reingest,
@@ -923,10 +928,10 @@ def run_assessment(
         else run_hype_ablations_with_reingest,
         run_reranking_ablations_fn=run_reranking_ablations_fn
         if run_reranking_ablations_fn is not None
-        else run_reranking_ablations,
+        else _run_reranking_ablations,
         run_diversity_sweep_fn=run_diversity_sweep_fn
         if run_diversity_sweep_fn is not None
-        else run_diversity_sweep,
+        else _run_diversity_sweep,
         render_summary_fn=render_summary_fn if render_summary_fn is not None else render_summary,
         sha256_file_fn=sha256_file_fn if sha256_file_fn is not None else sha256_file,
     ).run(params)
