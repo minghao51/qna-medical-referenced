@@ -21,7 +21,7 @@ def _import_generator():
 def test_synthetic_generator_structure():
     """Test that generator function is properly structured."""
     generate_synthetic_dataset = _import_generator()
-    fixture_path = Path(__file__).parent.parent / "fixtures" / "sample_medical.txt"
+    fixture_path = Path(__file__).parent.parent.parent / "fixtures" / "sample_medical.txt"
 
     with (
         patch("src.evals.synthetic.generator.Synthesizer") as mock_synthesizer_class,

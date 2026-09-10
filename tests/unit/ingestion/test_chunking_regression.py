@@ -27,7 +27,7 @@ from tests.fixtures.gen_chunking_golden import (
     _deterministic_embed,
 )
 
-GOLDEN_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "chunking_regression_golden.json"
+GOLDEN_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "chunking_regression_golden.json"
 
 # Keys emitted by the custom chunker's base path (_chunk_text_with_base_index).
 _BASE_CHUNK_KEYS = frozenset(

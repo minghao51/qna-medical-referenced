@@ -227,9 +227,11 @@ re-points: behavior identical, coverage identical.
   (real DI, ready for P3.1 composition).
 - Keep module-level `run_assessment()` as the default-composition convenience for callers/tests.
 
-**P2.5 Split `steps/convert_html.py`**
-- Separate `main()`/argparse from the pure core (strategies, classification, block collection).
-- Module-level get/set strategy globals **stay for now** (their removal is P3.3).
+**P2.5 Split `steps/convert_html.py`** — *executed as a no-op*
+- Inspection showed `main(force)` is already a plain library function with a minimal
+  `__main__` guard; the reusable core (`convert_html_to_md`) is separate. The module's
+  real problems (module-level setters, mixed strategies/classification) are resolved by
+  the P3.3 setter kill, which restructures this module anyway. No churn without benefit.
 
 **P2.6 Mirror `tests/unit/` (and `tests/integration/`) to top-level package dirs**
 - Pure `git mv`: `tests/unit/{app,rag,ingestion,evals,experiments,infra,config,usecases,cli}/`.
