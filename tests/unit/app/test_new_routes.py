@@ -45,8 +45,10 @@ class TestGetConfig:
         assert "enable_chunk_summaries" in result["enrichment"]
 
     def test_returns_effective_runtime_config(self, monkeypatch):
+        import src.usecases.runtime_config as runtime_config_usecase
+
         monkeypatch.setattr(
-            config,
+            runtime_config_usecase,
             "get_runtime_retrieval_config",
             lambda: {
                 "search_mode": "semantic_only",
