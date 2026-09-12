@@ -88,10 +88,12 @@ Working tree clean.
   → clean (CI gates `.`; the 9 drifted files were reformatted in the P3.4 commit)
 - `lint-imports` → **4 contracts kept** (added in P3.4; enforced in CI lint job +
   pre-commit; unmatched `ignore_imports` entries fail CI by design)
-- mypy: **8 pre-existing errors** — the 2 known `ingestion/indexing/store.py` errors
-  (list invariance, `_extracted_keywords_from_metadata`) plus 6 in untouched test
-  files that surfaced when the baseline was re-measured at 66837eb (the old
-  "2 pre-existing" note was stale). Do not "fix" incidentally, do not add new ones.
+- mypy: **clean on `src/`** (CI runs `mypy src/`). The 2 pre-existing store.py
+  invariance errors (`_extracted_keywords_from_metadata`) were fixed post-P3.4
+  with the mypy-suggested `Sequence[...]` param annotation — they had been
+  red on `main` since before the stack. Whole-project mypy still reports 6
+  pre-existing errors in test files CI never checks; do not "fix" those
+  incidentally, do not add new ones.
 - P3.2's **parity gate** passed once, pre-merge (gotcha 17); it is not part of the
   recurring ladder
 

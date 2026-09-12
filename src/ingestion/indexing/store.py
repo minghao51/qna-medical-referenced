@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -54,7 +55,7 @@ def _source_type_for(source: str) -> str:
 
 
 def _extracted_keywords_from_metadata(
-    metadatas: list[dict[str, Any] | None],
+    metadatas: Sequence[dict[str, Any] | None],
 ) -> list[list[str] | None]:
     """Per-document lowercased extracted keywords (None when absent)."""
     extracted: list[list[str] | None] = []
