@@ -24,6 +24,8 @@ venv*/
 
 # Data and logs
 data/
+!docs/data/
+!docs/data/sources.md
 .cache/
 *.log
 logs/
