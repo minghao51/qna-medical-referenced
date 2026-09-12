@@ -304,7 +304,7 @@ qna_medical_referenced/
 | Chat endpoint (SSE) | `src/app/routes/chat.py` |
 | Chat use case | `src/usecases/chat.py` |
 | DI composition root | `src/app/factory.py` (lifespan) + `src/app/dependencies.py` (route accessors) |
-| Ingestion pipeline | `src/cli/ingest.py` → `src/ingestion/pipeline.py` |
+| Ingestion pipeline | `run_ingestion()` in `src/ingestion/pipeline.py` (library entry, P3.2) — callers: `src/cli/ingest.py`, `src/rag/index.py` (async delegate), evals | 
 | LLM client | `src/infra/llm/qwen_client.py` |
 | Production entrypoint | `src/cli/serve_production.py` |
 | Docker entrypoint | `Dockerfile` (CMD: `python -m src.cli.serve_production`) |

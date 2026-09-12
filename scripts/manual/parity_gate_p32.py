@@ -9,7 +9,7 @@ metrics JSON for exact comparison between the baseline (pre-P3.2 commit)
 and the branch (post-P3.2), each checked out in its own worktree so the
 data/ directories (corpus, chroma, artifacts) stay isolated.
 
-Gated metrics: deterministic L0–L5 step-check aggregates and retrieval
+Gated metrics: deterministic L0-L5 step-check aggregates and retrieval
 metrics (nDCG/recall). Known-nondeterministic fields (timings, file
 sizes) are stripped before comparison. LLM-judged answer metrics are
 excluded from the run entirely (include_answer_eval=False).
@@ -175,28 +175,28 @@ def install_fake_embedder() -> None:
 # Normalization for exact comparison
 # ---------------------------------------------------------------------------
 
-NON_DETERMINISTIC_KEYS = {
-    "timing_ms",
-    "timings",
-    "build_elapsed_ms",
-    "elapsed_ms",
-    "elapsed_s",
-    "index_file_size_bytes",
+NON_DETERMINISTIC_SUBSTRINGS = (
+    "timing",
+    "latency",
+    "elapsed",
+    "size_bytes",
     "duration",
-    "started_at_epoch_s",
-    "completed_at_epoch_s",
-}
+    "epoch_s",
+    "wall_time",
+)
 
 
-def normalize(value: Any, path: str = "") -> Any:
+def normalize(value: Any, root: str = "", path: str = "") -> Any:
     if isinstance(value, dict):
         return {
-            key: normalize(item, f"{path}.{key}")
+            key: normalize(item, root, f"{path}.{key}")
             for key, item in sorted(value.items())
-            if key not in NON_DETERMINISTIC_KEYS
+            if not any(substring in key for substring in NON_DETERMINISTIC_SUBSTRINGS)
         }
     if isinstance(value, list):
-        return [normalize(item, f"{path}[{i}]") for i, item in enumerate(value)]
+        return [normalize(item, root, f"{path}[{i}]") for i, item in enumerate(value)]
+    if isinstance(value, str) and root and root in value:
+        return value.replace(root, "<ROOT>")
     return value
 
 
@@ -214,7 +214,7 @@ def first_diff(a: Any, b: Any, path: str = "$") -> str | None:
     if isinstance(a, list) and isinstance(b, list):
         if len(a) != len(b):
             return f"{path}: list length {len(a)} != {len(b)}"
-        for i, (x, y) in enumerate(zip(a, b)):
+        for i, (x, y) in enumerate(zip(a, b, strict=True)):
             diff = first_diff(x, y, f"{path}[{i}]")
             if diff:
                 return diff
@@ -278,17 +278,15 @@ def cmd_run(out: Path) -> None:
     elapsed = time.time() - start
     run_dir = Path(result.run_dir)
     step_metrics = json.loads((run_dir / "step_metrics.json").read_text(encoding="utf-8"))
-    retrieval_metrics = json.loads(
-        (run_dir / "retrieval_metrics.json").read_text(encoding="utf-8")
-    )
+    retrieval_metrics = json.loads((run_dir / "retrieval_metrics.json").read_text(encoding="utf-8"))
     dataset = json.loads((run_dir / "retrieval_dataset.json").read_text(encoding="utf-8"))
 
     payload = {
         "run_dir": run_dir.name,
         "status": result.status,
         "wall_time_s_excluded": round(elapsed, 1),
-        "step_metrics": normalize(step_metrics["aggregate"] if "aggregate" in step_metrics else step_metrics),
-        "retrieval_metrics": normalize(retrieval_metrics),
+        "step_metrics": normalize(step_metrics, str(PROJECT_ROOT)),
+        "retrieval_metrics": normalize(retrieval_metrics, str(PROJECT_ROOT)),
         "dataset_stats": {
             "query_count": len(dataset),
         },
@@ -310,7 +308,7 @@ def cmd_compare(baseline: Path, branch: Path) -> int:
         for failure in failures:
             print("  " + failure)
         return 1
-    print("[parity] PASS — L0–L5 aggregates, retrieval metrics and dataset identical")
+    print("[parity] PASS - L0-L5 aggregates, retrieval metrics and dataset identical")
     print(f"  baseline: {base.get('run_dir')}  (status={base.get('status')})")
     print(f"  branch:   {brch.get('run_dir')}  (status={brch.get('status')})")
     return 0

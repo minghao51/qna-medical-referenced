@@ -194,23 +194,33 @@ User → Frontend (SvelteKit)
   ← SSE stream → Frontend renders tokens
 ```
 
-### Ingestion Pipeline Flow
+### Ingestion Pipeline Flow (single path since roadmap P3.2)
 
 ```
-CLI: python -m src.cli.ingest
-  → src/ingestion/pipeline.py: build_ingestion_pipeline() (Hamilton DAG, single driver)
+Library entry: src/ingestion/pipeline.py::run_ingestion(IngestionRunConfig)
+  → build_ingestion_pipeline() (Hamilton DAG, driver cached by config signature)
     → L0: download_web.py → data/raw/*.html
     → L0b: download_pdfs.py → data/raw/*.pdf
-    → L1: convert_html.py → data/processed/*.md
-    → L2: load_pdfs.py + load_markdown.py → List[Document]
-    → L3: chunk_text.py → chunking/ (structured/medical-semantic/simple)
-       → List[Chunk] with metadata
-    → L3b: hype.py (optional) → generate hypothetical questions
+    → L1: convert_html.py → data/raw/*.md  (also runs under skip_download
+         when force_html_convert is set)
+    → L2: load_pdfs.py (rich per-file docs via load_pdf_document) +
+         load_markdown.py → silver parquet (full doc shape: id/metadata/
+         structured_blocks/pages — P3.2 passthrough)
+    → L3: chunking/ (structured/medical-semantic/simple)
+    → L3b: hypothetical_questions.py (optional, flag from runtime config)
     → L3c: enrich_chunks.py (optional) → extract keywords, summarize
     → L4: load_reference_data.py → reference range docs
-    → L5: chroma_store.py → embed via Qwen + store in ChromaDB
+    → L5: indexing/store.py → embed via Qwen + store in ChromaDB
          + build BM25 keyword index
-    → L6: initialize_runtime_index() → mark index ready
+
+Callers:
+  CLI: python -m src.cli.ingest (argparse wrapper on run_ingestion)
+  Server/eval builds: rag/index.py::initialize_vector_store_async delegates
+    via asyncio.to_thread(run_ingestion, IngestionRunConfig.from_runtime_state(...))
+    — the former parallel builder _build_index_from_sources was deleted in
+    P3.2; parity with the pre-refactor runtime index is proven by the gate in
+    docs/parity/p32/ (offline deterministic embedder, exact L0–L5 + retrieval
+    metric equality).
 ```
 
 ### Evaluation Flow

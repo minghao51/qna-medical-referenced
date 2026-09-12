@@ -8,9 +8,9 @@ Every PR must keep `ruff`, `mypy`, `pytest` green. Docs are updated **in the sam
 
 ---
 
-## ⚡ EXECUTION STATUS (updated after P3.3/P3.6)
+## ⚡ EXECUTION STATUS (updated after P3.2)
 
-**Phases 0–2, P3.1, and P3.3 (+P3.6) are COMPLETE. Phase 3 continues with P3.2 → P3.4.**
+**Phases 0–2, P3.1, P3.3 (+P3.6), and P3.2 are COMPLETE. Phase 3 continues with P3.4 (last).**
 A fresh agent should read this section, then §3 (target architecture), then the
 remaining Phase 3 work orders.
 
@@ -24,11 +24,13 @@ main
     └── refactor/phase-1-structure (7 commits) af0d2c3..4b58330  core/, nodes/, shims, services fold
         └── refactor/phase-2-structure (5 commits) 137a21d..659923e  ablations/, chroma split,
                                                      AssessmentPipeline, test mirroring
-            └── refactor/phase-3-structure (6 commits) de9c2e0..ca8be71  mypy-baseline fix, P3.1 injection,
-                                                            P3.3 setter kill + P3.6, docs sync
+            └── refactor/phase-3-structure (10 commits) de9c2e0..ffad78f  mypy-baseline fix,
+                                                            P3.1 injection, P3.3 setter kill +
+                                                            P3.6, P3.2 Hamilton delegation +
+                                                            parity gate, docs sync
 ```
 
-Working tree clean. 19 commits total.
+Working tree clean.
 
 ### Task status
 
@@ -52,16 +54,19 @@ Working tree clean. 19 commits total.
 | P3.3 setter-channel kill | ✅ done | 988bed7 | applier → `ingestion/runtime_config.py` (writes RuntimeState directly); 9 step setters deleted |
 | P3.3 config-route facade | ✅ done | 1b809ab | `app/routes/config.py` reads via `usecases/runtime_config.py` (no app→ingestion at routes) |
 | P3.6 settings.hype split | ✅ done | ca8be71 | `settings.hype.*` group; deprecated `hyde.hype_*` keys load+warn+migrate; yaml updated |
-| P3.2 Hamilton delegation + parity gate | ⬜ pending | | **start here** — mandatory baseline diff |
-| P3.4 import-linter contract | ⬜ pending | | last — asserts end state (see gotcha 12 re: composition roots) |
+| P3.2 Hamilton delegation + parity gate | ✅ done | 006c730 | `run_ingestion` library entry + signature-cached driver; `rag/index.py` delegates via `asyncio.to_thread`; `_build_index_from_sources` + `materialize_html` param deleted; **rich doc-shape passthrough in DAG silver nodes required** (gotcha 16); parity gate PASSED offline (gotcha 17, artifacts in `docs/parity/p32/`, runner `scripts/manual/parity_gate_p32.py`) |
+| P3.4 import-linter contract | ⬜ pending | | **last** — asserts end state (see gotcha 12 re: composition roots) |
 
 ### Verification baselines (must hold after every Phase 3 step)
 
-- `pytest tests/unit` → **523 passed, 8 skipped** (521 + 2 settings-migration tests from P3.6)
+- `pytest tests/unit` → **530 passed, 8 skipped** (523 + 7 new P3.2 tests)
 - `pytest tests/integration` → **92 passed, 56 skipped** (skips = env-key/deps, pre-existing)
 - `ruff check src/ tests/ scripts/` → clean
-- mypy: **2 pre-existing errors** in `ingestion/indexing/store.py` (list invariance, `_extracted_keywords_from_metadata`) — present before the refactor on `main`; do not "fix" incidentally, do not add new ones
-- P3.2 additionally requires the **parity gate** (§Phase 3)
+- mypy: **8 pre-existing errors** — the 2 known `ingestion/indexing/store.py` errors
+  (list invariance, `_extracted_keywords_from_metadata`) plus 6 in untouched test
+  files that surfaced when the baseline was re-measured at 66837eb (the old
+  "2 pre-existing" note was stale). Do not "fix" incidentally, do not add new ones.
+- P3.2 additionally required the **parity gate** (§Phase 3) — PASSED, see gotcha 17
 
 ### Gotchas discovered during execution (read before Phase 3)
 
@@ -116,7 +121,37 @@ Working tree clean. 19 commits total.
     the embedding API (DashScope/Qwen). If unavailable, agree an offline substitute
     (the integration conftest's deterministic fake `embed_texts`) and record it in
     the PR; gate on L0–L5 + retrieval metrics identical between baseline and branch
-    under the SAME embedder.
+    under the SAME embedder. **[RESOLVED]** offline substitute used; see gotcha 17.
+16. **P3.2 discovery - the two ingestion builders were never equivalent:** the
+    rag-side builder fed *rich* docs (`id`, `metadata` with `source_class`/
+    `canonical_label`, `structured_blocks`, `source_type: "html"`, pdf `pages`)
+    into the chunker, while the DAG silver nodes stripped to
+    `{path, text, source_type: "markdown"}` + parquet round-trip. Chunk content
+    matched, but chunk ids and stored `source_class` did not - the 0.2-weight
+    source boost would have silently changed retrieval rankings after
+    delegation. **Fix shipped in P3.2 (user-approved option A):** rich
+    passthrough - `all_markdown_documents` passes loader docs unchanged,
+    `parse_pdf_document` uses the new `PDFLoader.load_pdf_document` (extracted
+    from `load_all_pdfs`, same assembly), polars round-trips nested
+    metadata/blocks as struct columns. Verified chunk-for-chunk identical to
+    the baseline builder; CLI-built indexes gain the richer metadata (moves
+    toward runtime semantics - the unification target).
+17. **P3.2 parity gate record:** no API keys on the dev machine, so the gate ran
+    with the deterministic fake embedder on a fabricated fixed corpus
+    (3 html+md pairs, 1 hand-crafted minimal PDF, 8-row LabQAR CSV) in two
+    isolated git worktrees - baseline `66837eb` vs branch `006c730`. LLM-free
+    assessment (no answer eval, heuristic dataset + heuristic relevance
+    grading). Result: L0-L5 aggregates + records, retrieval metrics (full
+    float precision), dataset stats, and stored `source_class_distribution`
+    all identical. Artifacts: `docs/parity/p32/`; runner:
+    `scripts/manual/parity_gate_p32.py` (reusable `run|compare` modes).
+18. **Intentional P3.2 behavior deltas (approved):** (a) server/eval builds now
+    write medallion parquet artifacts (silver/gold/enriched/reference) as a DAG
+    side effect; (b) `--skip-download --force-html` now actually force-converts
+    (was silently suppressed); (c) reusing an existing index no longer converts
+    *missing* .md files (only mattered for partially-converted corpora);
+    (d) `embedding_index.materialize_html` experiment key is accepted but
+    ignored (kept in the schema and index_config_hash for artifact stability).
 
 ### Phase 3 next-work checklist (pinned order)
 
@@ -131,13 +166,17 @@ Working tree clean. 19 commits total.
    directly; 9 per-step `set_*` wrappers deleted; `app/routes/config.py`
    reads through `usecases/runtime_config.py` facade (no app→ingestion);
    `settings.hype.*` split from `hyde` (deprecated-key migration + warning).
-3. **P3.2** Hamilton delegation — **START HERE**: `run_ingestion(config)` library
-   entry with cached
-   driver in `ingestion/pipeline.py`; `rag/index.py::initialize_vector_store_async`
-   delegates via `asyncio.to_thread`; delete `_build_index_from_sources` +
-   `materialize_html` param; preserve signature-check skip + `get_runtime_status`.
-   **Run the parity gate before merge** (baseline on the CURRENT branch state
-   first — `main` has none of Phase 3; see gotcha 15 re: embedding source).
+3. ~~**P3.2** Hamilton delegation~~ ✅ **done** (006c730, c76635b):
+   `run_ingestion(config)` library entry with signature-cached driver in
+   `ingestion/pipeline.py`; `rag/index.py::initialize_vector_store_async`
+   delegates via `asyncio.to_thread`; `_build_index_from_sources` +
+   `materialize_html` param deleted (force_html_convert replaces
+   force_html_reconvert); signature-check skip + `get_runtime_status`
+   preserved; **plus the gotcha-16 rich passthrough** (without it the DAG
+   would have stripped doc metadata the rag builder indexed). **Parity gate
+   PASSED** (gotcha 17): baseline 66837eb vs branch 006c730, offline
+   deterministic embedder, exact L0–L5 + retrieval equality; artifacts in
+   `docs/parity/p32/`.
 4. **P3.4** import-linter: `cli > app > usecases > {rag,evals,experiments} >
    {ingestion,infra} > core > config` + forbids (infra→app, ingestion→rag,
    usecases→cli); wire into `ci.yml`. **Carve out the composition-root exception

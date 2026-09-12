@@ -65,6 +65,20 @@
 
 ## Known Bugs
 
+**`indexing_features` silently dropped by the vector-store factory (pre-existing, inherited by P3.2):**
+- Symptoms: `ChromaVectorStoreFactory._normalize_runtime_config` keeps only
+  collection/weights/embedding keys, so the `indexing_features` dict that
+  `apply_runtime_config` writes (enable_hype, hype_* and enrichment knobs)
+  never survives a read. The only consumer was the deleted rag-side builder
+  (`_build_index_from_sources`), which therefore never saw experiment HyPE/
+  enrichment overrides — on `main` too. `IngestionRunConfig.from_runtime_state`
+  (P3.2) reads the same (empty) source, preserving behavior bug-for-bug.
+- Files: `src/ingestion/indexing/factory.py`, `src/ingestion/runtime_config.py`
+- Fix approach (deferred): thread an explicit features dict from
+  `apply_runtime_config` into `run_ingestion` instead of piggybacking on the
+  store config; must ship with its own eval-parity story since enabling it
+  changes runtime index behavior vs today.
+
 **Sync Retrieval Called in Async Context (partial):**
 - Symptoms: `asyncio.run()` called inside potentially async event loops
 - Files: `src/usecases/pipeline.py`

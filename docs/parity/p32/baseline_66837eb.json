@@ -1,0 +1,545 @@
+{
+  "dataset_stats": {
+    "query_count": 21
+  },
+  "retrieval_metrics": {
+    "by_difficulty": {
+      "easy": {
+        "duplicate_source_ratio_mean": 0.6,
+        "evidence_hit_rate": 0.0,
+        "exact_chunk_hit_rate": 0.0,
+        "hit_rate_at_k": 0.16666666666666666,
+        "mrr": 0.08333333333333333,
+        "query_count": 6,
+        "source_hit_rate": 0.0
+      },
+      "hard": {
+        "duplicate_source_ratio_mean": 0.6,
+        "evidence_hit_rate": 0.0,
+        "exact_chunk_hit_rate": 0.0,
+        "hit_rate_at_k": 0.0,
+        "mrr": 0.0,
+        "query_count": 6,
+        "source_hit_rate": 0.0
+      },
+      "medium": {
+        "duplicate_source_ratio_mean": 0.6,
+        "evidence_hit_rate": 0.0,
+        "exact_chunk_hit_rate": 0.0,
+        "hit_rate_at_k": 0.1111111111111111,
+        "mrr": 0.05555555555555555,
+        "query_count": 9,
+        "source_hit_rate": 0.0
+      }
+    },
+    "by_expected_source_type": {
+      "unknown": {
+        "duplicate_source_ratio_mean": 0.6,
+        "evidence_hit_rate": 0.0,
+        "exact_chunk_hit_rate": 0.0,
+        "hit_rate_at_k": 0.09523809523809523,
+        "mrr": 0.047619047619047616,
+        "query_count": 21,
+        "source_hit_rate": 0.0
+      }
+    },
+    "by_query_category": {
+      "adversarial": {
+        "duplicate_source_ratio_mean": 0.6,
+        "evidence_hit_rate": 0.0,
+        "exact_chunk_hit_rate": 0.0,
+        "hit_rate_at_k": 0.0,
+        "mrr": 0.0,
+        "query_count": 5,
+        "source_hit_rate": 0.0
+      },
+      "anchor": {
+        "duplicate_source_ratio_mean": 0.6,
+        "evidence_hit_rate": 0.0,
+        "exact_chunk_hit_rate": 0.0,
+        "hit_rate_at_k": 0.18181818181818182,
+        "mrr": 0.09090909090909091,
+        "query_count": 11,
+        "source_hit_rate": 0.0
+      },
+      "paraphrase": {
+        "duplicate_source_ratio_mean": 0.6,
+        "evidence_hit_rate": 0.0,
+        "exact_chunk_hit_rate": 0.0,
+        "hit_rate_at_k": 0.0,
+        "mrr": 0.0,
+        "query_count": 5,
+        "source_hit_rate": 0.0
+      }
+    },
+    "by_semantic_case": {
+      "paraphrase": {
+        "duplicate_source_ratio_mean": 0.6,
+        "evidence_hit_rate": 0.0,
+        "exact_chunk_hit_rate": 0.0,
+        "hit_rate_at_k": 0.0,
+        "mrr": 0.0,
+        "query_count": 5,
+        "source_hit_rate": 0.0
+      }
+    },
+    "by_task_type": {
+      "unspecified": {
+        "duplicate_source_ratio_mean": 0.6,
+        "evidence_hit_rate": 0.0,
+        "exact_chunk_hit_rate": 0.0,
+        "hit_rate_at_k": 0.09523809523809523,
+        "mrr": 0.047619047619047616,
+        "query_count": 21,
+        "source_hit_rate": 0.0
+      }
+    },
+    "contribution_analysis": {
+      "bm25_ranked_hits": 0,
+      "fused_ranked_hits": 0,
+      "semantic_ranked_hits": 0
+    },
+    "dedup_hit_rate_at_k": 0.09523809523809523,
+    "dedup_mrr": 0.047619047619047616,
+    "dedup_precision_at_k": 0.01904761904761905,
+    "duplicate_doc_ratio_mean": 0.0,
+    "duplicate_source_ratio_mean": 0.6,
+    "evidence_hit_rate": 0.0,
+    "evidence_hit_rate_high_conf": 0.0,
+    "exact_chunk_hit_rate": 0.0,
+    "exact_chunk_hit_rate_high_conf": 0.0,
+    "graded_ndcg_at_k": 0.2326882304286857,
+    "hit_rate_at_k": 0.09523809523809523,
+    "hit_rate_at_k_high_conf": 0.08333333333333333,
+    "hyde_enabled": false,
+    "hyde_hit_rate": null,
+    "hyde_mrr": null,
+    "hyde_queries_count": 0,
+    "hyde_source_hit_rate": null,
+    "medical_expansion_enabled": false,
+    "medical_expansion_queries_count": 0,
+    "medical_expansion_term_count_mean": 0.0,
+    "mrr": 0.047619047619047616,
+    "mrr_high_conf": 0.041666666666666664,
+    "ndcg_at_k": 0.06008854795918643,
+    "precision_at_k": 0.01904761904761905,
+    "query_count": 21,
+    "recall_at_k": 0.09523809523809523,
+    "rerank_candidates_mean": 0.0,
+    "rerank_filtered_out_mean": 0.0,
+    "rerank_output_mean": 0.0,
+    "reranking_enabled": false,
+    "retrieval_options": {},
+    "source_hit_rate": 0.0,
+    "topic_false_positive_rate": 1.0,
+    "unique_source_hit_rate_at_k": 0.09523809523809523,
+    "unique_source_precision_at_k": 0.047619047619047616
+  },
+  "run_dir": "20260912T085718.240784Z_p32_parity",
+  "status": "ok",
+  "step_metrics": {
+    "l0": {
+      "aggregate": {
+        "duplicate_alias_file_rate": 0.0,
+        "duplicate_file_rate": 0.0,
+        "html_file_count": 3,
+        "html_parse_success_rate": 1.0,
+        "manifest_inventory_record_count": 0,
+        "small_file_rate": 1.0,
+        "true_duplicate_file_rate": 0.0
+      },
+      "findings": [
+        {
+          "message": "High small HTML file rate",
+          "severity": "warning",
+          "stage": "L0"
+        }
+      ],
+      "records": [
+        {
+          "file": "cholesterol_screening.html",
+          "has_body_tag": true,
+          "has_html_tag": true,
+          "parse_ok": true,
+          "visible_text_chars": 602
+        },
+        {
+          "file": "diabetes_screening.html",
+          "has_body_tag": true,
+          "has_html_tag": true,
+          "parse_ok": true,
+          "visible_text_chars": 496
+        },
+        {
+          "file": "liver_function.html",
+          "has_body_tag": true,
+          "has_html_tag": true,
+          "parse_ok": true,
+          "visible_text_chars": 617
+        }
+      ]
+    },
+    "l1": {
+      "aggregate": {
+        "boilerplate_ratio_mean": 0.0,
+        "cascade_depth_distribution": {
+          "1": 3
+        },
+        "cascade_depth_mean": 1.0,
+        "content_density_mean": 0.0,
+        "heading_preservation_rate_mean": 2.0,
+        "html_extractor_strategy": {
+          "trafilatura_bs": 3
+        },
+        "low_retention_rate": 0.0,
+        "markdown_empty_rate": 0.0,
+        "markdown_missing_rate": 0.0,
+        "page_classification_distribution": {
+          "None": 3
+        },
+        "pairs_evaluated": 3,
+        "retention_ratio_mean": 0.9793078479159035,
+        "retention_ratio_median": 0.9758064516129032,
+        "selected_extractor_distribution": {
+          "trafilatura": 3
+        },
+        "table_preservation_rate_mean": 0.0
+      },
+      "findings": [],
+      "records": [
+        {
+          "boilerplate_hits": 0,
+          "boilerplate_suspicion": 0.0,
+          "cascade_depth": 1,
+          "content_density": 0.0,
+          "file": "cholesterol_screening.html",
+          "heading_preservation_rate": 2.0,
+          "html_extractor_strategy": "trafilatura_bs",
+          "html_visible_chars": 602,
+          "markdown_heading_count": 2,
+          "markdown_link_count": 0,
+          "markdown_list_lines": 0,
+          "md_chars": 587,
+          "md_exists": true,
+          "page_type": null,
+          "retention_ratio": 0.9750830564784053,
+          "selected_extractor": "trafilatura",
+          "table_preservation_rate": 0.0
+        },
+        {
+          "boilerplate_hits": 0,
+          "boilerplate_suspicion": 0.0,
+          "cascade_depth": 1,
+          "content_density": 0.0,
+          "file": "diabetes_screening.html",
+          "heading_preservation_rate": 2.0,
+          "html_extractor_strategy": "trafilatura_bs",
+          "html_visible_chars": 496,
+          "markdown_heading_count": 2,
+          "markdown_link_count": 0,
+          "markdown_list_lines": 0,
+          "md_chars": 484,
+          "md_exists": true,
+          "page_type": null,
+          "retention_ratio": 0.9758064516129032,
+          "selected_extractor": "trafilatura",
+          "table_preservation_rate": 0.0
+        },
+        {
+          "boilerplate_hits": 0,
+          "boilerplate_suspicion": 0.0,
+          "cascade_depth": 1,
+          "content_density": 0.0,
+          "file": "liver_function.html",
+          "heading_preservation_rate": 2.0,
+          "html_extractor_strategy": "trafilatura_bs",
+          "html_visible_chars": 617,
+          "markdown_heading_count": 2,
+          "markdown_link_count": 0,
+          "markdown_list_lines": 0,
+          "md_chars": 609,
+          "md_exists": true,
+          "page_type": null,
+          "retention_ratio": 0.9870340356564019,
+          "selected_extractor": "trafilatura",
+          "table_preservation_rate": 0.0
+        }
+      ]
+    },
+    "l2": {
+      "aggregate": {
+        "camelot_total_rows": 0,
+        "camelot_total_table_pages": 0,
+        "empty_page_rate": 0.0,
+        "extracted_pages": 1,
+        "extractor_fallback_rate": 1.0,
+        "low_confidence_page_rate": 0.0,
+        "ocr_required_rate": 0.0,
+        "page_extraction_coverage": 1.0,
+        "pdf_extractor_strategy": [
+          "pypdf_pdfplumber"
+        ],
+        "pdf_file_count": 1,
+        "pdf_table_extractor": [
+          "heuristic"
+        ],
+        "table_extraction_success_proxy": 0.0,
+        "total_pages": 1
+      },
+      "findings": [],
+      "records": [
+        {
+          "camelot_table_pages": 0,
+          "camelot_total_rows": 0,
+          "chars_per_page_max": 120,
+          "chars_per_page_median": 120.0,
+          "chars_per_page_min": 120,
+          "empty_page_count": 0,
+          "extracted_page_count": 1,
+          "fallback_page_count": 1,
+          "file": "screening_thresholds.pdf",
+          "low_confidence_page_count": 0,
+          "ocr_required_page_count": 0,
+          "page_count": 1,
+          "pdf_extractor_strategy": "pypdf_pdfplumber",
+          "pdf_table_extractor": "heuristic",
+          "replacement_char_count": 0,
+          "suspected_table_count": 0
+        }
+      ]
+    },
+    "l3": {
+      "aggregate": {
+        "boundary_cut_rate": 0.0,
+        "chunk_count": 1,
+        "chunk_length_mean": 120.0,
+        "chunk_length_median": 120.0,
+        "chunk_overlap_config": 150,
+        "chunk_quality_histogram": {
+          "high": 1,
+          "low": 0,
+          "medium": 0
+        },
+        "chunk_size_config": 800,
+        "document_count": 1,
+        "duplicate_chunk_rate": 0.0,
+        "low_quality_chunk_exclusion_rate": 0.0,
+        "observed_overlap_mean": 0.0,
+        "section_integrity_rate": 0.0,
+        "table_row_split_violations": 0
+      },
+      "findings": [],
+      "records": [
+        {
+          "content_hash": "5778feea9a2c0dad",
+          "ends_mid_token": false,
+          "has_page": true,
+          "id": "screening_thresholds_p1_chunk_0",
+          "length_chars": 120,
+          "page": 1,
+          "source": "screening_thresholds.pdf"
+        }
+      ]
+    },
+    "l4": {
+      "aggregate": {
+        "csv_exists": true,
+        "duplicate_test_name_rate": 0.0,
+        "normal_range_parseable_rate": 1.0,
+        "required_columns_present": true,
+        "row_completeness_rate": 1.0,
+        "row_count": 8,
+        "schema_valid": true
+      },
+      "findings": [],
+      "records": [
+        {
+          "is_complete": true,
+          "normal_range_parseable": true,
+          "notes_empty": false,
+          "row_index": 0,
+          "test_name": "LDL-C"
+        },
+        {
+          "is_complete": true,
+          "normal_range_parseable": true,
+          "notes_empty": false,
+          "row_index": 1,
+          "test_name": "HDL-C"
+        },
+        {
+          "is_complete": true,
+          "normal_range_parseable": true,
+          "notes_empty": false,
+          "row_index": 2,
+          "test_name": "Triglycerides"
+        },
+        {
+          "is_complete": true,
+          "normal_range_parseable": true,
+          "notes_empty": false,
+          "row_index": 3,
+          "test_name": "Fasting glucose"
+        },
+        {
+          "is_complete": true,
+          "normal_range_parseable": true,
+          "notes_empty": false,
+          "row_index": 4,
+          "test_name": "HbA1c"
+        },
+        {
+          "is_complete": true,
+          "normal_range_parseable": true,
+          "notes_empty": false,
+          "row_index": 5,
+          "test_name": "ALT"
+        },
+        {
+          "is_complete": true,
+          "normal_range_parseable": true,
+          "notes_empty": false,
+          "row_index": 6,
+          "test_name": "AST"
+        },
+        {
+          "is_complete": true,
+          "normal_range_parseable": true,
+          "notes_empty": false,
+          "row_index": 7,
+          "test_name": "ALP"
+        }
+      ]
+    },
+    "l5": {
+      "aggregate": {
+        "content_hashes_count": 15,
+        "contents_count": 15,
+        "dedupe_effect_estimate": 0,
+        "embedding_batch_size": null,
+        "embedding_dim": 8,
+        "embedding_dim_consistent": true,
+        "embedding_model": null,
+        "embeddings_count": 15,
+        "ids_count": 15,
+        "index_config_hash": null,
+        "index_exists": true,
+        "lengths_consistent": true,
+        "metadatas_count": 15,
+        "short_content_rate": 0.0,
+        "source_class_distribution": {
+          "guideline_html": 6,
+          "guideline_pdf": 1,
+          "reference_csv": 8
+        },
+        "source_distribution": {
+          "cholesterol_screening.md": 2,
+          "diabetes_screening.md": 2,
+          "liver_function.md": 2,
+          "reference_ranges.csv": 8,
+          "screening_thresholds.pdf": 1
+        },
+        "source_type_distribution": {
+          "html": 6,
+          "pdf": 1,
+          "reference_csv": 8
+        },
+        "vector_path": "<ROOT>/data/chroma"
+      },
+      "findings": [],
+      "records": [
+        {
+          "content_chars": 120,
+          "embedding_dim": 8,
+          "id": "screening_thresholds_p1_chunk_0",
+          "source": "screening_thresholds.pdf"
+        },
+        {
+          "content_chars": 327,
+          "embedding_dim": 8,
+          "id": "cholesterol_screening_p1_chunk_0",
+          "source": "cholesterol_screening.md"
+        },
+        {
+          "content_chars": 258,
+          "embedding_dim": 8,
+          "id": "cholesterol_screening_p1_chunk_1",
+          "source": "cholesterol_screening.md"
+        },
+        {
+          "content_chars": 285,
+          "embedding_dim": 8,
+          "id": "diabetes_screening_p1_chunk_0",
+          "source": "diabetes_screening.md"
+        },
+        {
+          "content_chars": 196,
+          "embedding_dim": 8,
+          "id": "diabetes_screening_p1_chunk_1",
+          "source": "diabetes_screening.md"
+        },
+        {
+          "content_chars": 352,
+          "embedding_dim": 8,
+          "id": "liver_function_p1_chunk_0",
+          "source": "liver_function.md"
+        },
+        {
+          "content_chars": 255,
+          "embedding_dim": 8,
+          "id": "liver_function_p1_chunk_1",
+          "source": "liver_function.md"
+        },
+        {
+          "content_chars": 50,
+          "embedding_dim": 8,
+          "id": "ref_range_0",
+          "source": "reference_ranges.csv"
+        },
+        {
+          "content_chars": 33,
+          "embedding_dim": 8,
+          "id": "ref_range_1",
+          "source": "reference_ranges.csv"
+        },
+        {
+          "content_chars": 47,
+          "embedding_dim": 8,
+          "id": "ref_range_2",
+          "source": "reference_ranges.csv"
+        },
+        {
+          "content_chars": 65,
+          "embedding_dim": 8,
+          "id": "ref_range_3",
+          "source": "reference_ranges.csv"
+        },
+        {
+          "content_chars": 53,
+          "embedding_dim": 8,
+          "id": "ref_range_4",
+          "source": "reference_ranges.csv"
+        },
+        {
+          "content_chars": 46,
+          "embedding_dim": 8,
+          "id": "ref_range_5",
+          "source": "reference_ranges.csv"
+        },
+        {
+          "content_chars": 46,
+          "embedding_dim": 8,
+          "id": "ref_range_6",
+          "source": "reference_ranges.csv"
+        },
+        {
+          "content_chars": 44,
+          "embedding_dim": 8,
+          "id": "ref_range_7",
+          "source": "reference_ranges.csv"
+        }
+      ]
+    }
+  },
+  "wall_time_s_excluded": 0.5
+}
