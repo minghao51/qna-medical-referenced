@@ -24,7 +24,7 @@ main
     └── refactor/phase-1-structure (7 commits) af0d2c3..4b58330  core/, nodes/, shims, services fold
         └── refactor/phase-2-structure (5 commits) 137a21d..659923e  ablations/, chroma split,
                                                      AssessmentPipeline, test mirroring
-            └── refactor/phase-3-structure (10 commits) de9c2e0..ffad78f  mypy-baseline fix,
+            └── refactor/phase-3-structure (11 commits; tip = P3.2 docs sync)  mypy-baseline fix,
                                                             P3.1 injection, P3.3 setter kill +
                                                             P3.6, P3.2 Hamilton delegation +
                                                             parity gate, docs sync
