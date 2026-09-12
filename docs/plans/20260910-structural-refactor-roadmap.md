@@ -15,6 +15,26 @@ The stack is ready to merge sequentially into `main`, oldest branch first
 (phase-0 → phase-1 → phase-2 → phase-3). No further work is tracked in this
 roadmap; follow-ups live in §6 and `.planning/codebase/CONCERNS.md`.
 
+### Handoff for next thread (post-completion)
+
+1. **Merge procedure:** merge the four stacked branches into `main` in order
+   (phase-0 → phase-1 → phase-2 → phase-3; each is a fast-forward-able
+   ancestor of the next). After EACH merge, re-run the verification ladder
+   below — the ladder is also the post-merge CI expectation (ci.yml now gates
+   `ruff format --check .` and `lint-imports`; 9 files of pre-existing format
+   drift were fixed in the P3.4 commit for exactly this reason).
+2. **Known pending (not blockers):** P2.3 deviation — legacy JSON snapshot path
+   still lives in `indexing/store.py` (load-bearing for tests/L5 consumers;
+   needs dedicated test rework before deletion); CONCERNS.md — the
+   `indexing_features` factory-drop quirk (pre-existing, inherited bug-for-bug
+   in `IngestionRunConfig.from_runtime_state`); §6 — deferred follow-ups
+   (sync/async retrieval dedup, `get_full_context` reference loading).
+3. **Parity evidence:** `docs/parity/p32/` (methodology + both normalized
+   metric JSONs); rerunnable via `scripts/manual/parity_gate_p32.py run|compare`.
+4. **Gotchas below are the historical record** — still worth reading before
+   touching the affected areas; the composition-root trap (gotcha 12/19)
+   turned out to be a non-issue, kept for context.
+
 ### Branch / commit state
 
 Stacked branches, not yet merged to `main` (merge sequentially, oldest first):
@@ -25,7 +45,7 @@ main
     └── refactor/phase-1-structure (7 commits) af0d2c3..4b58330  core/, nodes/, shims, services fold
         └── refactor/phase-2-structure (5 commits) 137a21d..659923e  ablations/, chroma split,
                                                      AssessmentPipeline, test mirroring
-            └── refactor/phase-3-structure (12 commits; tip = P3.4 docs sync)   mypy-baseline fix,
+            └── refactor/phase-3-structure (12 commits; tip 172b7ac)   mypy-baseline fix,
                                                             P3.1 injection, P3.3 setter kill +
                                                             P3.6, P3.2 Hamilton delegation +
                                                             parity gate, P3.4 import-linter +
@@ -57,21 +77,25 @@ Working tree clean.
 | P3.3 config-route facade | ✅ done | 1b809ab | `app/routes/config.py` reads via `usecases/runtime_config.py` (no app→ingestion at routes) |
 | P3.6 settings.hype split | ✅ done | ca8be71 | `settings.hype.*` group; deprecated `hyde.hype_*` keys load+warn+migrate; yaml updated |
 | P3.2 Hamilton delegation + parity gate | ✅ done | 006c730 | `run_ingestion` library entry + signature-cached driver; `rag/index.py` delegates via `asyncio.to_thread`; `_build_index_from_sources` + `materialize_html` param deleted; **rich doc-shape passthrough in DAG silver nodes required** (gotcha 16); parity gate PASSED offline (gotcha 17, artifacts in `docs/parity/p32/`, runner `scripts/manual/parity_gate_p32.py`) |
-| P3.4 import-linter contract | ✅ done | (tip) | 4 contracts in `pyproject.toml [tool.importlinter]`: layered architecture (cli > app > usecases > {rag,evals,experiments} > {ingestion,infra} > core > config) with 8 same-tier `ignore_imports` exemptions + explicit forbids (infra→app, ingestion→rag, usecases→cli). Verified: clean tree passes; 6 violation probes fail correctly (incl. non-exempted rag→evals); unmatched exemption = CI failure (self-pruning list). Wired into ci.yml lint job + pre-commit. **Gotcha 12's carve-out proved unnecessary**: app→ingestion is legal downward; the static graph was already clean |
-| Rewrite ARCHITECTURE.md boundaries to final state | ✅ done | (tip) | Module Boundaries section documents the enforced contract, composition roots, and same-tier exemption semantics |
+| P3.4 import-linter contract | ✅ done | 172b7ac | 4 contracts in `pyproject.toml [tool.importlinter]`: layered architecture (cli > app > usecases > {rag,evals,experiments} > {ingestion,infra} > core > config) with 8 same-tier `ignore_imports` exemptions + explicit forbids (infra→app, ingestion→rag, usecases→cli). Verified: clean tree passes; 6 violation probes fail correctly (incl. non-exempted rag→evals); unmatched exemption = CI failure (self-pruning list). Wired into ci.yml lint job + pre-commit. **Gotcha 12's carve-out proved unnecessary**: app→ingestion is legal downward; the static graph was already clean |
+| Rewrite ARCHITECTURE.md boundaries to final state | ✅ done | 172b7ac | Module Boundaries section documents the enforced contract, composition roots, and same-tier exemption semantics |
 
-### Verification baselines (must hold after every Phase 3 step)
+### Verification baselines (final ladder — also the post-merge CI expectation)
 
 - `pytest tests/unit` → **530 passed, 8 skipped** (523 + 7 new P3.2 tests)
 - `pytest tests/integration` → **92 passed, 56 skipped** (skips = env-key/deps, pre-existing)
-- `ruff check src/ tests/ scripts/` → clean
+- `ruff check src/ tests/ scripts/` → clean, and `ruff format --check src/ tests/ scripts/`
+  → clean (CI gates `.`; the 9 drifted files were reformatted in the P3.4 commit)
+- `lint-imports` → **4 contracts kept** (added in P3.4; enforced in CI lint job +
+  pre-commit; unmatched `ignore_imports` entries fail CI by design)
 - mypy: **8 pre-existing errors** — the 2 known `ingestion/indexing/store.py` errors
   (list invariance, `_extracted_keywords_from_metadata`) plus 6 in untouched test
   files that surfaced when the baseline was re-measured at 66837eb (the old
   "2 pre-existing" note was stale). Do not "fix" incidentally, do not add new ones.
-- P3.2 additionally required the **parity gate** (§Phase 3) — PASSED, see gotcha 17
+- P3.2's **parity gate** passed once, pre-merge (gotcha 17); it is not part of the
+  recurring ladder
 
-### Gotchas discovered during execution (read before Phase 3)
+### Gotchas discovered during execution (historical record; read before touching the affected areas)
 
 1. **Ruff F401 eats re-exports.** Re-export modules must use alias form
    (`from x import Y as Y`) or ruff --fix deletes them mid-session (hit in P1.7).
