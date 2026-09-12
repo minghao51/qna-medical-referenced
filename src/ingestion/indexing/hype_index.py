@@ -23,9 +23,7 @@ class HypotheticalQuestionSearchMixin:
         _doc_metadatas: list[dict[str, Any]]
         _tokenize: Callable[[str], list[str]]
         _rebuild_index_if_needed: Callable[[], None]
-        _hypothetical_question_cache: (
-            list[tuple[float, list[tuple[frozenset[str], str]]]] | None
-        )
+        _hypothetical_question_cache: list[tuple[float, list[tuple[frozenset[str], str]]]] | None
 
     def _build_hypothetical_question_cache(
         self,

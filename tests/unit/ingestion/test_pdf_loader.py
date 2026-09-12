@@ -31,6 +31,7 @@ def _set_pdf_extractors(strategy: str, table_extractor: str) -> None:
     state.pdf_extractor_strategy = strategy
     state.pdf_table_extractor = table_extractor
 
+
 # --- synthetic PDF generation -------------------------------------------------
 
 
@@ -252,11 +253,15 @@ class _FakeCamelotTable:
 
 class TestPDFExtractorStrategy:
     def test_apply_runtime_config_pdf_strategy_valid(self, baseline_extractors):
-        apply_runtime_config(RuntimeConfig(pdf=PdfRuntimeConfig(extractor_strategy="pymupdf_pdfplumber")))
+        apply_runtime_config(
+            RuntimeConfig(pdf=PdfRuntimeConfig(extractor_strategy="pymupdf_pdfplumber"))
+        )
         assert get_pdf_extractor_strategy() == "pymupdf_pdfplumber"
 
     def test_apply_runtime_config_invalid_strategy_defaults_to_baseline(self, baseline_extractors):
-        apply_runtime_config(RuntimeConfig(pdf=PdfRuntimeConfig(extractor_strategy="invalid_strategy")))
+        apply_runtime_config(
+            RuntimeConfig(pdf=PdfRuntimeConfig(extractor_strategy="invalid_strategy"))
+        )
         assert get_pdf_extractor_strategy() == "pypdf_pdfplumber"
 
     def test_apply_runtime_config_table_extractor_valid(self, baseline_extractors):

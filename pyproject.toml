@@ -84,6 +84,7 @@ dev = [
     "playwright>=1.58.0",
     "pre-commit>=3.0.0",
     "bandit>=1.7.0",
+    "import-linter>=2.15",
 ]
 evaluation = [
     "deepeval>=3.9.0,<4.0.0",
@@ -141,3 +142,57 @@ module = [
     "deepeval.*",
 ]
 ignore_missing_imports = true
+
+[tool.importlinter]
+root_packages = ["src"]
+
+# Roadmap D3.4 / §3.1: dependencies point left-to-right only:
+# cli > app > usecases > {rag,evals,experiments} > {ingestion,infra} > core > config
+# import-linter treats siblings in one layer as independent; these exemptions
+# encode the sanctioned same-tier package pairs (eval/experiment runner edges
+# are composition roots per §3.1; ingestion consumes infra LLM clients).
+[[tool.importlinter.contracts]]
+name = "Layered architecture (cli > app > usecases > domain > data > core > config)"
+type = "layers"
+layers = [
+    "src.cli",
+    "src.app",
+    "src.usecases",
+    "src.rag | src.evals | src.experiments",
+    "src.ingestion | src.infra",
+    "src.core",
+    "src.config",
+]
+# Each entry MUST match at least one real import: import-linter treats an
+# unmatched ignore_imports pattern as a hard failure, which forces this list
+# to stay pruned when a sanctioned edge is refactored away.
+ignore_imports = [
+    "src.evals.** -> src.rag",
+    "src.evals.** -> src.rag.**",
+    "src.evals.** -> src.experiments.**",
+    "src.experiments.** -> src.evals",
+    "src.experiments.** -> src.evals.**",
+    "src.experiments.** -> src.rag",
+    "src.rag.** -> src.experiments.**",
+    "src.ingestion.** -> src.infra.**",
+]
+
+# Explicit forbids from the roadmap (redundant with the layers contract, but
+# they produce precise CI failure messages).
+[[tool.importlinter.contracts]]
+name = "infra must not import app"
+type = "forbidden"
+source_modules = ["src.infra"]
+forbidden_modules = ["src.app"]
+
+[[tool.importlinter.contracts]]
+name = "ingestion must not import rag"
+type = "forbidden"
+source_modules = ["src.ingestion"]
+forbidden_modules = ["src.rag"]
+
+[[tool.importlinter.contracts]]
+name = "usecases must not import cli"
+type = "forbidden"
+source_modules = ["src.usecases"]
+forbidden_modules = ["src.cli"]

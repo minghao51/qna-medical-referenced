@@ -122,9 +122,7 @@ def build_experiment_runtime_config(experiment: dict[str, Any]) -> RuntimeConfig
     )
     indexing_features = {
         "enable_hype": bool(ingestion.get("enable_hype", settings.hype.enabled)),
-        "hype_sample_rate": float(
-            ingestion.get("hype_sample_rate", settings.hype.sample_rate)
-        ),
+        "hype_sample_rate": float(ingestion.get("hype_sample_rate", settings.hype.sample_rate)),
         "hype_max_chunks": int(ingestion.get("hype_max_chunks", settings.hype.max_chunks)),
         "hype_questions_per_chunk": int(
             ingestion.get("hype_questions_per_chunk", settings.hype.questions_per_chunk)
@@ -227,7 +225,12 @@ def build_experiment_runtime_config(experiment: dict[str, Any]) -> RuntimeConfig
     )
 
 
-_VALID_HTML_EXTRACTOR_STRATEGIES = {"trafilatura_bs", "html2md_trafilatura_bs", "readability_bs", "full_cascade"}
+_VALID_HTML_EXTRACTOR_STRATEGIES = {
+    "trafilatura_bs",
+    "html2md_trafilatura_bs",
+    "readability_bs",
+    "full_cascade",
+}
 _VALID_HTML_EXTRACTOR_MODES = {"auto", "primary_only", "fallback_only"}
 _VALID_PDF_EXTRACTOR_STRATEGIES = {"pypdf_pdfplumber", "pymupdf_pdfplumber"}
 _VALID_PDF_TABLE_EXTRACTORS = {"heuristic", "camelot"}

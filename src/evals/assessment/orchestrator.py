@@ -489,9 +489,7 @@ class AssessmentPipeline:
                     embedding_index["collection_name"] = collection_name
                     exp["embedding_index"] = embedding_index
                     self.configure_runtime_for_experiment_fn(exp)
-                    self.initialize_runtime_index_fn(
-                        rebuild=True, force_html_convert=True
-                    )
+                    self.initialize_runtime_index_fn(rebuild=True, force_html_convert=True)
 
                 hype_ablations = self.run_hype_ablations_with_reingest_fn(
                     dataset,
@@ -522,9 +520,7 @@ class AssessmentPipeline:
                     embedding_index["collection_name"] = collection_name
                     exp["embedding_index"] = embedding_index
                     self.configure_runtime_for_experiment_fn(exp)
-                    self.initialize_runtime_index_fn(
-                        rebuild=True, force_html_convert=False
-                    )
+                    self.initialize_runtime_index_fn(rebuild=True, force_html_convert=False)
 
                 keyword_ablations = self.run_keyword_ablations_with_reingest_fn(
                     dataset,

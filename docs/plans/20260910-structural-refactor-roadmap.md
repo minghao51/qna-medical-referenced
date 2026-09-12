@@ -8,11 +8,12 @@ Every PR must keep `ruff`, `mypy`, `pytest` green. Docs are updated **in the sam
 
 ---
 
-## ⚡ EXECUTION STATUS (updated after P3.2)
+## ⚡ EXECUTION STATUS (FINAL — all phases complete)
 
-**Phases 0–2, P3.1, P3.3 (+P3.6), and P3.2 are COMPLETE. Phase 3 continues with P3.4 (last).**
-A fresh agent should read this section, then §3 (target architecture), then the
-remaining Phase 3 work orders.
+**Phases 0–3 are COMPLETE (P0.1–P0.3, P1.1–P1.7, P2.1–P2.6, P3.1–P3.4).**
+The stack is ready to merge sequentially into `main`, oldest branch first
+(phase-0 → phase-1 → phase-2 → phase-3). No further work is tracked in this
+roadmap; follow-ups live in §6 and `.planning/codebase/CONCERNS.md`.
 
 ### Branch / commit state
 
@@ -24,10 +25,11 @@ main
     └── refactor/phase-1-structure (7 commits) af0d2c3..4b58330  core/, nodes/, shims, services fold
         └── refactor/phase-2-structure (5 commits) 137a21d..659923e  ablations/, chroma split,
                                                      AssessmentPipeline, test mirroring
-            └── refactor/phase-3-structure (11 commits; tip = P3.2 docs sync)  mypy-baseline fix,
+            └── refactor/phase-3-structure (12 commits; tip = P3.4 docs sync)   mypy-baseline fix,
                                                             P3.1 injection, P3.3 setter kill +
                                                             P3.6, P3.2 Hamilton delegation +
-                                                            parity gate, docs sync
+                                                            parity gate, P3.4 import-linter +
+                                                            docs sync
 ```
 
 Working tree clean.
@@ -55,7 +57,8 @@ Working tree clean.
 | P3.3 config-route facade | ✅ done | 1b809ab | `app/routes/config.py` reads via `usecases/runtime_config.py` (no app→ingestion at routes) |
 | P3.6 settings.hype split | ✅ done | ca8be71 | `settings.hype.*` group; deprecated `hyde.hype_*` keys load+warn+migrate; yaml updated |
 | P3.2 Hamilton delegation + parity gate | ✅ done | 006c730 | `run_ingestion` library entry + signature-cached driver; `rag/index.py` delegates via `asyncio.to_thread`; `_build_index_from_sources` + `materialize_html` param deleted; **rich doc-shape passthrough in DAG silver nodes required** (gotcha 16); parity gate PASSED offline (gotcha 17, artifacts in `docs/parity/p32/`, runner `scripts/manual/parity_gate_p32.py`) |
-| P3.4 import-linter contract | ⬜ pending | | **last** — asserts end state (see gotcha 12 re: composition roots) |
+| P3.4 import-linter contract | ✅ done | (tip) | 4 contracts in `pyproject.toml [tool.importlinter]`: layered architecture (cli > app > usecases > {rag,evals,experiments} > {ingestion,infra} > core > config) with 8 same-tier `ignore_imports` exemptions + explicit forbids (infra→app, ingestion→rag, usecases→cli). Verified: clean tree passes; 6 violation probes fail correctly (incl. non-exempted rag→evals); unmatched exemption = CI failure (self-pruning list). Wired into ci.yml lint job + pre-commit. **Gotcha 12's carve-out proved unnecessary**: app→ingestion is legal downward; the static graph was already clean |
+| Rewrite ARCHITECTURE.md boundaries to final state | ✅ done | (tip) | Module Boundaries section documents the enforced contract, composition roots, and same-tier exemption semantics |
 
 ### Verification baselines (must hold after every Phase 3 step)
 
@@ -177,12 +180,17 @@ Working tree clean.
    PASSED** (gotcha 17): baseline 66837eb vs branch 006c730, offline
    deterministic embedder, exact L0–L5 + retrieval equality; artifacts in
    `docs/parity/p32/`.
-4. **P3.4** import-linter: `cli > app > usecases > {rag,evals,experiments} >
-   {ingestion,infra} > core > config` + forbids (infra→app, ingestion→rag,
-   usecases→cli); wire into `ci.yml`. **Carve out the composition-root exception
-   (gotcha 12) or the contract fails on the intended end state.**
-5. Rewrite ARCHITECTURE.md boundaries section to the final state; mark roadmap
-   phases complete in this file.
+4. ~~**P3.4** import-linter~~ ✅ **done**: contract in `pyproject.toml
+   [tool.importlinter]` exactly as designed + 8 same-tier `ignore_imports`
+   exemptions (each must match a real import — unmatched entries fail CI,
+   keeping the list self-pruning); wired into `ci.yml` lint job + pre-commit.
+   The gotcha-12 composition-root carve-out proved **unnecessary**: app→ingestion
+   is a legal downward import; the static graph was already clean (verified
+   with 6 violation probes, all correctly failing).
+5. ~~Rewrite ARCHITECTURE.md boundaries section~~ ✅ **done**: Module Boundaries
+   now documents the enforced contract, composition roots, and same-tier
+   exemption semantics. All roadmap phases are complete — merge the stack
+   sequentially (oldest branch first).
 
 ---
 

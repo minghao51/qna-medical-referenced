@@ -32,6 +32,9 @@ jobs:
       - name: Run MyPy
         run: uv run mypy src/
 
+      - name: Run import-linter (architecture contract)
+        run: uv run lint-imports
+
       - name: Run Bandit
         run: uv run bandit -r src/ -ll -f json -o bandit-report.json
 

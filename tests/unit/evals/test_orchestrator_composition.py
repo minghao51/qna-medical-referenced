@@ -24,9 +24,7 @@ class _StopRun(Exception):
     """Raised by the capturing pipeline to short-circuit run_assessment."""
 
 
-def test_run_assessment_default_composition_injects_ablation_runners(
-    monkeypatch, tmp_path
-):
+def test_run_assessment_default_composition_injects_ablation_runners(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
 
     class CapturingPipeline(pa.AssessmentPipeline):

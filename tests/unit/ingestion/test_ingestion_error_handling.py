@@ -28,6 +28,8 @@ from src.ingestion.steps.convert_html import (
 def _set_html_extractor_strategy(strategy: str) -> None:
     """Write the HTML extractor overlay directly (setters died in roadmap P3.3)."""
     get_runtime_state().html_extractor_strategy = strategy
+
+
 from src.ingestion.steps.load_pdfs import get_documents
 
 # =============================================================================

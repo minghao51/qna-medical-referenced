@@ -268,26 +268,42 @@ CLI: python -m src.cli.eval_pipeline
 
 ## Module Boundaries
 
+**Enforced by import-linter since roadmap P3.4** (CI `lint-imports` step; contract
+lives in `pyproject.toml` under `[tool.importlinter]`). Dependencies point
+left-to-right only:
+
+```
+cli/  →  app/  →  usecases/  →  {rag, evals, experiments}  →  {ingestion, infra}  →  core/  →  config/
+```
+
 ```
 src/
-├── app/          ← HTTP layer (routes, middleware, schemas) — depends on usecases/, config/
-├── cli/          ← CLI entry points — thin wrappers calling usecases/ or uvicorn
-├── config/       ← Settings (YAML + env vars), paths, runtime state — no business logic dependencies
-├── core/         ← Shared kernel: source_metadata, layer-agnostic exceptions — depends on nothing
-├── evals/        ← Evaluation framework — depends on rag/, infra/, config/
-├── experiments/  ← Ablation/experiment management — depends on evals/, config/
-├── infra/        ← Infrastructure (DI, LLM clients, storage) — depends on config/
-├── ingestion/    ← Data pipeline (download, convert, chunk, index) — depends on infra/, config/
-├── rag/          ← Retrieval engine — depends on ingestion/, infra/, config/
-└── usecases/     ← Use case orchestration (chat only) — depends on rag/, infra/, core/
+├── cli/          ← entrypoints only (argparse wrappers); imports anything below
+├── app/          ← HTTP layer + THE server composition root (factory.py lifespan,
+│                    dependencies.py accessors) — routes never import ingestion directly
+├── usecases/     ← use-case orchestration (chat, runtime-config facade)
+├── rag/          ← retrieval engine + runtime index state (index.py delegates builds
+│                    to ingestion's run_ingestion since P3.2)
+├── evals/        ← assessment framework (orchestrator, checks, artifact service)
+├── experiments/  ← ablations/additions management + experiment config dialect
+├── ingestion/    ← data pipeline (steps, nodes/Hamilton, indexing/ vector store)
+├── infra/        ← LLM clients + storage implementations (no DI container since P3.1)
+├── core/         ← shared kernel: source_metadata, exceptions — depends on config/ only
+└── config/       ← static settings (yaml + pydantic) + RuntimeState overlay — imports nothing
 ```
 
-**Dependency direction:** `cli/` → `usecases/` → `rag/` → `ingestion/` → `infra/` → `config/`. The `app/` layer calls into `usecases/`. `config/` is the deepest layer with no business logic dependencies.
+**Composition roots** (the only sanctioned places constructing concrete deps):
+`app/factory.py` (server lifespan → `app.state`), `cli/*` (offline entrypoints),
+and eval/experiment runner edges. Same-tier package pairs (e.g. `evals → rag`,
+`experiments → evals`, `rag → experiments`, `ingestion → infra`) are legal by
+design and exempted in the contract's `ignore_imports` — every exemption entry
+must match a real import (an unmatched entry is itself a CI failure, which
+keeps the list pruned).
 
-**Cross-boundary rules:**
-- `config/` never imports from other `src/` modules
-- `infra/` depends only on `config/` and `core/` (layer-agnostic exceptions moved to `core/exceptions.py` in Phase 1; `app/exceptions.py` re-exports them)
-- `ingestion/` depends on `infra/` and `config/`
-- `rag/` depends on `ingestion/`, `infra/`, and `config/`
-- `app/` depends on `usecases/`, `infra/`, `rag/`, and `config/`
-- `services/` was folded into `evals/` in Phase 1 (`EvaluationService` → `evals/artifact_service.py`); the layer no longer exists
+**Cross-boundary rules (all CI-enforced):**
+- No `infra → app`, no `ingestion → rag`, no `usecases → cli` (explicit forbidden contracts)
+- `config/` imports nothing from `src/`
+- `core/` imports only from `config/`
+- Inside the graph: constructor/parameter injection only — no module-level
+  `get_*()` fallbacks on the request path, no global mutable config setters
+  (setter channel deleted in P3.3)

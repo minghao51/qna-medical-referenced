@@ -198,9 +198,7 @@ class Settings(BaseSettings):
     }
 
     def model_post_init(self, __context: Any) -> None:
-        deprecated_set = [
-            old for old in self._HYPE_MIGRATION if old in self.hyde.model_fields_set
-        ]
+        deprecated_set = [old for old in self._HYPE_MIGRATION if old in self.hyde.model_fields_set]
         if deprecated_set:
             warnings.warn(
                 "settings.hyde.hype_* moved to settings.hype.* "
