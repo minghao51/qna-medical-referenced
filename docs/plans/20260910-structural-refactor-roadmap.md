@@ -8,7 +8,7 @@ Every PR must keep `ruff`, `mypy`, `pytest` green. Docs are updated **in the sam
 
 ---
 
-## ⚡ EXECUTION STATUS (updated after P3.1)
+## ⚡ EXECUTION STATUS (updated after P3.3/P3.6)
 
 **Phases 0–2, P3.1, and P3.3 (+P3.6) are COMPLETE. Phase 3 continues with P3.2 → P3.4.**
 A fresh agent should read this section, then §3 (target architecture), then the
@@ -24,11 +24,11 @@ main
     └── refactor/phase-1-structure (7 commits) af0d2c3..4b58330  core/, nodes/, shims, services fold
         └── refactor/phase-2-structure (5 commits) 137a21d..659923e  ablations/, chroma split,
                                                      AssessmentPipeline, test mirroring
-            └── refactor/phase-3-structure (6 commits) de9c2e0..docs  mypy-baseline fix, P3.1 injection,
-                                                     P3.3 setter kill + P3.6, docs sync
+            └── refactor/phase-3-structure (6 commits) de9c2e0..ca8be71  mypy-baseline fix, P3.1 injection,
+                                                            P3.3 setter kill + P3.6, docs sync
 ```
 
-Working tree clean. 16 commits total.
+Working tree clean. 19 commits total.
 
 ### Task status
 
@@ -49,9 +49,11 @@ Working tree clean. 16 commits total.
 | P2.5 convert_html split | ✅ no-op | (in 4323bf4 msg) | `main(force)` already library-quality; real fix is P3.3. Rationale in roadmap body |
 | P2.6 test mirroring | ✅ done | 4323bf4 | unit+integration mirrored to package dirs; 2 `__file__`-relative fixture paths adjusted |
 | P3.1 real constructor injection | ✅ done | 2733b20 | preceded by de9c2e0 (mypy-baseline fix; also fixed a real P2.4 shadowing bug — see commit). `app/dependencies.py` accessors; di.py + 21 tests deleted; HyPE gen → `infra/llm/hypothetical_questions.py`; last ingestion→rag edge gone |
-| P3.3 setter-channel kill (+P3.6 keys) | ✅ done | 988bed7 | applier → `ingestion/runtime_config.py` (writes RuntimeState directly); 9 step setters deleted; config route via `usecases/runtime_config.py`; P3.6 `settings.hype` split in follow-up commit |
-| P3.2 Hamilton delegation + parity gate | ⬜ pending | | after P3.3 — mandatory baseline diff |
-| P3.4 import-linter contract | ⬜ pending | | last — asserts end state |
+| P3.3 setter-channel kill | ✅ done | 988bed7 | applier → `ingestion/runtime_config.py` (writes RuntimeState directly); 9 step setters deleted |
+| P3.3 config-route facade | ✅ done | 1b809ab | `app/routes/config.py` reads via `usecases/runtime_config.py` (no app→ingestion at routes) |
+| P3.6 settings.hype split | ✅ done | ca8be71 | `settings.hype.*` group; deprecated `hyde.hype_*` keys load+warn+migrate; yaml updated |
+| P3.2 Hamilton delegation + parity gate | ⬜ pending | | **start here** — mandatory baseline diff |
+| P3.4 import-linter contract | ⬜ pending | | last — asserts end state (see gotcha 12 re: composition roots) |
 
 ### Verification baselines (must hold after every Phase 3 step)
 
@@ -77,13 +79,44 @@ Working tree clean. 16 commits total.
    dev venv (eval extras group). Imports of `experiments/metric_utils` and
    deepeval-dependent tests fail/skip — not regressions.
 6. **`tests/integration/conftest.py` fixtures** patch `indexing.store.embed_texts` —
-   keep that target valid when touching embedding wiring in P3.1.
-7. **Docs-in-same-PR policy held** for Phases 0–2 and P3.1: `.planning/codebase/*`
-   and `docs/architecture/*` are current as of the P3.1 docs commit. The
-   ARCHITECTURE.md "di.py scheduled for deletion in Phase 3" note is resolved
-   (deleted in P3.1).
+   keep that target valid when touching embedding wiring in P3.2.
+7. **Docs-in-same-PR policy held** through P3.3: `.planning/codebase/*` and
+   `docs/architecture/*` are current as of ca8be71.
 8. **Hamilton driver** is constructed in `ingestion/pipeline.py::build_ingestion_pipeline`
    via `NODE_MODULES`; tests exercise it through `tests/integration/ingestion/test_dag_functional.py`.
+9. **Ruff isort splits aliased imports** (`combine-as-imports` is false by default):
+   `from x import a as _a` cannot share a statement with plain names — one
+   `from x import` statement per alias (hit in de9c2e0, orchestrator `_run_*` aliases).
+10. **Orchestrator ablation aliases:** the five runners are imported as `_run_*`
+    module-level aliases (see de9c2e0) because `run_assessment()` has boolean
+    kwargs with the bare names. Keep the aliases when touching the default
+    composition; the contract is pinned by `tests/unit/evals/test_orchestrator_composition.py`.
+11. **App lifespan is NOT covered by the test suite** (no test enters a TestClient
+    context manager). After touching `app/factory.py` lifespan, smoke it manually:
+    TestClient context manager + isolate chroma to a tmp dir + patch
+    `factory.initialize_runtime_index_async`; note `get_client()` raises on this
+    dev machine (`settings.llm.provider == "gemini"`, no key) — set
+    `settings.llm.provider = "qwen"` in the smoke (pre-existing, not a regression).
+12. **P3.4 trap — composition roots import downward by design:** `app/factory.py`
+    (the sanctioned composition root) imports `src.ingestion.indexing.factory` to
+    construct the vector store. The import-linter contract must carve out this
+    exception (e.g. `ignore_imports` for `src.app.factory -> src.ingestion.*`), or it
+    will fail on the intended end state. Same reasoning if cli entrypoints construct
+    ingestion deps directly.
+13. **P3.6 migration discriminator:** `model_fields_set` cannot detect "explicitly
+    set" hype fields because the shipped `settings.yaml` defines the whole `hype:`
+    block. `Settings.model_post_init` migrates only onto fields still holding
+    `HypeConfig()` defaults (rationale in settings.py). Don't "simplify" this back
+    to `model_fields_set`.
+14. **Runtime-config tests moved:** `test_runtime_config.py` now lives in
+    `tests/unit/ingestion/` (was `tests/unit/rag/`); step-setter tests were
+    rewritten to write `get_runtime_state()` directly (helpers `_set_pdf_extractors`
+    / `_set_html_extractor_strategy` in the respective test files).
+15. **P3.2 open decision — parity gate embedding source:** a real parity run needs
+    the embedding API (DashScope/Qwen). If unavailable, agree an offline substitute
+    (the integration conftest's deterministic fake `embed_texts`) and record it in
+    the PR; gate on L0–L5 + retrieval metrics identical between baseline and branch
+    under the SAME embedder.
 
 ### Phase 3 next-work checklist (pinned order)
 
@@ -93,19 +126,22 @@ Working tree clean. 16 commits total.
    removed; `generate_hypothetical_questions` → `infra/llm/hypothetical_questions.py`
    (last ingestion→rag edge gone). Offline edges keep constructing at their own
    edge (rag/index.py, Hamilton nodes, evals) — intentional per D3.2=B.
-2. **P3.3** full setter kill ✅ **done** (988bed7, 1b809ab, P3.6 commit): runtime-config
+2. **P3.3** full setter kill ✅ **done** (988bed7, 1b809ab, ca8be71): runtime-config
    applier moved to `ingestion/runtime_config.py` writing `RuntimeState`
    directly; 9 per-step `set_*` wrappers deleted; `app/routes/config.py`
    reads through `usecases/runtime_config.py` facade (no app→ingestion);
    `settings.hype.*` split from `hyde` (deprecated-key migration + warning).
-3. **P3.2** Hamilton delegation: `run_ingestion(config)` library entry with cached
+3. **P3.2** Hamilton delegation — **START HERE**: `run_ingestion(config)` library
+   entry with cached
    driver in `ingestion/pipeline.py`; `rag/index.py::initialize_vector_store_async`
    delegates via `asyncio.to_thread`; delete `_build_index_from_sources` +
    `materialize_html` param; preserve signature-check skip + `get_runtime_status`.
-   **Run the parity gate before merge** (baseline on current branch first!).
+   **Run the parity gate before merge** (baseline on the CURRENT branch state
+   first — `main` has none of Phase 3; see gotcha 15 re: embedding source).
 4. **P3.4** import-linter: `cli > app > usecases > {rag,evals,experiments} >
    {ingestion,infra} > core > config` + forbids (infra→app, ingestion→rag,
-   usecases→cli); wire into `ci.yml`.
+   usecases→cli); wire into `ci.yml`. **Carve out the composition-root exception
+   (gotcha 12) or the contract fails on the intended end state.**
 5. Rewrite ARCHITECTURE.md boundaries section to the final state; mark roadmap
    phases complete in this file.
 
