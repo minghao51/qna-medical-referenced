@@ -112,8 +112,13 @@ jobs:
         if: env.DOTENV_PRIVATE_KEY != ''
         run: npm install -g @dotenvx/dotenvx
 
-      - name: Run smoke tests
+      - name: Run smoke tests (decrypted env)
+        if: env.DOTENV_PRIVATE_KEY != ''
         run: dotenvx run -- uv run pytest -m smoke --maxfail=1 -q
+
+      - name: Run smoke tests (no secrets; env-dependent tests skip)
+        if: env.DOTENV_PRIVATE_KEY == ''
+        run: uv run pytest -m smoke --maxfail=1 -q
 
   dependency-audit:
     runs-on: ubuntu-latest
