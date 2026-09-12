@@ -25,34 +25,29 @@ def run_pipeline(
 
     total_start = time.time()
 
-    from src.ingestion.pipeline import build_ingestion_pipeline
+    from src.ingestion.pipeline import IngestionRunConfig, run_ingestion
 
     project_root = Path.cwd()
 
-    dr = build_ingestion_pipeline(
+    config = IngestionRunConfig(
         project_root=project_root,
+        skip_download=skip_download,
+        force_rebuild=force_rebuild,
+        force_html_convert=force_html_convert,
         enable_hype=enable_hype,
         enable_keyword_extraction=enable_keyword_extraction,
         enable_chunk_summaries=enable_chunk_summaries,
-        force_rebuild=force_rebuild,
-        force_html_convert=force_html_convert,
-        skip_download=skip_download,
         parallel_cores=parallel_cores,
     )
 
-    # One execute: Hamilton runs each node exactly once in dependency order,
-    # so downloads happen before parsing, silver before chunking, and so on.
-    final_vars = ["write_gold_chunks", "write_reference_data", "embed_chunks"]
-    enrichment_enabled = enable_hype or enable_keyword_extraction or enable_chunk_summaries
-    if enrichment_enabled:
-        final_vars.append("write_enriched_chunks")
-
     stages = "download → parse → chunk" if not skip_download else "parse existing → chunk"
+    enrichment_enabled = enable_hype or enable_keyword_extraction or enable_chunk_summaries
     if enrichment_enabled:
         stages += " → enrich"
     stages += " → embed → index"
     print(f"Executing DAG: {stages}")
-    dr.execute(final_vars=final_vars)
+
+    result = run_ingestion(config)
     print()
 
     from src.rag import initialize_runtime_index
@@ -64,6 +59,11 @@ def run_pipeline(
     print("=" * 70)
     print("PIPELINE COMPLETE (Hamilton)")
     print("=" * 70)
+    print(f"  Documents: pdf={result.pdf_document_count} markdown={result.markdown_document_count}")
+    print(
+        f"  Chunks: {result.chunk_count} indexed={result.inserted}"
+        f" duplicates={result.skipped_duplicate_content}"
+    )
     print(f"  Total time: {total_time:.2f}s")
     print("=" * 70)
 

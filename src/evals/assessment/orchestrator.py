@@ -369,8 +369,7 @@ class AssessmentPipeline:
                 raise ValueError("Experiment index configuration does not match existing index")
             index_preparation = self.initialize_runtime_index_fn(
                 rebuild=should_rebuild,
-                materialize_html=bool(embedding_index.get("materialize_html", True)),
-                force_html_reconvert=should_rebuild,
+                force_html_convert=should_rebuild,
             )
         return experiment_runtime, index_preparation
 
@@ -491,7 +490,7 @@ class AssessmentPipeline:
                     exp["embedding_index"] = embedding_index
                     self.configure_runtime_for_experiment_fn(exp)
                     self.initialize_runtime_index_fn(
-                        rebuild=True, materialize_html=True, force_html_reconvert=True
+                        rebuild=True, force_html_convert=True
                     )
 
                 hype_ablations = self.run_hype_ablations_with_reingest_fn(
@@ -524,7 +523,7 @@ class AssessmentPipeline:
                     exp["embedding_index"] = embedding_index
                     self.configure_runtime_for_experiment_fn(exp)
                     self.initialize_runtime_index_fn(
-                        rebuild=True, materialize_html=True, force_html_reconvert=False
+                        rebuild=True, force_html_convert=False
                     )
 
                 keyword_ablations = self.run_keyword_ablations_with_reingest_fn(

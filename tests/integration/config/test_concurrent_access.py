@@ -72,7 +72,7 @@ class TestVectorStoreInitConcurrency:
         build_counts = {"count": 0}
         lock = threading.Lock()
 
-        # Patch _build_index_from_sources to count invocations
+        # Patch the run_ingestion delegate to count invocations
         import src.rag.index as index_mod
 
         class _FakeVectorStore:
@@ -87,21 +87,25 @@ class TestVectorStoreInitConcurrency:
         fake_store = _FakeVectorStore()
         monkeypatch.setattr(index_mod, "get_vector_store", lambda: fake_store)
 
-        async def counting_build(vs):
+        class _FakeIngestionResult:
+            def to_stats(self):
+                return {
+                    "attempted": 0,
+                    "inserted": 0,
+                    "skipped_duplicate_content": 0,
+                    "embedding_stats": {},
+                }
+
+        def counting_run_ingestion(config):
             with lock:
                 build_counts["count"] += 1
-            vs.documents["contents"] = ["chunk-1"]
-            vs.last_indexing_stats = {"inserted": 1}
+            fake_store.documents["contents"] = ["chunk-1"]
+            fake_store.last_indexing_stats = {"inserted": 1}
             # Simulate slow build to increase contention
             time.sleep(0.05)
-            return {
-                "attempted": 0,
-                "inserted": 0,
-                "skipped_duplicate_content": 0,
-                "embedding_stats": {},
-            }
+            return _FakeIngestionResult()
 
-        monkeypatch.setattr(index_mod, "_build_index_from_sources", counting_build)
+        monkeypatch.setattr(index_mod, "run_ingestion", counting_run_ingestion)
 
         # Reset init state
         from src.config.context import get_runtime_state

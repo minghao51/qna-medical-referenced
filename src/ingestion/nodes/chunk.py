@@ -33,8 +33,10 @@ def _chunk_silver_documents(
 
     df = pl.read_parquet(parquet_path)
     docs = df.to_dicts()
-    # The silver parquet schema (path/text/source_type) predates the chunker's
-    # doc-dict contract (source/content); adapt at this boundary.
+    # Silver documents carry the rich loader shape (roadmap P3.2 passthrough:
+    # id/metadata/structured_blocks/pages round-trip as struct columns). The
+    # legacy path/text fallback keys remain for older parquets written before
+    # the passthrough.
     for doc in docs:
         doc.setdefault("source", doc.get("path", ""))
         doc.setdefault("content", doc.get("text", ""))

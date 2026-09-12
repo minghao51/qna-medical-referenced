@@ -141,6 +141,9 @@ def _base_defaults() -> dict[str, Any]:
             "keyword_weight": 0.2,
             "boost_weight": 0.2,
             "rebuild_policy": "if_missing_or_stale",
+            # Deprecated (roadmap P3.2): accepted for schema compatibility and
+            # still hashed into index_config_hash, but no longer read — HTML
+            # (re-)conversion is now requested via force_html_convert.
             "materialize_html": True,
         },
         "retrieval": {
@@ -278,6 +281,8 @@ def _index_config_subset(experiment: dict[str, Any]) -> dict[str, Any]:
                 "semantic_weight",
                 "keyword_weight",
                 "boost_weight",
+                # Deprecated (P3.2): kept in the hash subset so existing
+                # experiment artifacts keep their index_config_hash.
                 "materialize_html",
             }
         },

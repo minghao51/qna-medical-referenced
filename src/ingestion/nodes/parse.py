@@ -25,11 +25,15 @@ def silver_chunks_dir(silver_data_path: str) -> str:
 
 
 def parse_pdf_document(pdf_path: str) -> dict[str, Any]:
+    """Rich per-file PDF document (same assembly as ``PDFLoader.load_all_pdfs``).
+
+    Roadmap P3.2: the DAG carries the full document shape (``id``, ``pages``,
+    ``structured_blocks``, ``metadata``) through the silver parquet so the
+    delegated runtime build indexes exactly what the rag-side builder did.
+    """
     from src.ingestion.steps.load_pdfs import PDFLoader
 
-    loader = PDFLoader()
-    result = loader.load_pdf(pdf_path)
-    return {"path": pdf_path, "text": result, "source_type": "pdf"}
+    return PDFLoader().load_pdf_document(Path(pdf_path))
 
 
 def all_pdf_documents(
@@ -47,16 +51,15 @@ def all_pdf_documents(
 def all_markdown_documents(
     convert_html_to_markdown: list[str],
 ) -> list[dict[str, Any]]:
+    """Markdown documents, passed through with their full rich shape.
+
+    Roadmap P3.2 passthrough: ``id``/``metadata``/``structured_blocks``/
+    ``source_type`` flow into the silver parquet so the chunker sees the
+    same documents the deleted rag-side builder chunked.
+    """
     from src.ingestion.steps.load_markdown import get_markdown_documents
 
-    return [
-        {
-            "path": d.get("source", ""),
-            "text": d.get("content", ""),
-            "source_type": "markdown",
-        }
-        for d in get_markdown_documents()
-    ]
+    return get_markdown_documents()
 
 
 def silver_documents_parquet_path(

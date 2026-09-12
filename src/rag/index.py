@@ -1,4 +1,11 @@
-"""Index initialization and runtime experiment configuration."""
+"""Index initialization and runtime experiment configuration.
+
+Since roadmap P3.2 the build path delegates to the Hamilton DAG via
+``ingestion.pipeline.run_ingestion`` — the parallel chunk→HyPE→enrich→
+embed→index sequence that used to live here (``_build_index_from_sources``)
+is deleted. This module keeps the signature-check reuse logic and the
+runtime-state bookkeeping.
+"""
 
 from __future__ import annotations
 
@@ -6,22 +13,15 @@ import asyncio
 import json
 import logging
 import threading
-import time
 from typing import Any
 
-from src.config import settings
 from src.config.context import get_runtime_state
 from src.ingestion.indexing.chroma_store import (
     get_vector_store,
     get_vector_store_runtime_config,
 )
+from src.ingestion.pipeline import IngestionRunConfig, run_ingestion
 from src.ingestion.runtime_config import apply_runtime_config, build_experiment_runtime_config
-from src.ingestion.steps.chunking import chunk_documents
-from src.ingestion.steps.convert_html import main as convert_html_main
-from src.ingestion.steps.load_markdown import get_markdown_documents
-from src.ingestion.steps.load_pdfs import get_documents
-from src.ingestion.steps.load_reference_data import ReferenceDataLoader
-from src.rag.protocols import VectorStoreProtocol
 
 logger = logging.getLogger(__name__)
 _INITIALIZATION_LOCK = threading.Lock()
@@ -35,102 +35,10 @@ def _vector_store_runtime_signature() -> str:
     )
 
 
-async def _build_index_from_sources(vector_store: VectorStoreProtocol) -> dict[str, Any]:
-    build_start = time.time()
-    runtime_cfg = get_vector_store_runtime_config()
-    indexing_features = dict(runtime_cfg.get("indexing_features", {}) or {})
-    loader = ReferenceDataLoader()
-    pdf_docs = await asyncio.to_thread(get_documents)
-    markdown_docs = await asyncio.to_thread(get_markdown_documents)
-    chunked_docs = await asyncio.to_thread(chunk_documents, pdf_docs)
-    chunked_docs.extend(chunk_documents(markdown_docs))
-
-    hype_chunk_count = 0
-    enriched_chunk_count = 0
-    needs_enrichment = indexing_features.get("enable_keyword_extraction") or indexing_features.get(
-        "enable_chunk_summaries"
-    )
-
-    if indexing_features.get("enable_hype") or needs_enrichment:
-        from src.infra.llm.qwen_client import get_client
-
-    if indexing_features.get("enable_hype"):
-        from src.ingestion.steps.hypothetical_questions import generate_hype_questions_for_chunks
-
-        hype_questions = await generate_hype_questions_for_chunks(
-            chunks=chunked_docs,
-            client=get_client(),
-            sample_rate=float(
-                indexing_features.get("hype_sample_rate", settings.hype.sample_rate)
-            ),
-            max_chunks=int(indexing_features.get("hype_max_chunks", settings.hype.max_chunks)),
-            questions_per_chunk=int(
-                indexing_features.get(
-                    "hype_questions_per_chunk", settings.hype.questions_per_chunk
-                )
-            ),
-        )
-        hype_chunk_count = len(hype_questions)
-        for doc in chunked_docs:
-            if doc["id"] in hype_questions:
-                doc.setdefault("metadata", {})
-                doc["metadata"]["hypothetical_questions"] = hype_questions[doc["id"]]
-
-    if needs_enrichment:
-        from src.ingestion.steps.enrich_chunks import (
-            apply_enrichment_to_chunks,
-            enrich_chunks,
-        )
-
-        enrichment_results = await enrich_chunks(
-            chunks=chunked_docs,
-            client=get_client(),
-            enable_keywords=bool(indexing_features.get("enable_keyword_extraction")),
-            enable_summaries=bool(indexing_features.get("enable_chunk_summaries")),
-            sample_rate=float(
-                indexing_features.get(
-                    "keyword_extraction_sample_rate",
-                    settings.enrichment.keyword_extraction_sample_rate,
-                )
-            ),
-            max_chunks=int(
-                indexing_features.get(
-                    "keyword_extraction_max_chunks",
-                    settings.enrichment.keyword_extraction_max_chunks,
-                )
-            ),
-        )
-        enriched_chunk_count = apply_enrichment_to_chunks(
-            chunked_docs,
-            enrichment_results,
-            enable_keywords=bool(indexing_features.get("enable_keyword_extraction")),
-            enable_summaries=bool(indexing_features.get("enable_chunk_summaries")),
-        )
-
-    ref_docs = loader.load_reference_ranges_as_docs()
-    chunked_docs.extend(ref_docs)
-    stats: dict[str, Any] = vector_store.add_documents(chunked_docs)
-    stats["build_elapsed_ms"] = int((time.time() - build_start) * 1000)
-    stats["pdf_document_count"] = len(pdf_docs)
-    stats["markdown_document_count"] = len(markdown_docs)
-    stats["reference_document_count"] = len(ref_docs)
-    stats["chunk_count"] = len(chunked_docs)
-    stats["hype_chunk_count"] = hype_chunk_count
-    stats["enriched_chunk_count"] = enriched_chunk_count
-    logger.info(
-        "Indexed document chunks (attempted=%d, inserted=%d, duplicate_content=%d)",
-        stats["attempted"],
-        stats["inserted"],
-        stats["skipped_duplicate_content"],
-    )
-    return stats
-
-
 async def initialize_vector_store_async(
     rebuild: bool = False,
     *,
-    materialize_html: bool = False,
-    force_html_reconvert: bool = False,
+    force_html_convert: bool = False,
 ) -> dict[str, Any]:
     state = get_runtime_state()
     runtime_signature = _vector_store_runtime_signature()
@@ -146,9 +54,6 @@ async def initialize_vector_store_async(
             with state._lock:
                 state.vector_store_initialized = False
                 state.vector_store_initialized_signature = None
-
-        if materialize_html:
-            convert_html_main(force=force_html_reconvert)
 
         documents = vector_store.documents
         if documents.get("contents"):
@@ -171,7 +76,18 @@ async def initialize_vector_store_async(
                 "indexing_stats": vector_store.last_indexing_stats,
             }
 
-        build_stats = await _build_index_from_sources(vector_store)
+        config = IngestionRunConfig.from_runtime_state(
+            force_rebuild=rebuild,
+            force_html_convert=force_html_convert,
+        )
+        ingestion = await asyncio.to_thread(run_ingestion, config)
+        build_stats = ingestion.to_stats()
+        logger.info(
+            "Indexed document chunks (attempted=%d, inserted=%d, duplicate_content=%d)",
+            build_stats["attempted"],
+            build_stats["inserted"],
+            build_stats["skipped_duplicate_content"],
+        )
         documents = vector_store.documents
         with state._lock:
             state.vector_store_initialized = True
@@ -189,8 +105,7 @@ async def initialize_vector_store_async(
 def initialize_vector_store(
     rebuild: bool = False,
     *,
-    materialize_html: bool = False,
-    force_html_reconvert: bool = False,
+    force_html_convert: bool = False,
 ) -> dict[str, Any]:
     try:
         loop = asyncio.get_running_loop()
@@ -201,8 +116,7 @@ def initialize_vector_store(
     return asyncio.run(
         initialize_vector_store_async(
             rebuild=rebuild,
-            materialize_html=materialize_html,
-            force_html_reconvert=force_html_reconvert,
+            force_html_convert=force_html_convert,
         )
     )
 
@@ -210,26 +124,22 @@ def initialize_vector_store(
 def initialize_runtime_index(
     rebuild: bool = False,
     *,
-    materialize_html: bool = False,
-    force_html_reconvert: bool = False,
+    force_html_convert: bool = False,
 ) -> dict[str, Any]:
     return initialize_vector_store(
         rebuild=rebuild,
-        materialize_html=materialize_html,
-        force_html_reconvert=force_html_reconvert,
+        force_html_convert=force_html_convert,
     )
 
 
 async def initialize_runtime_index_async(
     rebuild: bool = False,
     *,
-    materialize_html: bool = False,
-    force_html_reconvert: bool = False,
+    force_html_convert: bool = False,
 ) -> dict[str, Any]:
     return await initialize_vector_store_async(
         rebuild=rebuild,
-        materialize_html=materialize_html,
-        force_html_reconvert=force_html_reconvert,
+        force_html_convert=force_html_convert,
     )
 
 
