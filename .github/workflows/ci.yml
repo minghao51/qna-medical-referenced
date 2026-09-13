@@ -171,4 +171,4 @@ jobs:
         run: docker build -f Dockerfile .
 
       - name: Build frontend image
-        run: docker build -f frontend/Dockerfile .
+        run: docker build -f frontend/Dockerfile frontend/
