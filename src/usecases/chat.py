@@ -13,12 +13,13 @@ Flow:
     6. Return response with sources and optional pipeline trace
 
 Example:
-    Process a chat message:
+    Process a chat message (dependencies constructed at the caller's edge —
+    the app composition root, a CLI entrypoint, or a test):
         from src.usecases.chat import process_chat_message
-        from src.infra.llm import get_client
 
         result = process_chat_message(
-            llm_client=get_client(),
+            llm_client=client,
+            history_store=history_store,
             message="What is a normal CBC count?",
             session_id="user-123",
             include_pipeline=True
@@ -33,9 +34,8 @@ import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from src.app.exceptions import UpstreamServiceError
 from src.config import settings
-from src.infra.llm import get_client
+from src.core.exceptions import UpstreamServiceError
 from src.infra.storage.interfaces import ChatHistoryStore
 from src.rag import retrieve_context, retrieve_context_with_trace, retrieve_context_with_trace_async
 
@@ -92,7 +92,9 @@ def process_chat_message(
     tracks timing information for monitoring and debugging.
 
     Args:
-        llm_client: LLM client instance (QwenClient or compatible)
+        llm_client: LLM client instance (QwenClient or compatible) — required;
+            callers construct it at their edge (the app composition root,
+            CLI entrypoints, or tests)
         message: User's question or message
         session_id: Session identifier for history persistence.
                    If None, uses "default" session
@@ -134,9 +136,8 @@ def process_chat_message(
     full_context = _compose_full_context(history_context, context)
 
     gen_start = time.time()
-    client = llm_client or get_client()
     try:
-        response = client.generate(prompt=message, context=full_context)
+        response = llm_client.generate(prompt=message, context=full_context)
     except Exception as exc:
         logger.exception("Chat generation failed for session %s", resolved_session_id)
         raise UpstreamServiceError("An error occurred processing your request") from exc
@@ -191,12 +192,11 @@ async def stream_chat_message(
 
     pipeline_trace = None
     chat_start = time.time()
-    client = llm_client or get_client()
 
     context, sources, pipeline_trace = await retrieve_context_with_trace_async(
         message,
         top_k=top_k,
-        hyde_client=client,
+        hyde_client=llm_client,
     )
     if not include_pipeline:
         pipeline_trace = None
@@ -207,7 +207,7 @@ async def stream_chat_message(
     accumulated_response = ""
 
     try:
-        async for token in client.a_generate_stream(prompt=message, context=full_context):
+        async for token in llm_client.a_generate_stream(prompt=message, context=full_context):
             accumulated_response += token
             yield (token, {"done": False})
 

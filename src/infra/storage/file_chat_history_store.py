@@ -10,9 +10,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from src.app.exceptions import StorageError
 from src.config import CHAT_HISTORY_FILE
 from src.config.settings import settings
+from src.core.exceptions import StorageError
 
 logger = logging.getLogger(__name__)
 

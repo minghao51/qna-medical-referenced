@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
+# Layer-agnostic domain exceptions live in src/core/exceptions.py;
+# alias re-exports keep them importable from here for existing importers.
+from src.core.exceptions import AppError as AppError
+from src.core.exceptions import StorageError as StorageError
+from src.core.exceptions import UpstreamServiceError as UpstreamServiceError
 
-@dataclass
-class AppError(Exception):
-    """Base application exception with HTTP semantics."""
-
-    message: str
-    status_code: int = 500
-    code: str = "application_error"
-    extra: dict[str, Any] | None = None
+# Layer-agnostic domain exceptions live in src/core/exceptions.py;
 
 
 class InvalidInputError(AppError):
@@ -24,19 +21,9 @@ class InvalidInputError(AppError):
         super().__init__(message=message, status_code=400, code="invalid_input", extra=extra)
 
 
-class UpstreamServiceError(AppError):
-    def __init__(self, message: str = "Upstream service failure"):
-        super().__init__(message=message, status_code=502, code="upstream_service_error")
-
-
 class ArtifactNotFoundError(AppError):
     def __init__(self, message: str):
         super().__init__(message=message, status_code=404, code="artifact_not_found")
-
-
-class StorageError(AppError):
-    def __init__(self, message: str = "Storage operation failed"):
-        super().__init__(message=message, status_code=500, code="storage_error")
 
 
 def _error_payload(

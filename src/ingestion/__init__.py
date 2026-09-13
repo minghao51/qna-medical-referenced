@@ -1,11 +1,5 @@
-"""Offline ingestion package exports."""
+"""Offline ingestion package exports.
 
-__all__ = ["run_pipeline"]
-
-
-def __getattr__(name: str):
-    if name == "run_pipeline":
-        from src.usecases.pipeline import run_pipeline
-
-        return run_pipeline
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+The pipeline entrypoint is ``src.cli.ingest`` (``python -m src.cli.ingest``);
+the Hamilton driver lives in ``src.ingestion.pipeline``.
+"""

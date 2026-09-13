@@ -1,7 +1,6 @@
 """Formatting helpers for retrieved context and sources."""
 
-from src.rag.trace_models import ChatSource
-from src.source_metadata import (
+from src.core.source_metadata import (
     canonical_source_label,
     display_source_label,
     infer_domain,
@@ -10,6 +9,7 @@ from src.source_metadata import (
     normalize_source_type,
     sanitize_external_url,
 )
+from src.rag.trace_models import ChatSource
 
 
 def build_source_payload(result: dict) -> dict:

@@ -84,24 +84,6 @@ def is_page_classification_enabled() -> bool:
     return _page_classification_enabled()
 
 
-def set_html_extractor_strategy(strategy: str) -> None:
-    valid = {"trafilatura_bs", "html2md_trafilatura_bs", "readability_bs", "full_cascade"}
-    get_runtime_state().html_extractor_strategy = (
-        strategy if strategy in valid else "trafilatura_bs"
-    )
-
-
-def set_html_extractor_mode(mode: str) -> None:
-    normalized = str(mode or "auto").strip().lower()
-    if normalized not in {"auto", "primary_only", "fallback_only"}:
-        normalized = "auto"
-    get_runtime_state().html_extractor_mode = normalized
-
-
-def set_page_classification_enabled(enabled: bool) -> None:
-    get_runtime_state().page_classification_enabled = bool(enabled)
-
-
 def get_html_processor_config() -> HTMLProcessorConfig:
     state = get_runtime_state()
     return HTMLProcessorConfig(

@@ -16,9 +16,9 @@ from pypdf import PdfReader
 
 from src.config import DATA_RAW_DIR
 from src.config.context import get_runtime_state
+from src.core.source_metadata import build_document_source_metadata
 from src.ingestion.artifacts import SourceArtifact, persist_source_artifact
 from src.ingestion.steps.download_web import get_manifest_record_by_filename
-from src.source_metadata import build_document_source_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -68,18 +68,6 @@ def get_pdf_extractor_strategy() -> str:
 
 def get_pdf_table_extractor() -> str:
     return _pdf_table_extractor()
-
-
-def set_pdf_extractor_strategy(strategy: str) -> None:
-    valid = {"pypdf_pdfplumber", "pymupdf_pdfplumber"}
-    resolved = strategy if strategy in valid else "pypdf_pdfplumber"
-    get_runtime_state().pdf_extractor_strategy = resolved
-
-
-def set_pdf_table_extractor(extractor: str) -> None:
-    valid = {"heuristic", "camelot"}
-    resolved = extractor if extractor in valid else "heuristic"
-    get_runtime_state().pdf_table_extractor = resolved
 
 
 def _normalize_lines(text: str) -> list[str]:
@@ -249,6 +237,175 @@ class PDFLoader:
         _, texts = self._extract_primary(Path(pdf_path))
         return "\n".join(texts)
 
+    def load_pdf_document(self, pdf_file: Path) -> dict:
+        """Assemble the rich document dict for one PDF file.
+
+        Extracted from ``load_all_pdfs`` (roadmap P3.2) so the Hamilton
+        DAG nodes and the batch loader share a single assembly path.
+        Raises on parse failure; callers provide per-file isolation.
+        """
+        reader, primary_texts = self._extract_primary(pdf_file)
+        # pdfplumber is the slowest extractor: parse it lazily, only
+        # once at least one page actually triggers the fallback
+        # criteria below (instead of eagerly for every file).
+        fallback_texts: list[str] | None = None
+
+        def fallback_for(page_index: int, _pdf_file: Path = pdf_file) -> str:
+            nonlocal fallback_texts
+            if fallback_texts is None:
+                fallback_texts = self._extract_with_pdfplumber(_pdf_file)
+            return fallback_texts[page_index] if page_index < len(fallback_texts) else ""
+
+        pages = []
+        all_blocks: list[dict] = []
+        full_text_parts: list[str] = []
+        fallback_used = 0
+        low_conf_pages = 0
+        ocr_required_pages = 0
+        camelot_table_pages = 0
+        camelot_total_rows = 0
+
+        for page_num, primary_text in enumerate(primary_texts, 1):
+            replacement_chars = primary_text.count("\ufffd")
+            primary_lines = _normalize_lines(primary_text)
+            fallback_text = ""
+            if len(primary_text.strip()) < 120 or replacement_chars > 2 or len(primary_lines) < 2:
+                fallback_text = fallback_for(page_num - 1)
+            use_fallback = bool(fallback_text)
+            selected_text = fallback_text if use_fallback else primary_text
+            extractor = (
+                "pdfplumber"
+                if use_fallback
+                else ("pymupdf" if _pdf_extractor_strategy() == "pymupdf_pdfplumber" else "pypdf")
+            )
+            if use_fallback:
+                fallback_used += 1
+            line_count = len(_normalize_lines(selected_text))
+            confidence = _infer_confidence(selected_text, replacement_chars, line_count)
+            if confidence == "low":
+                low_conf_pages += 1
+            if not selected_text.strip():
+                ocr_required_pages += 1
+
+            section_path: list[str] = []
+            structured_blocks = _build_structured_blocks(page_num, selected_text)
+
+            # Computed once per page and reused for the camelot trigger,
+            # the page metadata, and the artifact aggregate below.
+            suspected_table_count = _suspected_table_count(selected_text)
+            page_camelot_table_pages = 0
+            if _pdf_table_extractor() == "camelot" and camelot is not None:
+                if suspected_table_count > 0:
+                    camelot_tables = self._extract_tables_camelot(pdf_file, page_num)
+                    if camelot_tables and len(camelot_tables) > 0:
+                        camelot_blocks = _build_camelot_table_blocks(
+                            page_num, camelot_tables, section_path
+                        )
+                        if camelot_blocks:
+                            structured_blocks.extend(camelot_blocks)
+                            camelot_table_pages += 1
+                            page_camelot_table_pages = 1
+                            for cb in camelot_blocks:
+                                tm = cb.get("metadata", {}).get("table_metadata", {})
+                                if isinstance(tm, dict):
+                                    camelot_total_rows += int(tm.get("rows", 0))
+
+            all_blocks.extend(structured_blocks)
+            full_text_parts.append(selected_text)
+            pages.append(
+                {
+                    "page": page_num,
+                    "content": selected_text,
+                    "extractor": extractor,
+                    "char_count": len(selected_text.strip()),
+                    "line_count": line_count,
+                    "suspected_table_count": suspected_table_count,
+                    "replacement_char_count": replacement_chars,
+                    "confidence": confidence,
+                    "ocr_required": not selected_text.strip(),
+                    "structured_blocks": structured_blocks,
+                    "metadata": {
+                        "selected_extractor": extractor,
+                        "primary_char_count": len(primary_text.strip()),
+                        "fallback_char_count": len(fallback_text.strip()),
+                        # Actual camelot outcome for this page (not the
+                        # suspicion heuristic that triggered the attempt).
+                        "camelot_table_pages": page_camelot_table_pages,
+                    },
+                }
+            )
+
+        artifact = SourceArtifact(
+            source_id=pdf_file.stem,
+            source_path=str(pdf_file),
+            source_type="pdf",
+            raw_source={
+                "page_count": (
+                    reader.page_count
+                    if hasattr(reader, "page_count")
+                    else len(reader.pages)
+                    if hasattr(reader, "pages") and not callable(reader.pages)
+                    else len(primary_texts)
+                ),
+                "size_bytes": pdf_file.stat().st_size,
+                "pdf_extractor_strategy": _pdf_extractor_strategy(),
+                "pdf_table_extractor": _pdf_table_extractor(),
+            },
+            extracted_text="\n\n".join(full_text_parts).strip(),
+            structured_blocks=all_blocks,
+            best_output={
+                "extractor": (
+                    "mixed_pymupdf"
+                    if _pdf_extractor_strategy() == "pymupdf_pdfplumber" and not fallback_used
+                    else "pymupdf"
+                    if _pdf_extractor_strategy() == "pymupdf_pdfplumber"
+                    else "mixed"
+                    if fallback_used
+                    else "pypdf"
+                ),
+                "page_count": (
+                    reader.page_count
+                    if hasattr(reader, "page_count")
+                    else len(reader.pages)
+                    if hasattr(reader, "pages") and not callable(reader.pages)
+                    else len(primary_texts)
+                ),
+                "pages": pages,
+            },
+            fallback_output={
+                "extractor": "pdfplumber" if pdfplumber is not None else "unavailable",
+                "page_count": len(fallback_texts) if fallback_texts is not None else 0,
+            },
+            metadata={
+                "fallback_used_pages": fallback_used,
+                "low_confidence_pages": low_conf_pages,
+                "ocr_required_pages": ocr_required_pages,
+                "camelot_table_pages": camelot_table_pages,
+                "camelot_total_rows": camelot_total_rows,
+                "pdf_extractor_strategy": _pdf_extractor_strategy(),
+                "pdf_table_extractor": _pdf_table_extractor(),
+            },
+        )
+        persist_source_artifact(artifact)
+
+        manifest_record = get_manifest_record_by_filename(pdf_file.name)
+        metadata = build_document_source_metadata(
+            artifact.metadata,
+            source=pdf_file.name,
+            source_type="pdf",
+            manifest_record=manifest_record,
+            explicit_class="guideline_pdf",
+        )
+
+        return {
+            "id": pdf_file.stem,
+            "source": str(pdf_file.name),
+            "source_type": "pdf",
+            "pages": pages,
+            "structured_blocks": all_blocks,
+            "metadata": metadata,
+        }
+
     def load_all_pdfs(self) -> list[dict]:
         documents = []
         pdf_files = sorted(self.data_dir.glob("*.pdf"))
@@ -257,178 +414,7 @@ class PDFLoader:
             # Per-file isolation: one corrupt/unreadable PDF must not abort the
             # whole ingestion run — log and continue with the remaining files.
             try:
-                reader, primary_texts = self._extract_primary(pdf_file)
-                # pdfplumber is the slowest extractor: parse it lazily, only
-                # once at least one page actually triggers the fallback
-                # criteria below (instead of eagerly for every file).
-                fallback_texts: list[str] | None = None
-
-                def fallback_for(page_index: int, _pdf_file: Path = pdf_file) -> str:
-                    nonlocal fallback_texts
-                    if fallback_texts is None:
-                        fallback_texts = self._extract_with_pdfplumber(_pdf_file)
-                    return fallback_texts[page_index] if page_index < len(fallback_texts) else ""
-
-                pages = []
-                all_blocks: list[dict] = []
-                full_text_parts: list[str] = []
-                fallback_used = 0
-                low_conf_pages = 0
-                ocr_required_pages = 0
-                camelot_table_pages = 0
-                camelot_total_rows = 0
-
-                for page_num, primary_text in enumerate(primary_texts, 1):
-                    replacement_chars = primary_text.count("\ufffd")
-                    primary_lines = _normalize_lines(primary_text)
-                    fallback_text = ""
-                    if (
-                        len(primary_text.strip()) < 120
-                        or replacement_chars > 2
-                        or len(primary_lines) < 2
-                    ):
-                        fallback_text = fallback_for(page_num - 1)
-                    use_fallback = bool(fallback_text)
-                    selected_text = fallback_text if use_fallback else primary_text
-                    extractor = (
-                        "pdfplumber"
-                        if use_fallback
-                        else (
-                            "pymupdf"
-                            if _pdf_extractor_strategy() == "pymupdf_pdfplumber"
-                            else "pypdf"
-                        )
-                    )
-                    if use_fallback:
-                        fallback_used += 1
-                    line_count = len(_normalize_lines(selected_text))
-                    confidence = _infer_confidence(selected_text, replacement_chars, line_count)
-                    if confidence == "low":
-                        low_conf_pages += 1
-                    if not selected_text.strip():
-                        ocr_required_pages += 1
-
-                    section_path: list[str] = []
-                    structured_blocks = _build_structured_blocks(page_num, selected_text)
-
-                    # Computed once per page and reused for the camelot trigger,
-                    # the page metadata, and the artifact aggregate below.
-                    suspected_table_count = _suspected_table_count(selected_text)
-                    page_camelot_table_pages = 0
-                    if _pdf_table_extractor() == "camelot" and camelot is not None:
-                        if suspected_table_count > 0:
-                            camelot_tables = self._extract_tables_camelot(pdf_file, page_num)
-                            if camelot_tables and len(camelot_tables) > 0:
-                                camelot_blocks = _build_camelot_table_blocks(
-                                    page_num, camelot_tables, section_path
-                                )
-                                if camelot_blocks:
-                                    structured_blocks.extend(camelot_blocks)
-                                    camelot_table_pages += 1
-                                    page_camelot_table_pages = 1
-                                    for cb in camelot_blocks:
-                                        tm = cb.get("metadata", {}).get("table_metadata", {})
-                                        if isinstance(tm, dict):
-                                            camelot_total_rows += int(tm.get("rows", 0))
-
-                    all_blocks.extend(structured_blocks)
-                    full_text_parts.append(selected_text)
-                    pages.append(
-                        {
-                            "page": page_num,
-                            "content": selected_text,
-                            "extractor": extractor,
-                            "char_count": len(selected_text.strip()),
-                            "line_count": line_count,
-                            "suspected_table_count": suspected_table_count,
-                            "replacement_char_count": replacement_chars,
-                            "confidence": confidence,
-                            "ocr_required": not selected_text.strip(),
-                            "structured_blocks": structured_blocks,
-                            "metadata": {
-                                "selected_extractor": extractor,
-                                "primary_char_count": len(primary_text.strip()),
-                                "fallback_char_count": len(fallback_text.strip()),
-                                # Actual camelot outcome for this page (not the
-                                # suspicion heuristic that triggered the attempt).
-                                "camelot_table_pages": page_camelot_table_pages,
-                            },
-                        }
-                    )
-
-                artifact = SourceArtifact(
-                    source_id=pdf_file.stem,
-                    source_path=str(pdf_file),
-                    source_type="pdf",
-                    raw_source={
-                        "page_count": (
-                            reader.page_count
-                            if hasattr(reader, "page_count")
-                            else len(reader.pages)
-                            if hasattr(reader, "pages") and not callable(reader.pages)
-                            else len(primary_texts)
-                        ),
-                        "size_bytes": pdf_file.stat().st_size,
-                        "pdf_extractor_strategy": _pdf_extractor_strategy(),
-                        "pdf_table_extractor": _pdf_table_extractor(),
-                    },
-                    extracted_text="\n\n".join(full_text_parts).strip(),
-                    structured_blocks=all_blocks,
-                    best_output={
-                        "extractor": (
-                            "mixed_pymupdf"
-                            if _pdf_extractor_strategy() == "pymupdf_pdfplumber"
-                            and not fallback_used
-                            else "pymupdf"
-                            if _pdf_extractor_strategy() == "pymupdf_pdfplumber"
-                            else "mixed"
-                            if fallback_used
-                            else "pypdf"
-                        ),
-                        "page_count": (
-                            reader.page_count
-                            if hasattr(reader, "page_count")
-                            else len(reader.pages)
-                            if hasattr(reader, "pages") and not callable(reader.pages)
-                            else len(primary_texts)
-                        ),
-                        "pages": pages,
-                    },
-                    fallback_output={
-                        "extractor": "pdfplumber" if pdfplumber is not None else "unavailable",
-                        "page_count": len(fallback_texts) if fallback_texts is not None else 0,
-                    },
-                    metadata={
-                        "fallback_used_pages": fallback_used,
-                        "low_confidence_pages": low_conf_pages,
-                        "ocr_required_pages": ocr_required_pages,
-                        "camelot_table_pages": camelot_table_pages,
-                        "camelot_total_rows": camelot_total_rows,
-                        "pdf_extractor_strategy": _pdf_extractor_strategy(),
-                        "pdf_table_extractor": _pdf_table_extractor(),
-                    },
-                )
-                persist_source_artifact(artifact)
-
-                manifest_record = get_manifest_record_by_filename(pdf_file.name)
-                metadata = build_document_source_metadata(
-                    artifact.metadata,
-                    source=pdf_file.name,
-                    source_type="pdf",
-                    manifest_record=manifest_record,
-                    explicit_class="guideline_pdf",
-                )
-
-                documents.append(
-                    {
-                        "id": pdf_file.stem,
-                        "source": str(pdf_file.name),
-                        "source_type": "pdf",
-                        "pages": pages,
-                        "structured_blocks": all_blocks,
-                        "metadata": metadata,
-                    }
-                )
+                documents.append(self.load_pdf_document(pdf_file))
             except Exception as e:
                 logger.warning("Failed to load PDF %s; skipping file: %s", pdf_file, e)
                 continue

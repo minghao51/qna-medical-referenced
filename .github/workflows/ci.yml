@@ -32,6 +32,9 @@ jobs:
       - name: Run MyPy
         run: uv run mypy src/
 
+      - name: Run import-linter (architecture contract)
+        run: uv run lint-imports
+
       - name: Run Bandit
         run: uv run bandit -r src/ -ll -f json -o bandit-report.json
 
@@ -54,7 +57,7 @@ jobs:
           uv run pytest tests/unit/ -m "not slow" --maxfail=3 -n auto -q
           --cov=src/app/middleware
           --cov=src/app/routes
-          --cov=src.rag.runtime
+          --cov=src/rag/runtime.py
           --cov=src/infra/storage
           --cov-report=term-missing
           --cov-fail-under=55
@@ -77,9 +80,17 @@ jobs:
         if: env.DOTENV_PRIVATE_KEY != ''
         run: npm install -g @dotenvx/dotenvx
 
-      - name: Run integration tests
+      - name: Run integration tests (decrypted env)
+        if: env.DOTENV_PRIVATE_KEY != ''
         run: >
           dotenvx run -- uv run pytest tests/integration/
+          -m "not slow and not live_api and not live_openrouter and not deepeval and not e2e_real_apis and not network"
+          --maxfail=2 -q
+
+      - name: Run integration tests (no secrets; env-dependent tests skip)
+        if: env.DOTENV_PRIVATE_KEY == ''
+        run: >
+          uv run pytest tests/integration/
           -m "not slow and not live_api and not live_openrouter and not deepeval and not e2e_real_apis and not network"
           --maxfail=2 -q
 
@@ -101,8 +112,13 @@ jobs:
         if: env.DOTENV_PRIVATE_KEY != ''
         run: npm install -g @dotenvx/dotenvx
 
-      - name: Run smoke tests
+      - name: Run smoke tests (decrypted env)
+        if: env.DOTENV_PRIVATE_KEY != ''
         run: dotenvx run -- uv run pytest -m smoke --maxfail=1 -q
+
+      - name: Run smoke tests (no secrets; env-dependent tests skip)
+        if: env.DOTENV_PRIVATE_KEY == ''
+        run: uv run pytest -m smoke --maxfail=1 -q
 
   dependency-audit:
     runs-on: ubuntu-latest
@@ -138,6 +154,9 @@ jobs:
 
       - name: Build frontend
         run: bun run build
+
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
 
       - name: Run frontend tests
         run: bun run test

@@ -1,6 +1,6 @@
 """Use-case layer exports."""
 
-__all__ = ["process_chat_message", "run_pipeline"]
+__all__ = ["process_chat_message"]
 
 
 def __getattr__(name: str):
@@ -8,8 +8,4 @@ def __getattr__(name: str):
         from src.usecases.chat import process_chat_message
 
         return process_chat_message
-    if name == "run_pipeline":
-        from src.usecases.pipeline import run_pipeline
-
-        return run_pipeline
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

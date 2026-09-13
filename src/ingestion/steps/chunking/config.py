@@ -57,20 +57,6 @@ def is_structured_chunking_enabled() -> bool:
     return bool(get_runtime_state().structured_chunking_enabled)
 
 
-def set_structured_chunking_enabled(enabled: bool) -> None:
-    get_runtime_state().structured_chunking_enabled = bool(enabled)
-
-
-def set_auto_select_strategy(enabled: bool) -> None:
-    get_runtime_state().auto_select_strategy = bool(enabled)
-
-
-def set_source_chunk_configs(configs: dict | None) -> None:
-    get_runtime_state().source_chunk_configs_override = (
-        copy.deepcopy(configs) if configs is not None else None
-    )
-
-
 def resolve_source_chunk_configs(
     override: dict | None,
     *,

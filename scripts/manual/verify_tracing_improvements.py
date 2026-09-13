@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from src.infra.llm import get_client
-from src.ingestion.indexing.vector_store import VectorStore
+from src.ingestion.indexing.chroma_store import ChromaVectorStore
 from src.rag.formatting import format_source_name, format_source_with_url
 from src.usecases.chat import process_chat_message
 
@@ -19,7 +19,7 @@ def test_vector_store_metadata():
     print("Test 1: Vector Store Metadata")
     print("=" * 60)
 
-    vs = VectorStore()
+    vs = ChromaVectorStore()
     results = vs.similarity_search("COPD diagnosis", top_k=2)
 
     passed = True
@@ -50,7 +50,7 @@ def test_source_formatting():
     print("Test 2: Source Formatting")
     print("=" * 60)
 
-    vs = VectorStore()
+    vs = ChromaVectorStore()
     results = vs.similarity_search("diabetes screening", top_k=2)
 
     passed = True

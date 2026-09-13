@@ -64,10 +64,8 @@ def clean_html_artifacts() -> None:
 def reset_global_state() -> None:
     """Reset all global state modules to defaults."""
     from src.config.context import reset_runtime_state
-    from src.infra.di import reset_container
     from src.rag import reset_runtime_index_state
 
-    reset_container()
     reset_runtime_state()
     reset_runtime_index_state()
 
@@ -75,13 +73,6 @@ def reset_global_state() -> None:
     from src.ingestion.indexing.chroma_store import ChromaVectorStoreFactory
 
     ChromaVectorStoreFactory.reset()
-
-    # Reset chunking config
-    import src.ingestion.steps.chunking.config as chunking_config
-
-    chunking_config.set_source_chunk_configs(None)
-    chunking_config.set_structured_chunking_enabled(True)
-    chunking_config.set_auto_select_strategy(False)
 
     print("  Reset all global state")
 

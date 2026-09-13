@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from src.config import settings
-from src.ingestion.steps.chunk_text import chunk_documents
+from src.ingestion.steps.chunking import chunk_documents
 from src.ingestion.steps.load_markdown import get_markdown_documents
 from src.ingestion.steps.load_pdfs import get_documents
 

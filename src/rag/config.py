@@ -68,7 +68,7 @@ def resolve_retrieval_config(
         cfg.search_mode = settings.retrieval.rrf_search_mode
     cfg.enable_hyde = bool(cfg.enable_hyde)
     cfg.hyde_max_length = max(50, min(500, int(cfg.hyde_max_length)))
-    cfg.enable_hype = bool(cfg.enable_hype) or bool(settings.hyde.hype_enabled)
+    cfg.enable_hype = bool(cfg.enable_hype) or bool(settings.hype.enabled)
     cfg.enable_medical_expansion = bool(cfg.enable_medical_expansion) or bool(
         settings.retrieval.medical_expansion_enabled
     )

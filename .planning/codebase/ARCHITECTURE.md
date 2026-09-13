@@ -1,5 +1,8 @@
 # Architecture
 
+> **Active refactor:** `docs/plans/20260910-structural-refactor-roadmap.md` (Phases 0–3).
+> Known violations marked below are scheduled there; this file is updated in the same PR as each change.
+
 ## Pattern
 
 **Layered Domain-Driven Design** with a FastAPI backend and SvelteKit frontend, following a pipeline-oriented architecture for RAG (Retrieval-Augmented Generation).
@@ -16,7 +19,7 @@ HTTP interface built on FastAPI. Contains routes, middleware, schemas, and error
 
 | Component | Location | Role |
 |-----------|----------|------|
-| Routes | `src/app/routes/` | REST API endpoint definitions (chat, health, history, evaluation) |
+| Routes | `src/app/routes/` | REST API endpoint definitions (chat, health, history, evaluation, config, experiments, documents — 7 routers mounted in `factory.py`) |
 | Middleware | `src/app/middleware/` | Cross-cutting concerns: auth (`APIKeyMiddleware`), rate limiting (`RateLimitMiddleware`), request tracing (`RequestIDMiddleware`) |
 | Schemas | `src/app/schemas/` | Pydantic request/response models |
 | Exceptions | `src/app/exceptions.py` | Domain exceptions (`AppError`, `UpstreamServiceError`, etc.) with FastAPI error handlers |
@@ -36,7 +39,8 @@ Orchestration logic that coordinates domain operations. Each use case represents
 | Use Case | File | Flow |
 |----------|------|------|
 | Chat | `src/usecases/chat.py` | Retrieve history → RAG retrieval → LLM generation → persist history → return response (sync + streaming) |
-| Pipeline | `src/usecases/pipeline.py` | CLI-driven Hamilton DAG pipeline (compat shim → `src/cli/ingest.py` → `src/ingestion/pipeline.py`): download → convert → load → chunk → enrich → embed → index |
+
+The historical `usecases/pipeline.py` compat shim was deleted in Phase 1; the ingestion entrypoint is `src/cli/ingest.py` (→ `src/ingestion/pipeline.py`).
 
 ### 3. RAG Layer (`src/rag/`)
 
@@ -51,7 +55,7 @@ The retrieval-augmented generation engine. This is the core domain logic — **r
 | `query_expansion.py` | Lexical/medical query expansion, HyDE async wrapper | ~125 lines |
 | `retrieval.py` | Candidate retrieval from vector store + result merging | ~115 lines |
 | `formatting.py` | Formats retrieved chunks into context strings and `ChatSource` citations | ~90 lines |
-| `hyde.py` | HyDE (Hypothetical Document Embeddings) — generates hypothetical answers | ~305 lines |
+| `hyde.py` | HyDE (Hypothetical Document Embeddings) query-time expansion; index-time HyPE question generation moved to `infra/llm/hypothetical_questions.py` (P3.1) | ~180 lines |
 | `reranker.py` | Cross-encoder reranking using sentence-transformers | ~155 lines |
 | `medical_expansion.py` | Medical term expansion provider (currently noop) | ~60 lines |
 | `production_profile.py` | Applies tuned retrieval profiles from ablation studies | ~115 lines |
@@ -70,8 +74,8 @@ Offline data processing pipeline that transforms raw documents into searchable v
 | L0b | `steps/download_pdfs.py` | Download PDF documents |
 | L1 | `steps/convert_html.py` | Convert HTML to Markdown (trafilatura/BS4) |
 | L2 | `steps/load_pdfs.py`, `steps/load_markdown.py` | Load and parse documents into structured format |
-| L3 | `steps/chunk_text.py` → `steps/chunking/` | Chunk documents (structured, medical-semantic, or simple strategies) |
-| L3b | `steps/hype.py` | Generate HyPE (Hypothetical Prompt Embedding) questions |
+| L3 | `steps/chunking/` | Chunk documents (structured, medical-semantic, or simple strategies) |
+| L3b | `steps/hypothetical_questions.py` | Generate HyPE (Hypothetical Prompt Embedding) questions |
 | L3c | `steps/enrich_chunks.py` | LLM-based keyword extraction and summarization |
 | L4 | `steps/load_reference_data.py` | Load medical reference ranges |
 | L5 | `indexing/` | Embed and store in ChromaDB |
@@ -86,7 +90,8 @@ Offline data processing pipeline that transforms raw documents into searchable v
 | `search.py` | Cosine similarity, rank fusion, MMR diversification algorithms |
 | `text_utils.py` | Tokenization, acronym expansion, content hashing |
 | `migrate.py` | Migration utilities |
-| `vector_store.py` | Backward-compatibility shim re-exporting `ChromaVectorStore` |
+
+**Hamilton DAG tier** (`src/ingestion/nodes/`): thin DAG nodes (`download.py`, `parse.py`, `chunk.py`, `enrich.py`, `reference.py`, `embedding.py` — one per canonical stage, see `docs/architecture/pipeline-stages.md`) that delegate to the `steps/` implementations above. Renamed from digit-prefixed `components/` in Phase 1; normal imports, public `NODE_MODULES` list.
 
 ### 5. Infrastructure Layer (`src/infra/`)
 
@@ -94,9 +99,9 @@ Technical infrastructure and cross-cutting concerns.
 
 | Module | Role |
 |--------|------|
-| `di.py` | `ServiceContainer` — simple DI container with lazy initialization for vector store, LLM client, retrieval config |
 | `llm/qwen_client.py` | Qwen/DashScope OpenAI-compatible LLM client (sync + async streaming) |
 | `llm/litellm_client.py` | LiteLLM client for multi-provider support (OpenRouter, etc.) |
+| `llm/hypothetical_questions.py` | HyPE index-time hypothetical question generation (moved from `rag/hyde.py` in P3.1) |
 | `storage/interfaces.py` | `ChatHistoryStore` Protocol (interface) for storage abstraction |
 | `storage/chat_history_store.py` | Abstract base for chat history |
 | `storage/file_chat_history_store.py` | JSON file-backed chat history implementation with per-session message truncation |
@@ -129,7 +134,7 @@ Ablation study and experiment management.
 
 | Module | Role |
 |--------|------|
-| `experiment_config.py` | Experiment config models |
+| `addition_config.py` | Feature-addition experiment schema (variants vs baseline) |
 | `config.py` | Experiment configuration loading (YAML) |
 | `feature_ablation_runner.py` | Feature ablation study execution |
 | `feature_addition_runner.py` | Feature addition experiments |
@@ -145,10 +150,9 @@ Centralized settings management using Pydantic `BaseSettings` with YAML + env va
 
 | Module | Role |
 |--------|------|
-| `settings.py` | `Settings` class with 10 nested Pydantic models (AppConfig, ApiConfig, LLMConfig, StorageConfig, RetrievalConfig, HyDEConfig, EnrichmentConfig, RetryConfig, DeepEvalConfig, WandbConfig, ProductionConfig) — ~285 lines total. Loads from `config/settings.yaml` + env vars with `APP__` prefix |
+| `settings.py` | `Settings` class with nested Pydantic models (AppConfig, ApiConfig, LLMConfig, StorageConfig, RetrievalConfig, HyDEConfig, HypeConfig, EnrichmentConfig, RetryConfig, DeepEvalConfig, WandbConfig, ProductionConfig) — loads from `config/settings.yaml` + env vars with `APP__` prefix. Deprecated `hyde.hype_*` keys are migrated onto `settings.hype` with a warning (roadmap P3.6) |
 | `context.py` | `RuntimeState` — thread-safe mutable runtime state singleton for feature flags and runtime configuration |
 | `paths.py` | Canonical filesystem paths derived from settings |
-| `models/` | Split Pydantic model definitions (`api_config.py`, `llm_config.py`, `retrieval_config.py`, `storage_config.py`) |
 | `__init__.py` | Re-exports `settings` and path constants |
 
 **Config sources** (priority order):
@@ -157,16 +161,11 @@ Centralized settings management using Pydantic `BaseSettings` with YAML + env va
 3. `.env` file (via dotenvx)
 4. `config/settings.yaml` (defaults)
 
-### 9. Services Layer (`src/services/`)
+### 9. (removed) Services Layer
 
-Service abstraction layer (partially adopted, **recently trimmed**).
-
-| Module | Role |
-|--------|------|
-| `base_service.py` | `BaseService` with logging |
-| `evaluation_service.py` | Evaluation orchestration service |
-
-**Note:** `RAGService` and `VectorStoreService` were removed. The main chat flow calls `src/rag/runtime.py` and `src/usecases/chat.py` directly. The DI container (`src/infra/di.py`) manages service lifecycle.
+The `src/services/` layer was folded into `evals/` in Phase 1: `EvaluationService` (artifact
+reading for the evaluation route) lives at `src/evals/artifact_service.py`; `BaseService` was
+deleted. The main chat flow calls `src/rag/runtime.py` and `src/usecases/chat.py` directly.
 
 ## Data Flow Through the System
 
@@ -195,23 +194,33 @@ User → Frontend (SvelteKit)
   ← SSE stream → Frontend renders tokens
 ```
 
-### Ingestion Pipeline Flow
+### Ingestion Pipeline Flow (single path since roadmap P3.2)
 
 ```
-CLI: python -m src.cli.ingest
-  → src/ingestion/pipeline.py: build_ingestion_pipeline() (Hamilton DAG, single driver)
+Library entry: src/ingestion/pipeline.py::run_ingestion(IngestionRunConfig)
+  → build_ingestion_pipeline() (Hamilton DAG, driver cached by config signature)
     → L0: download_web.py → data/raw/*.html
     → L0b: download_pdfs.py → data/raw/*.pdf
-    → L1: convert_html.py → data/processed/*.md
-    → L2: load_pdfs.py + load_markdown.py → List[Document]
-    → L3: chunk_text.py → chunking/ (structured/medical-semantic/simple)
-       → List[Chunk] with metadata
-    → L3b: hype.py (optional) → generate hypothetical questions
+    → L1: convert_html.py → data/raw/*.md  (also runs under skip_download
+         when force_html_convert is set)
+    → L2: load_pdfs.py (rich per-file docs via load_pdf_document) +
+         load_markdown.py → silver parquet (full doc shape: id/metadata/
+         structured_blocks/pages — P3.2 passthrough)
+    → L3: chunking/ (structured/medical-semantic/simple)
+    → L3b: hypothetical_questions.py (optional, flag from runtime config)
     → L3c: enrich_chunks.py (optional) → extract keywords, summarize
     → L4: load_reference_data.py → reference range docs
-    → L5: chroma_store.py → embed via Qwen + store in ChromaDB
+    → L5: indexing/store.py → embed via Qwen + store in ChromaDB
          + build BM25 keyword index
-    → L6: initialize_runtime_index() → mark index ready
+
+Callers:
+  CLI: python -m src.cli.ingest (argparse wrapper on run_ingestion)
+  Server/eval builds: rag/index.py::initialize_vector_store_async delegates
+    via asyncio.to_thread(run_ingestion, IngestionRunConfig.from_runtime_state(...))
+    — the former parallel builder _build_index_from_sources was deleted in
+    P3.2; parity with the pre-refactor runtime index is proven by the gate in
+    docs/parity/p32/ (offline deterministic embedder, exact L0–L5 + retrieval
+    metric equality).
 ```
 
 ### Evaluation Flow
@@ -234,7 +243,7 @@ CLI: python -m src.cli.eval_pipeline
 
 1. **`ChatHistoryStore` (Protocol)** — `src/infra/storage/interfaces.py:8` — Interface for chat history persistence. Implemented by `FileChatHistoryStore` with per-session message truncation.
 
-2. **`ServiceContainer`** — `src/infra/di.py:29` — DI container managing lazy-initialized services (vector store, LLM client, configs). Global singleton via `get_container()`.
+2. **Composition root (app lifespan)** — `src/app/factory.py::lifespan` — the only server-side place that constructs concrete dependencies (`LLMClient`, `FileChatHistoryStore`, `ChromaVectorStore` via the factory singleton); stashes them on `app.state`. Routes receive them through the accessors in `src/app/dependencies.py` (roadmap P3.1; replaced the deleted `infra/di.py` `ServiceContainer`).
 
 3. **`RuntimeState`** — `src/config/context.py:11` — Thread-safe mutable runtime state with property-based access. Manages feature flags and runtime configuration overrides.
 
@@ -244,7 +253,7 @@ CLI: python -m src.cli.eval_pipeline
 
 6. **`ChromaVectorStore`** — `src/ingestion/indexing/chroma_store.py` — Core vector store with hybrid search, BM25 + semantic + RRF fusion (~1010 lines).
 
-7. **`BaseService`** — `src/services/base_service.py:9` — Service base class with logging. Subclassed by `EvaluationService`.
+7. **`EvaluationService`** — `src/evals/artifact_service.py` — loads and shapes evaluation artifacts for the evaluation route.
 
 ## Entry Points
 
@@ -259,26 +268,42 @@ CLI: python -m src.cli.eval_pipeline
 
 ## Module Boundaries
 
+**Enforced by import-linter since roadmap P3.4** (CI `lint-imports` step; contract
+lives in `pyproject.toml` under `[tool.importlinter]`). Dependencies point
+left-to-right only:
+
+```
+cli/  →  app/  →  usecases/  →  {rag, evals, experiments}  →  {ingestion, infra}  →  core/  →  config/
+```
+
 ```
 src/
-├── app/          ← HTTP layer (routes, middleware, schemas) — depends on usecases/, config/
-├── cli/          ← CLI entry points — thin wrappers calling usecases/ or uvicorn
-├── config/       ← Settings (YAML + env vars), paths, runtime state — no business logic dependencies
-├── evals/        ← Evaluation framework — depends on rag/, infra/, config/
-├── experiments/  ← Ablation/experiment management — depends on evals/, config/
-├── infra/        ← Infrastructure (DI, LLM clients, storage) — depends on config/
-├── ingestion/    ← Data pipeline (download, convert, chunk, index) — depends on infra/, config/
-├── rag/          ← Retrieval engine — depends on ingestion/, infra/, config/
-├── services/     ← Service abstractions (evaluation only) — depends on rag/, ingestion/, config/
-└── usecases/     ← Use case orchestration — depends on rag/, infra/, app/
+├── cli/          ← entrypoints only (argparse wrappers); imports anything below
+├── app/          ← HTTP layer + THE server composition root (factory.py lifespan,
+│                    dependencies.py accessors) — routes never import ingestion directly
+├── usecases/     ← use-case orchestration (chat, runtime-config facade)
+├── rag/          ← retrieval engine + runtime index state (index.py delegates builds
+│                    to ingestion's run_ingestion since P3.2)
+├── evals/        ← assessment framework (orchestrator, checks, artifact service)
+├── experiments/  ← ablations/additions management + experiment config dialect
+├── ingestion/    ← data pipeline (steps, nodes/Hamilton, indexing/ vector store)
+├── infra/        ← LLM clients + storage implementations (no DI container since P3.1)
+├── core/         ← shared kernel: source_metadata, exceptions — depends on config/ only
+└── config/       ← static settings (yaml + pydantic) + RuntimeState overlay — imports nothing
 ```
 
-**Dependency direction:** `cli/` → `usecases/` → `rag/` → `ingestion/` → `infra/` → `config/`. The `app/` layer calls into `usecases/`. `config/` is the deepest layer with no business logic dependencies.
+**Composition roots** (the only sanctioned places constructing concrete deps):
+`app/factory.py` (server lifespan → `app.state`), `cli/*` (offline entrypoints),
+and eval/experiment runner edges. Same-tier package pairs (e.g. `evals → rag`,
+`experiments → evals`, `rag → experiments`, `ingestion → infra`) are legal by
+design and exempted in the contract's `ignore_imports` — every exemption entry
+must match a real import (an unmatched entry is itself a CI failure, which
+keeps the list pruned).
 
-**Cross-boundary rules:**
-- `config/` never imports from other `src/` modules
-- `infra/` only depends on `config/`
-- `ingestion/` depends on `infra/` and `config/`
-- `rag/` depends on `ingestion/`, `infra/`, and `config/`
-- `app/` depends on `usecases/`, `infra/`, `rag/`, and `config/`
-- `services/` is an emerging abstraction layer that wraps `rag/` and `ingestion/`
+**Cross-boundary rules (all CI-enforced):**
+- No `infra → app`, no `ingestion → rag`, no `usecases → cli` (explicit forbidden contracts)
+- `config/` imports nothing from `src/`
+- `core/` imports only from `config/`
+- Inside the graph: constructor/parameter injection only — no module-level
+  `get_*()` fallbacks on the request path, no global mutable config setters
+  (setter channel deleted in P3.3)

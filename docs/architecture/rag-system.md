@@ -31,7 +31,7 @@ HTTP POST /chat
 
 ```text
 src.cli.ingest
-  -> src.usecases.pipeline.run_pipeline(...)
+  -> src.cli.ingest (run_pipeline)
   -> steps.download_web (optional)
   -> steps.convert_html (optional/forced)
   -> steps.load_pdfs

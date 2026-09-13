@@ -7,12 +7,12 @@ from pathlib import Path
 
 from src.config import DATA_RAW_DIR
 from src.config.context import get_runtime_state
+from src.core.source_metadata import build_document_source_metadata
 from src.ingestion.artifacts import load_source_artifact
 from src.ingestion.steps.download_web import (
     get_manifest_record_by_filename,
     get_manifest_record_by_logical_name,
 )
-from src.source_metadata import build_document_source_metadata
 
 
 def _is_index_only_classified_pages() -> bool:
@@ -75,7 +75,3 @@ class MarkdownLoader:
 def get_markdown_documents() -> list[dict]:
     loader = MarkdownLoader()
     return loader.load_all_markdown()
-
-
-def set_index_only_classified_pages(enabled: bool) -> None:
-    get_runtime_state().index_only_classified_pages = bool(enabled)

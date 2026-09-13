@@ -47,7 +47,10 @@ from src.app.routes import (
 )
 from src.app.security import validate_security_configuration
 from src.config import settings
-from src.infra.di import get_container, reset_container
+from src.config.context import reset_runtime_state
+from src.infra.llm import get_client
+from src.infra.storage.file_chat_history_store import FileChatHistoryStore
+from src.ingestion.indexing.factory import ChromaVectorStoreFactory
 from src.rag import initialize_runtime_index_async
 
 configure_logging(settings.app.log_level)
@@ -71,26 +74,25 @@ async def lifespan(app: FastAPI):
         None: Control is transferred to the application during its lifetime
 
     Startup tasks:
-        - Initialize dependency injection container
-        - Initialize LLM client
+        - Construct dependencies (LLM client, chat history store, vector store)
+          and stash them on app.state — this lifespan is the composition root
         - Load vector index into memory for fast retrieval
 
     Shutdown tasks:
-        - Reset container for clean shutdown
+        - Reset the vector store factory and runtime state for clean shutdown
     """
-    # Startup
-    container = get_container()
-    app.state.container = container
-
+    # Startup — composition root (roadmap P3.1): the only server-side place
+    # that constructs concrete dependencies. Routes read them through the
+    # accessors in src.app.dependencies.
     _wandb_key = settings.wandb.wandb_api_key.get_secret_value()
     if _wandb_key:
         os.environ["WANDB_API_KEY"] = _wandb_key
 
     # Initialize LLM client
-    app.state.llm_client = container.get_llm_client()
+    app.state.llm_client = get_client()
 
     # Initialize chat history store
-    app.state.chat_history_store = container.get_chat_history_store()
+    app.state.chat_history_store = FileChatHistoryStore()
 
     # Initialize vector store
     from src.rag.production_profile import apply_production_profile
@@ -99,6 +101,9 @@ async def lifespan(app: FastAPI):
     if profile_name:
         if apply_production_profile(profile_name):
             logger.info(f"Production profile applied: {profile_name}")
+
+    # Same factory singleton the runtime index initializes below.
+    app.state.vector_store = ChromaVectorStoreFactory.get_vector_store()
     await initialize_runtime_index_async()
     logger.info("Application startup complete")
 
@@ -106,7 +111,8 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Application shutting down")
-    reset_container()
+    ChromaVectorStoreFactory.reset()
+    reset_runtime_state()
 
 
 def create_app() -> FastAPI:
