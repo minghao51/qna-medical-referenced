@@ -1,0 +1,124 @@
+{
+  "clinical_quality_verified": false,
+  "comparison_profile": "baseline",
+  "credential_status": "not_inspected; synthetic credentials used only for offline resolution",
+  "generator_judge_tuple_owner_matched": false,
+  "installed_versions": {
+    "chromadb": "1.5.5",
+    "deepeval": "3.9.7",
+    "google-genai": "2.6.0",
+    "litellm": "1.82.1",
+    "logfire": "5.2.0",
+    "openai": "2.24.0",
+    "opentelemetry-sdk": "1.45.1",
+    "protobuf": "6.33.6"
+  },
+  "live_baseline_captured": false,
+  "profile_selection_scope": "isolated capture process; serving defaults unchanged",
+  "provider_outputs_captured": false,
+  "remaining": [
+    "owner-matched generation/judge request tuple",
+    "frozen corpus/index and independently reviewed pilot",
+    "separate live-run permission before provider outputs or billing verification"
+  ],
+  "retrieval": {
+    "enable_chunk_summaries": false,
+    "enable_diversification": true,
+    "enable_hyde": false,
+    "enable_hype": false,
+    "enable_keyword_extraction": false,
+    "enable_medical_expansion": false,
+    "enable_query_understanding": false,
+    "enable_reranking": false,
+    "hyde_max_length": 200,
+    "max_chunks_per_source": 3,
+    "max_chunks_per_source_page": 2,
+    "medical_expansion_provider": "noop",
+    "mmr_lambda": 0.75,
+    "overfetch_multiplier": 4,
+    "rerank_score_threshold": null,
+    "rerank_top_k": null,
+    "reranking_mode": "cross_encoder",
+    "search_mode": "rrf_hybrid",
+    "top_k": 5
+  },
+  "roles": {
+    "embedder": {
+      "batch_size": 10,
+      "dimensions": 768,
+      "endpoint": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
+      "maximum_wire_attempts": 9,
+      "model": "text-embedding-v4",
+      "provider": "qwen",
+      "retry_attempts": 3,
+      "retry_delay_seconds": 1,
+      "sdk_retries_per_attempt": 2,
+      "timeout_seconds": 30
+    },
+    "enrichment": {
+      "status": "not_required"
+    },
+    "generator": {
+      "endpoint": "google-genai",
+      "max_tokens": 2048,
+      "model": "gemma-4-31b-it",
+      "provider": "gemini",
+      "retry_attempts": 3,
+      "retry_delay_seconds": 1,
+      "sdk_retries": 0,
+      "temperature": 0.7,
+      "timeout_seconds": 30
+    },
+    "harness": "deterministic_rag",
+    "implementation": "existing",
+    "judge": {
+      "endpoint": "google-genai",
+      "heavy_model": "gemma-4-31b-it",
+      "light_model": "gemma-4-31b-it",
+      "max_tokens": 1024,
+      "max_tokens_parameter": "max_output_tokens",
+      "outer_metric_max_attempts": 2,
+      "provider": "gemini",
+      "request_attempts": 1,
+      "retry_scope": "one direct model call; outer metric retries are separate",
+      "rubric": {
+        "metric_keys": [
+          "factual_accuracy",
+          "completeness",
+          "clinical_relevance",
+          "clarity",
+          "answer_relevancy",
+          "faithfulness"
+        ],
+        "source": "src.evals.metrics.medical.METRIC_SPECS"
+      },
+      "sdk_retries": 0,
+      "temperature": 0,
+      "timeout_seconds": 90
+    },
+    "missing_dependencies": [],
+    "required_dependencies": [
+      "deepeval"
+    ],
+    "task": "answer_eval"
+  },
+  "schema_version": 1,
+  "source": {
+    "dependency_lock_sha256": "16764a6cad2039b17821e8a99f4905d3d2083f835d7d93e73f4ee3fc29e9d340",
+    "dirty": true,
+    "git_head": "a4edbc8dae9e73ac8653aa47062e65fe8e0be84a",
+    "limitations": [
+      "Covers src/**/*.py, uv.lock, and Git revision/status only.",
+      "This is not an atomic whole-tree snapshot or a complete runtime semantic identity.",
+      "Not a promotion-eligibility signal."
+    ],
+    "reason": null,
+    "scope": "src-python-v1",
+    "source_content_sha256": "a3600404052cb29fdda74b387792ed5f69458866d4349cc6e0b8f5c33dff9dc3",
+    "status": "verified",
+    "version": 1
+  },
+  "status": "configuration_snapshot_only",
+  "project_corpus_or_index_inspected": false,
+  "runtime_asset_scope": "Existing local NLTK stopwords used for host imports; no project corpus/index or model weights loaded; no downloads."
+}

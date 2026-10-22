@@ -26,7 +26,9 @@ These routes operate on the current cookie-bound session and should not be used 
 
 - Cookie lifetime is controlled by `CHAT_SESSION_COOKIE_MAX_AGE_SECONDS`.
 - File-backed history retention is controlled by `CHAT_HISTORY_TTL_SECONDS`.
-- Expired sessions are pruned during normal history reads and writes.
+- Expired sessions are pruned during normal history reads and writes; this is not scheduled erasure.
+- `DELETE /history` can return 409 while a turn is active; require a successful response before treating history as cleared. Deletion does not cascade to logs, artifacts, backups, or provider copies.
+- See [data-processing boundaries](data-processing-boundaries.md) for access, retention, deletion, and third-party limitations. There is no automatic PHI scrubbing.
 
 ## Security Properties
 

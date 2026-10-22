@@ -106,6 +106,39 @@ Technical infrastructure and cross-cutting concerns.
 | `storage/chat_history_store.py` | Abstract base for chat history |
 | `storage/file_chat_history_store.py` | JSON file-backed chat history implementation with per-session message truncation |
 
+Streaming ownership (migration P1-C1): each Qwen/Gemini/LiteLLM streaming
+method owns/closes its returned SDK stream in `finally`. Only classified transient
+failures before content are retried, within the existing total-attempt count and
+a 30-second active-producer budget per attempt; consumer suspension does not spend
+that budget. Native per-call retries are disabled; conflicting LiteLLM process-global
+retry/fallback policies fail closed without shared mutation. No content is replayed
+after the first nonempty token. Nonstream retry behavior is unchanged.
+
+The chat usecase and route use `aclosing` for their nested generators, preserve
+cancellation and the existing SSE keys, and guard a single terminal event. Failed
+generation is discarded from ordinary history. Migration P1-C2 adds a metadata-only
+`FileChatHistoryStore.turn()` guard before history lookup through generation/cleanup
+and atomic `save_turn()` persistence for both sync and streaming usecases. Same-session
+turns/clears are rejected (`chat_session_busy`); other sessions remain admissible.
+Streaming rejection uses the existing HTTP-200 SSE error shape; busy history clear
+returns 409 without rotating the cookie. Release admission before terminal yields.
+
+Each completed user/assistant pair uses one existing JSON temp-file replacement,
+retaining schema v2, TTL, and message-window behavior. A cap below two rejects a pair;
+legacy `save_message` remains low-level and is not a whole-turn admission API. Read
+I/O errors fail closed (missing-file/corrupt-JSON compatibility remains). Guarantees
+are same-instance/process, not cross-instance/multiworker or fsync/crash durability.
+
+Async commit submission after a cancellation checkpoint is its admission boundary.
+An admitted job is shielded/drained before releasing the session, including tested
+repeated asyncio cancellation and AnyIO level cancellation. Cancellation stays
+primary even when that worker fails; a completed pair may persist after admission.
+This is server completion, not proof the client received the terminal event. An
+unresponsive worker can retain admission indefinitely; no hard deadline is implied.
+Touched chat error logs omit SDK exception text and raw session IDs, not a whole-project
+privacy certification. Native Gemini's public `aclose()` still does not prove immediate
+inner HTTP release; broader request/SDK worker drain and cleanup gates remain open.
+
 ### 6. Evaluation Layer (`src/evals/`)
 
 Assessment and quality measurement framework.
@@ -194,6 +227,41 @@ User → Frontend (SvelteKit)
   ← SSE stream → Frontend renders tokens
 ```
 
+Async retrieval worker boundaries (migration P1-A3): store access, lexical/medical
+preparation, HyPE lookup, the sequential synchronous candidate-search batch (including
+query embedding), and reranking/diversification run via `asyncio.to_thread`. HyDE
+awaits the injected `LLMClient.a_generate()` on its owning loop. Runtime reranker
+lookup/loading/prediction share a process-local thread lock. Caller cancellation
+stops further orchestration, not a synchronous worker stage already started.
+
+App lifespan (migration P1-A4) shields/drains its owned initialization task before
+cleanup can reset shared state, then publishes the warmed store singleton. A
+`try/finally` covers acquisition and serving; cleanup drains across repeated
+cancellation, closes only the freshly constructed client through its optional
+`aclose`, clears dependency references, and resets logical factory/runtime state.
+Qwen/Gemini close async SDK transports on their owning loop and sync transports
+off-loop; LiteLLM global sessions are not owned by its wrapper. Synthetic real
+HTTP/SSE startup/shutdown/failure tests pass; per-request worker/stream ownership,
+concurrent active apps, and physical Chroma shutdown remain separate limits.
+
+Effective configuration (migration P1-B) uses the existing `RuntimeState` overlay:
+static settings → applied profile/run retrieval options → enabled adaptive routing
+→ explicit non-None request options. Explicit disables and zero MMR survive;
+count limits clamp to at least one, including explicit `top_k`. Omitted top-k
+inherits the effective profile in chat/use-cases and sync/async retrieval. Experiment
+file defaults exclude an already-active run; the CLI overlays only explicitly
+provided retrieval flags and keeps mode/top-k aliases coherent. A new experiment
+replaces the previous run/profile overlay rather than mutating its source dict.
+
+Index-time features are copied directly from the typed ingestion configuration
+into the runtime overlay, then into `IngestionRunConfig`; the store factory remains
+constructor-only. Zero sampling rates generate nothing. Selecting features does
+not enrich an existing populated index automatically. The config API separates
+applied/configured profile, reports the injected generation model when available,
+and labels ingestion/enrichment flags `next_build`. HyPE and enrichment still use
+DashScope/Qwen independently of generation; embedding remains provider-bound too.
+Whole-run identity/provenance and frozen benchmark capture remain later gates.
+
 ### Ingestion Pipeline Flow (single path since roadmap P3.2)
 
 ```
@@ -216,8 +284,12 @@ Library entry: src/ingestion/pipeline.py::run_ingestion(IngestionRunConfig)
 Callers:
   CLI: python -m src.cli.ingest (argparse wrapper on run_ingestion)
   Server/eval builds: rag/index.py::initialize_vector_store_async delegates
-    via asyncio.to_thread(run_ingestion, IngestionRunConfig.from_runtime_state(...))
-    — the former parallel builder _build_index_from_sources was deleted in
+    via asyncio.to_thread(_initialize_vector_store, ...) — the worker owns the
+    thread lock, storage readiness, and synchronous run_ingestion call together.
+    The sync CLI initializer remains a guarded asyncio.run wrapper. Cancellation
+    observed before worker admission skips work; an admitted build finishes or
+    fails under the lock even if its caller stops waiting (migration P1-A2).
+    The former parallel builder _build_index_from_sources was deleted in
     P3.2; parity with the pre-refactor runtime index is proven by the gate in
     docs/parity/p32/ (offline deterministic embedder, exact L0–L5 + retrieval
     metric equality).

@@ -84,6 +84,15 @@ This is the process that powers:
 - `GET /evaluation/latest`
 - `GET /evaluation/history`
 
+### Private-lab production-mode constraints
+
+- Inject `APP__APP__ENVIRONMENT=production`, caller authentication via `APP__API__API_KEYS` or `APP__API__API_KEYS_JSON`, and a separate `APP__API__SESSION_SIGNING_SECRET` through your approved secret manager/environment workflow. The entrypoint name alone does not select production settings.
+- The signing secret must be independently generated and contain at least 32 UTF-8 bytes after trimming outer whitespace. Do not reuse a caller/provider API key. Missing or weak production configuration fails before serving; an explicitly weak secret also fails in development.
+- Without a configured development secret, a process-random key is used. Restarting that process, rotating a configured secret, or moving from the old API-key/environment-derived signer invalidates old cookies and starts fresh browser sessions. Historical messages are not deleted or migrated; there is no legacy-signature fallback.
+- File-backed history supports **one process/worker and one store instance**. `src.cli.serve_production --workers` rejects values other than `1`; do not bypass this with multiple Uvicorn workers, independent servers sharing the file, or an external process manager. This guard does not implement cross-process locking.
+- Bind explicitly to loopback for private local use, for example `dotenvx run -- uv run python -m src.cli.serve_production --host 127.0.0.1 --workers 1`. Existing bind defaults are unchanged. Do not expose this research application publicly; provider/profile readiness, container parity and a value-free preflight remain separate migration gates.
+- Generation providers are restricted to `qwen`, `gemini`, and `litellm`; unknown values fail rather than falling back to Qwen. The selected comparison profile does not silently change serving defaults.
+
 ### 4. Start the frontend
 
 In a second terminal:
@@ -116,14 +125,14 @@ dotenvx run -- uv run python -m src.cli.eval_pipeline --config experiments/v1/ba
 # Run the base experiment plus all named variants
 dotenvx run -- uv run python -m src.cli.eval_pipeline --config experiments/v1/baseline.yaml --all-variants
 
-# Reuse a cached dataset when iterating on evaluation
-dotenvx run -- uv run python -m src.cli.eval_pipeline --reuse-cached-dataset
+# Select a previously reviewed/frozen dataset explicitly
+dotenvx run -- uv run python -m src.cli.eval_pipeline --dataset-path path/to/reviewed-dataset.json
 
-# Force a new eval run instead of dedup-reusing a prior matching run
+# Retained compatibility flag; every assessment already executes a fresh attempt
 dotenvx run -- uv run python -m src.cli.eval_pipeline --force-rerun
 ```
 
-Evaluation artifacts are written to `data/evals/`.
+Evaluation artifacts are written to `data/evals/`. Assessments no longer automatically reuse completed runs or answer caches. `--reuse-cached-dataset` is rejected until identity verification exists; use an explicit dataset path instead. Repeated runs can therefore perform new provider work: obtain the required live-run/budget approval first. Fresh attempts alone are not controlled benchmark timing or verified comparisons. See the [P2-B1 handoff](plans/migration/20261016-p2-b1-handoff.md) for the unverified index/semantic-identity boundary and isolated offline regression command.
 
 ## What To Tell Users
 

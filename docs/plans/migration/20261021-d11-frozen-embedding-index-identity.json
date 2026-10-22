@@ -1,0 +1,47 @@
+{
+  "corpus_identity": {
+    "content_sha256": null,
+    "file_count": 0,
+    "reason": "source_tree_empty",
+    "status": "unverified",
+    "version": 1
+  },
+  "d11_decision": {
+    "clinical_quality_verified": false,
+    "cross_encoder_reranker": "not_selected_not_downloaded",
+    "decision": "freeze_current_embedding_model_representation_corpus_and_index",
+    "decision_reference": "docs/plans/migration/decisions.md (D11, 2026-10-20)",
+    "freeze_semantics": "comparison-time identity; any reindex or embedding-provider change is a separately named variant with its own identity",
+    "frozen_representation_dimensions": 768,
+    "live_claims": false
+  },
+  "embedding_identity": {
+    "batch_size": 10,
+    "dimensions": 768,
+    "dimensions_match_d11_decision": true,
+    "endpoint": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
+    "model": "text-embedding-v4",
+    "provider": "qwen",
+    "role_source": "src.evals.deepeval_models.effective_roles",
+    "status": "verified"
+  },
+  "generation": {
+    "offline_only": true,
+    "script": "scripts/manual/build_d11_frozen_identity.py"
+  },
+  "index_identity": {
+    "build_spec_sha256": null,
+    "collection_name": null,
+    "document_count": null,
+    "embedding_dimensions": null,
+    "embedding_model": null,
+    "fingerprint": null,
+    "freeze_guarantee": false,
+    "reason": "Index snapshot is empty or exceeds the supported document count",
+    "retrieval_weights": null,
+    "snapshot_sha256": null,
+    "source_snapshot_sha256": null,
+    "status": "unverified"
+  },
+  "schema_version": 1
+}
