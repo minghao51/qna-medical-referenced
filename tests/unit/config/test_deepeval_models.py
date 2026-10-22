@@ -16,7 +16,8 @@ def _response(text: str):
 
 def test_qwen_model_initialization():
     model = QwenModel("qwen3.5-flash")
-    assert model.model == "qwen3.5-flash"
+    assert model.model is model
+    assert model.model_name == "qwen3.5-flash"
     assert model.client is not None
     assert model.async_client is not None
 
@@ -71,12 +72,14 @@ async def test_qwen_model_a_generate_uses_async_client(monkeypatch):
 def test_get_light_model_returns_light_model(monkeypatch):
     monkeypatch.setattr(settings.llm, "provider", "qwen")
     model = get_light_model()
-    assert model.model == settings.llm.judge_model_light
-    assert model.model == "qwen3.5-35b-a3b"
+    assert model.model is model
+    assert model.model_name == settings.llm.judge_model_light
+    assert model.model_name == "qwen3.5-35b-a3b"
 
 
 def test_get_heavy_model_returns_heavy_model(monkeypatch):
     monkeypatch.setattr(settings.llm, "provider", "qwen")
     model = get_heavy_model()
-    assert model.model == settings.llm.judge_model_heavy
-    assert model.model == "qwen3.5-flash"
+    assert model.model is model
+    assert model.model_name == settings.llm.judge_model_heavy
+    assert model.model_name == "qwen3.5-flash"

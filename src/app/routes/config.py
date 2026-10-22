@@ -32,4 +32,4 @@ def _require_authenticated_request(request: Request) -> None:
 )
 def get_config(request: Request) -> dict:
     _require_authenticated_request(request)
-    return get_runtime_config_view()
+    return get_runtime_config_view(llm_client=getattr(request.app.state, "llm_client", None))

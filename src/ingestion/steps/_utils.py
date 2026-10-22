@@ -162,7 +162,7 @@ def _weighted_sample_chunks(
     max_chunks: int,
     label: str = "sampling",
 ) -> list[dict[str, Any]]:
-    if not chunks:
+    if not chunks or sample_rate <= 0 or max_chunks <= 0:
         return []
 
     target_count = min(max_chunks, max(1, int(len(chunks) * sample_rate)))

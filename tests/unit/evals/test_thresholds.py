@@ -35,9 +35,9 @@ class TestIsThresholdPass:
         passed, _, _ = is_threshold_pass(0.10, {"op": "max", "value": 0.10})
         assert passed is True
 
-    def test_bool_true(self):
+    def test_bool_is_not_a_numeric_quality_score(self):
         passed, _, _ = is_threshold_pass(True, {"op": "min", "value": 0.5})
-        assert passed is True
+        assert passed is False
 
     def test_bool_false(self):
         passed, _, _ = is_threshold_pass(False, {"op": "min", "value": 0.5})
@@ -95,9 +95,10 @@ class TestEvaluateThresholds:
         metric_names = [f["metric"] for f in failed]
         assert "l1.markdown_empty_rate" in metric_names
 
-    def test_empty_metrics(self):
+    def test_empty_metrics_fail_required_measurement(self):
         failed = evaluate_thresholds({}, {}, {}, DEFAULT_THRESHOLDS)
-        assert failed == []
+        assert {item["metric"] for item in failed} == set(DEFAULT_THRESHOLDS)
+        assert all(item["reason"] == "missing_required_metric" for item in failed)
 
     def test_l6_answer_quality(self):
         l6_metrics = {

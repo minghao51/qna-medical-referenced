@@ -77,6 +77,7 @@ async def retrieve_candidates_with_trace_async(
     enable_hyde: bool = False,
     hyde_max_length: int = 200,
 ) -> tuple[list[dict], dict]:
+    """Offload one sequential search batch; cancellation cannot stop its thread."""
     if pre_expanded_queries is None:
         from src.rag.query_expansion import expand_queries_async
 
@@ -87,9 +88,11 @@ async def retrieve_candidates_with_trace_async(
             hyde_max_length=hyde_max_length,
         )
     else:
-        expanded_queries = pre_expanded_queries
-    results, merged_trace = _search_and_merge_traced(
-        vector_store, expanded_queries, top_k, search_mode
+        expanded_queries = list(pre_expanded_queries)
+    from src.rag.runtime import _run_owned_worker
+
+    results, merged_trace = await _run_owned_worker(
+        _search_and_merge_traced, vector_store, expanded_queries, top_k, search_mode
     )
     merged_trace["hyde_enabled"] = enable_hyde
     return results, merged_trace

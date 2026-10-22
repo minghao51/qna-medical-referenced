@@ -96,15 +96,17 @@ async def expand_queries_async(
     medical_expansion_provider: str = "noop",
     pre_expanded_queries: list[str] | None = None,
 ) -> list[str]:
-    base_queries = (
-        list(pre_expanded_queries)
-        if pre_expanded_queries is not None
-        else prepare_expanded_queries(
+    if pre_expanded_queries is not None:
+        base_queries = list(pre_expanded_queries)
+    else:
+        from src.rag.runtime import _run_owned_worker
+
+        base_queries, _ = await _run_owned_worker(
+            prepare_expanded_queries,
             query,
             enable_medical_expansion=enable_medical_expansion,
             medical_expansion_provider=medical_expansion_provider,
-        )[0]
-    )
+        )
 
     if not enable_hyde or not hyde_client:
         return base_queries
@@ -117,12 +119,8 @@ async def expand_queries_async(
             max_length=hyde_max_length,
         )
         all_queries = _dedupe_queries(base_queries + hyde_queries)
-        logger.debug("HyDE expanded query '%s...' to %d variants", query[:50], len(all_queries))
+        logger.debug("HyDE expanded query to %d variants", len(all_queries))
         return all_queries
-    except Exception as e:
-        logger.error(
-            "HyDE expansion failed for query '%s': %s, falling back to base expansion",
-            query,
-            e,
-        )
+    except Exception:
+        logger.error("HyDE expansion failed, falling back to base expansion")
         return base_queries

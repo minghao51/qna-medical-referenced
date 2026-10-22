@@ -12,6 +12,7 @@ from src.ingestion.indexing.factory import (
     get_vector_store,
     get_vector_store_runtime_config,
     set_vector_store_runtime_config,
+    use_vector_store,
 )
 from src.ingestion.indexing.store import ChromaVectorStore
 
@@ -21,4 +22,5 @@ __all__ = [
     "get_vector_store",
     "get_vector_store_runtime_config",
     "set_vector_store_runtime_config",
+    "use_vector_store",
 ]

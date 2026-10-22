@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from httpx import AsyncClient
 from pydantic import BaseModel
 
 
@@ -34,7 +35,13 @@ def _mock_settings():
 
 @pytest.fixture
 def mock_genai_client():
-    with patch("src.infra.llm.gemini_client.genai.Client") as mock_cls:
+    with (
+        patch(
+            "src.infra.llm.gemini_client.httpx.AsyncClient",
+            return_value=MagicMock(spec=AsyncClient),
+        ),
+        patch("src.infra.llm.gemini_client.genai.Client") as mock_cls,
+    ):
         mock_instance = MagicMock()
         mock_instance.models = MagicMock()
         mock_instance.aio = MagicMock()
@@ -83,7 +90,7 @@ def test_gemini_client_generate_empty_raises(mock_genai_client):
 
 def test_gemini_client_generate_retries(mock_genai_client):
     mock_genai_client.models.generate_content.side_effect = [
-        Exception("timeout"),
+        TimeoutError("timeout"),
         _gemini_response("retry ok"),
     ]
     with patch("src.infra.llm.gemini_client.settings", _mock_settings()):

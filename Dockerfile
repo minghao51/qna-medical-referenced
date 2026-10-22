@@ -27,6 +27,7 @@ COPY --from=builder /usr/local/share/nltk_data /usr/local/share/nltk_data
 
 # Copy application code only. Runtime data is mounted via docker-compose.
 COPY src/ ./src/
+COPY config/settings.yaml ./config/settings.yaml
 COPY experiments/ ./experiments/
 RUN mkdir -p /app/data/chroma /app/data/evals /app/data/evals_comprehensive_ablation /app/data/processed /app/data/raw
 

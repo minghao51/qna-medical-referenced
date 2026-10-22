@@ -6,9 +6,13 @@ export async function exportToCSV(data: EvaluationResponse, filename?: string): 
 	// Flatten summary metrics
 	if (data.summary) {
 		rows.push({ stage: 'summary', metric: 'run_dir', value: data.run_dir });
-		rows.push({ stage: 'summary', metric: 'duration_s', value: data.summary.duration_s });
-		rows.push({ stage: 'summary', metric: 'status', value: data.summary.status });
-		rows.push({ stage: 'summary', metric: 'failed_thresholds_count', value: data.summary.failed_thresholds_count });
+		rows.push({ stage: 'summary', metric: 'duration_s', value: data.summary.duration_s ?? 'N/A' });
+		rows.push({ stage: 'summary', metric: 'status', value: data.summary.status ?? 'N/A' });
+		rows.push({
+			stage: 'summary',
+			metric: 'failed_thresholds_count',
+			value: data.summary.failed_thresholds_count ?? 'N/A'
+		});
 	}
 
 	// Flatten retrieval metrics

@@ -37,7 +37,7 @@ async def test_generate_hypothetical_answer_basic():
 
     with patch.object(
         client,
-        "generate",
+        "a_generate",
         return_value="The LDL cholesterol target for secondary prevention is typically below 1.8 mmol/L.",
     ):
         answer = await generate_hypothetical_answer(query, client, max_length=200)
@@ -76,7 +76,7 @@ async def test_generate_hypothetical_answer_max_length():
     query = "What is statin therapy?"
 
     # Test with short max_length
-    with patch.object(client, "generate", return_value="word " * 100):
+    with patch.object(client, "a_generate", return_value="word " * 100):
         answer = await generate_hypothetical_answer(query, client, max_length=50)
 
     # Should be truncated to around 50 words
@@ -93,7 +93,7 @@ async def test_generate_hypothetical_answer_handles_llm_errors():
     query = "Test query"
 
     # Mock LLM to raise error
-    with patch.object(client, "generate", side_effect=Exception("API Error")):
+    with patch.object(client, "a_generate", side_effect=Exception("API Error")):
         answer = await generate_hypothetical_answer(query, client, max_length=200)
 
         # Should return empty string on error
@@ -183,7 +183,7 @@ async def test_expand_query_with_hyde_async_handles_generation_failure():
     query = "Test query"
 
     # Mock LLM to fail
-    with patch.object(client, "generate", side_effect=Exception("API Error")):
+    with patch.object(client, "a_generate", side_effect=Exception("API Error")):
         queries = await expand_query_with_hyde_async(
             query,
             client,
@@ -333,7 +333,7 @@ async def test_hyde_with_duplicate_queries():
     query = "What is LDL?"
 
     # Mock to return same query as hypothetical
-    with patch.object(client, "generate", return_value=query):
+    with patch.object(client, "a_generate", return_value=query):
         queries = await expand_query_with_hyde_async(
             query,
             client,

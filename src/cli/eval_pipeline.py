@@ -4,23 +4,31 @@ import argparse
 import json
 import logging
 import sys
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any
 
 from src.evals import run_assessment
 from src.evals.schemas import AssessmentResult
+from src.evals.usage import paid_benchmark_budget_status, paid_operation_budget_status
 from src.experiments import (
     build_run_assessment_kwargs,
     compute_retrieval_delta,
     resolve_experiment_runs,
+)
+from src.experiments.feature_addition_runner import (
+    ensure_supported_selection_axes,
+    run_assessment_in_subprocess,
+    validate_execution_mode,
 )
 
 logger = logging.getLogger(__name__)
 
 
 def _run_single_variant(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Run one variant assessment. Top-level function for ProcessPoolExecutor."""
-    result = run_assessment(**kwargs)
+    """Run one variant in a fresh worker process with isolated writable storage."""
+    result = run_assessment_in_subprocess(kwargs)
     return {
         "run_dir": str(result.run_dir),
         "status": result.status,
@@ -34,15 +42,15 @@ def _run_variants_parallel(
     cli_overrides_fn,
     max_workers: int,
 ) -> list[tuple[int, dict[str, Any]]]:
-    """Run multiple variants in parallel using ProcessPoolExecutor.
+    """Launch one isolated subprocess per variant, optionally concurrently.
 
     Returns list of (index, result_dict) tuples ordered by completion.
     """
     results: list[tuple[int, dict[str, Any]]] = []
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_idx = {}
         for idx, spec in enumerate(specs):
-            kwargs = cli_overrides_fn(build_run_assessment_kwargs(spec))
+            kwargs = cli_overrides_fn(spec, idx)
             future = executor.submit(_run_single_variant, kwargs)
             future_to_idx[future] = idx
 
@@ -51,8 +59,8 @@ def _run_variants_parallel(
             try:
                 result = future.result()
                 results.append((idx, result))
-            except Exception as e:
-                logger.error(f"Variant {idx} failed: {e}")
+            except Exception as exc:
+                logger.error("Variant %s failed (%s)", idx, type(exc).__name__)
                 results.append(
                     (
                         idx,
@@ -60,12 +68,65 @@ def _run_variants_parallel(
                             "run_dir": None,
                             "status": "failed",
                             "failed_thresholds": [],
-                            "summary": {"error": str(e)},
+                            "summary": {"error": f"isolated run failed ({type(exc).__name__})"},
                         },
                     )
                 )
 
     return results
+
+
+def _load_usage_records(path: str | Path) -> list[dict[str, Any]]:
+    """Read local usage records or one run summary without contacting services."""
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    manifest_execution_mode: str | None = None
+    if isinstance(payload, dict):
+        mode = payload.get("execution_mode")
+        manifest_execution_mode = mode if isinstance(mode, str) else None
+        if isinstance(payload.get("records"), list):
+            payload = payload["records"]
+        else:
+            payload = payload.get("usage_summary", payload)
+            payload = payload if isinstance(payload, list) else [payload]
+    if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
+        raise ValueError("Usage summary must be a JSON record or an array of records")
+    records = [dict(item) for item in payload]
+    if manifest_execution_mode in {"benchmark", "diagnostic"}:
+        for record in records:
+            if record.get("record_type") != "manual_adjustment":
+                record.setdefault("execution_mode", manifest_execution_mode)
+    return records
+
+
+def _operation_budget_statuses(
+    records: Sequence[Mapping[str, Any]], month: str, *, overage_off_confirmed: bool
+) -> dict[str, dict[str, Any]]:
+    """Report shared-pool admission for benchmark and recorded paid eval modes."""
+    operations = {"benchmark"}
+    operations.update(
+        str(record["execution_mode"])
+        for record in records
+        if record.get("execution_mode") in {"benchmark", "diagnostic"}
+    )
+    return {
+        operation: paid_operation_budget_status(
+            records,
+            utc_month=month,
+            operation=operation,
+            overage_off_confirmed=overage_off_confirmed,
+        )
+        for operation in sorted(operations)
+    }
+
+
+def _usage_budget_status(
+    path: str | Path, month: str, *, overage_off_confirmed: bool
+) -> dict[str, Any]:
+    return paid_benchmark_budget_status(
+        _load_usage_records(path),
+        utc_month=month,
+        overage_off_confirmed=overage_off_confirmed,
+    )
 
 
 def _parse_csv_floats(value: str | None) -> list[float] | None:
@@ -86,6 +147,59 @@ def _provided_flags(argv: list[str]) -> set[str]:
         if token.startswith("--"):
             flags.add(token.split("=", 1)[0])
     return flags
+
+
+def _run_assessment_worker(result_path: str) -> int:
+    """Private subprocess entrypoint; read resolved config from a private stdin pipe."""
+    from src.evals.artifacts import to_serializable
+
+    try:
+        kwargs = json.loads(sys.stdin.read())
+        if not isinstance(kwargs, dict):
+            raise ValueError("worker config must be an object")
+        ensure_supported_selection_axes(kwargs)
+        validate_execution_mode(
+            str(kwargs.get("execution_mode", "diagnostic")),
+            index_snapshot_path=kwargs.get("index_snapshot_path"),
+        )
+        result = run_assessment(**kwargs)
+        summary = result.summary if isinstance(result.summary, dict) else {}
+        summary_keys = {
+            "status",
+            "execution_status",
+            "measurement_contract_version",
+            "measurement",
+            "quality_gate",
+            "identity",
+            "cache_policy",
+            "retrieval_metrics",
+            "metrics",
+            "index_execution",
+            "l6_retrieval_quality_metrics",
+            "l6_answer_quality_metrics",
+            "dedup",
+            "duration_s",
+            "usage_summary",
+            "evaluator_overhead_ms",
+        }
+        payload = {
+            "run_dir": str(result.run_dir),
+            "status": result.status,
+            "failed_threshold_count": len(result.failed_thresholds),
+            "summary": to_serializable(
+                {key: value for key, value in summary.items() if key in summary_keys}
+            ),
+        }
+        Path(result_path).write_text(
+            json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8"
+        )
+        return 0
+    except Exception as exc:
+        Path(result_path).write_text(
+            json.dumps({"status": "worker_error", "error_type": type(exc).__name__}),
+            encoding="utf-8",
+        )
+        return 1
 
 
 def _print_assessment_result(result: Any, baseline_result: Any = None) -> None:
@@ -121,6 +235,38 @@ def _print_assessment_result(result: Any, baseline_result: Any = None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate ingestion + retrieval pipeline quality")
     parser.add_argument("--config", default=None, help="Versioned experiment YAML path")
+    parser.add_argument(
+        "--generation-implementation",
+        choices=["existing"],
+        default="existing",
+        help="Generation implementation (only the existing RAG path is supported)",
+    )
+    parser.add_argument(
+        "--harness",
+        choices=["deterministic_rag"],
+        default="deterministic_rag",
+        help="Evaluation harness (only deterministic_rag is supported)",
+    )
+    parser.add_argument(
+        "--usage-summary",
+        default=None,
+        help="Read local JSON usage records for offline budget diagnostics (does not run an assessment)",
+    )
+    parser.add_argument(
+        "--usage-month", default=None, help="UTC month for usage diagnostics (YYYY-MM)"
+    )
+    parser.add_argument(
+        "--confirm-overage-off",
+        action="store_true",
+        help="Acknowledge external provider overage and auto-top-up are disabled",
+    )
+    parser.add_argument(
+        "--execution-mode",
+        default="diagnostic",
+        choices=["diagnostic", "benchmark", "replay"],
+        help="Diagnostic legacy run, fresh benchmark, or explicit functional replay",
+    )
+    parser.add_argument("--_assessment-worker-result", help=argparse.SUPPRESS)
     parser.add_argument("--variant", default=None, help="Named experiment variant to run")
     parser.add_argument(
         "--all-variants",
@@ -132,6 +278,16 @@ def main() -> None:
     )
     parser.add_argument("--name", default=None, help="Optional run label")
     parser.add_argument("--dataset-path", default=None, help="Optional JSON dataset path")
+    parser.add_argument(
+        "--review-manifest-path",
+        default=None,
+        help="Optional out-of-band reviewed retrieval manifest (requires an explicit frozen dataset)",
+    )
+    parser.add_argument(
+        "--index-snapshot-path",
+        default=None,
+        help="Read-only verified frozen index export required for benchmark mode",
+    )
     parser.add_argument("--top-k", type=int, default=5, help="Retrieval top-k")
     parser.add_argument("--max-synthetic-questions", type=int, default=40)
     parser.add_argument("--disable-llm-generation", action="store_true")
@@ -141,8 +297,16 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-queries", type=int, default=None)
     parser.add_argument("--sample-seed", type=int, default=42)
-    parser.add_argument("--reuse-cached-dataset", action="store_true")
-    parser.add_argument("--force-rerun", action="store_true")
+    parser.add_argument(
+        "--reuse-cached-dataset",
+        action="store_true",
+        help="Replay unavailable until identity is verified; select --dataset-path explicitly",
+    )
+    parser.add_argument(
+        "--force-rerun",
+        action="store_true",
+        help="Compatibility flag: all assessments now execute fresh attempts",
+    )
     parser.add_argument("--fail-on-thresholds", action="store_true")
     parser.add_argument("--thresholds-file", default=None)
     parser.add_argument("--dataset-split", default=None, choices=["dev", "test", "regression"])
@@ -192,7 +356,7 @@ def main() -> None:
     parser.add_argument(
         "--parallel",
         action="store_true",
-        help="Run variants in parallel using ProcessPoolExecutor",
+        help="Run variants concurrently in separate isolated subprocesses",
     )
     parser.add_argument(
         "--max-workers",
@@ -201,7 +365,58 @@ def main() -> None:
         help="Max parallel workers (default: number of variants)",
     )
     args = parser.parse_args()
+    if args._assessment_worker_result:
+        raise SystemExit(_run_assessment_worker(args._assessment_worker_result))
+    if bool(args.usage_summary) != bool(args.usage_month):
+        parser.error("--usage-summary and --usage-month must be supplied together")
+    if args.execution_mode == "benchmark":
+        if not args.usage_summary or not args.usage_month:
+            parser.error("Benchmark mode requires --usage-summary and --usage-month")
+        try:
+            budget_status = _usage_budget_status(
+                args.usage_summary,
+                args.usage_month,
+                overage_off_confirmed=args.confirm_overage_off,
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            parser.error(f"Could not verify benchmark usage budget ({type(exc).__name__})")
+        print(json.dumps(budget_status, indent=2, sort_keys=True))
+        if not budget_status["allowed"]:
+            raise SystemExit(2)
+    elif args.usage_summary:
+        try:
+            budget_status = _usage_budget_status(
+                args.usage_summary,
+                args.usage_month,
+                overage_off_confirmed=args.confirm_overage_off,
+            )
+            records = _load_usage_records(args.usage_summary)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            parser.error(f"Could not read usage summary ({type(exc).__name__})")
+        budget_status["operation_admission"] = _operation_budget_statuses(
+            records,
+            args.usage_month,
+            overage_off_confirmed=args.confirm_overage_off,
+        )
+        print(json.dumps(budget_status, indent=2, sort_keys=True))
+        raise SystemExit(0)
+    try:
+        if not args.config:
+            validate_execution_mode(
+                args.execution_mode, index_snapshot_path=args.index_snapshot_path
+            )
+        elif args.execution_mode not in {"diagnostic", "benchmark", "replay"}:
+            validate_execution_mode(args.execution_mode)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if args.execution_mode == "diagnostic":
+        print("Execution mode: diagnostic (legacy exploratory output; not benchmark evidence)")
     provided_flags = _provided_flags(sys.argv[1:])
+    # Keep the legacy mode aliases coherent; an explicit disable still wins.
+    if "--search-mode" in provided_flags and "--retrieval-mode" not in provided_flags:
+        args.retrieval_mode = args.search_mode
+    if args.disable_bm25:
+        args.retrieval_mode = "semantic_only"
 
     diversity_sweep = {
         k: v
@@ -215,7 +430,11 @@ def main() -> None:
         }.items()
         if v is not None
     }
-    retrieval_options: dict[str, Any] = {"search_mode": args.search_mode}
+    retrieval_options: dict[str, Any] = {}
+    if not args.config or provided_flags & {"--search-mode", "--retrieval-mode", "--disable-bm25"}:
+        retrieval_options["search_mode"] = args.retrieval_mode
+    if "--top-k" in provided_flags:
+        retrieval_options["top_k"] = args.top_k
     if args.no_diversification:
         retrieval_options["enable_diversification"] = False
     if args.enable_hyde:
@@ -233,12 +452,25 @@ def main() -> None:
     if "--reranking-mode" in provided_flags:
         retrieval_options["reranking_mode"] = args.reranking_mode
 
-    def _apply_cli_overrides(kwargs: dict[str, Any]) -> dict[str, Any]:
+    def _apply_cli_overrides(
+        experiment: dict[str, Any], execution_order: int | None = None
+    ) -> dict[str, Any]:
+        normalized = dict(experiment)
+        ensure_supported_selection_axes(normalized)
+        kwargs = build_run_assessment_kwargs(normalized)
         merged = dict(kwargs)
+        merged["execution_mode"] = args.execution_mode
+        merged["execution_order"] = execution_order
+        if "--generation-implementation" in provided_flags:
+            merged["generation_implementation"] = args.generation_implementation
+        if "--harness" in provided_flags:
+            merged["harness"] = args.harness
         scalar_overrides = {
             "--artifact-dir": ("artifact_dir", args.artifact_dir),
             "--name": ("name", args.name),
             "--dataset-path": ("dataset_path", args.dataset_path),
+            "--review-manifest-path": ("review_manifest_path", args.review_manifest_path),
+            "--index-snapshot-path": ("index_snapshot_path", args.index_snapshot_path),
             "--top-k": ("top_k", args.top_k),
             "--max-synthetic-questions": ("max_synthetic_questions", args.max_synthetic_questions),
             "--sample-docs-per-source-type": (
@@ -252,6 +484,11 @@ def main() -> None:
             "--dataset-split": ("dataset_split", args.dataset_split),
             "--min-label-confidence": ("min_label_confidence", args.min_label_confidence),
             "--retrieval-mode": ("retrieval_mode", args.retrieval_mode),
+            "--generation-implementation": (
+                "generation_implementation",
+                args.generation_implementation,
+            ),
+            "--harness": ("harness", args.harness),
         }
         for flag, (key, value) in scalar_overrides.items():
             if flag in provided_flags:
@@ -297,10 +534,19 @@ def main() -> None:
         for flag, (key, value) in bool_overrides.items():
             if flag in provided_flags:
                 merged[key] = value
+        if provided_flags & {"--search-mode", "--retrieval-mode", "--disable-bm25"}:
+            merged["retrieval_mode"] = args.retrieval_mode
+            if "--disable-bm25" not in provided_flags:
+                merged["disable_bm25"] = args.retrieval_mode == "semantic_only"
         if any(
             flag in provided_flags
             for flag in {
                 "--search-mode",
+                "--retrieval-mode",
+                "--disable-bm25",
+                "--top-k",
+                "--enable-reranking",
+                "--reranking-mode",
                 "--no-diversification",
                 "--enable-hyde",
                 "--mmr-lambda",
@@ -360,20 +606,23 @@ def main() -> None:
                 failures = result_dict.get("failed_thresholds", [])
                 if failures:
                     print(f"Threshold failures: {len(failures)}")
-                if result_dict["status"] == "failed":
+                strict = _apply_cli_overrides(spec).get("fail_on_thresholds", False)
+                if result_dict["status"] == "failed" or (strict and result_dict["status"] != "ok"):
                     exit_code = 1
                 if baseline_result is None:
                     baseline_result = result_dict
         else:
             baseline_result = None
             for idx, spec in enumerate(specs):
-                kwargs = _apply_cli_overrides(build_run_assessment_kwargs(spec))
-                result = run_assessment(**kwargs)
+                kwargs = _apply_cli_overrides(spec, idx)
+                result = run_assessment_in_subprocess(kwargs)
                 baseline: AssessmentResult | None = baseline_result if idx > 0 else None
                 _print_assessment_result(result, baseline)
                 if idx == 0:
                     baseline_result = result
-                if result.status == "failed":
+                if result.status == "failed" or (
+                    kwargs.get("fail_on_thresholds") and result.status != "ok"
+                ):
                     exit_code = 1
         raise SystemExit(exit_code)
 
@@ -381,6 +630,8 @@ def main() -> None:
         artifact_dir=args.artifact_dir,
         name=args.name,
         dataset_path=args.dataset_path,
+        review_manifest_path=args.review_manifest_path,
+        index_snapshot_path=args.index_snapshot_path,
         top_k=args.top_k,
         max_synthetic_questions=args.max_synthetic_questions,
         disable_llm_generation=args.disable_llm_generation,
@@ -408,9 +659,14 @@ def main() -> None:
         run_reranking_ablations=args.run_reranking_ablations,
         run_diversity_sweep=args.run_diversity_sweep,
         diversity_sweep=diversity_sweep,
+        execution_mode=args.execution_mode,
+        generation_implementation=args.generation_implementation,
+        harness=args.harness,
     )
     _print_assessment_result(result)
-    raise SystemExit(1 if result.status == "failed" else 0)
+    raise SystemExit(
+        1 if result.status == "failed" or (args.fail_on_thresholds and result.status != "ok") else 0
+    )
 
 
 if __name__ == "__main__":

@@ -10,12 +10,19 @@ from src.config import settings
 from src.infra.storage.file_chat_history_store import FileChatHistoryStore
 
 
-def _fake_retrieve_context(query: str, top_k: int = 5, retrieval_options=None):
+def _fake_retrieve_context(query: str, top_k: int = 5, retrieval_options=None, *, allow_build=True):
     del top_k, retrieval_options
     return f"context for {query}", [{"label": f"Source for {query}"}]
 
 
-async def _fake_retrieve_context_with_trace_async(query: str, top_k: int = 5, hyde_client=None):
+async def _fake_retrieve_context_with_trace_async(
+    query: str,
+    top_k: int = 5,
+    hyde_client=None,
+    *,
+    allow_build=False,
+):
+    assert allow_build is False
     del top_k, hyde_client
     return (
         f"context for {query}",

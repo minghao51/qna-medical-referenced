@@ -38,33 +38,83 @@ def _assign_split(source: str) -> str:
     return "regression"
 
 
+def _normalize_case_record(
+    item: dict[str, Any],
+    *,
+    default_origin: str,
+    dataset_version: str,
+    dataset_id: str | None = None,
+    default_label_origin: str | None = None,
+    default_review_status: str = "unreviewed",
+) -> dict[str, Any]:
+    query = str(item.get("query") or item.get("question") or "").strip()
+    sources = list(item.get("expected_sources") or [])
+    source = str(sources[0]) if sources else "unknown"
+    source_family = str(item.get("source_family") or _source_family(source))
+    split = str(item.get("dataset_split") or _assign_split(source))
+    origin = str(item.get("dataset_origin") or default_origin)
+    explicit_id = item.get("query_id") or item.get("case_id")
+    stable_key = json.dumps(
+        [query.casefold(), split, source_family, origin],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    query_id = str(
+        explicit_id or f"case_{hashlib.sha256(stable_key.encode('utf-8')).hexdigest()[:16]}"
+    )
+    label_origin = str(
+        item.get("label_origin")
+        or default_label_origin
+        or ("synthetic" if "synthetic" in origin else "heuristic")
+    )
+    record = dict(item)
+    record.update(
+        {
+            "query_id": query_id,
+            "case_id": str(item.get("case_id") or query_id),
+            "query": query,
+            "expected_keywords": list(item.get("expected_keywords", [])),
+            "expected_sources": sources,
+            "expected_source_types": list(item.get("expected_source_types", [])),
+            "query_category": item.get("query_category", "anchor"),
+            "task_type": item.get("task_type"),
+            "evidence_phrase": item.get("evidence_phrase"),
+            "evidence_span": item.get("evidence_span") or item.get("evidence_phrase"),
+            "evidence_passages": list(item.get("evidence_passages", [])),
+            "expected_chunk_id": item.get("expected_chunk_id"),
+            "expected_page": item.get("expected_page"),
+            "label_confidence": item.get("label_confidence", "low"),
+            "label_origin": label_origin,
+            "review_status": str(item.get("review_status", default_review_status)),
+            "dataset_origin": origin,
+            "dataset_version": str(item.get("dataset_version") or dataset_version),
+            "dataset_id": str(item.get("dataset_id") or dataset_id or "legacy-unversioned"),
+            "dataset_split": split,
+            "difficulty": item.get("difficulty", "medium"),
+            "negative_query": item.get("negative_query"),
+            "source_family": source_family,
+        }
+    )
+    if "answerability" not in record:
+        record["answerability"] = "answerable"
+    return record
+
+
 def normalize_golden_queries(fixture_path: Path) -> list[dict[str, Any]]:
     data = json.loads(Path(fixture_path).read_text(encoding="utf-8"))
-    records = []
-    for i, item in enumerate(data.get("golden_queries", []), start=1):
-        source = (item.get("expected_sources") or ["unknown"])[0]
-        records.append(
-            {
-                "query_id": f"golden_{i}",
-                "query": item.get("query", "").strip(),
-                "expected_keywords": list(item.get("expected_keywords", [])),
-                "expected_sources": list(item.get("expected_sources", [])),
-                "expected_source_types": list(item.get("expected_source_types", [])),
-                "query_category": item.get("query_category", "anchor"),
-                "task_type": item.get("task_type"),
-                "evidence_phrase": item.get("evidence_phrase"),
-                "evidence_span": item.get("evidence_span") or item.get("evidence_phrase"),
-                "expected_chunk_id": item.get("expected_chunk_id"),
-                "expected_page": item.get("expected_page"),
-                "label_confidence": item.get("label_confidence", "medium"),
-                "dataset_origin": item.get("dataset_origin", "golden_fixture"),
-                "dataset_split": item.get("dataset_split") or _assign_split(str(source)),
-                "difficulty": item.get("difficulty", "medium"),
-                "negative_query": item.get("negative_query"),
-                "source_family": item.get("source_family") or _source_family(str(source)),
-            }
+    version = str(data.get("schema_version", "legacy-unversioned"))
+    records = [
+        _normalize_case_record(
+            item,
+            default_origin=str(data.get("dataset_origin", "golden_fixture")),
+            dataset_version=version,
+            dataset_id=data.get("dataset_id"),
+            default_label_origin=data.get("label_origin"),
+            default_review_status=str(data.get("review_status", "unreviewed")),
         )
-    return [r for r in records if r["query"]]
+        for item in data.get("golden_queries", [])
+    ]
+    return [record for record in records if record["query"]]
 
 
 def normalize_golden_conversations(fixture_path: Path) -> list[dict[str, Any]]:
@@ -77,14 +127,36 @@ def normalize_golden_conversations(fixture_path: Path) -> list[dict[str, Any]]:
         List of normalized conversation records suitable for evaluation
     """
     data = json.loads(Path(fixture_path).read_text(encoding="utf-8"))
+    version = str(data.get("schema_version", "legacy-unversioned"))
     records = []
-    for i, item in enumerate(data.get("golden_conversations", []), start=1):
+    for item in data.get("golden_conversations", []):
         turns = item.get("turns", [])
         user_turns = [t for t in turns if t.get("role") == "user"]
+        scenario = str(item.get("scenario", "")).strip()
+        source_family = str(item.get("source_family", "unknown"))
+        stable_material = json.dumps(
+            [scenario, turns, source_family], sort_keys=True, ensure_ascii=False
+        )
+        conversation_id = str(
+            item.get("conversation_id")
+            or f"conversation_{hashlib.sha256(stable_material.encode('utf-8')).hexdigest()[:16]}"
+        )
+        origin = str(item.get("dataset_origin", data.get("dataset_origin", "golden_fixture")))
         records.append(
             {
-                "conversation_id": item.get("conversation_id", f"mt_{i:03d}"),
-                "scenario": item.get("scenario", "").strip(),
+                "conversation_id": conversation_id,
+                "case_id": conversation_id,
+                "dataset_origin": origin,
+                "dataset_version": str(item.get("dataset_version") or version),
+                "label_origin": str(
+                    item.get("label_origin")
+                    or data.get("label_origin")
+                    or ("synthetic" if "synthetic" in origin else "heuristic")
+                ),
+                "review_status": str(
+                    item.get("review_status", data.get("review_status", "unreviewed"))
+                ),
+                "scenario": scenario,
                 "conversation_category": item.get("conversation_category", "contextual_followup"),
                 "turns": turns,
                 "user_turn_count": len(user_turns),
@@ -93,9 +165,8 @@ def normalize_golden_conversations(fixture_path: Path) -> list[dict[str, Any]]:
                 "turn_level_expected_sources": list(item.get("turn_level_expected_sources", [])),
                 "context": list(item.get("context", [])),
                 "difficulty": item.get("difficulty", "medium"),
-                "dataset_split": item.get("dataset_split")
-                or _assign_split(item.get("source_family", "")),
-                "source_family": item.get("source_family", "unknown"),
+                "dataset_split": item.get("dataset_split") or _assign_split(source_family),
+                "source_family": source_family,
             }
         )
     return [r for r in records if r["turns"] and r["scenario"]]
@@ -107,9 +178,39 @@ def _normalize_cached_dataset(dataset_path: Path) -> list[dict[str, Any]]:
         return normalize_golden_queries(dataset_path)
     if isinstance(data, dict) and "golden_conversations" in data:
         return normalize_golden_conversations(dataset_path)
+    if isinstance(data, dict) and "cases" in data:
+        version = str(data.get("schema_version", "unversioned"))
+        origin = str(data.get("dataset_origin", "frozen_fixture"))
+        cases = data.get("cases")
+        if not isinstance(cases, list):
+            raise ValueError("Versioned dataset 'cases' must be a list")
+        return [
+            record
+            for item in cases
+            if isinstance(item, dict)
+            for record in [
+                _normalize_case_record(
+                    item,
+                    default_origin=origin,
+                    dataset_version=version,
+                    dataset_id=str(data.get("dataset_id") or "versioned-dataset"),
+                    default_label_origin=data.get("label_origin"),
+                    default_review_status=str(data.get("review_status", "unreviewed")),
+                )
+            ]
+            if record["query"]
+        ]
     if isinstance(data, list):
         return [
-            item for item in data if isinstance(item, dict) and str(item.get("query", "")).strip()
+            record
+            for item in data
+            if isinstance(item, dict)
+            for record in [
+                _normalize_case_record(
+                    item, default_origin="explicit_dataset", dataset_version="unversioned"
+                )
+            ]
+            if record["query"]
         ]
     raise ValueError(f"Unsupported dataset format in {dataset_path}")
 
@@ -141,6 +242,7 @@ def _build_dataset_compatibility_contract(
     dataset_split: str | None,
     min_label_confidence: str,
     reuse_requirements: dict[str, Any] | None,
+    benchmark_mode: bool = False,
 ) -> dict[str, Any]:
     return {
         "dataset_path": _resolve_path_for_contract(dataset_path),
@@ -153,6 +255,34 @@ def _build_dataset_compatibility_contract(
         "max_queries": max_queries,
         "sample_seed": sample_seed,
         "reuse_requirements": dict(reuse_requirements or {}),
+        **({"benchmark_mode": True} if benchmark_mode else {}),
+    }
+
+
+def _dataset_diagnostics(records: list[dict[str, Any]]) -> dict[str, Any]:
+    query_groups: dict[str, list[str]] = {}
+    family_splits: dict[str, set[str]] = {}
+    for record in records:
+        normalized_query = re.sub(r"\s+", " ", str(record.get("query", "")).casefold()).strip()
+        if normalized_query:
+            query_groups.setdefault(normalized_query, []).append(str(record.get("query_id", "")))
+        family = str(record.get("source_family", "unknown")).strip().casefold()
+        split = str(record.get("dataset_split", "unknown"))
+        if family and family != "unknown":
+            family_splits.setdefault(family, set()).add(split)
+    duplicate_groups = [ids for ids in query_groups.values() if len(ids) > 1]
+    overlaps = [
+        {"source_family": family, "splits": sorted(splits)}
+        for family, splits in sorted(family_splits.items())
+        if len(splits) > 1
+    ]
+    return {
+        "duplicate_query_detection": "normalized_exact_only",
+        "near_duplicate_query_status": "not_assessed",
+        "duplicate_query_group_count": len(duplicate_groups),
+        "duplicate_query_case_ids": duplicate_groups,
+        "source_family_overlap_count": len(overlaps),
+        "source_family_overlaps": overlaps,
     }
 
 
@@ -438,7 +568,9 @@ def _try_generate_synthetic_questions(
                     "expected_source_types": [_source_type(str(doc.get("source", "")))],
                     "query_category": "synthetic",
                     "task_type": f"{_source_type(str(doc.get('source', '')))}_{doc.get('content_type', 'paragraph')}",
-                    "label_confidence": "high" if doc.get("content_type") != "mixed" else "medium",
+                    "label_confidence": "low",
+                    "label_origin": "synthetic",
+                    "review_status": "unreviewed",
                     "dataset_origin": "synthetic_qwen",
                     "dataset_split": _assign_split(str(doc.get("source", ""))),
                     "difficulty": _difficulty_for_chunk(doc),
@@ -449,9 +581,9 @@ def _try_generate_synthetic_questions(
             )
             attempt["status"] = "accepted"
             attempt["parsed"] = accepted[-1]
-        except Exception as exc:
-            attempt["error"] = str(exc)
-            logger.warning("Synthetic dataset generation failed for doc %s: %s", doc.get("id"), exc)
+        except Exception:
+            attempt["error"] = "synthetic_generation_failed"
+            logger.warning("Synthetic dataset generation failed")
         attempts.append(attempt)
 
     return accepted, attempts
@@ -497,9 +629,9 @@ def _bootstrap_precise_labels(records: list[dict[str, Any]]) -> list[dict[str, A
             )
         if not item.get("evidence_phrase"):
             item["evidence_phrase"] = item.get("evidence_span")
-        item["label_confidence"] = (
-            "high" if best_score >= 2 else item.get("label_confidence", "medium")
-        )
+        item.setdefault("label_confidence", "low")
+        item.setdefault("label_origin", "heuristic")
+        item.setdefault("review_status", "unreviewed")
         item.setdefault("source_family", _source_family(str(best.get("source", ""))))
         item.setdefault("dataset_split", _assign_split(str(best.get("source", ""))))
         item.setdefault("difficulty", _difficulty_for_chunk(best))
@@ -546,7 +678,8 @@ def _filter_records(
 def build_retrieval_dataset(
     *,
     dataset_path: str | Path | None = None,
-    enable_llm_generation: bool = True,
+    enable_llm_generation: bool = False,
+    benchmark_mode: bool = False,
     max_synthetic_questions: int = 40,
     sample_docs_per_source_type: int = 10,
     seed: int = 42,
@@ -558,11 +691,20 @@ def build_retrieval_dataset(
     reuse_requirements: dict[str, Any] | None = None,
     artifact_dir: str | Path = "data/evals",
 ) -> dict[str, Any]:
+    """Load frozen cases; benchmark mode disables synthesis and label bootstrapping."""
+    if benchmark_mode and enable_llm_generation:
+        raise ValueError(
+            "benchmark_mode forbids synthetic generation; use build_synthetic_retrieval_dataset"
+        )
     resolved_dataset_path = Path(dataset_path) if dataset_path else None
     reused_cached_dataset = False
     reused_from_run_dir: str | None = None
     reuse_rejections: list[dict[str, Any]] = []
-    default_fixture_path = Path("tests/fixtures/golden_queries.json")
+    default_fixture_path = (
+        Path("tests/fixtures/evals/phase123/retrieval-cases.v1.json")
+        if benchmark_mode
+        else Path("tests/fixtures/golden_queries.json")
+    )
     effective_base_dataset_path = resolved_dataset_path or default_fixture_path
     compatibility_contract = _build_dataset_compatibility_contract(
         dataset_path=effective_base_dataset_path,
@@ -575,6 +717,7 @@ def build_retrieval_dataset(
         dataset_split=dataset_split,
         min_label_confidence=min_label_confidence,
         reuse_requirements=reuse_requirements,
+        benchmark_mode=benchmark_mode,
     )
     if resolved_dataset_path is None and reuse_cached_dataset:
         resolved_dataset_path, reused_from_run_dir, reuse_rejections = _resolve_cached_dataset_path(
@@ -602,15 +745,21 @@ def build_retrieval_dataset(
                 "source_run_dir": reused_from_run_dir,
             }
         ]
-    elif enable_llm_generation:
+    elif enable_llm_generation and not benchmark_mode:
         synthetic_records, attempts = _try_generate_synthetic_questions(
             max_synthetic_questions=max_synthetic_questions,
             sample_docs_per_source_type=sample_docs_per_source_type,
             seed=seed,
         )
     else:
-        attempts = [{"status": "skipped", "reason": "llm_generation_disabled"}]
+        attempts = [
+            {
+                "status": "skipped",
+                "reason": "frozen_benchmark_mode" if benchmark_mode else "llm_generation_disabled",
+            }
+        ]
 
+    dataset_diagnostics = _dataset_diagnostics(base_records + synthetic_records)
     merged_seen: set[str] = set()
     merged_deduped: list[dict[str, Any]] = []
     for item in base_records + synthetic_records:
@@ -618,7 +767,9 @@ def build_retrieval_dataset(
         if key and key not in merged_seen:
             merged_seen.add(key)
             merged_deduped.append(item)
-    merged = _bootstrap_precise_labels(merged_deduped)
+    # Frozen cases retain their declared identities and denominator, including
+    # cross-split duplicate queries. Diagnose leakage; never silently remove it.
+    merged = list(base_records) if benchmark_mode else _bootstrap_precise_labels(merged_deduped)
     filtered = _filter_records(
         merged, dataset_split=dataset_split, min_label_confidence=min_label_confidence
     )
@@ -633,6 +784,7 @@ def build_retrieval_dataset(
         "generation_attempts": attempts,
         "stats": {
             "dataset_path": str(resolved_dataset_path),
+            "dataset_mode": "benchmark" if benchmark_mode else "diagnostic",
             "dataset_source": (
                 "cached_reuse"
                 if reused_cached_dataset
@@ -655,5 +807,14 @@ def build_retrieval_dataset(
             "was_sampled": was_sampled,
             "split": dataset_split,
             "min_label_confidence": min_label_confidence,
+            **dataset_diagnostics,
         },
     }
+
+
+def build_synthetic_retrieval_dataset(**kwargs: Any) -> dict[str, Any]:
+    """Explicit diagnostic operation for generating synthetic retrieval questions."""
+    if kwargs.get("benchmark_mode"):
+        raise ValueError("synthetic dataset generation is not available in benchmark mode")
+    kwargs["enable_llm_generation"] = True
+    return build_retrieval_dataset(**kwargs)

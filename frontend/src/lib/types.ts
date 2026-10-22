@@ -126,13 +126,13 @@ export interface HealthResponse {
 
 export interface EvaluationSummary {
 	run_dir: string;
-	duration_s: number;
+	duration_s?: number | null;
 	retrieval_metrics: RetrievalMetrics;
 	l6_answer_quality_metrics: L6AnswerQualityMetrics;
 	l6_answer_quality_enabled?: boolean;
 	l6_answer_quality_status?: string;
-	failed_thresholds_count: number;
-	status: 'ok' | 'failed';
+	failed_thresholds_count?: number | null;
+	status?: string | null;
 	tracking?: Record<string, unknown>;
 }
 
@@ -304,10 +304,12 @@ export interface EvaluationHistoryRun {
 	run_dir: string;
 	timestamp: string;
 	status?: string;
-	duration_s?: number;
-	failed_thresholds_count?: number;
-	retrieval_metrics?: Partial<RetrievalMetrics>;
-	l6_answer_quality_metrics?: Partial<L6AnswerQualityMetrics>;
+	comparable: false;
+	artifact_compatibility?: 'legacy' | 'versioned' | 'unsupported';
+	duration_s?: number | null;
+	failed_thresholds_count?: number | null;
+	retrieval_metrics?: { [K in keyof RetrievalMetrics]?: RetrievalMetrics[K] | null };
+	l6_answer_quality_metrics?: Record<string, unknown>;
 	source: 'local' | 'wandb' | string;
 	experiment_name?: string;
 	variant_name?: string;
@@ -321,10 +323,10 @@ export interface EvaluationHistoryResponse {
 	runs: EvaluationHistoryRun[];
 	summary: {
 		total_runs: number;
-		avg_hit_rate: number;
-		avg_mrr: number;
-		avg_latency_p50: number;
-		avg_duration: number;
+		avg_hit_rate: number | null;
+		avg_mrr: number | null;
+		avg_latency_p50: number | null;
+		avg_duration: number | null;
 		sources?: Record<string, number>;
 	};
 	sources?: {

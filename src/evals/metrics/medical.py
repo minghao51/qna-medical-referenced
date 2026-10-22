@@ -2,23 +2,36 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, TypeAlias
-
-try:
-    from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, GEval
-    from deepeval.test_case import LLMTestCaseParams
-
-    _DEEPEVAL_AVAILABLE = True
-except ModuleNotFoundError:
-    AnswerRelevancyMetric = Any
-    FaithfulnessMetric = Any
-    GEval = Any
-    LLMTestCaseParams = None
-    _DEEPEVAL_AVAILABLE = False
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from src.config import settings
 from src.evals.deepeval_models import get_heavy_model, get_light_model
+
+_DEEPEVAL_AVAILABLE = False
+if TYPE_CHECKING:
+    from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, GEval
+    from deepeval.test_case import LLMTestCaseParams
+else:
+    try:
+        from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, GEval
+        from deepeval.test_case import LLMTestCaseParams
+    except ModuleNotFoundError:
+
+        class _UnavailableDeepEvalMetric:
+            """Import-time placeholder; factories fail before this class is instantiated."""
+
+        class LLMTestCaseParams:
+            INPUT = "input"
+            ACTUAL_OUTPUT = "actual_output"
+            RETRIEVAL_CONTEXT = "retrieval_context"
+
+        AnswerRelevancyMetric = _UnavailableDeepEvalMetric
+        FaithfulnessMetric = _UnavailableDeepEvalMetric
+        GEval = _UnavailableDeepEvalMetric
+    else:
+        _DEEPEVAL_AVAILABLE = True
 
 MetricFactory: TypeAlias = GEval | AnswerRelevancyMetric | FaithfulnessMetric  # noqa: UP040
 
@@ -35,13 +48,13 @@ class MetricSpec:
     key: str
     display_name: str
     judge_tier: str
-    factory: Any
+    factory: Callable[..., MetricFactory]
 
-    def create(self) -> MetricFactory:
-        return self.factory()
+    def create(self, model: Any = None) -> MetricFactory:
+        return self.factory() if model is None else self.factory(model=model)
 
 
-def _build_factual_accuracy() -> GEval:
+def _build_factual_accuracy(model: Any = None) -> GEval:
     _require_deepeval()
     return GEval(
         name="Factual Accuracy",
@@ -65,12 +78,12 @@ Rate from 1-5:
             LLMTestCaseParams.RETRIEVAL_CONTEXT,
         ],
         threshold=0.8,
-        model=get_heavy_model(),
+        model=model if model is not None else get_heavy_model(),
         async_mode=True,
     )
 
 
-def _build_completeness() -> GEval:
+def _build_completeness(model: Any = None) -> GEval:
     _require_deepeval()
     return GEval(
         name="Completeness",
@@ -90,12 +103,12 @@ Rate from 1-5:
 - 1: Fails to address the question""",
         evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
         threshold=0.75,
-        model=get_heavy_model(),
+        model=model if model is not None else get_heavy_model(),
         async_mode=True,
     )
 
 
-def _build_clinical_relevance() -> GEval:
+def _build_clinical_relevance(model: Any = None) -> GEval:
     _require_deepeval()
     return GEval(
         name="Clinical Relevance",
@@ -119,12 +132,12 @@ Rate from 1-5:
             LLMTestCaseParams.RETRIEVAL_CONTEXT,
         ],
         threshold=0.8,
-        model=get_heavy_model(),
+        model=model if model is not None else get_heavy_model(),
         async_mode=True,
     )
 
 
-def _build_clarity() -> GEval:
+def _build_clarity(model: Any = None) -> GEval:
     _require_deepeval()
     return GEval(
         name="Clarity",
@@ -144,26 +157,26 @@ Rate from 1-5:
 - 1: Very unclear, poorly structured""",
         evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
         threshold=0.70,
-        model=get_light_model(),
+        model=model if model is not None else get_light_model(),
         async_mode=True,
     )
 
 
-def _build_answer_relevancy() -> AnswerRelevancyMetric:
+def _build_answer_relevancy(model: Any = None) -> AnswerRelevancyMetric:
     _require_deepeval()
     return AnswerRelevancyMetric(
         threshold=0.7,
-        model=get_light_model(),
+        model=model if model is not None else get_light_model(),
         async_mode=True,
         include_reason=False,
     )
 
 
-def _build_faithfulness() -> FaithfulnessMetric:
+def _build_faithfulness(model: Any = None) -> FaithfulnessMetric:
     _require_deepeval()
     return FaithfulnessMetric(
         threshold=0.8,
-        model=get_heavy_model(),
+        model=model if model is not None else get_heavy_model(),
         async_mode=True,
         include_reason=False,
         truths_extraction_limit=settings.deepeval.deepeval_faithfulness_truths_limit,
@@ -210,10 +223,20 @@ METRIC_SPECS: tuple[MetricSpec, ...] = (
 )
 
 
-def create_medical_metrics() -> list[MetricFactory]:
-    """Return fresh metric instances for each evaluation run."""
+def create_medical_metrics(*, owned_models: list[Any] | None = None) -> list[MetricFactory]:
+    """Build fresh metrics; register models before constructors can fail.
+
+    Async owners pass a list and close every registered model in their finally
+    block, including when construction fails before any metric is returned.
+    """
     _require_deepeval()
-    return [spec.create() for spec in METRIC_SPECS]
+    metrics: list[MetricFactory] = []
+    for spec in METRIC_SPECS:
+        model = get_heavy_model() if spec.judge_tier == "heavy" else get_light_model()
+        if owned_models is not None:
+            owned_models.append(model)
+        metrics.append(spec.create(model=model))
+    return metrics
 
 
 __all__ = ["METRIC_SPECS", "MetricSpec", "create_medical_metrics"]

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
-from scipy import stats
+if TYPE_CHECKING:
+    import numpy as np
 
 _METRIC_ALIASES: dict[str, str] = {
     "ndcg@5": "ndcg_at_k",
@@ -14,6 +14,8 @@ _METRIC_ALIASES: dict[str, str] = {
     "hit_rate@5": "hit_rate_at_k",
     "precision@5": "precision_at_k",
     "recall@5": "recall_at_k",
+    "exact_chunk_hit_rate": "exact_chunk_hit",
+    "evidence_hit_rate": "evidence_hit",
 }
 
 
@@ -31,6 +33,10 @@ def wilcoxon_test(
     system_a_scores: list[float] | np.ndarray,
     system_b_scores: list[float] | np.ndarray,
 ) -> tuple[float, float]:
+    try:
+        from scipy import stats
+    except ModuleNotFoundError:
+        raise RuntimeError("Statistical comparison requires separately provisioned SciPy") from None
     stat, p_value = stats.wilcoxon(system_b_scores, system_a_scores)
     return float(stat), float(p_value)
 
@@ -40,6 +46,10 @@ def bootstrap_ci(
     confidence: float = 0.95,
     n_bootstrap: int = 10000,
 ) -> tuple[float, float]:
+    try:
+        import numpy as np
+    except ModuleNotFoundError:
+        raise RuntimeError("Bootstrap intervals require separately provisioned NumPy") from None
     arr = np.asarray(scores, dtype=float)
     boot_means = [
         np.mean(np.random.choice(arr, len(arr), replace=True)) for _ in range(n_bootstrap)

@@ -51,12 +51,17 @@ def test_create_medical_metrics_returns_fresh_instances():
     ]
 
 
-def test_metric_specs_use_expected_models():
+def test_metric_specs_use_expected_models(monkeypatch):
+    from src.config import settings
+
+    monkeypatch.setattr(settings.llm, "judge_provider", "qwen")
+    monkeypatch.setattr(settings.llm, "judge_model_light", "test-light-judge")
+    monkeypatch.setattr(settings.llm, "judge_model_heavy", "test-heavy-judge")
     METRIC_SPECS, create_medical_metrics = _import_metrics()
     metrics = create_medical_metrics()
     metric_map = {spec.key: metric for spec, metric in zip(METRIC_SPECS, metrics, strict=True)}
 
-    assert metric_map["clarity"].model.model == "qwen3.5-35b-a3b"
-    assert metric_map["factual_accuracy"].model.model == "qwen3.5-flash"
+    assert metric_map["clarity"].model.model_name == "test-light-judge"
+    assert metric_map["factual_accuracy"].model.model_name == "test-heavy-judge"
     assert metric_map["answer_relevancy"].threshold == 0.7
     assert metric_map["faithfulness"].threshold == 0.8

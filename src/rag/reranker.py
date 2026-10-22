@@ -41,16 +41,24 @@ class CrossEncoderReranker:
         try:
             from sentence_transformers import CrossEncoder
 
-            self._model = CrossEncoder(self.model_name, device=self.device)
-            logger.info("Loaded cross-encoder model: %s on %s", self.model_name, self.device)
+            self._model = CrossEncoder(
+                self.model_name, device=self.device, local_files_only=True, trust_remote_code=False
+            )
+            logger.info("Loaded local cross-encoder model")
         except ImportError:
             logger.error(
                 "sentence-transformers not installed. "
                 "Install with: pip install sentence-transformers"
             )
             raise
-        except Exception as e:
-            logger.error("Failed to load cross-encoder model %s: %s", self.model_name, e)
+        except OSError:
+            logger.error("Required local cross-encoder assets are unavailable")
+            raise RuntimeError(
+                "Required local reranker assets are unavailable; provision approved "
+                "assets before serving. Request-time downloads are disabled."
+            ) from None
+        except Exception:
+            logger.error("Cross-encoder initialization failed")
             raise
 
     def rerank(

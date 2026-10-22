@@ -29,8 +29,7 @@ class IngestionRunConfig:
     """Execution flags for :func:`run_ingestion` (roadmap P3.2).
 
     ``from_runtime_state`` derives the feature flags (HyPE / enrichment)
-    from the vector-store runtime config — the same source the deleted
-    rag-side builder (``_build_index_from_sources``) read — so builds
+    directly from the runtime overlay (not the store factory) so builds
     triggered from ``rag/index.py`` pick up experiment overrides applied
     via ``apply_runtime_config``.
     """
@@ -56,9 +55,9 @@ class IngestionRunConfig:
     ) -> IngestionRunConfig:
         """Build a config from the current runtime-config overlay."""
         from src.config import PROJECT_ROOT, settings
-        from src.ingestion.indexing.factory import get_vector_store_runtime_config
+        from src.config.context import get_runtime_state
 
-        features = dict(get_vector_store_runtime_config().get("indexing_features", {}) or {})
+        features = dict(get_runtime_state().indexing_features)
         return cls(
             project_root=Path(project_root) if project_root is not None else PROJECT_ROOT,
             skip_download=True,

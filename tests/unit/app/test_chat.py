@@ -111,9 +111,8 @@ class TestProcessChatMessage:
             session_id="sess-3",
         )
 
-        store.save_message.assert_any_call("sess-3", "user", "hello")
-        store.save_message.assert_any_call("sess-3", "assistant", "response text")
-        assert store.save_message.call_count == 2
+        store.save_turn.assert_called_once_with("sess-3", "hello", "response text")
+        store.save_message.assert_not_called()
 
     @patch("src.usecases.chat.retrieve_context")
     def test_session_id_default(self, mock_retrieve):

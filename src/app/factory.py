@@ -17,16 +17,20 @@ Example:
         # Use app for testing...
 """
 
+import asyncio
 import logging
 import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import cast
+from typing import Any, cast
+from uuid import uuid4
 
+import anyio
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from src.app.exceptions import (
     AppError,
@@ -34,7 +38,7 @@ from src.app.exceptions import (
     http_exception_handler,
     unhandled_exception_handler,
 )
-from src.app.logging import configure_logging
+from src.app.logging import configure_logging, log_event
 from src.app.middleware import APIKeyMiddleware, RateLimitMiddleware, RequestIDMiddleware
 from src.app.routes import (
     chat_router,
@@ -50,6 +54,14 @@ from src.config import settings
 from src.config.context import reset_runtime_state
 from src.infra.llm import get_client
 from src.infra.storage.file_chat_history_store import FileChatHistoryStore
+from src.infra.telemetry import (
+    ErrorCode,
+    Operation,
+    Route,
+    Telemetry,
+    telemetry_operation,
+    use_telemetry,
+)
 from src.ingestion.indexing.factory import ChromaVectorStoreFactory
 from src.rag import initialize_runtime_index_async
 
@@ -57,6 +69,133 @@ configure_logging(settings.app.log_level)
 logger = logging.getLogger(__name__)
 
 ExceptionHandler = Callable[[Request, Exception], Response | Awaitable[Response]]
+
+
+async def _await_owned_task(task: asyncio.Task[Any]) -> None:
+    """Drain a lifespan-owned task before propagating even repeated cancellation."""
+    try:
+        await asyncio.shield(task)
+    except asyncio.CancelledError:
+        with anyio.CancelScope(shield=True):
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+        if not task.cancelled():
+            task.exception()  # Consume a failure; caller cancellation stays primary.
+        raise
+
+
+class _RequestLifecycle:
+    """Track requests owned by one app instance and gate shutdown admission."""
+
+    def __init__(self) -> None:
+        self._condition = asyncio.Condition()
+        self._active = 0
+        self._closing = False
+
+    async def acquire(self) -> bool:
+        async with self._condition:
+            if self._closing:
+                return False
+            self._active += 1
+            return True
+
+    async def release(self) -> None:
+        async with self._condition:
+            self._active -= 1
+            if self._active == 0:
+                self._condition.notify_all()
+
+    async def stop_and_drain(self) -> None:
+        async with self._condition:
+            self._closing = True
+            await self._condition.wait_for(lambda: self._active == 0)
+
+
+class _RequestLifecycleMiddleware:
+    """Hold app request ownership until the ASGI response has fully settled."""
+
+    def __init__(self, app: ASGIApp, tracker: _RequestLifecycle) -> None:
+        self.app = app
+        self.tracker = tracker
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        if not await self.tracker.acquire():
+            request_id = str(uuid4())
+            app_instance = scope.get("app")
+            telemetry = getattr(getattr(app_instance, "state", None), "telemetry", None)
+            if not isinstance(telemetry, Telemetry):
+                telemetry = None
+            log_event(
+                logger, logging.WARNING, "request_rejected", request_id=request_id, status_code=503
+            )
+            with use_telemetry(telemetry):
+                with telemetry_operation(Operation.REQUEST, request_id=request_id) as span:
+                    await Response(
+                        "Application is shutting down",
+                        status_code=503,
+                        headers={"X-Request-ID": request_id},
+                    )(scope, receive, send)
+                    span.finish(outcome="error", error_code=ErrorCode.SHUTDOWN)
+            return
+        app_instance = scope.get("app")
+        telemetry = getattr(getattr(app_instance, "state", None), "telemetry", None)
+        if not isinstance(telemetry, Telemetry):
+            telemetry = None
+        path = scope.get("path", "")
+        route = None
+        if path in {"/chat", "/chat/"}:
+            route = Route.CHAT
+        elif path == "/evaluation" or path.startswith("/evaluation/"):
+            route = Route.EVALUATION
+        try:
+            with use_telemetry(telemetry):
+                if telemetry is None:
+                    await self.app(scope, receive, send)
+                else:
+                    with telemetry.span(Operation.REQUEST, route=route):
+                        await self.app(scope, receive, send)
+        finally:
+            await _await_owned_task(asyncio.create_task(self.tracker.release()))
+
+
+async def _shutdown_lifespan(app: FastAPI, llm_client: Any, telemetry: Telemetry | None) -> None:
+    await app.state.request_lifecycle.stop_and_drain()
+    await _cleanup_lifespan(app, llm_client, telemetry)
+
+
+async def _cleanup_lifespan(app: FastAPI, llm_client: Any, telemetry: Telemetry | None) -> None:
+    try:
+        close = getattr(llm_client, "aclose", None)
+        if close is not None:
+            await close()
+    except Exception:
+        # Do not mask startup failures or export SDK exception/credential details.
+        logger.warning("LLM client cleanup failed")
+    finally:
+        try:
+            if telemetry is not None:
+                if await telemetry.aclose() is False:
+                    logger.warning("Telemetry cleanup incomplete")
+        except BaseException:
+            # Telemetry shutdown is best-effort and must not mask application cleanup.
+            pass
+        finally:
+            app.state.telemetry = None
+            app.state.llm_client = None
+            app.state.chat_history_store = None
+            app.state.vector_store = None
+            try:
+                ChromaVectorStoreFactory.reset()
+            finally:
+                reset_runtime_state()
 
 
 @asynccontextmanager
@@ -79,7 +218,9 @@ async def lifespan(app: FastAPI):
         - Load vector index into memory for fast retrieval
 
     Shutdown tasks:
-        - Reset the vector store factory and runtime state for clean shutdown
+        - Drain owned startup/cleanup tasks before resetting shared state
+        - Close the client constructed here, not an injected app.state replacement
+        - Reset logical vector-store/runtime state and clear dependency references
     """
     # Startup — composition root (roadmap P3.1): the only server-side place
     # that constructs concrete dependencies. Routes read them through the
@@ -88,31 +229,33 @@ async def lifespan(app: FastAPI):
     if _wandb_key:
         os.environ["WANDB_API_KEY"] = _wandb_key
 
-    # Initialize LLM client
-    app.state.llm_client = get_client()
+    llm_client = None
+    owned_telemetry = None
+    try:
+        owned_telemetry = Telemetry(settings.telemetry)
+        app.state.telemetry = owned_telemetry
+        llm_client = get_client()
+        app.state.llm_client = llm_client
+        app.state.chat_history_store = FileChatHistoryStore()
 
-    # Initialize chat history store
-    app.state.chat_history_store = FileChatHistoryStore()
+        from src.rag.production_profile import apply_production_profile
 
-    # Initialize vector store
-    from src.rag.production_profile import apply_production_profile
+        profile_name = settings.production.production_profile
+        if profile_name:
+            if apply_production_profile(profile_name):
+                logger.info(f"Production profile applied: {profile_name}")
 
-    profile_name = settings.production.production_profile
-    if profile_name:
-        if apply_production_profile(profile_name):
-            logger.info(f"Production profile applied: {profile_name}")
-
-    # Same factory singleton the runtime index initializes below.
-    app.state.vector_store = ChromaVectorStoreFactory.get_vector_store()
-    await initialize_runtime_index_async()
-    logger.info("Application startup complete")
-
-    yield
-
-    # Shutdown
-    logger.info("Application shutting down")
-    ChromaVectorStoreFactory.reset()
-    reset_runtime_state()
+        # The worker warms the singleton off-loop. Shield/drain it on cancellation
+        # so it cannot publish readiness after cleanup has reset the factory/state.
+        initialization = asyncio.create_task(initialize_runtime_index_async(allow_build=False))
+        await _await_owned_task(initialization)
+        app.state.vector_store = ChromaVectorStoreFactory.get_vector_store()
+        logger.info("Application startup complete")
+        yield
+    finally:
+        logger.info("Application shutting down")
+        cleanup = asyncio.create_task(_shutdown_lifespan(app, llm_client, owned_telemetry))
+        await _await_owned_task(cleanup)
 
 
 def create_app() -> FastAPI:
@@ -146,6 +289,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    request_lifecycle = _RequestLifecycle()
+    app.state.request_lifecycle = request_lifecycle
+    app.state.telemetry = None
+
     # CORS must be first middleware
     # Allows frontend to communicate with backend during development
     # For production, update allow_origins with actual frontend domain
@@ -164,6 +311,8 @@ def create_app() -> FastAPI:
     app.add_middleware(APIKeyMiddleware)
     # Request tracking outermost so errors also carry request ids
     app.add_middleware(RequestIDMiddleware)
+    # Outermost gate: shutdown must reject requests before they reach app work.
+    app.add_middleware(_RequestLifecycleMiddleware, tracker=request_lifecycle)
 
     # Register route modules
     app.include_router(health_router)

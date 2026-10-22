@@ -10,6 +10,7 @@ runtime-state bookkeeping.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import threading
@@ -39,10 +40,46 @@ async def initialize_vector_store_async(
     rebuild: bool = False,
     *,
     force_html_convert: bool = False,
+    allow_build: bool = True,
 ) -> dict[str, Any]:
-    state = get_runtime_state()
-    runtime_signature = _vector_store_runtime_signature()
+    """Initialize off-loop; cancellation stops waiting, not an active build.
+
+    If caller cancellation is observed before the worker's post-lock checkpoint,
+    it skips all store work. Passing that checkpoint admits initialization: later
+    cancellation cannot undo it, even before the first store access. An admitted
+    build keeps the lock until completion or failure so another cannot overlap.
+    """
+    cancelled = threading.Event()
+    try:
+        return await asyncio.to_thread(
+            _initialize_vector_store,
+            rebuild=rebuild,
+            force_html_convert=force_html_convert,
+            allow_build=allow_build,
+            cancelled=cancelled,
+        )
+    except asyncio.CancelledError:
+        cancelled.set()
+        raise
+
+
+def _initialize_vector_store(
+    rebuild: bool = False,
+    *,
+    force_html_convert: bool = False,
+    allow_build: bool = True,
+    cancelled: threading.Event | None = None,
+) -> dict[str, Any]:
+    """Keep synchronous storage/build work and its thread lock in one worker."""
     with _INITIALIZATION_LOCK:
+        # Cooperative cancellation boundary, not a guarantee about when Task.cancel()
+        # was requested: the loop may not have delivered it to the caller yet.
+        if cancelled is not None and cancelled.is_set():
+            raise asyncio.CancelledError
+        if not allow_build and rebuild:
+            raise RuntimeError("Index rebuild is disabled because allow_build=False")
+        state = get_runtime_state()
+        runtime_signature = _vector_store_runtime_signature()
         with state._lock:
             if state.vector_store_initialized_signature != runtime_signature:
                 state.vector_store_initialized = False
@@ -57,6 +94,24 @@ async def initialize_vector_store_async(
 
         documents = vector_store.documents
         if documents.get("contents"):
+            if not allow_build:
+                expected = get_vector_store_runtime_config()
+                metadata = documents.get("index_metadata") or {}
+                metadata_keys = {
+                    "embedding_model": "embedding_model",
+                    "embedding_batch_size": "embedding_batch_size",
+                    "semantic_weight": "semantic_weight",
+                    "keyword_weight": "keyword_weight",
+                    "boost_weight": "boost_weight",
+                }
+                for config_key, metadata_key in metadata_keys.items():
+                    if metadata_key in metadata and metadata[metadata_key] != expected.get(
+                        config_key
+                    ):
+                        raise RuntimeError(
+                            "Existing index configuration does not match runtime settings; "
+                            "allow_build=False prevents rebuilding"
+                        )
             with state._lock:
                 if not state.vector_store_initialized:
                     state.vector_store_initialized = True
@@ -76,11 +131,13 @@ async def initialize_vector_store_async(
                 "indexing_stats": vector_store.last_indexing_stats,
             }
 
+        if not allow_build:
+            raise RuntimeError("Index is empty; allow_build=False prevents ingestion")
         config = IngestionRunConfig.from_runtime_state(
             force_rebuild=rebuild,
             force_html_convert=force_html_convert,
         )
-        ingestion = await asyncio.to_thread(run_ingestion, config)
+        ingestion = run_ingestion(config)
         build_stats = ingestion.to_stats()
         logger.info(
             "Indexed document chunks (attempted=%d, inserted=%d, duplicate_content=%d)",
@@ -106,6 +163,7 @@ def initialize_vector_store(
     rebuild: bool = False,
     *,
     force_html_convert: bool = False,
+    allow_build: bool = True,
 ) -> dict[str, Any]:
     try:
         loop = asyncio.get_running_loop()
@@ -117,6 +175,7 @@ def initialize_vector_store(
         initialize_vector_store_async(
             rebuild=rebuild,
             force_html_convert=force_html_convert,
+            allow_build=allow_build,
         )
     )
 
@@ -125,10 +184,12 @@ def initialize_runtime_index(
     rebuild: bool = False,
     *,
     force_html_convert: bool = False,
+    allow_build: bool = True,
 ) -> dict[str, Any]:
     return initialize_vector_store(
         rebuild=rebuild,
         force_html_convert=force_html_convert,
+        allow_build=allow_build,
     )
 
 
@@ -136,10 +197,12 @@ async def initialize_runtime_index_async(
     rebuild: bool = False,
     *,
     force_html_convert: bool = False,
+    allow_build: bool = True,
 ) -> dict[str, Any]:
     return await initialize_vector_store_async(
         rebuild=rebuild,
         force_html_convert=force_html_convert,
+        allow_build=allow_build,
     )
 
 
@@ -169,7 +232,10 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
     embedding_index = dict(experiment.get("embedding_index", {}))
     runtime_config = build_experiment_runtime_config(experiment)
     apply_runtime_config(runtime_config)
-    get_runtime_state().reset_vector_store_state()
+    state = get_runtime_state()
+    state.retrieval_overrides = copy.deepcopy(dict(experiment.get("retrieval", {})))
+    state.production_profile = None
+    state.reset_vector_store_state()
     return {
         "ingestion": ingestion,
         "embedding_index": embedding_index,

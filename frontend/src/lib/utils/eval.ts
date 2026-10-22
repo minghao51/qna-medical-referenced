@@ -1,7 +1,6 @@
 import type {
 	AblationRun,
 	DrillDownPoint,
-	EvalTrendMetric,
 	EvaluationHistoryRun,
 	EvaluationResponse,
 	RetrievalMetrics
@@ -89,9 +88,9 @@ export function historyLabel(run: EvaluationHistoryRun | EvaluationResponse): st
 export function retrievalMetric(
 	run: EvaluationHistoryRun,
 	key: keyof RetrievalMetrics
-): number {
+): number | null {
 	const value = run.retrieval_metrics?.[key];
-	return typeof value === 'number' ? value : 0;
+	return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 export function runMetricLabels(run: EvaluationHistoryRun): string[] {
@@ -112,37 +111,6 @@ export function runMetricLabels(run: EvaluationHistoryRun): string[] {
 	}
 
 	return labels;
-}
-
-export function buildTrendDatasets(
-	runs: EvaluationHistoryRun[],
-	selectedTrendMetric: EvalTrendMetric
-): Array<{ label: string; data: number[] }> {
-	if (selectedTrendMetric === 'latency') {
-		return [
-			{ label: 'p50', data: runs.map((run) => retrievalMetric(run, 'latency_p50_ms')) },
-			{ label: 'p95', data: runs.map((run) => retrievalMetric(run, 'latency_p95_ms')) }
-		];
-	}
-
-	if (selectedTrendMetric === 'mrr') {
-		return [
-			{ label: 'MRR', data: runs.map((run) => retrievalMetric(run, 'mrr') * 100) },
-			{
-				label: 'Precision @k',
-				data: runs.map((run) => retrievalMetric(run, 'precision_at_k') * 100)
-			},
-			{ label: 'Recall @k', data: runs.map((run) => retrievalMetric(run, 'recall_at_k') * 100) }
-		];
-	}
-
-	return [
-		{
-			label: 'Hit Rate @k',
-			data: runs.map((run) => retrievalMetric(run, 'hit_rate_at_k') * 100)
-		},
-		{ label: 'MRR', data: runs.map((run) => retrievalMetric(run, 'mrr') * 100) }
-	];
 }
 
 export function summarizeAblation(run: AblationRun): string[] {

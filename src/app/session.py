@@ -6,23 +6,39 @@ import hashlib
 import hmac
 import logging
 import secrets
-from typing import cast
 
 from fastapi import Request, Response
+from pydantic import SecretStr
 
 from src.config import settings
 
 logger = logging.getLogger(__name__)
 
 _SIGNING_SEPARATOR = "."
+_MIN_SIGNING_KEY_BYTES = 32
+_DEVELOPMENT_SIGNING_KEY = secrets.token_bytes(_MIN_SIGNING_KEY_BYTES)
 
 
 def _get_signing_key() -> bytes:
-    api_keys = settings.api.api_keys
-    if api_keys:
-        first_key = api_keys.split(",")[0].strip()
-        return cast(bytes, first_key.encode("utf-8"))
-    return cast(bytes, settings.app.environment.encode("utf-8"))
+    configured_secret = getattr(settings.api, "session_signing_secret", None)
+    if configured_secret is None:
+        if settings.is_development:
+            return _DEVELOPMENT_SIGNING_KEY
+        raise RuntimeError("Session signing secret must be configured outside development mode")
+
+    if isinstance(configured_secret, SecretStr):
+        secret = configured_secret.get_secret_value().strip()
+    elif isinstance(configured_secret, str):
+        secret = configured_secret.strip()
+    else:
+        raise RuntimeError("Configured session signing secret is invalid")
+
+    key = secret.encode("utf-8")
+    if len(key) < _MIN_SIGNING_KEY_BYTES:
+        raise RuntimeError(
+            "Configured session signing secret must contain at least 32 bytes after trimming whitespace"
+        )
+    return key
 
 
 def _sign_session_id(session_id: str) -> str:
@@ -36,6 +52,8 @@ def _verify_signed_session_id(signed_value: str) -> str | None:
     if len(parts) != 2:
         return None
     session_id, provided_sig = parts
+    if len(provided_sig) != 64 or any(ch not in "0123456789abcdef" for ch in provided_sig):
+        return None
     expected_sig = hmac.new(
         _get_signing_key(), session_id.encode("utf-8"), hashlib.sha256
     ).hexdigest()

@@ -112,7 +112,7 @@ def _normalize_embedding_index(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _base_defaults() -> dict[str, Any]:
-    retrieval_defaults = get_runtime_retrieval_config()
+    retrieval_defaults = get_runtime_retrieval_config(include_runtime=False)
     return {
         "schema_version": 1,
         "metadata": {
@@ -168,6 +168,8 @@ def _base_defaults() -> dict[str, Any]:
             "artifact_dir": "data/evals",
             "thresholds_file": None,
             "include_answer_eval": None,
+            "index_snapshot_path": None,
+            "review_manifest_path": None,
             "disable_llm_judging": False,
             "fail_on_thresholds": False,
             "export_failed_generations": False,
@@ -185,7 +187,7 @@ def _base_defaults() -> dict[str, Any]:
                 "tags": [],
                 "notes": None,
                 "mode": "online",
-                "log_artifacts": True,
+                "log_artifacts": False,
                 "metrics_verbosity": "standard",
             }
         },
@@ -194,7 +196,15 @@ def _base_defaults() -> dict[str, Any]:
 
 
 def _normalize_experiment_dict(data: dict[str, Any], *, file_path: Path) -> dict[str, Any]:
+    if "generation" in data or "provider" in data:
+        raise ValueError("Experiment generation/provider overrides are unsupported")
     merged = _deep_merge(_base_defaults(), data)
+    generation_implementation = merged.get("generation_implementation", "existing")
+    harness = merged.get("harness", "deterministic_rag")
+    if generation_implementation != "existing":
+        raise ValueError("Unsupported generation implementation; supported: existing")
+    if harness != "deterministic_rag":
+        raise ValueError("Unsupported evaluation harness; supported: deterministic_rag")
     schema_version = int(
         merged.get("schema_version", merged.get("metadata", {}).get("schema_version", 1))
     )
@@ -232,14 +242,19 @@ def _normalize_experiment_dict(data: dict[str, Any], *, file_path: Path) -> dict
     evaluation = dict(merged.get("evaluation", {}))
     if evaluation.get("thresholds_file") is not None:
         evaluation["thresholds_file"] = str(Path(evaluation["thresholds_file"]))
+    if evaluation.get("review_manifest_path") is not None:
+        evaluation["review_manifest_path"] = str(Path(evaluation["review_manifest_path"]))
 
     tracking = dict(merged.get("tracking", {}))
     wandb_cfg = dict(tracking.get("wandb", {}))
     mode = str(wandb_cfg.get("mode", "online")).strip().lower()
     if mode not in {"online", "offline", "disabled"}:
-        mode = "online"
+        raise ValueError("Unsupported W&B tracking mode")
+    for key in ("enabled", "log_artifacts"):
+        if not isinstance(wandb_cfg.get(key, False), bool):
+            raise ValueError(f"tracking.wandb.{key} must be a boolean")
     tracking["wandb"] = {
-        "enabled": bool(wandb_cfg.get("enabled", False)),
+        "enabled": wandb_cfg.get("enabled", False),
         "project": str(wandb_cfg.get("project")).strip() if wandb_cfg.get("project") else None,
         "entity": str(wandb_cfg.get("entity")).strip() if wandb_cfg.get("entity") else None,
         "group": str(wandb_cfg.get("group")).strip() if wandb_cfg.get("group") else None,
@@ -247,13 +262,15 @@ def _normalize_experiment_dict(data: dict[str, Any], *, file_path: Path) -> dict
         "tags": list(wandb_cfg.get("tags", [])),
         "notes": str(wandb_cfg.get("notes")).strip() if wandb_cfg.get("notes") else None,
         "mode": mode,
-        "log_artifacts": bool(wandb_cfg.get("log_artifacts", True)),
+        "log_artifacts": wandb_cfg.get("log_artifacts", False),
         "metrics_verbosity": _normalize_wandb_metrics_verbosity(wandb_cfg.get("metrics_verbosity")),
     }
 
     variants = list(merged.get("variants", []))
     normalized = {
         "schema_version": schema_version,
+        "generation_implementation": generation_implementation,
+        "harness": harness,
         "metadata": metadata,
         "ingestion": ingestion,
         "embedding_index": embedding_index,
@@ -349,8 +366,12 @@ def build_run_assessment_kwargs(experiment: dict[str, Any]) -> dict[str, Any]:
     retrieval = experiment["retrieval"]
     return {
         "artifact_dir": evaluation["artifact_dir"],
+        "generation_implementation": experiment.get("generation_implementation", "existing"),
+        "harness": experiment.get("harness", "deterministic_rag"),
         "name": experiment["metadata"]["name"],
         "dataset_path": dataset.get("path"),
+        "index_snapshot_path": evaluation.get("index_snapshot_path"),
+        "review_manifest_path": evaluation.get("review_manifest_path"),
         "top_k": retrieval["top_k"],
         "max_synthetic_questions": dataset["max_synthetic_questions"],
         "disable_llm_generation": not bool(dataset.get("enable_llm_generation", True)),
@@ -371,20 +392,9 @@ def build_run_assessment_kwargs(experiment: dict[str, Any]) -> dict[str, Any]:
         ),
         "disable_bm25": str(retrieval["search_mode"]).lower() == "semantic_only",
         "export_failed_generations": bool(evaluation.get("export_failed_generations", False)),
-        "retrieval_options": {
-            "search_mode": retrieval["search_mode"],
-            "enable_diversification": retrieval["enable_diversification"],
-            "mmr_lambda": retrieval["mmr_lambda"],
-            "overfetch_multiplier": retrieval["overfetch_multiplier"],
-            "max_chunks_per_source_page": retrieval["max_chunks_per_source_page"],
-            "max_chunks_per_source": retrieval["max_chunks_per_source"],
-            "enable_hyde": retrieval.get("enable_hyde", False),
-            "hyde_max_length": retrieval.get("hyde_max_length", 200),
-            "enable_hype": retrieval.get("enable_hype", False),
-            "enable_reranking": retrieval.get("enable_reranking", False),
-            "reranking_mode": retrieval.get("reranking_mode", "cross_encoder"),
-            "enable_query_understanding": retrieval.get("enable_query_understanding", False),
-        },
+        # Preserve omitted/None/False values and optional controls; the shared
+        # resolver owns defaults/validation for both serving and evaluation.
+        "retrieval_options": dict(retrieval),
         "run_retrieval_ablations": bool(evaluation.get("run_retrieval_ablations", False)),
         "run_hype_ablations": bool(evaluation.get("run_hype_ablations", False)),
         "run_keyword_ablations": bool(evaluation.get("run_keyword_ablations", False)),

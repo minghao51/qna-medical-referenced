@@ -5,23 +5,58 @@ Public API re-exports are in src/rag/__init__.py.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
+import anyio
+
 from src.config import settings
+from src.infra.telemetry import Operation, Stage, telemetry_operation
 from src.ingestion.indexing.chroma_store import get_vector_store
 from src.rag.config import (
     RetrievalDiversityConfig,
     resolve_retrieval_config,
 )
 from src.rag.diversification import diversify_results
-from src.rag.index import initialize_runtime_index
+from src.rag.index import initialize_runtime_index, initialize_runtime_index_async
 from src.rag.protocols import VectorStoreProtocol
 from src.rag.query_expansion import prepare_expanded_queries
 from src.rag.trace_models import ChatSource, RetrievedDocument
 
 logger = logging.getLogger(__name__)
+
+# The cached cross-encoder loads lazily; do not overlap load or prediction.
+_RERANKING_LOCK = threading.Lock()
+
+
+async def _await_owned_task(task: asyncio.Task[Any]) -> Any:
+    """Keep an admitted retrieval task alive until its work has settled."""
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        with anyio.CancelScope(shield=True):
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+        if not task.cancelled():
+            try:
+                task.result()
+            except Exception:
+                logger.error("RAG worker failed during cancellation")
+        raise
+
+
+async def _run_owned_worker(function: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    return await _await_owned_task(task)
 
 
 def _empty_pipeline_trace(query: str, top_k: int):
@@ -58,8 +93,10 @@ def _apply_query_understanding(
 
         classification = classify_query(query)
         query_params = get_retrieval_params_for_query(query, classification)
-        merged = dict(retrieval_options or {})
-        merged.update(query_params)
+        merged = dict(query_params)
+        merged.update(
+            {key: value for key, value in (retrieval_options or {}).items() if value is not None}
+        )
         logger.debug(
             "Query understanding applied: type=%s, confidence=%s",
             classification.query_type.value,
@@ -137,17 +174,18 @@ def _apply_reranking(
 
     from src.rag.reranker import get_reranker
 
-    reranker = get_reranker()
     rerank_candidates_count = cfg.rerank_top_k or fetch_k
     candidates = (
         results[:rerank_candidates_count] if rerank_candidates_count < len(results) else results
     )
-    rerank_result = reranker.rerank(
-        query=query,
-        results=candidates,
-        top_k=fetch_k,
-        min_score=cfg.rerank_score_threshold,
-    )
+    with _RERANKING_LOCK:
+        reranker = get_reranker()
+        rerank_result = reranker.rerank(
+            query=query,
+            results=candidates,
+            top_k=fetch_k,
+            min_score=cfg.rerank_score_threshold,
+        )
     rerank_info = {
         "reranker_model": rerank_result.model_name,
         "rerank_timing_ms": rerank_result.timing_ms,
@@ -264,38 +302,63 @@ def _build_pipeline_trace(
 
 
 def retrieve_context_with_trace(
-    query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None
+    query: str,
+    top_k: int | None = None,
+    retrieval_options: dict[str, Any] | None = None,
+    *,
+    allow_build: bool = True,
 ):
+    if top_k is not None:
+        top_k = max(1, int(top_k))
     if not query or not query.strip():
-        return "", [], _empty_pipeline_trace("", top_k)
-    query, original_length, cfg, total_start, vector_store = _prepare_query(
-        query, retrieval_options
-    )
+        empty_k = top_k if top_k is not None else resolve_retrieval_config(retrieval_options).top_k
+        return "", [], _empty_pipeline_trace("", empty_k)
+    query, original_length, cfg, total_start = _prepare_query(query, retrieval_options)
+    top_k = cfg.top_k if top_k is None else top_k
+    if allow_build:
+        initialize_runtime_index()
+    else:
+        initialize_runtime_index(allow_build=False)
+    vector_store = get_vector_store()
 
     fetch_k = max(top_k, top_k * cfg.overfetch_multiplier)
-    expanded_queries, medical_expansion_trace = prepare_expanded_queries(
-        query,
-        enable_medical_expansion=cfg.enable_medical_expansion,
-        medical_expansion_provider=cfg.medical_expansion_provider,
-    )
-    expanded_queries, _ = _extend_with_hype_questions(
-        vector_store,
-        query,
-        expanded_queries,
-        enable_hype=cfg.enable_hype,
-    )
+    with telemetry_operation(Operation.EXPANSION, stage=Stage.QUERY_EXPANSION):
+        expanded_queries, medical_expansion_trace = prepare_expanded_queries(
+            query,
+            enable_medical_expansion=cfg.enable_medical_expansion,
+            medical_expansion_provider=cfg.medical_expansion_provider,
+        )
+    with telemetry_operation(Operation.EXPANSION, stage=Stage.QUERY_EXPANSION):
+        expanded_queries, _ = _extend_with_hype_questions(
+            vector_store,
+            query,
+            expanded_queries,
+            enable_hype=cfg.enable_hype,
+        )
 
     from src.rag.retrieval import retrieve_candidates_with_trace as retrieve_fn
 
-    results, retrieval_trace = retrieve_fn(
-        vector_store,
-        query,
-        fetch_k,
-        cfg.search_mode,
-        pre_expanded_queries=expanded_queries,
-    )
+    with telemetry_operation(
+        Operation.SEARCH,
+        stage=Stage.SEARCH,
+        input_count=len(expanded_queries),
+    ):
+        results, retrieval_trace = retrieve_fn(
+            vector_store,
+            query,
+            fetch_k,
+            cfg.search_mode,
+            pre_expanded_queries=expanded_queries,
+        )
 
-    results, _, rerank_info, apply_div = _rerank_and_diversify(results, query, top_k, fetch_k, cfg)
+    with telemetry_operation(
+        Operation.RERANKING,
+        stage=Stage.RERANKING,
+        input_count=len(results),
+    ):
+        results, _, rerank_info, apply_div = _rerank_and_diversify(
+            results, query, top_k, fetch_k, cfg
+        )
 
     return _build_pipeline_trace(
         results=results,
@@ -313,15 +376,30 @@ def retrieve_context_with_trace(
 
 async def retrieve_context_with_trace_async(
     query: str,
-    top_k: int = 5,
+    top_k: int | None = None,
     retrieval_options: dict[str, Any] | None = None,
     hyde_client: Any = None,
+    *,
+    allow_build: bool = True,
 ):
+    """Use native async HyDE and off-loop synchronous retrieval stages.
+
+    Cancellation stops orchestration; a started worker stage may still finish.
+    """
+    if top_k is not None:
+        top_k = max(1, int(top_k))
     if not query or not query.strip():
-        return "", [], _empty_pipeline_trace("", top_k)
-    query, original_length, cfg, total_start, vector_store = _prepare_query(
-        query, retrieval_options
+        empty_k = top_k if top_k is not None else resolve_retrieval_config(retrieval_options).top_k
+        return "", [], _empty_pipeline_trace("", empty_k)
+    query, original_length, cfg, total_start = _prepare_query(query, retrieval_options)
+    top_k = cfg.top_k if top_k is None else top_k
+    initialization = asyncio.create_task(
+        initialize_runtime_index_async()
+        if allow_build
+        else initialize_runtime_index_async(allow_build=False)
     )
+    await _await_owned_task(initialization)
+    vector_store = await _run_owned_worker(get_vector_store)
 
     from src.rag.trace_models import RetrievalStep
 
@@ -329,44 +407,54 @@ async def retrieve_context_with_trace_async(
     steps: list[RetrievalStep] = []
 
     query_expansion_start = time.time()
-    expanded_queries, medical_expansion_trace = prepare_expanded_queries(
-        query,
-        enable_medical_expansion=cfg.enable_medical_expansion,
-        medical_expansion_provider=cfg.medical_expansion_provider,
-    )
+    with telemetry_operation(Operation.EXPANSION, stage=Stage.QUERY_EXPANSION):
+        expanded_queries, medical_expansion_trace = await _run_owned_worker(
+            prepare_expanded_queries,
+            query,
+            enable_medical_expansion=cfg.enable_medical_expansion,
+            medical_expansion_provider=cfg.medical_expansion_provider,
+        )
     from src.rag.query_expansion import expand_queries_async
 
-    expanded_queries = await expand_queries_async(
-        query,
-        hyde_client=hyde_client,
-        enable_hyde=cfg.enable_hyde,
-        hyde_max_length=cfg.hyde_max_length,
-        pre_expanded_queries=expanded_queries,
-    )
+    with telemetry_operation(Operation.EXPANSION, stage=Stage.QUERY_EXPANSION):
+        expanded_queries = await expand_queries_async(
+            query,
+            hyde_client=hyde_client,
+            enable_hyde=cfg.enable_hyde,
+            hyde_max_length=cfg.hyde_max_length,
+            pre_expanded_queries=expanded_queries,
+        )
     query_expansion_timing_ms = int((time.time() - query_expansion_start) * 1000)
 
-    expanded_queries, selected_hype_questions = _extend_with_hype_questions(
-        vector_store,
-        query,
-        expanded_queries,
-        enable_hype=cfg.enable_hype,
-    )
+    with telemetry_operation(Operation.EXPANSION, stage=Stage.QUERY_EXPANSION):
+        expanded_queries, selected_hype_questions = await _run_owned_worker(
+            _extend_with_hype_questions,
+            vector_store,
+            query,
+            expanded_queries,
+            enable_hype=cfg.enable_hype,
+        )
     if selected_hype_questions:
         logger.debug("HyPE: expanded to %d total queries", len(expanded_queries))
 
     retrieval_start = time.time()
     from src.rag.retrieval import retrieve_candidates_with_trace_async as retrieve_fn
 
-    results, retrieval_trace = await retrieve_fn(
-        vector_store,
-        query,
-        fetch_k,
-        cfg.search_mode,
-        hyde_client=hyde_client,
-        enable_hyde=cfg.enable_hyde,
-        hyde_max_length=cfg.hyde_max_length,
-        pre_expanded_queries=expanded_queries,
-    )
+    with telemetry_operation(
+        Operation.SEARCH,
+        stage=Stage.SEARCH,
+        input_count=len(expanded_queries),
+    ):
+        results, retrieval_trace = await retrieve_fn(
+            vector_store,
+            query,
+            fetch_k,
+            cfg.search_mode,
+            hyde_client=hyde_client,
+            enable_hyde=cfg.enable_hyde,
+            hyde_max_length=cfg.hyde_max_length,
+            pre_expanded_queries=expanded_queries,
+        )
     retrieval_search_timing_ms = int((time.time() - retrieval_start) * 1000)
 
     search_mode = cfg.search_mode
@@ -410,13 +498,19 @@ async def retrieve_context_with_trace_async(
     )
 
     reranking_start = time.time()
-    results, rerank_result, rerank_info, apply_div = _rerank_and_diversify(
-        results,
-        query,
-        top_k,
-        fetch_k,
-        cfg,
-    )
+    with telemetry_operation(
+        Operation.RERANKING,
+        stage=Stage.RERANKING,
+        input_count=len(results),
+    ):
+        results, rerank_result, rerank_info, apply_div = await _run_owned_worker(
+            _rerank_and_diversify,
+            results,
+            query,
+            top_k,
+            fetch_k,
+            cfg,
+        )
     reranking_timing_ms = int((time.time() - reranking_start) * 1000)
 
     steps.append(
@@ -456,8 +550,8 @@ async def retrieve_context_with_trace_async(
 def _prepare_query(
     query: str,
     retrieval_options: dict[str, Any] | None,
-) -> tuple[str, int, RetrievalDiversityConfig, float, VectorStoreProtocol]:
-    """Validate, truncate, config-resolve, and init shared by sync/async retrieval."""
+) -> tuple[str, int, RetrievalDiversityConfig, float]:
+    """Validate, truncate, and resolve config without initializing the index."""
     original_length = len(query)
     if len(query) > 4000:
         logger.warning("Query truncated from %d to 4000 chars", len(query))
@@ -470,15 +564,18 @@ def _prepare_query(
     if updated:
         cfg = resolve_retrieval_config(updated)
 
-    initialize_runtime_index()
-    return query, original_length, cfg, total_start, get_vector_store()
+    return query, original_length, cfg, total_start
 
 
 def retrieve_context(
-    query: str, top_k: int = 5, retrieval_options: dict[str, Any] | None = None
+    query: str,
+    top_k: int | None = None,
+    retrieval_options: dict[str, Any] | None = None,
+    *,
+    allow_build: bool = True,
 ) -> tuple[str, list[ChatSource]]:
     context, sources, _ = retrieve_context_with_trace(
-        query, top_k=top_k, retrieval_options=retrieval_options
+        query, top_k=top_k, retrieval_options=retrieval_options, allow_build=allow_build
     )
     return context, sources
 

@@ -275,6 +275,12 @@ def apply_runtime_config(config: RuntimeConfig) -> None:
     )
     state.auto_select_strategy = bool(config.chunking.auto_select_strategy)
 
+    # Ingestion options belong to the runtime overlay, not store constructor kwargs.
+    state.indexing_features = (
+        copy.deepcopy(config.vector_store.indexing_features)
+        if config.vector_store is not None
+        else {}
+    )
     set_vector_store_runtime_config(
         config.vector_store.to_dict() if config.vector_store is not None else None
     )

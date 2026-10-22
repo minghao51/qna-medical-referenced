@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from src.config import VECTOR_DIR, settings
+from src.evals.index_snapshot import (
+    ConsistentIndexSnapshotSource,
+    FrozenIndexSnapshot,
+    SnapshotError,
+    freeze_index_snapshot,
+    load_snapshot_export,
+)
 from src.ingestion.indexing.chroma_store import ChromaVectorStore, get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -41,6 +48,42 @@ def _index_size_bytes(path: Path) -> int | None:
     except OSError as e:
         logger.debug("Failed to compute index size for %s: %s", path, e)
         return None
+
+
+def capture_index_snapshot(
+    collection_name: str | None = None,
+    *,
+    snapshot_source: ConsistentIndexSnapshotSource | None = None,
+    frozen_snapshot: FrozenIndexSnapshot | None = None,
+    export_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Capture only a frozen private snapshot; never certify the shared Chroma store.
+
+    ``snapshot_source`` must provide a single consistent view from a privately owned
+    or quiescent backend. The ordinary runtime collection has no such public
+    consistency guarantee and is therefore intentionally not read here.
+    """
+    if settings.storage.chroma_server_host.strip():
+        return {"status": "unverified", "reason": "remote_snapshot_verification_unsupported"}
+    if sum(item is not None for item in (snapshot_source, frozen_snapshot, export_path)) > 1:
+        return {"status": "unverified", "reason": "conflicting_snapshot_inputs"}
+    try:
+        if snapshot_source is not None:
+            frozen_snapshot = freeze_index_snapshot(snapshot_source)
+        elif export_path is not None:
+            frozen_snapshot = load_snapshot_export(export_path)
+        if frozen_snapshot is None:
+            return {
+                "status": "unverified",
+                "reason": "private_frozen_snapshot_required",
+            }
+        if collection_name and frozen_snapshot.collection_name != collection_name:
+            return {"status": "unverified", "reason": "snapshot_collection_mismatch"}
+        return frozen_snapshot.capture_payload()
+    except SnapshotError as error:
+        return {"status": "unverified", "reason": str(error)}
+    except (OSError, TypeError, ValueError):
+        return {"status": "unverified", "reason": "index_snapshot_invalid_or_unavailable"}
 
 
 def assess_l5_index_quality(

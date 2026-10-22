@@ -27,7 +27,7 @@
 			items: [
 				{
 					q: 'What does the confidence badge mean?',
-					a: 'The confidence badge summarizes the quality of the retrieval and generation pipeline. It is derived from source quality, retrieval scores, context relevance, and generation success. High confidence means the system found strong, relevant sources.'
+					a: 'The badge is an uncalibrated heuristic retrieval/pipeline diagnostic derived from source quality, retrieval scores, context relevance, and generation success. It is not a probability that a medical answer is correct, and a high score does not establish medical correctness.'
 				},
 				{
 					q: 'Why are some sources marked with quality indicators?',

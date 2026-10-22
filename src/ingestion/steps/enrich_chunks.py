@@ -29,6 +29,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+from src.infra.usage import usage_role
 from src.ingestion.steps._utils import _weighted_sample_chunks
 
 if TYPE_CHECKING:
@@ -140,18 +141,38 @@ async def _enrich_chunk_batch(
     """
     results: dict[str, dict[str, Any]] = {}
 
-    # Run synchronous generate in executor threads for concurrency
-    loop = asyncio.get_running_loop()
+    # Run synchronous generate in worker threads for concurrency
     tasks = []
     for chunk in chunks_batch:
         prompt = ENRICH_PROMPT_TEMPLATE.format(chunk=chunk["content"])
         chunk_id = chunk["id"]
 
         async def generate_with_timeout(prompt=prompt, chunk_id=chunk_id) -> str:
+            def generate() -> str:
+                with usage_role("enrichment"):
+                    return str(client.generate(prompt, ""))
+
+            async def generate_in_thread() -> str:
+                worker = asyncio.create_task(asyncio.to_thread(generate))
+                try:
+                    return await asyncio.shield(worker)
+                except BaseException:
+                    # Keep the semaphore held until an admitted synchronous SDK call settles.
+                    while not worker.done():
+                        try:
+                            await asyncio.shield(worker)
+                        except BaseException:
+                            continue
+                    try:
+                        worker.result()
+                    except BaseException:
+                        pass
+                    raise
+
             try:
                 async with semaphore:
-                    async with asyncio.timeout(30):  # 30s timeout per chunk
-                        return await loop.run_in_executor(None, client.generate, prompt, "")
+                    async with asyncio.timeout(30):  # 30s active timeout per chunk
+                        return await generate_in_thread()
             except TimeoutError:
                 logger.warning("Enrichment timeout for chunk %s", chunk_id)
                 return ""

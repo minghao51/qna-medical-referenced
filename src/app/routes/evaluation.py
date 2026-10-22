@@ -160,18 +160,17 @@ def get_evaluation_runs(request: Request) -> list[dict[str, Any]]:
 
 @router.get(
     "/evaluation/history",
-    summary="Get evaluation trending metrics",
-    description="Get historical evaluation metrics for trending analysis and performance monitoring",
+    summary="Get evaluation history",
+    description="Get diagnostic history records; cross-run aggregates are unavailable without a verified comparison cohort",
 )
 def get_evaluation_history(
     request: Request,
     limit: int = 10,
 ) -> dict[str, Any]:
-    """Get historical evaluation metrics for trending analysis.
+    """Get diagnostic records without asserting cross-run comparability.
 
-    Aggregates metrics across multiple evaluation runs to show trends
-    over time. Computes averages for key metrics like hit rate, MRR,
-    and latency.
+    Individual records retain run metrics for inspection, but aggregate quality,
+    latency, and duration metrics remain unavailable until a verified comparison cohort exists.
 
     Args:
         limit: Maximum number of recent runs to include (default: 10)
@@ -179,7 +178,7 @@ def get_evaluation_history(
     Returns:
         Dictionary containing:
             - runs: List of run data with timestamps and metrics
-            - summary: Aggregated averages across all runs
+            - summary: Run/source counts and null aggregate metrics
 
     Example:
         GET /evaluation/history?limit=20
@@ -199,9 +198,9 @@ def get_evaluation_history(
             ],
             "summary": {
                 "total_runs": 10,
-                "avg_hit_rate": 0.82,
-                "avg_mrr": 0.70,
-                "avg_latency_p50": 150
+                "avg_hit_rate": null,
+                "avg_mrr": null,
+                "avg_latency_p50": null
             }
         }
     """

@@ -14,16 +14,30 @@ def test_select_best_variant_uses_tie_breakers():
     winner_name, winner_metrics = select_best_variant(
         {
             "a": {
+                "query_count": 7,
                 "ndcg_at_k": 0.9,
                 "exact_chunk_hit_rate": 0.2,
                 "evidence_hit_rate": 0.1,
                 "latency_p50_ms": 100,
+                "identity_status": "verified",
+                "measurement_contract_version": 1,
+                "status": "ok",
+                "execution_status": "completed",
+                "measurement_status": "complete",
+                "quality_gate": "passed",
             },
             "b": {
+                "query_count": 7,
                 "ndcg_at_k": 0.9,
                 "exact_chunk_hit_rate": 0.3,
                 "evidence_hit_rate": 0.0,
                 "latency_p50_ms": 150,
+                "identity_status": "verified",
+                "measurement_contract_version": 1,
+                "status": "ok",
+                "execution_status": "completed",
+                "measurement_status": "complete",
+                "quality_gate": "passed",
             },
         }
     )
@@ -32,7 +46,7 @@ def test_select_best_variant_uses_tie_breakers():
     assert winner_metrics["exact_chunk_hit_rate"] == 0.3
 
 
-def test_run_feature_family_reconfigures_keyword_winner_for_answer_eval(tmp_path: Path):
+def test_run_feature_family_runs_each_keyword_variant_in_isolation(tmp_path: Path):
     calls: list[dict] = []
     experiment = load_reference_experiment(
         "experiments/v1/comprehensive_ablation.yaml", "pymupdf_semantic_hybrid"
@@ -40,21 +54,26 @@ def test_run_feature_family_reconfigures_keyword_winner_for_answer_eval(tmp_path
 
     def fake_run_assessment(**kwargs):
         calls.append(kwargs)
-        if len(calls) == 1:
-            summary = {
-                "keyword_ablations": {
-                    "baseline": {"ndcg_at_k": 0.9, "exact_chunk_hit_rate": 0.2},
-                    "keywords_only": {"ndcg_at_k": 0.95, "exact_chunk_hit_rate": 0.1},
-                    "summaries_only": {"ndcg_at_k": 0.95, "exact_chunk_hit_rate": 0.25},
-                    "both": {"ndcg_at_k": 0.94, "exact_chunk_hit_rate": 0.4},
-                }
-            }
-            run_dir = tmp_path / "retrieval"
-        else:
-            summary = {"l6_answer_quality_metrics": {"status": "ok", "query_count": 7}}
-            run_dir = tmp_path / "winner"
+        run_dir = tmp_path / f"run-{len(calls)}"
         run_dir.mkdir(parents=True, exist_ok=True)
-        return SimpleNamespace(run_dir=run_dir, status="ok", failed_thresholds=[], summary=summary)
+        ndcg = [0.9, 0.95, 0.95, 0.94][len(calls) - 1]
+        exact = [0.2, 0.1, 0.25, 0.4][len(calls) - 1]
+        summary = {
+            "measurement_contract_version": 1,
+            "execution_status": "completed",
+            "measurement": {"status": "complete"},
+            "quality_gate": "passed",
+            "status": "ok",
+            "identity": {"status": "verified"},
+            "retrieval_metrics": {
+                "query_count": 7,
+                "ndcg_at_k": ndcg,
+                "exact_chunk_hit_rate": exact,
+                "evidence_hit_rate": 0.2,
+                "latency_p50_ms": 10,
+            },
+        }
+        return SimpleNamespace(run_dir=run_dir, status="ok", summary=summary)
 
     result = run_feature_family(
         experiment,
@@ -64,16 +83,18 @@ def test_run_feature_family_reconfigures_keyword_winner_for_answer_eval(tmp_path
     )
 
     assert result["winner_variant"] == "summaries_only"
-    assert calls[0]["run_keyword_ablations"] is True
-    assert calls[0]["include_answer_eval"] is False
-    winner_experiment = calls[1]["experiment_config"]
+    assert len(calls) == 4
+    assert all(call["run_keyword_ablations"] is False for call in calls)
+    assert all(call["include_answer_eval"] is False for call in calls)
+    assert all(call["skip_ingestion"] is False for call in calls)
+    assert (
+        len({call["experiment_config"]["embedding_index"]["collection_name"] for call in calls})
+        == 4
+    )
+    winner_experiment = calls[2]["experiment_config"]
     assert winner_experiment["ingestion"]["enable_keyword_extraction"] is False
     assert winner_experiment["ingestion"]["enable_chunk_summaries"] is True
-    assert winner_experiment["embedding_index"]["rebuild_policy"] == "always"
-    assert winner_experiment["embedding_index"]["collection_name"].endswith(
-        "_summaries_only_answer"
-    )
-    assert calls[1]["include_answer_eval"] is True
+    assert result["answer_eval_status"].startswith("blocked")
 
 
 def test_render_and_write_feature_ablation_summary(tmp_path: Path):
@@ -108,7 +129,7 @@ def test_render_and_write_feature_ablation_summary(tmp_path: Path):
 
     rendered = render_feature_ablation_summary(summary)
     assert "both_reranking" in rendered
-    assert "not re-ranked across all variants" in rendered
+    assert "not promotion" in rendered
 
     markdown_path, json_path = write_feature_ablation_outputs(summary, tmp_path)
     assert markdown_path.exists()

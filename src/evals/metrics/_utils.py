@@ -69,3 +69,47 @@ def ndcg_at_k(binary_relevance: list[int], k: int | None = None) -> float:
     for i in range(1, ideal_count + 1):
         idcg += 1.0 / math.log2(i + 1)
     return dcg / idcg if idcg else 0.0
+
+
+def finite_mean(values: Iterable[int | float]) -> float | None:
+    """Average finite numeric measurements; reject booleans and invalid values."""
+    vals = list(values)
+    if not vals:
+        return None
+    for value in vals:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("metric values must be finite numbers")
+        if not math.isfinite(value):
+            raise ValueError("metric values must be finite numbers")
+    return sum(vals) / len(vals)
+
+
+def precision_at_k_slots(binary_relevance: list[int], k: int) -> float:
+    """Precision@k with unreturned result slots counted as non-relevant."""
+    if isinstance(k, bool) or not isinstance(k, int) or k <= 0:
+        raise ValueError("k must be a positive integer")
+    for value in binary_relevance:
+        if isinstance(value, bool) or not isinstance(value, int) or value not in (0, 1):
+            raise ValueError("binary relevance judgments must be integer 0 or 1")
+    return sum(binary_relevance[:k]) / k
+
+
+def ndcg_from_qrels_at_k(
+    retrieved_grades: list[int], ideal_grades: list[int], k: int
+) -> float | None:
+    """Standard graded nDCG using the complete independently judged ideal set."""
+    if isinstance(k, bool) or not isinstance(k, int) or k <= 0:
+        raise ValueError("k must be a positive integer")
+    for grade in [*retrieved_grades, *ideal_grades]:
+        if isinstance(grade, bool) or not isinstance(grade, int) or grade < 0:
+            raise ValueError("relevance grades must be non-negative integers")
+    if not ideal_grades:
+        return None
+
+    def dcg(grades: list[int]) -> float:
+        return math.fsum(
+            (2**grade - 1) / math.log2(rank + 1) for rank, grade in enumerate(grades[:k], start=1)
+        )
+
+    ideal_dcg = dcg(sorted(ideal_grades, reverse=True))
+    return dcg(retrieved_grades) / ideal_dcg if ideal_dcg else 0.0

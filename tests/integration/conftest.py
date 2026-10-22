@@ -50,13 +50,15 @@ def _fake_embedding(text: str) -> list[float]:
 def fake_chroma_embeddings(monkeypatch, tmp_path):
     """Replace the Qwen embedding API with deterministic offline vectors.
 
-    Patches the embedding functions at the chroma_store module boundary (the
-    only place ChromaVectorStore calls them) and isolates ChromaDB
+    Patches the embedding functions at the embedding-module boundary plus the
+    store's imported binding of ``embed_texts_with_stats`` (the surfaces
+    ChromaVectorStore calls) and isolates ChromaDB
     persistence under tmp_path (also forcing the embedded client even if the
     host is configured for a Chroma server). ChromaDB itself still runs for
     real, so store semantics are genuinely exercised without any API key or
     network.
     """
+    import src.ingestion.indexing.embedding as embedding_boundary
     import src.ingestion.indexing.store as chroma_store
     from src.config import settings
 
@@ -73,7 +75,8 @@ def fake_chroma_embeddings(monkeypatch, tmp_path):
         }
         return vectors, stats
 
-    monkeypatch.setattr(chroma_store, "embed_texts", fake_embed_texts)
+    monkeypatch.setattr(embedding_boundary, "embed_texts", fake_embed_texts)
+    monkeypatch.setattr(embedding_boundary, "embed_texts_with_stats", fake_embed_texts_with_stats)
     monkeypatch.setattr(chroma_store, "embed_texts_with_stats", fake_embed_texts_with_stats)
     monkeypatch.setattr(settings.storage, "chroma_server_host", "")
     monkeypatch.setattr(settings.storage, "chroma_persist_directory", str(tmp_path / "chroma"))

@@ -7,6 +7,7 @@ so the YAML file is the canonical source for all non-secret values.
 
 from __future__ import annotations
 
+import copy
 import threading
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -36,6 +37,9 @@ class RuntimeState:
         "html_extractor_strategy": settings.ingestion.html_extractor_strategy,
         "html_extractor_mode": settings.ingestion.html_extractor_mode,
         "page_classification_enabled": settings.ingestion.page_classification_enabled,
+        "retrieval_overrides": {},
+        "indexing_features": {},
+        "production_profile": None,
         "reranker_instance": None,
         "vector_store_initialized": False,
         "vector_store_initialized_signature": None,
@@ -101,6 +105,9 @@ class RuntimeState:
                 "html_extractor_strategy": merged["html_extractor_strategy"],
                 "html_extractor_mode": merged["html_extractor_mode"],
                 "page_classification_enabled": merged["page_classification_enabled"],
+                "retrieval_overrides": copy.deepcopy(merged["retrieval_overrides"]),
+                "indexing_features": copy.deepcopy(merged["indexing_features"]),
+                "production_profile": merged["production_profile"],
                 "reranker_instance_loaded": merged["reranker_instance"] is not None,
                 "vector_store_initialized": merged["vector_store_initialized"],
                 "vector_store_initialized_signature": merged["vector_store_initialized_signature"],

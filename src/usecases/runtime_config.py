@@ -15,10 +15,20 @@ from src.config.context import get_runtime_state
 from src.rag import get_runtime_retrieval_config
 
 
-def get_runtime_config_view() -> dict[str, Any]:
-    """Return a read-only snapshot of the active runtime configuration."""
+def get_runtime_config_view(*, llm_client: Any = None) -> dict[str, Any]:
+    """Return serving options and next-build flags, not proof of index provenance."""
     state = get_runtime_state()
     retrieval_cfg = get_runtime_retrieval_config()
+    features = state.indexing_features
+    provider = settings.llm.provider
+    model = getattr(llm_client, "model", None)
+    if not isinstance(model, str):
+        if provider == "gemini":
+            model = settings.llm.gemini_model_name
+        elif provider == "litellm":
+            model = settings.llm.litellm_model or f"openrouter/{settings.llm.openrouter_model}"
+        else:
+            model = settings.llm.model_name
 
     return {
         "retrieval": {
@@ -46,15 +56,27 @@ def get_runtime_config_view() -> dict[str, Any]:
             "html_extractor_mode": str(state.html_extractor_mode),
             "pdf_extractor_strategy": str(state.pdf_extractor_strategy),
             "pdf_table_extractor": str(state.pdf_table_extractor),
+            "enable_hype": bool(features.get("enable_hype", settings.hype.enabled)),
+            "configuration_scope": "next_build",
         },
         "enrichment": {
-            "enable_keyword_extraction": retrieval_cfg.get("enable_keyword_extraction", False),
-            "enable_chunk_summaries": retrieval_cfg.get("enable_chunk_summaries", False),
+            "configuration_scope": "next_build",
+            "enable_keyword_extraction": bool(
+                features.get(
+                    "enable_keyword_extraction", settings.enrichment.enable_keyword_extraction
+                )
+            ),
+            "enable_chunk_summaries": bool(
+                features.get("enable_chunk_summaries", settings.enrichment.enable_chunk_summaries)
+            ),
+            "provider": "qwen",
+            "model_name": settings.llm.model_name,
         },
         "llm": {
-            "provider": settings.llm.provider,
-            "model_name": settings.llm.model_name,
+            "provider": provider,
+            "model_name": model,
             "embedding_model": settings.llm.embedding_model,
         },
-        "production_profile": settings.production.production_profile,
+        "production_profile": state.production_profile,
+        "configured_production_profile": settings.production.production_profile,
     }

@@ -48,7 +48,7 @@ def test_search_hypothetical_questions_only_returns_query_relevant_matches():
     store.documents = {
         "ids": ["a", "b"],
         "contents": ["chunk a", "chunk b"],
-        "embeddings": [[], []],
+        "embeddings": [[1.0, 0.0], [0.0, 1.0]],
         "metadatas": [
             {
                 "quality_score": 1.0,

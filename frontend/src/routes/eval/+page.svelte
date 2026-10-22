@@ -16,6 +16,7 @@
 	import { calculateHealthScore, getHealthGrade } from '$lib/utils/health-score';
 	import {
 		emptyDrillDownState,
+		formatDecimal,
 		formatRunTimestampWithZone,
 		historyLabel,
 		selectionKey
@@ -94,7 +95,8 @@
 		}
 	}
 
-	function getStatusColor(status: string): string {
+	function getStatusColor(status: string | null | undefined): string {
+		if (status == null) return '#6b7280';
 		return status === 'ok' ? '#4caf50' : '#f44336';
 	}
 
@@ -264,7 +266,7 @@
 			<div class="run-bar">
 				<div class="run-bar-primary">
 					<span class="status-pill" style={`background:${getStatusColor(data.summary.status)}`}>
-						{data.summary.status.toUpperCase()}
+						{data.summary.status?.toUpperCase() ?? 'N/A'}
 					</span>
 					<div>
 						<strong>{selectedRunLabel()}</strong>
@@ -272,8 +274,8 @@
 					</div>
 				</div>
 				<div class="run-bar-meta">
-					<span>Duration {data.summary.duration_s.toFixed(2)}s</span>
-					<span>{data.summary.failed_thresholds_count} failed thresholds</span>
+					<span>Duration {formatDecimal(data.summary.duration_s, 2, 's')}</span>
+					<span>{formatDecimal(data.summary.failed_thresholds_count, 0)} failed thresholds</span>
 				</div>
 				<div class="run-bar-actions">
 					<button type="button" class="action-btn" onclick={() => data && exportToCSV(data)} disabled={!data}>Export CSV</button>

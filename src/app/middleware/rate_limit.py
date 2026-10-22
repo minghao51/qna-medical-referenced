@@ -154,8 +154,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 logging.WARNING,
                 "rate_limit_exceeded",
                 request_id=getattr(request.state, "request_id", None),
-                path=request.url.path,
-                rate_key=rate_key,
+                path=getattr(request.scope.get("route"), "path", "/unmatched"),
                 retry_after=decision.retry_after,
             )
             response = JSONResponse(
@@ -179,7 +178,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _build_rate_limit_key(self, request: Request, auth) -> tuple[str, int]:
         if auth:
             if self._is_bypass_auth(auth):
-                logger.info("Rate limit bypass used by key_id=%s", auth.key_id)
+                logger.info("Rate limit bypass used")
                 return f"auth-bypass:{auth.key_id}", 0
             return f"auth:{auth.key_id}", rate_limiter.requests_per_minute
 

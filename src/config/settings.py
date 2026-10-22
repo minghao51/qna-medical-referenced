@@ -15,9 +15,10 @@ Priority order (first wins):
 import functools
 import warnings
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal, Self
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -36,6 +37,7 @@ class AppConfig(BaseModel):
 class ApiConfig(BaseModel):
     cors_allowed_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000,http://127.0.0.1:4173"
     max_message_length: int = 2000
+    session_signing_secret: SecretStr | None = None
     api_keys: str | None = None
     api_keys_json: str | None = None
     rate_limit_per_minute: int = 60
@@ -51,7 +53,8 @@ class ApiConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    provider: str = "qwen"
+    provider: Literal["qwen", "gemini", "litellm"] = "qwen"
+    judge_provider: Literal["qwen", "gemini", "litellm"] | None = None
     model_name: str = "qwen3.5-flash"
     dashscope_api_key: SecretStr = SecretStr("")
     qwen_base_url: str = "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
@@ -168,6 +171,72 @@ class ProductionConfig(BaseModel):
     production_profile: str | None = "baseline_cross_encoder"
 
 
+class TelemetryConfig(BaseModel):
+    """Opt-in, content-safe telemetry configuration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    mode: Literal["disabled", "local", "hosted_metadata", "approved_public_synthetic_content"] = (
+        "disabled"
+    )
+    export_enabled: bool = False
+    content_approved: bool = False
+    endpoint: str | None = None
+    region: Literal["us", "eu"] | None = None
+    access_policy: Literal["private_project"] | None = None
+    access_approved: bool = False
+    retention_days: int | None = Field(default=None, ge=1, le=3650)
+    retention_approved: bool = False
+    token: SecretStr = SecretStr("")
+    shutdown_timeout_seconds: float = Field(default=0.25, gt=0, le=2)
+    local_span_capacity: int = Field(default=256, ge=1, le=4096)
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("telemetry endpoint must be an approved HTTPS origin")
+        return f"https://{parsed.hostname.lower()}"
+
+    @model_validator(mode="after")
+    def validate_export_policy(self) -> Self:
+        if self.content_approved and self.mode != "approved_public_synthetic_content":
+            raise ValueError("content approval requires approved public/synthetic mode")
+        if self.export_enabled:
+            if self.mode not in {"hosted_metadata", "approved_public_synthetic_content"}:
+                raise ValueError("hosted export requires an explicit hosted telemetry mode")
+            expected_hosts = {
+                "us": "logfire-us.pydantic.dev",
+                "eu": "logfire-eu.pydantic.dev",
+            }
+            if (
+                not self.token.get_secret_value()
+                or self.endpoint is None
+                or self.region is None
+                or self.access_policy != "private_project"
+                or not self.access_approved
+                or self.retention_days is None
+                or not self.retention_approved
+                or urlsplit(self.endpoint).hostname != expected_hosts.get(self.region)
+            ):
+                raise ValueError(
+                    "hosted telemetry destination, access, retention, and token must be approved"
+                )
+        return self
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         extra="ignore",
@@ -188,6 +257,7 @@ class Settings(BaseSettings):
     deepeval: DeepEvalConfig = Field(default_factory=DeepEvalConfig)
     wandb: WandbConfig = Field(default_factory=WandbConfig)
     production: ProductionConfig = Field(default_factory=ProductionConfig)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
 
     # Mapping of deprecated hyde.hype_* fields -> settings.hype fields (P3.6).
     _HYPE_MIGRATION: ClassVar[dict[str, str]] = {

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from src.app.factory import create_app
 from src.app.middleware.auth import APIKeyConfig
@@ -41,6 +42,7 @@ def _build_client(
         {
             "api_keys": api_keys,
             "api_keys_json": None,
+            "session_signing_secret": SecretStr("synthetic-session-signing-secret-for-tests"),
             "anonymous_chat_rate_limit_per_minute": anonymous_chat_rate_limit,
             "anonymous_browser_cookie_name": "anon_browser_id",
             "chat_session_cookie_name": "chat_session_id",

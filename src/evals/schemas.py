@@ -10,8 +10,13 @@ from typing import Any
 @dataclass
 class AssessmentConfig:
     artifact_dir: Path
+    execution_mode: str = "diagnostic"
+    generation_implementation: str = "existing"
+    harness: str = "deterministic_rag"
+    replay_snapshot: Path | None = None
     name: str | None = None
     dataset_path: Path | None = None
+    review_manifest_path: Path | None = None
     top_k: int = 5
     max_synthetic_questions: int = 40
     disable_llm_generation: bool = False
@@ -41,6 +46,8 @@ class AssessmentConfig:
     experiment_config: dict[str, Any] | None = None
     force_rerun: bool = False
     skip_ingestion: bool = False
+    index_snapshot_path: Path | None = None
+    execution_order: int | None = None
 
 
 @dataclass
@@ -54,8 +61,13 @@ class AssessmentResult:
 @dataclass
 class AssessmentRunParams:
     artifact_dir: str | Path = "data/evals"
+    execution_mode: str = "diagnostic"
+    generation_implementation: str = "existing"
+    harness: str = "deterministic_rag"
+    replay_snapshot: str | Path | None = None
     name: str | None = None
     dataset_path: str | Path | None = None
+    review_manifest_path: str | Path | None = None
     top_k: int = 5
     max_synthetic_questions: int = 40
     disable_llm_generation: bool = False
@@ -85,3 +97,5 @@ class AssessmentRunParams:
     diversity_sweep: dict[str, Any] = field(default_factory=dict)
     skip_ingestion: bool = False
     experiment_config: dict[str, Any] | None = None
+    index_snapshot_path: str | Path | None = None
+    execution_order: int | None = None

@@ -4,16 +4,125 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from src.evals.artifacts import ARTIFACT_CONTRACT_VERSION
 from src.evals.assessment.l6_contract import (
     L6_ANSWER_QUALITY_ROWS,
     SUMMARY_L6_METRICS_KEY,
 )
 
 logger = logging.getLogger(__name__)
+
+_HISTORY_NUMERIC_FIELDS = {
+    "duration_s",
+    "failed_thresholds_count",
+    "query_count",
+    "query_count_scored",
+    "hit_rate_at_k",
+    "precision_at_k",
+    "recall_at_k",
+    "mrr",
+    "ndcg_at_k",
+    "source_hit_rate",
+    "exact_chunk_hit_rate",
+    "evidence_hit_rate",
+    "latency_p50_ms",
+    "latency_p95_ms",
+    "hit_rate_at_k_high_conf",
+    "mrr_high_conf",
+    "dedup_hit_rate_at_k",
+    "dedup_precision_at_k",
+    "dedup_mrr",
+    "unique_source_hit_rate_at_k",
+    "unique_source_precision_at_k",
+    "duplicate_source_ratio_mean",
+    "duplicate_doc_ratio_mean",
+    "exact_chunk_hit_rate_high_conf",
+    "evidence_hit_rate_high_conf",
+    "topic_false_positive_rate",
+    "hyde_queries_count",
+    "hyde_hit_rate",
+    "hyde_mrr",
+    "hyde_source_hit_rate",
+    "mean",
+    "count",
+    "error_count",
+    "error_rate",
+    "metric_evaluations_total",
+    "metric_evaluations_ok",
+    "metric_evaluations_failed",
+    "metric_error_rate",
+    "score",
+    "timing_ms",
+    "timing_s",
+    "document_count",
+    "chunk_count",
+    "pairs_evaluated",
+    "pdf_file_count",
+    "replacement_char_count",
+    "table_row_split_violations",
+    "row_count",
+    "ids_count",
+    "embedding_dim",
+}
+_HISTORY_NUMERIC_SUFFIXES = (
+    "_rate",
+    "_ratio",
+    "_mean",
+    "_median",
+    "_count",
+    "_ms",
+    "_score",
+    "_coverage",
+    "_violations",
+    "_chars",
+    "_length",
+    "_size",
+    "_evaluated",
+    "_inserted",
+    "_attempted",
+    "_pages",
+    "_files",
+    "_chunks",
+)
+
+
+def _finite_history_number(value: Any) -> int | float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        return value if math.isfinite(value) else None
+    except OverflowError:
+        return None
+
+
+def _sanitize_artifact_value(
+    value: Any, field: str | None = None, *, numeric_fields: bool = True
+) -> Any:
+    if field in {"manifest", "experiment_config", "config", "tracking", "dedup"}:
+        # These are diagnostic configuration/metadata, not measured metrics.
+        numeric_fields = False
+    if field == "comparable":
+        return False
+    if numeric_fields and (
+        field in _HISTORY_NUMERIC_FIELDS
+        or (field is not None and field.endswith(_HISTORY_NUMERIC_SUFFIXES))
+    ):
+        return _finite_history_number(value)
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_artifact_value(item, key, numeric_fields=numeric_fields)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_artifact_value(item, numeric_fields=numeric_fields) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
 
 
 @lru_cache(maxsize=256)
@@ -115,7 +224,7 @@ class EvaluationService:
             except Exception as exc:
                 logger.debug("Failed to read summary for run %s: %s", run_dir.name, exc)
                 result.append({"run_dir": str(run_dir.name), "status": "error", "source": "local"})
-        return result
+        return cast(list[dict[str, Any]], _sanitize_artifact_value(result))
 
     def read_failed_thresholds(self, run_dir: Path) -> list[dict[str, Any]]:
         summary = self.read_summary(run_dir)
@@ -181,96 +290,102 @@ class EvaluationService:
             )
         return {"ablation_runs": ablation_runs}
 
+    @staticmethod
+    def artifact_compatibility(manifest: Any) -> str:
+        """Read old/unknown records without upgrading their evidence contract."""
+        if not isinstance(manifest, dict) or "artifact_contract_version" not in manifest:
+            return "legacy"
+        version = manifest["artifact_contract_version"]
+        return (
+            "versioned"
+            if type(version) is int and version == ARTIFACT_CONTRACT_VERSION
+            else "unsupported"
+        )
+
     def local_history_runs(self, limit: int) -> list[dict[str, Any]]:
-        runs = [run_dir for run_dir in self.list_run_dirs() if self.is_valid_local_run(run_dir)][
-            :limit
-        ]
+        artifact_names = ("summary.json", "retrieval_metrics.json", "manifest.json")
+        runs = [
+            run_dir
+            for run_dir in self.list_run_dirs()
+            if any((run_dir / name).exists() for name in artifact_names)
+        ][:limit]
         result_runs = []
         for run_dir in runs:
             summary = self.read_summary(run_dir)
             retrieval = self.read_retrieval_metrics(run_dir)
-            manifest = self.read_json_if_exists(run_dir / "manifest.json")
+            manifest_data = self.read_json_if_exists(run_dir / "manifest.json")
+            manifest = manifest_data if isinstance(manifest_data, dict) else {}
             experiment_cfg = self.extract_experiment_config(manifest)
+            metadata = experiment_cfg.get("metadata")
+            metadata = metadata if isinstance(metadata, dict) else {}
+            experiment = manifest.get("experiment")
+            experiment = experiment if isinstance(experiment, dict) else {}
+            tracking = summary.get("tracking")
+            tracking = tracking if isinstance(tracking, dict) else {}
+            wandb = tracking.get("wandb")
+            wandb = wandb if isinstance(wandb, dict) else {}
             l6_metrics = summary.get(SUMMARY_L6_METRICS_KEY, {})
             result_runs.append(
                 {
                     "run_dir": str(run_dir.name),
+                    "artifact_compatibility": self.artifact_compatibility(manifest),
+                    "comparable": False,
                     "timestamp": run_dir.name.split("_")[0] if "_" in run_dir.name else "",
                     "status": summary.get("status"),
-                    "duration_s": summary.get("duration_s", 0),
-                    "failed_thresholds_count": summary.get("failed_thresholds_count", 0),
+                    "duration_s": _finite_history_number(summary.get("duration_s")),
+                    "failed_thresholds_count": _finite_history_number(
+                        summary.get("failed_thresholds_count")
+                    ),
                     "retrieval_metrics": {
-                        "hit_rate_at_k": retrieval.get("hit_rate_at_k", 0),
-                        "mrr": retrieval.get("mrr", 0),
-                        "ndcg_at_k": retrieval.get("ndcg_at_k", 0),
-                        "latency_p50_ms": retrieval.get("latency_p50_ms", 0),
-                        "latency_p95_ms": retrieval.get("latency_p95_ms", 0),
-                        "precision_at_k": retrieval.get("precision_at_k", 0),
-                        "recall_at_k": retrieval.get("recall_at_k", 0),
-                        "hyde_enabled": retrieval.get("hyde_enabled", False),
-                        "hyde_queries_count": retrieval.get("hyde_queries_count", 0),
-                        "hyde_hit_rate": retrieval.get("hyde_hit_rate"),
-                        "hyde_mrr": retrieval.get("hyde_mrr"),
-                        "hyde_source_hit_rate": retrieval.get("hyde_source_hit_rate"),
+                        "query_count": _finite_history_number(retrieval.get("query_count")),
+                        "hit_rate_at_k": _finite_history_number(retrieval.get("hit_rate_at_k")),
+                        "mrr": _finite_history_number(retrieval.get("mrr")),
+                        "ndcg_at_k": _finite_history_number(retrieval.get("ndcg_at_k")),
+                        "latency_p50_ms": _finite_history_number(retrieval.get("latency_p50_ms")),
+                        "latency_p95_ms": _finite_history_number(retrieval.get("latency_p95_ms")),
+                        "precision_at_k": _finite_history_number(retrieval.get("precision_at_k")),
+                        "recall_at_k": _finite_history_number(retrieval.get("recall_at_k")),
+                        "hyde_enabled": (
+                            retrieval.get("hyde_enabled")
+                            if isinstance(retrieval.get("hyde_enabled"), bool)
+                            else None
+                        ),
+                        "hyde_queries_count": _finite_history_number(
+                            retrieval.get("hyde_queries_count")
+                        ),
+                        "hyde_hit_rate": _finite_history_number(retrieval.get("hyde_hit_rate")),
+                        "hyde_mrr": _finite_history_number(retrieval.get("hyde_mrr")),
+                        "hyde_source_hit_rate": _finite_history_number(
+                            retrieval.get("hyde_source_hit_rate")
+                        ),
                     },
-                    "l6_answer_quality_metrics": l6_metrics if isinstance(l6_metrics, dict) else {},
+                    "l6_answer_quality_metrics": _sanitize_artifact_value(l6_metrics)
+                    if isinstance(l6_metrics, dict)
+                    else {},
                     "source": "local",
-                    "experiment_name": (experiment_cfg.get("metadata") or {}).get("name"),
+                    "experiment_name": metadata.get("name"),
                     "variant_name": experiment_cfg.get("variant_name"),
-                    "index_config_hash": (manifest.get("experiment") or {}).get(
-                        "index_config_hash"
-                    ),
-                    "wandb_url": (
-                        ((summary.get("tracking") or {}).get("wandb") or {}).get("run_url")
-                    ),
-                    "wandb_run_id": (
-                        ((summary.get("tracking") or {}).get("wandb") or {}).get("run_id")
-                    ),
+                    "index_config_hash": experiment.get("index_config_hash"),
+                    "wandb_url": wandb.get("run_url"),
+                    "wandb_run_id": wandb.get("run_id"),
                     "dedup": summary.get("dedup", {}),
                     "tracking": summary.get("tracking", {}),
                 }
             )
-        return result_runs
+        return cast(list[dict[str, Any]], _sanitize_artifact_value(result_runs))
 
     @staticmethod
     def aggregate_history_summary(runs: list[dict[str, Any]]) -> dict[str, Any]:
-        metrics_tracking: dict[str, list[float]] = {
-            "hit_rate_at_k": [],
-            "mrr": [],
-            "ndcg_at_k": [],
-            "latency_p50_ms": [],
-            "latency_p95_ms": [],
-            "duration_s": [],
-        }
         source_breakdown: dict[str, int] = {}
         for run in runs:
             source = str(run.get("source") or "unknown")
             source_breakdown[source] = source_breakdown.get(source, 0) + 1
-            retrieval = dict(run.get("retrieval_metrics") or {})
-            for key in ("hit_rate_at_k", "mrr", "ndcg_at_k", "latency_p50_ms", "latency_p95_ms"):
-                value = retrieval.get(key)
-                if isinstance(value, (int, float)):
-                    metrics_tracking[key].append(value)
-            duration = run.get("duration_s")
-            if isinstance(duration, (int, float)):
-                metrics_tracking["duration_s"].append(duration)
         return {
             "total_runs": len(runs),
-            "avg_hit_rate": sum(metrics_tracking["hit_rate_at_k"])
-            / len(metrics_tracking["hit_rate_at_k"])
-            if metrics_tracking["hit_rate_at_k"]
-            else 0,
-            "avg_mrr": sum(metrics_tracking["mrr"]) / len(metrics_tracking["mrr"])
-            if metrics_tracking["mrr"]
-            else 0,
-            "avg_latency_p50": sum(metrics_tracking["latency_p50_ms"])
-            / len(metrics_tracking["latency_p50_ms"])
-            if metrics_tracking["latency_p50_ms"]
-            else 0,
-            "avg_duration": sum(metrics_tracking["duration_s"])
-            / len(metrics_tracking["duration_s"])
-            if metrics_tracking["duration_s"]
-            else 0,
+            "avg_hit_rate": None,
+            "avg_mrr": None,
+            "avg_latency_p50": None,
+            "avg_duration": None,
             "sources": source_breakdown,
         }
 
@@ -282,6 +397,9 @@ class EvaluationService:
         retrieval_metrics = self.read_json_if_exists(run_dir / "retrieval_metrics.json")
         manifest = self.read_json_if_exists(run_dir / "manifest.json")
 
+        result["artifact_compatibility"] = self.artifact_compatibility(manifest)
+        # A recognized artifact format is not a verified semantic identity.
+        result["comparable"] = False
         if isinstance(summary, dict) and summary:
             result["summary"] = summary
         if isinstance(step_metrics, dict) and step_metrics:
@@ -298,7 +416,7 @@ class EvaluationService:
                     "metadata": experiment_cfg.get("metadata"),
                 }
         result["failed_thresholds"] = self.read_failed_thresholds(run_dir)
-        return result
+        return cast(dict[str, Any], _sanitize_artifact_value(result))
 
     def load_latest_evaluation(self) -> dict[str, Any]:
         run_dir = self.get_latest_run_dir()

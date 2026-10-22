@@ -10,9 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, cast
+from uuid import uuid4
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -27,7 +28,14 @@ from src.core.source_metadata import (
     normalize_source_type,
     sanitize_external_url,
 )
-from src.ingestion.indexing.embedding import embed_texts, embed_texts_with_stats
+from src.infra.telemetry import (
+    ErrorCode,
+    Operation,
+    Stage,
+    UsageCompleteness,
+    telemetry_operation,
+)
+from src.ingestion.indexing.embedding import embed_texts_with_stats
 from src.ingestion.indexing.hype_index import HypotheticalQuestionSearchMixin
 from src.ingestion.indexing.keyword_index import (
     build_keyword_index,
@@ -79,6 +87,29 @@ def _source_class_for(source: str, metadata: dict | None = None) -> str:
     )
 
 
+def _record_store_embedding_span(
+    *,
+    model_name: str,
+    input_count: int,
+    elapsed_ms: float,
+    result_count: int | None = None,
+    error_code: ErrorCode | None = None,
+) -> None:
+    with telemetry_operation(
+        Operation.EMBEDDING,
+        stage=Stage.EMBEDDING,
+        model=model_name,
+        input_count=input_count,
+        attempt_id=str(uuid4()),
+        elapsed_ms=elapsed_ms,
+    ) as span:
+        span.set_usage(completeness=UsageCompleteness.UNKNOWN)
+        if result_count is not None:
+            span.set_result_count(result_count)
+        if error_code is not None:
+            span.mark_error(error_code)
+
+
 class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
     """Vector store backed by ChromaDB persistent storage.
 
@@ -112,6 +143,11 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
         embedding_model: str | None = None,
         embedding_batch_size: int | None = None,
         index_metadata: dict[str, Any] | None = None,
+        persist_directory: str | Path | None = None,
+        client: Any | None = None,
+        collection: Any | None = None,
+        query_embedding_fn: Callable[[str], Sequence[float]] | None = None,
+        strict_query_embedding: bool = False,
     ):
         self.collection_name = collection_name or settings.storage.collection_name
         self.semantic_weight = semantic_weight
@@ -119,30 +155,54 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
         self.boost_weight = boost_weight
         self.embedding_model = embedding_model or settings.llm.embedding_model
         self.embedding_batch_size = int(embedding_batch_size or settings.llm.embedding_batch_size)
+        self._query_embedding_fn = query_embedding_fn
+        self._strict_query_embedding = strict_query_embedding
 
         self._embeddings_file: Path | None = None
 
-        chroma_host = settings.storage.chroma_server_host.strip()
-        if chroma_host:
-            logger.info(
-                "Connecting to ChromaDB server at %s:%d",
-                chroma_host,
-                settings.storage.chroma_server_port,
+        if client is not None:
+            self._client = client
+            self._collection = (
+                collection
+                if collection is not None
+                else client.get_or_create_collection(
+                    name=self.collection_name,
+                    embedding_function=None,
+                )
             )
-            self._client = chromadb.HttpClient(
-                host=chroma_host,
-                port=settings.storage.chroma_server_port,
-            )
-        else:
-            persist_dir = str(settings.storage.chroma_persist_directory)
+        elif collection is not None:
+            raise ValueError("A Chroma client is required with an injected collection")
+        elif persist_directory is not None:
             self._client = chromadb.PersistentClient(
-                path=persist_dir,
+                path=str(persist_directory),
                 settings=ChromaSettings(allow_reset=True),
             )
-        self._collection = self._client.get_or_create_collection(
-            name=self.collection_name,
-            embedding_function=None,
-        )
+            self._collection = self._client.get_or_create_collection(
+                name=self.collection_name,
+                embedding_function=None,
+            )
+        else:
+            chroma_host = settings.storage.chroma_server_host.strip()
+            if chroma_host:
+                logger.info(
+                    "Connecting to ChromaDB server at %s:%d",
+                    chroma_host,
+                    settings.storage.chroma_server_port,
+                )
+                self._client = chromadb.HttpClient(
+                    host=chroma_host,
+                    port=settings.storage.chroma_server_port,
+                )
+            else:
+                persist_dir = str(settings.storage.chroma_persist_directory)
+                self._client = chromadb.PersistentClient(
+                    path=persist_dir,
+                    settings=ChromaSettings(allow_reset=True),
+                )
+            self._collection = self._client.get_or_create_collection(
+                name=self.collection_name,
+                embedding_function=None,
+            )
         # When no index metadata is supplied, adopt what the collection
         # already persists so provenance survives cold restarts. The factory
         # passes ``{}`` for "unset", which is treated the same as None.
@@ -323,16 +383,57 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
         )
 
     def _embed(self, texts: list[str], batch_size: int = 10) -> list[list[float]]:
-        return embed_texts(texts, batch_size=batch_size, model=self.embedding_model)
+        embeddings, _ = self._embed_with_stats(texts, batch_size=batch_size)
+        return embeddings
 
     def _embed_with_stats(
         self, texts: list[str], batch_size: int = 10
     ) -> tuple[list[list[float]], dict]:
-        return embed_texts_with_stats(
-            texts,
-            batch_size=batch_size,
-            model=self.embedding_model,
+        started = time.perf_counter()
+        try:
+            embeddings, stats = embed_texts_with_stats(
+                texts,
+                batch_size=batch_size,
+                model=self.embedding_model,
+            )
+        except Exception:
+            _record_store_embedding_span(
+                model_name=self.embedding_model,
+                input_count=len(texts),
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+                error_code=ErrorCode.UPSTREAM,
+            )
+            raise
+        _record_store_embedding_span(
+            model_name=self.embedding_model,
+            input_count=len(texts),
+            result_count=len(embeddings),
+            elapsed_ms=(time.perf_counter() - started) * 1000,
         )
+        return embeddings, stats
+
+    def _embed_query(self, query: str) -> list[float]:
+        if self._query_embedding_fn is None:
+            return self._embed([query], batch_size=1)[0]
+
+        started = time.perf_counter()
+        try:
+            embedding = list(self._query_embedding_fn(query))
+        except Exception:
+            _record_store_embedding_span(
+                model_name=self.embedding_model,
+                input_count=1,
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+                error_code=ErrorCode.UPSTREAM,
+            )
+            raise
+        _record_store_embedding_span(
+            model_name=self.embedding_model,
+            input_count=1,
+            result_count=1,
+            elapsed_ms=(time.perf_counter() - started) * 1000,
+        )
+        return embedding
 
     def set_index_metadata(self, metadata: dict[str, Any] | None = None) -> None:
         self._index_metadata = dict(metadata or {})
@@ -625,11 +726,13 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
                 embedding_start = time.time()
                 # Query-embedding caching is handled by embedding.py's
                 # thread-safe LRU (keyed by model + text).
-                query_embedding = embed_texts([query], batch_size=1, model=self.embedding_model)[0]
+                query_embedding = self._embed_query(query)
                 trace_info["query_embedding_timing_ms"] = int(
                     (time.time() - embedding_start) * 1000
                 )
             except Exception as e:
+                if self._strict_query_embedding:
+                    raise RuntimeError("Frozen-index benchmark query embedding failed") from e
                 logger.warning(f"Embedding failed, falling back to BM25-only search: {e}")
                 use_semantic = False
                 trace_info["query_embedding_timing_ms"] = 0

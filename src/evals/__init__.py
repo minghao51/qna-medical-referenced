@@ -1,5 +1,12 @@
 """Pipeline quality assessment utilities."""
 
+import os
+
+# DeepEval analytics are a separate hosted destination, never authorized by the
+# application allowlisted Logfire export modes. Set the public opt-out before
+# any lazy DeepEval import; do not inspect credentials or analytics files.
+os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "YES"
+
 __all__ = ["run_assessment"]
 
 

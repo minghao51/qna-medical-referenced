@@ -5,10 +5,27 @@ Split in Phase 2 (roadmap P2.3) from chroma_store.py.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, ClassVar
 
 from src.config import settings
 from src.ingestion.indexing.store import ChromaVectorStore
+
+_scoped_vector_store: ContextVar[ChromaVectorStore | None] = ContextVar(
+    "scoped_vector_store", default=None
+)
+
+
+@contextmanager
+def use_vector_store(vector_store: ChromaVectorStore) -> Iterator[None]:
+    """Route RAG lookups in this context to one explicitly owned store."""
+    token = _scoped_vector_store.set(vector_store)
+    try:
+        yield
+    finally:
+        _scoped_vector_store.reset(token)
 
 
 class ChromaVectorStoreFactory:
@@ -19,7 +36,7 @@ class ChromaVectorStoreFactory:
     @classmethod
     def _normalize_runtime_config(cls, config: dict[str, Any] | None = None) -> dict[str, Any]:
         resolved = dict(config or cls._runtime_config or {})
-        return {
+        normalized = {
             "collection_name": resolved.get("collection_name", settings.storage.collection_name),
             "semantic_weight": float(resolved.get("semantic_weight", 0.6)),
             "keyword_weight": float(resolved.get("keyword_weight", 0.2)),
@@ -30,6 +47,9 @@ class ChromaVectorStoreFactory:
             ),
             "index_metadata": dict(resolved.get("index_metadata", {})),
         }
+        if resolved.get("persist_directory") is not None:
+            normalized["persist_directory"] = resolved["persist_directory"]
+        return normalized
 
     @classmethod
     def _compute_runtime_signature(cls, config: dict[str, Any]) -> tuple[tuple[str, Any], ...]:
@@ -58,6 +78,10 @@ class ChromaVectorStoreFactory:
 
     @classmethod
     def get_vector_store(cls, config: dict[str, Any] | None = None) -> ChromaVectorStore:
+        if config is None:
+            scoped = _scoped_vector_store.get()
+            if scoped is not None:
+                return scoped
         normalized = cls._normalize_runtime_config(config)
         signature = cls._compute_runtime_signature(normalized)
         if config is not None:

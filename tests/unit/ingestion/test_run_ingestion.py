@@ -64,20 +64,19 @@ class TestDriverCache:
 
 class TestIngestionRunConfigFromRuntimeState:
     def test_maps_indexing_features_overrides(self, monkeypatch):
-        monkeypatch.setattr(
-            "src.ingestion.indexing.factory.get_vector_store_runtime_config",
-            lambda: {
-                "indexing_features": {
-                    "enable_hype": True,
-                    "hype_sample_rate": 0.5,
-                    "hype_max_chunks": 7,
-                    "hype_questions_per_chunk": 3,
-                    "enable_keyword_extraction": True,
-                    "keyword_extraction_sample_rate": 0.25,
-                    "keyword_extraction_max_chunks": 9,
-                }
-            },
-        )
+        from src.config import context
+
+        state = context.RuntimeState()
+        state.indexing_features = {
+            "enable_hype": True,
+            "hype_sample_rate": 0.5,
+            "hype_max_chunks": 7,
+            "hype_questions_per_chunk": 3,
+            "enable_keyword_extraction": True,
+            "keyword_extraction_sample_rate": 0.25,
+            "keyword_extraction_max_chunks": 9,
+        }
+        monkeypatch.setattr(context, "_state", state)
 
         config = IngestionRunConfig.from_runtime_state(force_rebuild=True, force_html_convert=True)
 
@@ -95,11 +94,9 @@ class TestIngestionRunConfigFromRuntimeState:
         assert config.enrichment_config == {"sample_rate": 0.25, "max_chunks": 9}
 
     def test_empty_features_fall_back_to_settings_defaults(self, monkeypatch):
-        monkeypatch.setattr(
-            "src.ingestion.indexing.factory.get_vector_store_runtime_config",
-            dict,
-        )
-        from src.config import PROJECT_ROOT, settings
+        from src.config import PROJECT_ROOT, context, settings
+
+        monkeypatch.setattr(context, "_state", context.RuntimeState())
 
         config = IngestionRunConfig.from_runtime_state()
 

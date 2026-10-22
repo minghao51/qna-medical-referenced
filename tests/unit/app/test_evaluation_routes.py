@@ -48,6 +48,11 @@ def test_evaluation_history_includes_microsecond_run_dirs(monkeypatch, tmp_path)
     runs = evaluation.get_evaluation_runs(_auth_request())
 
     assert history["runs"][0]["run_dir"] == newer.name
+    assert history["runs"][0]["comparable"] is False
+    assert history["summary"]["avg_hit_rate"] is None
+    assert history["summary"]["avg_mrr"] is None
+    assert history["summary"]["avg_latency_p50"] is None
+    assert history["summary"]["avg_duration"] is None
     assert history["runs"][0]["dedup"]["reused_existing_run"] is True
     assert runs[0]["dedup"]["reused_existing_run"] is True
     assert runs[0]["run_dir"] == newer.name
@@ -157,7 +162,7 @@ def test_evaluation_history_handles_null_experiment_config(monkeypatch, tmp_path
     assert history["runs"][0]["index_config_hash"] == "idx-null"
 
 
-def test_evaluation_history_excludes_incomplete_and_zero_query_runs(monkeypatch, tmp_path):
+def test_evaluation_history_keeps_incomplete_and_zero_query_diagnostics(monkeypatch, tmp_path):
     evals_dir = tmp_path / "evals"
     evals_dir.mkdir()
 
@@ -209,8 +214,37 @@ def test_evaluation_history_excludes_incomplete_and_zero_query_runs(monkeypatch,
     history = evaluation.get_evaluation_history(_auth_request(), limit=10)
     runs = evaluation.get_evaluation_runs(_auth_request())
 
-    assert [run["run_dir"] for run in history["runs"]] == [valid.name]
+    assert [run["run_dir"] for run in history["runs"]] == [
+        manifest_only.name,
+        missing_retrieval.name,
+        zero_query.name,
+        valid.name,
+    ]
+    assert history["summary"]["total_runs"] == 4
+    assert history["summary"]["sources"] == {"local": 4}
+    assert all(run["comparable"] is False for run in history["runs"])
+    assert history["runs"][1]["retrieval_metrics"]["hit_rate_at_k"] is None
+    assert history["runs"][2]["retrieval_metrics"]["query_count"] == 0
     assert [run["run_dir"] for run in runs] == [valid.name]
+
+
+def test_evaluation_history_empty_has_unavailable_aggregates(monkeypatch, tmp_path):
+    evals_dir = tmp_path / "evals"
+    evals_dir.mkdir()
+    monkeypatch.setattr(evaluation, "EVALS_DIR", evals_dir)
+    monkeypatch.setattr(evaluation, "LATEST_POINTER", evals_dir / "latest_run.txt")
+
+    history = evaluation.get_evaluation_history(_auth_request(), limit=10)
+
+    assert history["runs"] == []
+    assert history["summary"] == {
+        "total_runs": 0,
+        "avg_hit_rate": None,
+        "avg_mrr": None,
+        "avg_latency_p50": None,
+        "avg_duration": None,
+        "sources": {},
+    }
 
 
 def test_get_latest_evaluation_skips_incomplete_newest_run(monkeypatch, tmp_path):

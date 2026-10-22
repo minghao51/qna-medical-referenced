@@ -15,7 +15,15 @@ pytestmark = pytest.mark.smoke
 
 def _fake_step(stage: str):
     return {
-        "aggregate": {f"{stage}_ok": True},
+        "aggregate": {
+            f"{stage}_ok": True,
+            **{
+                "l1": {"markdown_empty_rate": 0.0},
+                "l2": {"empty_page_rate": 0.0},
+                "l3": {"duplicate_chunk_rate": 0.0},
+                "l5": {"embedding_dim_consistent": True},
+            }.get(stage, {}),
+        },
         "records": [{"stage": stage}],
         "findings": [],
     }
@@ -63,6 +71,10 @@ def test_run_assessment_smoke(monkeypatch, tmp_path: Path):
                 "latency_p95_ms": 10.0,
                 "hit_rate_at_k_high_conf": 1.0,
                 "mrr_high_conf": 1.0,
+                "exact_chunk_hit_rate_high_conf": 1.0,
+                "evidence_hit_rate_high_conf": 1.0,
+                "topic_false_positive_rate": 0.0,
+                "duplicate_source_ratio_mean": 0.0,
             },
         ),
     )
@@ -91,17 +103,13 @@ def test_artifact_store_uses_unique_run_dirs(tmp_path: Path):
     assert first.run_dir != second.run_dir
 
 
-def test_run_assessment_reuses_matching_completed_run(monkeypatch, tmp_path: Path):
+def test_run_assessment_repeats_matching_completed_run_fresh(monkeypatch, tmp_path: Path):
     call_counter = {"steps": 0}
 
     def fake_step(stage: str):
         def _inner():
             call_counter["steps"] += 1
-            return {
-                "aggregate": {f"{stage}_ok": True},
-                "records": [{"stage": stage}],
-                "findings": [],
-            }
+            return _fake_step(stage)
 
         return _inner
 
@@ -115,9 +123,9 @@ def test_run_assessment_reuses_matching_completed_run(monkeypatch, tmp_path: Pat
         pa,
         "build_retrieval_dataset",
         lambda **kwargs: {
-            "dataset": [],
+            "dataset": [{"query_id": "synthetic", "query": "synthetic question"}],
             "generation_attempts": [],
-            "stats": {"fixture_records": 0, "synthetic_records": 0, "merged_records": 0},
+            "stats": {"fixture_records": 1, "synthetic_records": 0, "merged_records": 1},
         },
     )
     monkeypatch.setattr(
@@ -125,7 +133,15 @@ def test_run_assessment_reuses_matching_completed_run(monkeypatch, tmp_path: Pat
         "evaluate_retrieval",
         lambda dataset, top_k, retrieval_options=None: (
             [],
-            {"query_count": 0, "hit_rate_at_k": 0.0, "mrr": 0.0, "ndcg_at_k": 0.0},
+            {
+                "query_count": 1,
+                "exact_chunk_hit_rate_high_conf": 1.0,
+                "evidence_hit_rate_high_conf": 1.0,
+                "hit_rate_at_k_high_conf": 1.0,
+                "mrr_high_conf": 1.0,
+                "topic_false_positive_rate": 0.0,
+                "duplicate_source_ratio_mean": 0.0,
+            },
         ),
     )
     import src.evals.assessment.reporting as reporting
@@ -139,18 +155,8 @@ def test_run_assessment_reuses_matching_completed_run(monkeypatch, tmp_path: Pat
         include_answer_eval=False,
     )
     assert call_counter["steps"] == 6
-
-    def should_not_run():
-        raise AssertionError("dedup should have reused the prior completed run")
-
-    monkeypatch.setattr(pa, "audit_l0_download", should_not_run)
-    monkeypatch.setattr(pa, "assess_l1_html_markdown_quality", should_not_run)
-    monkeypatch.setattr(pa, "assess_l2_pdf_quality", should_not_run)
-    monkeypatch.setattr(pa, "assess_l3_chunking_quality", should_not_run)
-    monkeypatch.setattr(pa, "assess_l4_reference_quality", should_not_run)
-    monkeypatch.setattr(pa, "assess_l5_index_quality", should_not_run)
-    monkeypatch.setattr(pa, "build_retrieval_dataset", should_not_run)
-    monkeypatch.setattr(pa, "evaluate_retrieval", should_not_run)
+    assert first.summary["measurement"]["status"] == "complete"
+    assert first.summary["quality_gate"] == "passed"
 
     second = pa.run_assessment(
         artifact_dir=tmp_path / "evals",
@@ -159,8 +165,14 @@ def test_run_assessment_reuses_matching_completed_run(monkeypatch, tmp_path: Pat
         include_answer_eval=False,
     )
 
-    assert second.run_dir == first.run_dir
-    assert second.summary["dedup"]["reused_existing_run"] is True
+    assert call_counter["steps"] == 12
+    assert second.run_dir != first.run_dir
+    assert (
+        second.summary["identity"]["configuration_fingerprint"]
+        == first.summary["identity"]["configuration_fingerprint"]
+    )
+    assert second.summary["dedup"]["reused_existing_run"] is False
+    assert second.summary["cache_policy"]["mode"] == "fresh"
 
 
 def test_run_assessment_ignores_incomplete_matching_run(monkeypatch, tmp_path: Path):
@@ -235,7 +247,7 @@ def test_run_assessment_ignores_incomplete_matching_run(monkeypatch, tmp_path: P
     assert (result.run_dir / "summary.json").exists()
 
 
-def test_run_assessment_dedup_invalidates_when_dataset_file_changes(monkeypatch, tmp_path: Path):
+def test_run_assessment_fingerprint_changes_with_dataset_bytes(monkeypatch, tmp_path: Path):
     dataset_path = tmp_path / "dataset.json"
     dataset_path.write_text(
         '{"golden_queries":[{"query":"Q1","expected_sources":["S1"]}]}',
@@ -290,3 +302,7 @@ def test_run_assessment_dedup_invalidates_when_dataset_file_changes(monkeypatch,
     )
 
     assert second.run_dir != first.run_dir
+    assert (
+        second.summary["identity"]["configuration_fingerprint"]
+        != first.summary["identity"]["configuration_fingerprint"]
+    )

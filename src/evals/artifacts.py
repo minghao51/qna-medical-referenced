@@ -6,8 +6,11 @@ import fcntl
 import hashlib
 import json
 import logging
+import os
 import re
+import tempfile
 import threading
+import uuid
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +22,8 @@ logger = logging.getLogger(__name__)
 # from multiple threads within the same process that would bypass flock.
 _thread_lock = threading.Lock()
 
+# Versions attempt records, not the outstanding full metric/index semantics.
+ARTIFACT_CONTRACT_VERSION = 1
 RUN_INDEX_FILENAME = "run_index.json"
 LOCK_TIMEOUT_SECONDS = 30
 
@@ -28,9 +33,34 @@ def _slugify(name: str) -> str:
     return value or "run"
 
 
+def atomic_write_text(path: Path, content: str) -> Path:
+    """Atomically replace a text file using a unique temporary sibling."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        os.close(file_descriptor)
+        temporary_path.write_text(content, encoding="utf-8")
+        os.replace(temporary_path, path)
+    except BaseException:
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    return path
+
+
 def _canonical_json(value: Any) -> str:
     return json.dumps(
-        to_serializable(value), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        to_serializable(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
     )
 
 
@@ -99,10 +129,8 @@ def _load_run_index(base_dir: Path) -> dict[str, Any]:
 def _write_run_index(base_dir: Path, payload: dict[str, Any]) -> Path:
     path = _run_index_path(base_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(to_serializable(payload), indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-    return path
+    content = json.dumps(to_serializable(payload), indent=2, ensure_ascii=False, allow_nan=False)
+    return atomic_write_text(path, content)
 
 
 def _candidate_run_dirs(base_dir: Path) -> list[Path]:
@@ -142,7 +170,7 @@ def write_latest_pointer(base_dir: Path, run_dir: Path) -> Path:
 
     with _with_file_lock(base_dir) as lock_f:
         try:
-            pointer.write_text(str(run_dir), encoding="utf-8")
+            atomic_write_text(pointer, str(run_dir))
         finally:
             fcntl.flock(lock_f, fcntl.LOCK_UN)
             _thread_lock.release()
@@ -178,12 +206,17 @@ def find_reusable_run(base_dir: Path, run_identity: str) -> Path | None:
             candidate = Path(indexed_run_dir)
             manifest = _load_json_file(candidate / "manifest.json")
             summary = _load_json_file(candidate / "summary.json")
-            if manifest and summary and manifest.get("run_identity") == run_identity:
+            if (
+                manifest
+                and summary
+                and "artifact_contract_version" not in manifest
+                and manifest.get("run_identity") == run_identity
+            ):
                 return candidate
     for run_dir in _candidate_run_dirs(Path(base_dir)):
         manifest = _load_json_file(run_dir / "manifest.json")
         summary = _load_json_file(run_dir / "summary.json")
-        if not manifest or not summary:
+        if not manifest or not summary or "artifact_contract_version" in manifest:
             continue
         existing_identity = manifest.get("run_identity")
         if not existing_identity:
@@ -205,33 +238,33 @@ class ArtifactStore:
         self.base_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
         suffix = _slugify(run_name or "pipeline-quality-assessment")
-        self.run_dir = self.base_dir / f"{timestamp}_{suffix}"
-        self.run_dir.mkdir(parents=True, exist_ok=False)
+        while True:
+            self.execution_id = uuid.uuid4().hex
+            self.run_dir = self.base_dir / f"{timestamp}_{suffix}_{self.execution_id}"
+            try:
+                self.run_dir.mkdir(parents=True, exist_ok=False)
+            except FileExistsError:
+                continue
+            break
 
     def path(self, relative_name: str) -> Path:
         return self.run_dir / relative_name
 
     def write_json(self, relative_name: str, data: Any) -> Path:
         path = self.path(relative_name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(to_serializable(data), f, indent=2, ensure_ascii=False)
-        return path
+        content = json.dumps(to_serializable(data), indent=2, ensure_ascii=False, allow_nan=False)
+        return atomic_write_text(path, content)
 
     def write_jsonl(self, relative_name: str, rows: list[Any]) -> Path:
         path = self.path(relative_name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            for row in rows:
-                f.write(json.dumps(to_serializable(row), ensure_ascii=False))
-                f.write("\n")
-        return path
+        content = "".join(
+            json.dumps(to_serializable(row), ensure_ascii=False, allow_nan=False) + "\n"
+            for row in rows
+        )
+        return atomic_write_text(path, content)
 
     def write_text(self, relative_name: str, content: str) -> Path:
-        path = self.path(relative_name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-        return path
+        return atomic_write_text(self.path(relative_name), content)
 
     def write_latest_pointer(self) -> Path:
         return write_latest_pointer(self.base_dir, self.run_dir)

@@ -48,8 +48,9 @@
 		</div>
 
 		<div class="confidence-header">
-			<span class="confidence-label">Overall Confidence:</span>
+			<span class="confidence-label">Pipeline diagnostic (uncalibrated):</span>
 			<ConfidenceBadge level={confidence.level} score={confidence.overall} />
+			<p class="confidence-note">A heuristic retrieval/pipeline signal, not a probability of medical correctness.</p>
 			<div class="confidence-breakdown">
 				<MetricBar label="Retrieval" value={confidence.breakdown.retrieval} compact />
 				<MetricBar label="Sources" value={confidence.breakdown.sourceQuality} compact />
@@ -715,6 +716,12 @@
 		font-weight: 600;
 		color: #334155;
 		font-size: 0.9rem;
+	}
+
+	.confidence-note {
+		margin: -0.5rem 0 0;
+		color: #64748b;
+		font-size: 0.75rem;
 	}
 
 	.confidence-breakdown {

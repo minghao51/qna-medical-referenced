@@ -77,7 +77,9 @@ def test_evaluate_retrieval_reports_dedup_and_unique_source_metrics(monkeypatch)
     assert agg["retrieval_options"]["search_mode"] == "hybrid"
     assert agg["by_expected_source_type"]["pdf"]["query_count"] == 1
     assert agg["by_query_category"]["threshold_comparison"]["exact_chunk_hit_rate"] == 1.0
-    assert agg["by_task_type"]["pdf_guideline"]["evidence_hit_rate"] == 1.0
+    task_metrics = agg["by_task_type"]["pdf_guideline"]
+    assert task_metrics["evidence_hit_rate_at_k"] is None
+    assert task_metrics["evidence_phrase_hit_rate_proxy"] == 1.0
 
 
 def test_evaluate_retrieval_reports_hyde_metrics(monkeypatch):
@@ -126,8 +128,9 @@ def test_evaluate_retrieval_reports_hyde_metrics(monkeypatch):
     assert rows[0]["metrics"]["hyde_enabled"] is True
     assert agg["hyde_enabled"] is True
     assert agg["hyde_queries_count"] == 1
-    assert agg["hyde_hit_rate"] is not None
-    assert agg["hyde_mrr"] is not None
+    # Heuristic/source labels cannot establish reviewed evidence performance.
+    assert agg["hyde_hit_rate"] is None
+    assert agg["hyde_mrr"] is None
     assert agg["hyde_source_hit_rate"] is not None
 
 

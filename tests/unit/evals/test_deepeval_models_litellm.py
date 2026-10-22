@@ -13,7 +13,7 @@ def _response(text: str):
 
 def test_litellm_judge_model_init():
     model = LiteLLMJudgeModel("openrouter/google/gemma-4-31b-it")
-    assert model.model == "openrouter/google/gemma-4-31b-it"
+    assert model.model is model
     assert model.model_name == "openrouter/google/gemma-4-31b-it"
 
 
@@ -57,7 +57,8 @@ def test_get_light_model_returns_litellm_when_configured(monkeypatch):
 
     model = get_light_model()
     assert isinstance(model, LiteLLMJudgeModel)
-    assert model.model == "openrouter/google/gemma-4-31b-it"
+    assert model.model is model
+    assert model.model_name == "openrouter/google/gemma-4-31b-it"
 
 
 def test_get_heavy_model_returns_litellm_when_configured(monkeypatch):
@@ -68,7 +69,8 @@ def test_get_heavy_model_returns_litellm_when_configured(monkeypatch):
 
     model = get_heavy_model()
     assert isinstance(model, LiteLLMJudgeModel)
-    assert model.model == "openrouter/google/gemma-4-31b-it"
+    assert model.model is model
+    assert model.model_name == "openrouter/google/gemma-4-31b-it"
 
 
 def test_get_light_model_returns_qwen_by_default(monkeypatch):
@@ -98,4 +100,5 @@ def test_litellm_judge_model_preserves_openrouter_prefix(monkeypatch):
     )
 
     model = get_light_model()
-    assert model.model == "openrouter/google/gemma-4-31b-it"
+    assert model.model is model
+    assert model.model_name == "openrouter/google/gemma-4-31b-it"

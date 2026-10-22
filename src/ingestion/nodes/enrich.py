@@ -1,6 +1,9 @@
 """Hamilton components for data ingestion pipeline.
 
 Gold: enrich chunks with HyPE questions, keywords, and summaries.
+
+These offline nodes retain a DashScope/Qwen client dependency, independent of
+settings.llm.provider, until ingestion model-role migration is explicitly approved.
 """
 
 from __future__ import annotations

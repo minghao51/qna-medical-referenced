@@ -36,7 +36,7 @@
 <span
 	class="confidence-badge"
 	style="--badge-color: {currentConfig.color}; --badge-bg: {currentConfig.bgColor};"
-	title="Confidence: {score}%"
+	title="Uncalibrated retrieval/pipeline diagnostic score: {score}%. Not a probability of medical correctness."
 >
 	<span class="badge-icon">{currentConfig.icon}</span>
 	<span class="badge-label">{displayLabel}</span>

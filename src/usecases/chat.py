@@ -31,13 +31,28 @@ import asyncio
 import logging
 import re
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
+from contextlib import aclosing
 from typing import Any
+
+import anyio
 
 from src.config import settings
 from src.core.exceptions import UpstreamServiceError
 from src.infra.storage.interfaces import ChatHistoryStore
-from src.rag import retrieve_context, retrieve_context_with_trace, retrieve_context_with_trace_async
+from src.infra.telemetry import (
+    ErrorCode,
+    Operation,
+    Stage,
+    start_telemetry_operation,
+    telemetry_operation,
+)
+from src.rag import (
+    get_runtime_retrieval_config,
+    retrieve_context,
+    retrieve_context_with_trace,
+    retrieve_context_with_trace_async,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +98,7 @@ def process_chat_message(
     message: str,
     session_id: str | None,
     include_pipeline: bool = False,
-    top_k: int = 5,
+    top_k: int | None = None,
 ) -> dict[str, Any]:
     """Run retrieval + generation, persist history, and optionally include a trace.
 
@@ -99,7 +114,7 @@ def process_chat_message(
         session_id: Session identifier for history persistence.
                    If None, uses "default" session
         include_pipeline: If True, includes detailed pipeline trace with timing
-        top_k: Number of documents to retrieve from vector store (default: 5)
+        top_k: Explicit document limit, or None to inherit the effective runtime limit
 
     Returns:
         Dictionary containing:
@@ -122,39 +137,83 @@ def process_chat_message(
         raise ValueError(f"Invalid session_id format: {resolved_session_id!r}")
     if not message or len(message) > MAX_MESSAGE_LENGTH:
         raise ValueError(f"message must be 1-{MAX_MESSAGE_LENGTH} characters")
-    history = history_store.get_history(resolved_session_id)
-    history_context = _build_history_context(history)
+    if top_k is None:
+        top_k = int(get_runtime_retrieval_config()["top_k"])
+    with history_store.turn(resolved_session_id):
+        history = history_store.get_history(resolved_session_id)
+        history_context = _build_history_context(history)
 
-    pipeline_trace = None
-    chat_start = time.time()
+        pipeline_trace = None
+        chat_start = time.time()
 
-    if include_pipeline:
-        context, sources, pipeline_trace = retrieve_context_with_trace(message, top_k=top_k)
-    else:
-        context, sources = retrieve_context(message, top_k=top_k)
+        with telemetry_operation(Operation.RETRIEVAL) as retrieval_span:
+            if include_pipeline:
+                context, sources, pipeline_trace = retrieve_context_with_trace(
+                    message, top_k=top_k, allow_build=False
+                )
+            else:
+                context, sources = retrieve_context(message, top_k=top_k, allow_build=False)
+            retrieval_span.set_result_count(len(sources))
 
-    full_context = _compose_full_context(history_context, context)
+        full_context = _compose_full_context(history_context, context)
 
-    gen_start = time.time()
+        gen_start = time.time()
+        try:
+            with telemetry_operation(
+                Operation.GENERATION,
+                stage=Stage.GENERATION,
+                model=getattr(llm_client, "model", None),
+            ):
+                response = llm_client.generate(prompt=message, context=full_context)
+        except Exception as exc:
+            logger.error("Chat generation failed")
+            raise UpstreamServiceError("An error occurred processing your request") from exc
+        gen_timing_ms = int((time.time() - gen_start) * 1000)
+
+        if pipeline_trace is not None:
+            model = getattr(llm_client, "model", None)
+            if isinstance(model, str):
+                pipeline_trace.generation.model = model
+            pipeline_trace.generation.timing_ms = gen_timing_ms
+            pipeline_trace.total_time_ms = int((time.time() - chat_start) * 1000)
+
+        history_store.save_turn(resolved_session_id, message, response)
+
+        return {
+            "response": response,
+            "sources": sources,
+            "pipeline": pipeline_trace,
+        }
+
+
+async def _run_owned_worker(function: Callable[..., Any], *args: Any) -> Any:
+    task = asyncio.create_task(asyncio.to_thread(function, *args))
     try:
-        response = llm_client.generate(prompt=message, context=full_context)
-    except Exception as exc:
-        logger.exception("Chat generation failed for session %s", resolved_session_id)
-        raise UpstreamServiceError("An error occurred processing your request") from exc
-    gen_timing_ms = int((time.time() - gen_start) * 1000)
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        # An admitted worker cannot be revoked; keep the session until it settles.
+        with anyio.CancelScope(shield=True):
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+        if not task.cancelled():
+            try:
+                task.result()
+            except Exception:
+                logger.error("Chat worker failed during cancellation")
+        raise
 
-    if pipeline_trace is not None:
-        pipeline_trace.generation.timing_ms = gen_timing_ms
-        pipeline_trace.total_time_ms = int((time.time() - chat_start) * 1000)
 
-    history_store.save_message(resolved_session_id, "user", message)
-    history_store.save_message(resolved_session_id, "assistant", response)
-
-    return {
-        "response": response,
-        "sources": sources,
-        "pipeline": pipeline_trace,
-    }
+async def _save_turn_async(
+    history_store: ChatHistoryStore, session_id: str, message: str, response: str
+) -> None:
+    # Cancellation observed here admits no persistence job.
+    await asyncio.sleep(0)
+    await _run_owned_worker(history_store.save_turn, session_id, message, response)
 
 
 async def stream_chat_message(
@@ -164,11 +223,11 @@ async def stream_chat_message(
     message: str,
     session_id: str | None,
     include_pipeline: bool = False,
-    top_k: int = 5,
+    top_k: int | None = None,
 ) -> AsyncGenerator[tuple[str, dict[str, Any]], None]:
     """Stream response tokens while performing RAG.
 
-    Runs RAG synchronously (needed before generation), then streams tokens
+    Awaits async RAG retrieval before generation, then streams tokens
     from the LLM. Saves messages to history when stream completes.
 
     Args:
@@ -176,7 +235,7 @@ async def stream_chat_message(
         message: User's question
         session_id: Session identifier for history persistence
         include_pipeline: If True, includes pipeline trace in final metadata
-        top_k: Number of documents to retrieve (default: 5)
+        top_k: Explicit document limit, or None to inherit the effective runtime limit
 
     Yields:
         Tuple of (content, metadata) where:
@@ -187,76 +246,111 @@ async def stream_chat_message(
     On error after partial output, yields with error key set.
     """
     resolved_session_id = session_id or "default"
-    history = await asyncio.to_thread(history_store.get_history, resolved_session_id)
-    history_context = _build_history_context(history)
+    if top_k is None:
+        top_k = int(get_runtime_retrieval_config()["top_k"])
+    failure: Exception | None = None
+    with history_store.turn(resolved_session_id):
+        history = await _run_owned_worker(history_store.get_history, resolved_session_id)
+        history_context = _build_history_context(history)
 
-    pipeline_trace = None
-    chat_start = time.time()
-
-    context, sources, pipeline_trace = await retrieve_context_with_trace_async(
-        message,
-        top_k=top_k,
-        hyde_client=llm_client,
-    )
-    if not include_pipeline:
-        pipeline_trace = None
-
-    full_context = _compose_full_context(history_context, context)
-
-    gen_start = time.time()
-    accumulated_response = ""
-
-    try:
-        async for token in llm_client.a_generate_stream(prompt=message, context=full_context):
-            accumulated_response += token
-            yield (token, {"done": False})
-
-        gen_timing_ms = int((time.time() - gen_start) * 1000)
-        if pipeline_trace is not None:
-            pipeline_trace.generation.timing_ms = gen_timing_ms
-            pipeline_trace.total_time_ms = int((time.time() - chat_start) * 1000)
-
-        await asyncio.to_thread(history_store.save_message, resolved_session_id, "user", message)
-        await asyncio.to_thread(
-            history_store.save_message, resolved_session_id, "assistant", accumulated_response
-        )
-
-        yield (
-            "",
-            {
-                "done": True,
-                "sources": sources,
-                "pipeline": pipeline_trace,
-            },
-        )
-
-    except asyncio.CancelledError:
-        raise
-    except GeneratorExit:
-        raise
-    except Exception as exc:
-        logger.exception("Error during stream for session %s", resolved_session_id)
-        try:
-            await asyncio.to_thread(
-                history_store.save_message, resolved_session_id, "user", message
+        chat_start = time.time()
+        with telemetry_operation(Operation.RETRIEVAL) as retrieval_span:
+            context, sources, pipeline_trace = await retrieve_context_with_trace_async(
+                message,
+                top_k=top_k,
+                hyde_client=llm_client,
+                allow_build=False,
             )
-            if accumulated_response:
-                await asyncio.to_thread(
-                    history_store.save_message,
-                    resolved_session_id,
-                    "assistant",
-                    accumulated_response,
-                )
+            retrieval_span.set_result_count(len(sources))
+        if not include_pipeline:
+            pipeline_trace = None
+        full_context = _compose_full_context(history_context, context)
+        gen_start = time.time()
+        accumulated_response = ""
+        model = getattr(llm_client, "model", None)
+        generation_span = start_telemetry_operation(
+            Operation.GENERATION,
+            stage=Stage.GENERATION,
+            model=model if isinstance(model, str) else None,
+        )
+
+        try:
+            async with aclosing(
+                llm_client.a_generate_stream(prompt=message, context=full_context)
+            ) as stream:
+                async for token in stream:
+                    accumulated_response += token
+                    yield (token, {"done": False})
         except asyncio.CancelledError:
+            generation_span.finish(outcome="cancelled", error_code=ErrorCode.CANCELLED)
+            cancellation_span = start_telemetry_operation(
+                Operation.CANCELLATION,
+                stage=Stage.GENERATION,
+                error_code=ErrorCode.CANCELLED,
+            )
+            cancellation_span.finish(outcome="cancelled", error_code=ErrorCode.CANCELLED)
             raise
         except GeneratorExit:
-            raise
-        except Exception:
-            logger.warning(
-                "Failed to save partial error message to history for session %s",
-                resolved_session_id,
+            generation_span.finish(outcome="cancelled", error_code=ErrorCode.CANCELLED)
+            cancellation_span = start_telemetry_operation(
+                Operation.CANCELLATION,
+                stage=Stage.GENERATION,
+                error_code=ErrorCode.CANCELLED,
             )
+            cancellation_span.finish(outcome="cancelled", error_code=ErrorCode.CANCELLED)
+            raise
+        except Exception as exc:
+            generation_span.finish(outcome="error", error_code=ErrorCode.UPSTREAM)
+            error_span = start_telemetry_operation(
+                Operation.ERROR,
+                stage=Stage.GENERATION,
+                error_code=ErrorCode.UPSTREAM,
+            )
+            error_span.finish(outcome="error", error_code=ErrorCode.UPSTREAM)
+            logger.error("Chat stream generation failed")
+            failure = exc
+        else:
+            generation_span.finish()
 
+        if failure is None:
+            try:
+                gen_timing_ms = int((time.time() - gen_start) * 1000)
+                if pipeline_trace is not None:
+                    if isinstance(model, str):
+                        pipeline_trace.generation.model = model
+                    pipeline_trace.generation.timing_ms = gen_timing_ms
+                    pipeline_trace.total_time_ms = int((time.time() - chat_start) * 1000)
+
+                await _save_turn_async(
+                    history_store, resolved_session_id, message, accumulated_response
+                )
+            except asyncio.CancelledError:
+                cancellation_span = start_telemetry_operation(
+                    Operation.CANCELLATION,
+                    stage=Stage.PERSISTENCE,
+                    error_code=ErrorCode.CANCELLED,
+                )
+                cancellation_span.finish(outcome="cancelled", error_code=ErrorCode.CANCELLED)
+                raise
+            except GeneratorExit:
+                raise
+            except Exception as exc:
+                error_span = start_telemetry_operation(
+                    Operation.ERROR,
+                    stage=Stage.PERSISTENCE,
+                    error_code=ErrorCode.INTERNAL,
+                )
+                error_span.finish(outcome="error", error_code=ErrorCode.INTERNAL)
+                logger.error("Chat stream persistence failed")
+                failure = exc
+
+    # A terminal consumer must not retain admission after work/cleanup has ended.
+    if failure is None:
+        yield (
+            "",
+            {"done": True, "sources": sources, "pipeline": pipeline_trace},
+        )
+    else:
         try:
             yield (
                 "",
@@ -273,5 +367,5 @@ async def stream_chat_message(
         except GeneratorExit:
             raise
         except Exception:
-            logger.exception("Failed to yield error event for session %s", resolved_session_id)
-        raise UpstreamServiceError("An error occurred processing your request") from exc
+            logger.error("Failed to yield chat stream error event")
+        raise UpstreamServiceError("An error occurred processing your request") from failure

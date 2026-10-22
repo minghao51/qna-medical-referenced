@@ -15,22 +15,63 @@ Example request:
       }'
 """
 
+import asyncio
 import json
 import logging
+from contextlib import aclosing
+from typing import Any
 
+import anyio
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response, StreamingResponse
+from starlette.types import Receive, Scope, Send
 
 from src.app.dependencies import get_chat_history_store, get_llm_client
 from src.app.logging import log_event
 from src.app.schemas import ChatRequest
 from src.app.session import ensure_chat_session, get_chat_session_id
-from src.config import settings
+from src.core.exceptions import AppError
 from src.usecases.chat import stream_chat_message
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _close_stream_iterator(iterator: Any) -> None:
+    close = getattr(iterator, "aclose", None)
+    if close is None:
+        return
+    task = asyncio.ensure_future(close())
+    try:
+        await asyncio.shield(task)
+    except asyncio.CancelledError:
+        with anyio.CancelScope(shield=True):
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+        if not task.cancelled():
+            try:
+                task.result()
+            except Exception:
+                logger.error("Chat response iterator cleanup failed")
+        raise
+    except Exception:
+        logger.error("Chat response iterator cleanup failed")
+
+
+class _ChatStreamingResponse(StreamingResponse):
+    """Close the route iterator even when ASGI sending or disconnect handling fails."""
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await _close_stream_iterator(self.body_iterator)
 
 
 async def chat_stream_generator(
@@ -44,68 +85,69 @@ async def chat_stream_generator(
         llm_client = get_llm_client(request)
         history_store = get_chat_history_store(request)
 
-        async for content, metadata in stream_chat_message(
-            llm_client=llm_client,
-            history_store=history_store,
-            message=payload.message,
-            session_id=session_id,
-            include_pipeline=include_pipeline,
-            top_k=5,
-        ):
-            if content:
-                event = json.dumps({"content": content, "done": False})
-                yield f"data: {event}\n\n"
-
-            if metadata.get("done"):
-                sources_data = metadata.get("sources", [])
-                if sources_data and hasattr(sources_data[0], "model_dump"):
-                    sources_data = [
-                        s.model_dump() if hasattr(s, "model_dump") else s for s in sources_data
-                    ]
-                pipeline_data = metadata.get("pipeline")
-                if pipeline_data is not None and hasattr(pipeline_data, "model_dump"):
-                    pipeline_data = pipeline_data.model_dump()
-                try:
-                    event = json.dumps(
-                        {
-                            "content": "",
-                            "done": True,
-                            "sources": sources_data,
-                            "pipeline": pipeline_data,
-                            "error": metadata.get("error"),
-                            "error_code": metadata.get("error_code"),
-                            "request_id": getattr(request.state, "request_id", None),
-                        }
-                    )
-                    sent_terminal_event = True
+        async with aclosing(
+            stream_chat_message(
+                llm_client=llm_client,
+                history_store=history_store,
+                message=payload.message,
+                session_id=session_id,
+                include_pipeline=include_pipeline,
+            )
+        ) as stream:
+            async for content, metadata in stream:
+                if content and not sent_terminal_event:
+                    event = json.dumps({"content": content, "done": False})
                     yield f"data: {event}\n\n"
-                except GeneratorExit:
-                    raise
-                except Exception:
-                    logger.exception("Failed to serialize SSE event")
-                    error_event = json.dumps(
-                        {
-                            "content": "",
-                            "done": True,
-                            "error": "Serialization error",
-                            "error_code": "sse_serialization_failed",
-                            "request_id": getattr(request.state, "request_id", None),
-                        }
-                    )
-                    sent_terminal_event = True
-                    yield f"data: {error_event}\n\n"
+
+                if metadata.get("done") and not sent_terminal_event:
+                    sources_data = metadata.get("sources", [])
+                    if sources_data and hasattr(sources_data[0], "model_dump"):
+                        sources_data = [
+                            s.model_dump() if hasattr(s, "model_dump") else s for s in sources_data
+                        ]
+                    pipeline_data = metadata.get("pipeline")
+                    if pipeline_data is not None and hasattr(pipeline_data, "model_dump"):
+                        pipeline_data = pipeline_data.model_dump()
+                    try:
+                        event = json.dumps(
+                            {
+                                "content": "",
+                                "done": True,
+                                "sources": sources_data,
+                                "pipeline": pipeline_data,
+                                "error": metadata.get("error"),
+                                "error_code": metadata.get("error_code"),
+                                "request_id": getattr(request.state, "request_id", None),
+                            }
+                        )
+                        sent_terminal_event = True
+                        yield f"data: {event}\n\n"
+                    except GeneratorExit:
+                        raise
+                    except Exception:
+                        logger.error("Failed to serialize SSE event")
+                        error_event = json.dumps(
+                            {
+                                "content": "",
+                                "done": True,
+                                "error": "Serialization error",
+                                "error_code": "sse_serialization_failed",
+                                "request_id": getattr(request.state, "request_id", None),
+                            }
+                        )
+                        sent_terminal_event = True
+                        yield f"data: {error_event}\n\n"
 
     except GeneratorExit:
         raise
-    except Exception:
-        logger.exception("Chat stream generator failed")
+    except Exception as exc:
+        busy = isinstance(exc, AppError) and exc.code == "chat_session_busy"
+        logger.error("Chat stream generator failed")
         log_event(
             logger,
             logging.ERROR,
             "chat_failed",
             request_id=getattr(request.state, "request_id", None),
-            session_id=getattr(request.state, "chat_session_id", None)
-            or request.cookies.get(settings.api.chat_session_cookie_name),
             include_pipeline=include_pipeline,
             auth_key_id=getattr(getattr(request.state, "auth", None), "key_id", None),
         )
@@ -114,8 +156,12 @@ async def chat_stream_generator(
                 {
                     "content": "",
                     "done": True,
-                    "error": "An error occurred",
-                    "error_code": "chat_failed",
+                    "error": (
+                        "A request is already active for this chat session"
+                        if busy
+                        else "An error occurred"
+                    ),
+                    "error_code": "chat_session_busy" if busy else "chat_failed",
                     "request_id": getattr(request.state, "request_id", None),
                 }
             )
@@ -139,7 +185,7 @@ async def chat(
     ensure_chat_session(request, response)
     headers = {k: v for k, v in dict(response.headers).items() if k.lower() != "content-length"}
 
-    return StreamingResponse(
+    return _ChatStreamingResponse(
         chat_stream_generator(request, payload, include_pipeline),
         media_type="text/event-stream",
         headers=headers,

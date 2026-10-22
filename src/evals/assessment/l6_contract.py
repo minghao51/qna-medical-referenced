@@ -32,6 +32,26 @@ STAGE_EVAL_LABELS: dict[str, str] = {
     STAGE_EMBEDDING: "L5 index",
 }
 
+# New summaries carry this marker; older/unversioned results retain legacy semantics.
+MEASUREMENT_CONTRACT_VERSION = 2
+RETRIEVAL_METRIC_CONTRACT_VERSION = "evidence-qrels-v1"
+IDENTITY_CONTRACT_VERSION = 2
+REPLAY_SNAPSHOT_CONTRACT_VERSION = 2
+REQUIRED_RETRIEVAL_METRICS = (
+    "evidence_hit_rate_at_k",
+    "evidence_precision_at_k",
+    "evidence_recall_at_k",
+    "evidence_ndcg_at_k",
+)
+REQUIRED_ANSWER_METRICS = (
+    "factual_accuracy",
+    "completeness",
+    "clinical_relevance",
+    "clarity",
+    "answer_relevancy",
+    "faithfulness",
+)
+
 L6_ANSWER_QUALITY_ROWS = "l6_answer_quality.jsonl"
 L6_ANSWER_QUALITY_METRICS = "l6_answer_quality_metrics.json"
 SUMMARY_L6_METRICS_KEY = "l6_answer_quality_metrics"

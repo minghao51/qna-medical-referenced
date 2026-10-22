@@ -105,11 +105,13 @@ def apply_production_profile(name: str | None = None) -> bool:
     profile = get_production_profile(name)
     if not profile:
         if name:
-            logger.warning("Production profile '%s' not found, using defaults", name)
+            logger.warning("Production profile '%s' not found; runtime unchanged", name)
         return False
 
+    from src.config.context import get_runtime_state
     from src.rag.index import configure_runtime_for_experiment
 
     configure_runtime_for_experiment(profile)
+    get_runtime_state().production_profile = name
     logger.info("Applied production profile: %s", name)
     return True

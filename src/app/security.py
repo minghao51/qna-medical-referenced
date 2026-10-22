@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import bcrypt
 
+from src.app.session import _get_signing_key
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -214,6 +215,7 @@ def generate_api_key_record(key_id: str, plaintext: str, **kwargs) -> dict:
 
 
 def validate_security_configuration() -> None:
+    _get_signing_key()
     if settings.is_development:
         return
     if not load_api_key_records():

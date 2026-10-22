@@ -7,12 +7,14 @@ import logging
 import shutil
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from src.config import CHAT_HISTORY_FILE
 from src.config.settings import settings
-from src.core.exceptions import StorageError
+from src.core.exceptions import AppError, StorageError
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,8 @@ class FileChatHistoryStore:
     ):
         self.path = Path(path)
         self._lock = threading.RLock()
+        self._turn_lock = threading.Lock()
+        self._active_turns: set[str] = set()
         self.ttl_seconds = (
             settings.api.chat_history_ttl_seconds if ttl_seconds is None else ttl_seconds
         )
@@ -38,9 +42,24 @@ class FileChatHistoryStore:
         else:
             self.max_messages_per_session = max(1, int(max_messages_per_session))
 
+    @contextmanager
+    def turn(self, session_id: str) -> Iterator[None]:
+        """Reject overlapping operations; never hold an I/O lock across a turn."""
+        with self._turn_lock:
+            if session_id in self._active_turns:
+                raise AppError(
+                    "A request is already active for this chat session",
+                    status_code=409,
+                    code="chat_session_busy",
+                )
+            self._active_turns.add(session_id)
+        try:
+            yield
+        finally:
+            with self._turn_lock:
+                self._active_turns.remove(session_id)
+
     def _load_history_unlocked(self) -> dict[str, dict[str, Any]]:
-        if not self.path.exists():
-            return {}
         try:
             with self.path.open("r", encoding="utf-8") as handle:
                 raw_history = json.load(handle)
@@ -50,8 +69,10 @@ class FileChatHistoryStore:
             )
             self._backup_corrupt_file()
             return {}
-        except OSError:
+        except FileNotFoundError:
             return {}
+        except OSError as exc:
+            raise StorageError("Failed to read chat history") from exc
         if not isinstance(raw_history, dict):
             return {}
         return self._normalize_history(raw_history)
@@ -72,7 +93,7 @@ class FileChatHistoryStore:
                 json.dump(history, handle, indent=2)
             temp_path.replace(self.path)
         except OSError as exc:
-            raise StorageError(f"Failed to write chat history: {exc}") from exc
+            raise StorageError("Failed to write chat history") from exc
 
     def get_history(self, session_id: str) -> list[dict]:
         with self._lock:
@@ -86,6 +107,15 @@ class FileChatHistoryStore:
             return list(session.get("messages", []))
 
     def save_message(self, session_id: str, role: str, content: str) -> None:
+        self._save_messages(session_id, [(role, content)])
+
+    def save_turn(self, session_id: str, message: str, response: str) -> None:
+        """Publish a complete generated pair in one replacement, never two writes."""
+        if self.max_messages_per_session < 2:
+            raise StorageError("Chat history capacity must allow a complete turn")
+        self._save_messages(session_id, [("user", message), ("assistant", response)])
+
+    def _save_messages(self, session_id: str, messages: list[tuple[str, str]]) -> None:
         with self._lock:
             history = self._load_history_unlocked()
             history, _ = self._prune_expired_sessions(history)
@@ -100,14 +130,15 @@ class FileChatHistoryStore:
             )
             session["version"] = SESSION_SCHEMA_VERSION
             session["updated_at"] = now
-            session.setdefault("messages", []).append(
+            session.setdefault("messages", []).extend(
                 {"role": role, "content": content, "timestamp": now * 1000}
+                for role, content in messages
             )
             self._truncate_session_messages(session)
             self._save_history_unlocked(history)
 
     def clear_history(self, session_id: str) -> None:
-        with self._lock:
+        with self.turn(session_id), self._lock:
             history = self._load_history_unlocked()
             history.pop(session_id, None)
             self._save_history_unlocked(history)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -18,12 +19,132 @@ _L6_ANSWER_QUALITY_METRIC_NAMES = (
     "faithfulness",
 )
 
+_SAFE_METRIC_NAMES = {
+    "retrieval/hit_rate",
+    "retrieval/mrr",
+    "retrieval/ndcg",
+    "retrieval/latency_p50_ms",
+    "retrieval/latency_p95_ms",
+    "retrieval/precision_at_k",
+    "retrieval/recall_at_k",
+    "retrieval/source_hit_rate",
+    "retrieval/exact_chunk_hit_rate",
+    "retrieval/evidence_hit_rate",
+    "retrieval/hyde_enabled",
+    "retrieval/hyde_queries_count",
+    "retrieval/hyde_hit_rate",
+    "retrieval/hyde_mrr",
+    "retrieval/hyde_source_hit_rate",
+    "l6_answer_quality/query_count",
+    "l6_answer_quality/query_count_scored",
+    "l6_answer_quality/metric_error_rate",
+    "l6_answer_quality/metric_evaluations_failed",
+    "summary/duration_s",
+    "summary/failed_thresholds",
+    "thresholds/failed_count",
+    *{
+        f"l6_answer_quality/{metric_name}_{suffix}"
+        for metric_name in _L6_ANSWER_QUALITY_METRIC_NAMES
+        for suffix in ("mean", "error_rate")
+    },
+}
+
+_SAFE_ENUMS = {
+    "ingestion": {
+        "html_extractor_mode": {"auto"},
+        "html_extractor_strategy": {"trafilatura_bs"},
+        "pdf_extractor_strategy": {"pypdf_pdfplumber"},
+        "pdf_table_extractor": {"heuristic"},
+    },
+    "retrieval": {"search_mode": {"rrf_hybrid", "semantic_only"}},
+    "embedding_index": {"rebuild_policy": {"if_missing_or_stale"}},
+}
+_SAFE_BOOLEANS = {
+    "ingestion": {
+        "page_classification_enabled",
+        "index_only_classified_pages",
+        "structured_chunking_enabled",
+    },
+    "retrieval": {"enable_diversification"},
+    "dataset": {"enable_llm_generation"},
+    "evaluation": {
+        "include_answer_eval",
+        "disable_llm_judging",
+        "fail_on_thresholds",
+        "export_failed_generations",
+        "run_retrieval_ablations",
+        "run_diversity_sweep",
+    },
+}
+_SAFE_NUMBERS = {
+    "embedding_index": {
+        "embedding_batch_size",
+        "semantic_weight",
+        "keyword_weight",
+        "boost_weight",
+    },
+    "retrieval": {
+        "top_k",
+        "mmr_lambda",
+        "overfetch_multiplier",
+        "max_chunks_per_source_page",
+        "max_chunks_per_source",
+    },
+    "dataset": {"max_synthetic_questions", "sample_docs_per_source_type", "seed"},
+}
+
+
+def _is_finite_number(value: Any) -> bool:
+    return type(value) in (int, float) and (type(value) is int or math.isfinite(value))
+
+
+def _safe_structural_config(experiment: dict[str, Any] | None) -> dict[str, Any]:
+    """Select only fixed-name structural metadata with safe scalar values."""
+    source = experiment if isinstance(experiment, dict) else {}
+    safe: dict[str, Any] = {}
+    schema_version = source.get("schema_version")
+    if _is_finite_number(schema_version):
+        safe["schema_version"] = schema_version
+
+    for section in _SAFE_BOOLEANS.keys() | _SAFE_NUMBERS.keys() | _SAFE_ENUMS.keys():
+        values = source.get(section)
+        if not isinstance(values, dict):
+            continue
+        safe_values: dict[str, Any] = {}
+        for key in _SAFE_BOOLEANS.get(section, set()):
+            value = values.get(key)
+            if type(value) is bool:
+                safe_values[key] = value
+        for key in _SAFE_NUMBERS.get(section, set()):
+            value = values.get(key)
+            if _is_finite_number(value):
+                safe_values[key] = value
+        for key, allowed_values in _SAFE_ENUMS.get(section, {}).items():
+            value = values.get(key)
+            if isinstance(value, str) and value in allowed_values:
+                safe_values[key] = value
+        if safe_values:
+            safe[section] = safe_values
+    return safe
+
+
+def _safe_metric_payload(metrics: dict[str, Any]) -> dict[str, int | float | bool]:
+    safe: dict[str, int | float | bool] = {}
+    for name, value in metrics.items():
+        if name not in _SAFE_METRIC_NAMES:
+            continue
+        if name == "retrieval/hyde_enabled" and type(value) is bool:
+            safe[name] = value
+        elif _is_finite_number(value):
+            safe[name] = value
+    return safe
+
 
 def _safe_define_metric(run: Any, name: str, **kwargs: Any) -> None:
     try:
         run.define_metric(name, **kwargs)
-    except Exception as exc:
-        logger.warning("Skipping unsupported W&B metric definition %s: %s", name, exc)
+    except Exception:
+        logger.warning("Skipping unsupported W&B metric definition")
 
 
 def _define_wandb_metrics(run: Any, verbosity: str = "standard") -> None:
@@ -230,15 +351,6 @@ def _wandb_tracking_config(experiment: dict[str, Any] | None) -> dict[str, Any]:
     return dict(((experiment or {}).get("tracking") or {}).get("wandb") or {})
 
 
-def _resolve_run_name(experiment: dict[str, Any] | None, run_dir: Path) -> str:
-    metadata = dict((experiment or {}).get("metadata", {}))
-    variant_name = (experiment or {}).get("variant_name")
-    base_name = str(metadata.get("name") or run_dir.name).strip() or run_dir.name
-    if variant_name and variant_name != base_name:
-        return f"{base_name}/{variant_name}"
-    return base_name
-
-
 def log_assessment_to_wandb(
     *,
     experiment: dict[str, Any] | None,
@@ -250,58 +362,61 @@ def log_assessment_to_wandb(
     run_dir: str | Path,
     failed_thresholds: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    tracking_cfg = _wandb_tracking_config(experiment)
-    if not tracking_cfg.get("enabled"):
+    try:
+        tracking_cfg = _wandb_tracking_config(experiment)
+    except (TypeError, ValueError):
+        return {"enabled": False, "status": "error", "error": "invalid tracking configuration"}
+    if tracking_cfg.get("enabled") is not True:
         return {"enabled": False, "status": "disabled"}
+    mode = tracking_cfg.get("mode", "online")
+    if mode not in ("online", "offline", "disabled"):
+        return {"enabled": True, "status": "error", "error": "invalid tracking mode"}
 
     run_path = Path(run_dir)
+    artifact_export_enabled = tracking_cfg.get("log_artifacts") is True
     try:
         wandb = importlib.import_module("wandb")
-    except Exception as exc:
-        logger.warning("W&B tracking requested but unavailable: %s", exc)
+    except Exception:
+        logger.warning("W&B tracking requested but unavailable")
         return {
             "enabled": True,
             "status": "error",
-            "error": f"wandb import failed: {exc}",
+            "error": "tracking unavailable",
+            "artifact_export_enabled": artifact_export_enabled,
         }
 
     run = None
-    artifact = None
     try:
+        verbosity = tracking_cfg.get("metrics_verbosity", "standard")
+        if not isinstance(verbosity, str) or verbosity.lower() not in {
+            "critical",
+            "standard",
+            "debug",
+        }:
+            verbosity = "standard"
+        else:
+            verbosity = verbosity.lower()
+
+        # Do not forward the manifest or user-authored experiment fields to W&B.
         run = wandb.init(
             project=tracking_cfg.get("project"),
             entity=tracking_cfg.get("entity"),
-            group=tracking_cfg.get("group"),
-            job_type=tracking_cfg.get("job_type") or "pipeline_eval",
-            tags=tracking_cfg.get("tags") or [],
-            notes=tracking_cfg.get("notes"),
-            mode=tracking_cfg.get("mode") or "online",
-            name=_resolve_run_name(experiment, run_path),
-            config={
-                "experiment": experiment or {},
-                "manifest": manifest,
-            },
+            job_type="pipeline_eval",
+            mode=mode,
+            config={"structural_metadata": _safe_structural_config(experiment)},
         )
-        # Get verbosity level (default to 'standard')
-        verbosity = tracking_cfg.get("metrics_verbosity", "standard").lower()
 
-        # Define metric behavior for UI organization
         _define_wandb_metrics(run, verbosity=verbosity)
-
-        # Extract metrics based on verbosity level
         metrics: dict[str, Any] = {}
 
         if verbosity == "critical":
-            # Only log ~10 critical metrics for easy comparison
             metrics.update(_get_critical_metrics(retrieval_metrics, summary))
         elif verbosity == "standard":
-            # Log primary + secondary metrics (~50 metrics)
             metrics.update(
                 _extract_primary_metrics(retrieval_metrics, l6_answer_quality_metrics, summary)
             )
             metrics.update(_extract_secondary_metrics(retrieval_metrics))
-        else:  # debug
-            # Log everything (current behavior, 1000+ metrics)
+        else:
             metrics.update(
                 _extract_primary_metrics(retrieval_metrics, l6_answer_quality_metrics, summary)
             )
@@ -309,45 +424,33 @@ def log_assessment_to_wandb(
             metrics.update(_extract_debug_metrics(retrieval_metrics, step_metrics))
 
         metrics["thresholds/failed_count"] = len(failed_thresholds)
-        if metrics:
-            run.log(metrics)
-        if tracking_cfg.get("log_artifacts", True):
-            artifact = wandb.Artifact(
-                name=f"{run_path.name}-artifacts",
-                type="evaluation-run",
-                metadata={
-                    "run_dir": run_path.name,
-                    "status": summary.get("status"),
-                    "failed_thresholds_count": len(failed_thresholds),
-                },
+        safe_metrics = _safe_metric_payload(metrics)
+        if safe_metrics:
+            run.log(safe_metrics)
+
+        if artifact_export_enabled:
+            logger.warning(
+                "Legacy raw W&B artifact export explicitly enabled; this is not content-policy approval"
             )
+            artifact = wandb.Artifact(name="pipeline-evaluation-artifacts", type="evaluation-run")
             artifact.add_dir(str(run_path))
             run.log_artifact(artifact)
         return {
             "enabled": True,
             "status": "logged",
-            "project": tracking_cfg.get("project"),
-            "entity": tracking_cfg.get("entity"),
-            "group": tracking_cfg.get("group"),
-            "job_type": tracking_cfg.get("job_type") or "pipeline_eval",
-            "mode": tracking_cfg.get("mode") or "online",
-            "run_name": getattr(run, "name", None),
-            "run_id": getattr(run, "id", None),
-            "run_url": getattr(run, "url", None),
-            "artifact_name": getattr(artifact, "name", None) if artifact else None,
+            "artifact_export_enabled": artifact_export_enabled,
         }
-    except Exception as exc:
-        logger.warning("W&B logging failed for %s: %s", run_path, exc)
+    except Exception:
+        logger.warning("W&B logging failed")
         return {
             "enabled": True,
             "status": "error",
-            "project": tracking_cfg.get("project"),
-            "entity": tracking_cfg.get("entity"),
-            "error": str(exc),
+            "error": "tracking failed",
+            "artifact_export_enabled": artifact_export_enabled,
         }
     finally:
         if run is not None:
             try:
                 run.finish()
             except Exception:
-                logger.debug("Failed to finish W&B run cleanly", exc_info=True)
+                logger.debug("Failed to finish W&B run cleanly")

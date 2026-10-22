@@ -1,11 +1,10 @@
 <script lang="ts">
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import EvalSection from '$lib/components/EvalSection.svelte';
-	import MetricChart from '$lib/components/MetricChart.svelte';
 	import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte';
 	import MetricTile from '$lib/components/MetricTile.svelte';
 	import {
-		buildTrendDatasets,
+		formatDecimal,
 		formatPercent,
 		historyLabel,
 		runMetricLabels,
@@ -40,8 +39,6 @@
 		ablationLoading,
 		selectedRunKey,
 		data,
-		selectedTrendMetric,
-		onTrendMetricChange,
 		onSelectRun,
 		onRefreshHistory
 	}: Props = $props();
@@ -72,48 +69,31 @@
 
 <div class="trending-tab" id="panel-trending" role="tabpanel" aria-labelledby="tab-trending">
 	{#if historyLoading}
-		<EvalSection title="Historical trending" description="Loading recent evaluation history.">
+		<EvalSection title="Historical runs" description="Loading recent evaluation history.">
 			<LoadingSkeleton count={3} type="card" height="90px" />
 		</EvalSection>
 	{:else if historyData && historyData.runs.length > 0}
 		<EvalSection
-			title="Historical trending"
-			description="Trend chart first, with the run list kept compact."
+			title="Historical runs"
+			description="Individual runs remain available for diagnostics."
 		>
+			<p class="non-comparability-notice" role="status">
+				Historical runs are not comparable. Aggregate metrics and trend charts are unavailable
+				until a verified comparison cohort exists.
+			</p>
 			<div class="trend-toolbar">
 				<div class="summary-grid">
 					<MetricTile label="Total Runs" value={String(historyData.summary.total_runs)} quiet />
 					<MetricTile label="Avg Hit Rate" value={formatPercent(historyData.summary.avg_hit_rate)} />
-					<MetricTile label="Avg MRR" value={historyData.summary.avg_mrr.toFixed(3)} />
-					<MetricTile label="Avg Latency" value={`${historyData.summary.avg_latency_p50.toFixed(0)}ms`} />
+					<MetricTile label="Avg MRR" value={formatDecimal(historyData.summary.avg_mrr, 3)} />
+					<MetricTile
+						label="Avg Latency"
+						value={formatDecimal(historyData.summary.avg_latency_p50, 0, 'ms')}
+					/>
 				</div>
 				<div class="controls">
-					<label>
-						<span>Metric</span>
-						<select
-							value={selectedTrendMetric}
-							onchange={(event) =>
-								onTrendMetricChange(event.currentTarget.value as EvalTrendMetric)}
-						>
-							<option value="hit_rate">Hit Rate & MRR</option>
-							<option value="mrr">MRR Focus</option>
-							<option value="latency">Latency</option>
-						</select>
-					</label>
 					<button type="button" class="action-btn" onclick={onRefreshHistory}>Reload History</button>
 				</div>
-			</div>
-
-			<div class="chart-card">
-				<MetricChart
-					type={selectedTrendMetric === 'latency' ? 'bar' : 'line'}
-					title="Evaluation trend"
-					data={{
-						labels: filteredRuns.map((run) => historyLabel(run)),
-						datasets: buildTrendDatasets(filteredRuns, selectedTrendMetric)
-					}}
-					height={220}
-				/>
 			</div>
 
 			<div class="run-list-head">
@@ -159,7 +139,14 @@
 			{/if}
 		</EvalSection>
 	{:else}
-		<EmptyState title="No historical data available" body="Run more than one evaluation to unlock trending views." />
+		<p class="non-comparability-notice" role="status">
+			Historical runs are not comparable. Aggregate metrics and trend charts are unavailable
+			until a verified comparison cohort exists.
+		</p>
+		<EmptyState
+			title="No historical data available"
+			body="Completed and diagnostic runs will appear here when available."
+		/>
 	{/if}
 
 	{#if ablationLoading}
@@ -221,15 +208,6 @@
 		justify-content: space-between;
 	}
 
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		font-size: 0.9rem;
-		color: var(--muted-color);
-	}
-
-	select,
 	.search-input {
 		padding: 0.65rem 0.8rem;
 		border: 1px solid var(--border-color);
@@ -237,11 +215,13 @@
 		background: white;
 	}
 
-	.chart-card {
-		padding: 0.5rem;
+	.non-comparability-notice {
+		margin: 0;
+		padding: 0.85rem 1rem;
 		border: 1px solid var(--border-color);
-		border-radius: 16px;
+		border-radius: 12px;
 		background: var(--surface-subtle);
+		color: var(--muted-color);
 	}
 
 	.action-btn {

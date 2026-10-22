@@ -64,11 +64,14 @@ def test_litellm_client_generate(monkeypatch):
     assert call_kwargs.kwargs["model"] == "openrouter/test-model"
     assert call_kwargs.kwargs["temperature"] == 0.7
     assert call_kwargs.kwargs["max_tokens"] == 2048
+    assert call_kwargs.kwargs["timeout"] == 30.0
+    assert call_kwargs.kwargs["max_retries"] == 0
+    assert call_kwargs.kwargs["num_retries"] == 0
 
 
 def test_litellm_client_generate_retries_on_failure(monkeypatch):
     client = LiteLLMClient(model="openrouter/test-model")
-    mock_completion = MagicMock(side_effect=[Exception("timeout"), _response("retry ok")])
+    mock_completion = MagicMock(side_effect=[TimeoutError("timeout"), _response("retry ok")])
     monkeypatch.setattr("src.infra.llm.litellm_client.litellm.completion", mock_completion)
     monkeypatch.setattr("src.infra.llm.litellm_client.time.sleep", lambda _: None)
 
@@ -79,11 +82,11 @@ def test_litellm_client_generate_retries_on_failure(monkeypatch):
 
 def test_litellm_client_generate_raises_after_max_retries(monkeypatch):
     client = LiteLLMClient(model="openrouter/test-model")
-    mock_completion = MagicMock(side_effect=Exception("persistent failure"))
+    mock_completion = MagicMock(side_effect=TimeoutError("persistent failure"))
     monkeypatch.setattr("src.infra.llm.litellm_client.litellm.completion", mock_completion)
     monkeypatch.setattr("src.infra.llm.litellm_client.time.sleep", lambda _: None)
 
-    with pytest.raises(Exception, match="persistent failure"):
+    with pytest.raises(TimeoutError, match="persistent failure"):
         client.generate("test prompt")
     assert mock_completion.call_count == 3
 
@@ -102,12 +105,24 @@ async def test_litellm_client_a_generate(monkeypatch):
 @pytest.mark.asyncio
 async def test_litellm_client_a_generate_retries(monkeypatch):
     client = LiteLLMClient(model="openrouter/test-model")
-    mock_acompletion = AsyncMock(side_effect=[Exception("fail"), _response("ok")])
+    mock_acompletion = AsyncMock(side_effect=[TimeoutError("fail"), _response("ok")])
     monkeypatch.setattr("src.infra.llm.litellm_client.litellm.acompletion", mock_acompletion)
 
     result = await client.a_generate("test")
     assert result == "ok"
     assert mock_acompletion.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_litellm_client_a_generate_unknown_failure_fails_once(monkeypatch):
+    client = LiteLLMClient(model="openrouter/test-model")
+    mock_acompletion = AsyncMock(side_effect=RuntimeError("unknown failure"))
+    monkeypatch.setattr("src.infra.llm.litellm_client.litellm.acompletion", mock_acompletion)
+
+    with pytest.raises(RuntimeError, match="unknown failure"):
+        await client.a_generate("test")
+
+    assert mock_acompletion.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -126,6 +141,17 @@ async def test_litellm_client_a_generate_stream(monkeypatch):
         chunks.append(token)
 
     assert chunks == ["Hello", " world", "!"]
+
+
+def test_litellm_client_generate_unknown_failure_fails_once(monkeypatch):
+    client = LiteLLMClient(model="openrouter/test-model")
+    mock_completion = MagicMock(side_effect=RuntimeError("unknown failure"))
+    monkeypatch.setattr("src.infra.llm.litellm_client.litellm.completion", mock_completion)
+
+    with pytest.raises(RuntimeError, match="unknown failure"):
+        client.generate("test prompt")
+
+    assert mock_completion.call_count == 1
 
 
 def test_litellm_client_generate_empty_response_raises(monkeypatch):

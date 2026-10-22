@@ -1,4 +1,4 @@
-"""L3 chunking quality checks."""
+"""L3 chunking quality checks over the chunks emitted by the selected run."""
 
 from __future__ import annotations
 
@@ -8,8 +8,6 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from src.evals.checks.shared import longest_suffix_prefix_overlap, safe_mean, safe_median
-from src.ingestion.steps.chunking import TextChunker
-from src.ingestion.steps.load_pdfs import get_documents
 
 
 def _float_metric(value: Any, default: float = 0.0) -> float:
@@ -21,12 +19,50 @@ def _float_metric(value: Any, default: float = 0.0) -> float:
 
 
 def assess_l3_chunking_quality(
-    chunk_size: int = 800,
-    chunk_overlap: int = 150,
+    chunk_size: int | None = None,
+    chunk_overlap: int | None = None,
+    *,
+    chunks: list[dict[str, Any]] | None = None,
+    document_count: int | None = None,
 ) -> dict[str, Any]:
-    docs = get_documents()
-    chunker = TextChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    chunks = chunker.chunk_documents(docs)
+    """Assess supplied emitted chunks; without them the check is explicitly incomplete."""
+    config = {"chunk_size_config": chunk_size, "chunk_overlap_config": chunk_overlap}
+    if chunks is None:
+        aggregate: dict[str, Any] = {
+            **config,
+            "measurement_status": "incomplete",
+            "measurement_reason": "actual_emitted_chunks_not_supplied",
+            "document_count": document_count,
+            "chunk_count": None,
+            "chunk_length_median": None,
+            "chunk_length_mean": None,
+            "duplicate_chunk_rate": None,
+            "boundary_cut_rate": None,
+            "observed_overlap_mean": None,
+            "section_integrity_rate": None,
+            "table_row_split_violations": None,
+            "low_quality_chunk_exclusion_rate": None,
+            "chunk_quality_histogram": None,
+        }
+        return {
+            "aggregate": aggregate,
+            "records": [],
+            "findings": [
+                {
+                    "severity": "warning",
+                    "message": "L3 measurements unavailable without actual emitted chunks",
+                    "stage": "L3",
+                }
+            ],
+        }
+
+    if document_count is not None and (
+        isinstance(document_count, bool)
+        or not isinstance(document_count, int)
+        or document_count < 0
+    ):
+        raise ValueError("document_count must be a non-negative integer or None")
+
     records: list[dict[str, Any]] = []
     duplicate_hashes: Counter[str] = Counter()
     boundary_cut_count = 0
@@ -34,13 +70,17 @@ def assess_l3_chunking_quality(
     groups: dict[tuple[str, int | None], list[dict[str, Any]]] = defaultdict(list)
 
     for chunk in chunks:
-        content = chunk.get("content", "")
+        content = str(chunk.get("content", ""))
         chunk_hash = hashlib.sha256(content.encode("utf-8", errors="ignore")).hexdigest()
         duplicate_hashes[chunk_hash] += 1
         if content and content[-1].isalnum():
             boundary_cut_count += 1
-        key = (str(chunk.get("source", "")), chunk.get("page"))
-        groups[key].append(chunk)
+        source = str(chunk.get("source", ""))
+        page_value = chunk.get("page")
+        page = (
+            page_value if isinstance(page_value, int) and not isinstance(page_value, bool) else None
+        )
+        groups[(source, page)].append({**chunk, "content": content})
         records.append(
             {
                 "id": chunk.get("id"),
@@ -53,44 +93,71 @@ def assess_l3_chunking_quality(
             }
         )
 
-    for _, group in groups.items():
+    for group in groups.values():
         for first, second in itertools.pairwise(group):
-            a = first.get("content", "")
-            b = second.get("content", "")
-            overlap_values.append(longest_suffix_prefix_overlap(a, b, chunk_overlap))
+            first_content = str(first.get("content", ""))
+            second_content = str(second.get("content", ""))
+            overlap_limit = (
+                chunk_overlap
+                if chunk_overlap is not None
+                else min(len(first_content), len(second_content))
+            )
+            overlap_values.append(
+                longest_suffix_prefix_overlap(first_content, second_content, overlap_limit)
+            )
 
-    lengths = [r["length_chars"] for r in records]
+    lengths = [record["length_chars"] for record in records]
     duplicate_chunks = sum(count - 1 for count in duplicate_hashes.values() if count > 1)
+    chunk_count = len(chunks)
+    observed_document_count = (
+        document_count
+        if document_count is not None
+        else len({str(chunk.get("source", "")) for chunk in chunks if chunk.get("source")})
+    )
     low_quality_excluded = 0
     aggregate = {
-        "document_count": len(docs),
-        "chunk_count": len(chunks),
-        "chunk_size_config": chunk_size,
-        "chunk_overlap_config": chunk_overlap,
-        "chunk_length_median": safe_median([float(x) for x in lengths]),
-        "chunk_length_mean": safe_mean([float(x) for x in lengths]),
-        "duplicate_chunk_rate": (duplicate_chunks / len(chunks)) if chunks else 0.0,
-        "boundary_cut_rate": (boundary_cut_count / len(chunks)) if chunks else 0.0,
-        "observed_overlap_mean": safe_mean([float(x) for x in overlap_values]),
-        "section_integrity_rate": (sum(1 for c in chunks if c.get("section_path")) / len(chunks))
-        if chunks
-        else 0.0,
+        **config,
+        "measurement_status": "measured",
+        "measurement_reason": None,
+        "document_count": observed_document_count,
+        "chunk_count": chunk_count,
+        "chunk_length_median": safe_median([float(value) for value in lengths])
+        if lengths
+        else None,
+        "chunk_length_mean": safe_mean([float(value) for value in lengths]) if lengths else None,
+        "duplicate_chunk_rate": duplicate_chunks / chunk_count if chunk_count else None,
+        "boundary_cut_rate": boundary_cut_count / chunk_count if chunk_count else None,
+        "observed_overlap_mean": safe_mean([float(value) for value in overlap_values])
+        if overlap_values
+        else None,
+        "section_integrity_rate": (
+            sum(1 for chunk in chunks if chunk.get("section_path")) / chunk_count
+            if chunk_count
+            else None
+        ),
         "table_row_split_violations": sum(
             1
-            for c in chunks
-            if c.get("content_type") == "table" and len(str(c.get("content", "")).splitlines()) == 1
+            for chunk in chunks
+            if chunk.get("content_type") == "table"
+            and len(str(chunk.get("content", "")).splitlines()) == 1
         ),
         "low_quality_chunk_exclusion_rate": (
-            low_quality_excluded / max(1, len(chunks) + low_quality_excluded)
+            low_quality_excluded / max(1, chunk_count + low_quality_excluded)
+            if chunk_count
+            else None
         ),
         "chunk_quality_histogram": {
             "high": sum(
-                1 for c in chunks if _float_metric(c.get("quality_score", 1.0), 1.0) >= 0.8
+                1 for chunk in chunks if _float_metric(chunk.get("quality_score", 1.0), 1.0) >= 0.8
             ),
             "medium": sum(
-                1 for c in chunks if 0.55 <= _float_metric(c.get("quality_score", 1.0), 1.0) < 0.8
+                1
+                for chunk in chunks
+                if 0.55 <= _float_metric(chunk.get("quality_score", 1.0), 1.0) < 0.8
             ),
-            "low": sum(1 for c in chunks if _float_metric(c.get("quality_score", 1.0), 1.0) < 0.55),
+            "low": sum(
+                1 for chunk in chunks if _float_metric(chunk.get("quality_score", 1.0), 1.0) < 0.55
+            ),
         },
     }
     findings = []

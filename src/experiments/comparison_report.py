@@ -5,11 +5,13 @@ Generates reports comparing variants against baseline.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any
 
-from src.experiments.feature_addition_runner import ExperimentSummary
+from src.experiments.feature_addition_runner import ExperimentSummary, VariantResult
 from src.experiments.metric_utils import resolve_metric_key
 
 
@@ -65,6 +67,82 @@ def _format_percent_delta(baseline: float | None, variant: float | None) -> str:
     return f"{sign}{delta:.2f}%"
 
 
+def _case_fingerprint(row: dict[str, Any]) -> str | None:
+    query = row.get("query")
+    if not isinstance(query, str):
+        return None
+    identity = {
+        "query": query,
+        "query_id": row.get("query_id"),
+        "dataset_origin": row.get("dataset_origin"),
+        "label_confidence": row.get("label_confidence"),
+        "expected_sources": row.get("expected_sources", []),
+        "expected_keywords": row.get("expected_keywords", []),
+        "evidence_phrase": row.get("evidence_phrase"),
+        "expected_chunk_id": row.get("expected_chunk_id"),
+        "answerable": row.get("answerable"),
+    }
+    canonical = json.dumps(identity, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _load_case_metrics(run_dir: str) -> dict[str, dict[str, Any]]:
+    result_path = Path(run_dir) / "retrieval_results.jsonl"
+    if not result_path.is_file():
+        return {}
+    cases: dict[str, dict[str, Any]] = {}
+    for line in result_path.read_text(encoding="utf-8").splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        fingerprint = _case_fingerprint(row)
+        metrics = row.get("metrics")
+        if fingerprint and isinstance(metrics, dict) and fingerprint not in cases:
+            cases[fingerprint] = metrics
+    return cases
+
+
+def _matched_case_comparison_paths(
+    baseline_run_dir: str, variant_run_dir: str, metrics: list[str]
+) -> dict[str, Any]:
+    baseline_rows = _load_case_metrics(baseline_run_dir)
+    variant_rows = _load_case_metrics(variant_run_dir)
+    matched_keys = sorted(baseline_rows.keys() & variant_rows.keys())
+    pairs: list[dict[str, Any]] = []
+    for index, fingerprint in enumerate(matched_keys, start=1):
+        values: dict[str, Any] = {}
+        for metric in metrics:
+            left = resolve_metric_key(baseline_rows[fingerprint], metric)
+            right = resolve_metric_key(variant_rows[fingerprint], metric)
+            if (
+                isinstance(left, bool)
+                or isinstance(right, bool)
+                or not isinstance(left, (int, float))
+                or not isinstance(right, (int, float))
+                or not math.isfinite(float(left))
+                or not math.isfinite(float(right))
+            ):
+                continue
+            values[metric] = {
+                "baseline": float(left),
+                "variant": float(right),
+                "delta": float(right) - float(left),
+            }
+        if values:
+            # Use an ordinal rather than exporting a possibly identifying case ID.
+            pairs.append({"case": index, "metrics": values})
+    return {"sample_count": len(pairs), "cases": pairs}
+
+
+def _matched_case_comparison(
+    baseline: VariantResult, variant: VariantResult, metrics: list[str]
+) -> dict[str, Any]:
+    return _matched_case_comparison_paths(baseline.run_dir, variant.run_dir, metrics)
+
+
 def generate_comparison_report(summary: ExperimentSummary) -> str:
     """Generate markdown comparison report.
 
@@ -86,7 +164,14 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
         "",
         "## Baseline Results",
         "",
+        "Exploratory matched comparisons only; no inferential, equivalence, or promotion claim.",
+        "",
+        f"- **Execution mode:** `{summary.baseline_result.execution_mode}`",
+        f"- **Identity status:** `{summary.baseline_result.identity_status}`",
         f"- **Run Directory:** `{summary.baseline_result.run_dir}`",
+        f"- **Sample count:** `{summary.baseline_result.sample_count}`",
+        f"- **Execution order:** `{summary.baseline_result.execution_order}`",
+        f"- **Execution metadata:** `{summary.baseline_result.execution_metadata}`",
         "",
     ]
 
@@ -133,6 +218,10 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
                 f"### {variant_result.variant_name}",
                 "",
                 f"- **Run Directory:** `{variant_result.run_dir}`",
+                f"- **Identity status:** `{variant_result.identity_status}`",
+                f"- **Sample count:** `{variant_result.sample_count}`",
+                f"- **Execution order:** `{variant_result.execution_order}`",
+                f"- **Execution metadata:** `{variant_result.execution_metadata}`",
                 "",
                 "### Metrics vs Baseline",
                 "",
@@ -161,20 +250,37 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
                 f"| {metric} | {baseline_formatted} | {variant_formatted} | {delta} | {percent_delta} | {target_status} |"
             )
 
+        matched = _matched_case_comparison(summary.baseline_result, variant_result, key_metrics)
+        lines.extend(
+            [
+                f"Matched per-case sample count: {matched['sample_count']}",
+                "",
+            ]
+        )
+        if matched["sample_count"]:
+            lines.append("Per-case values are local to this report and descriptive only.")
+            lines.append("")
         lines.append("")
 
-    # Add winner section
-    winner_name, winner_result = summary.get_winner()
+    # An unverified index/source identity is diagnostic evidence, not a winner cohort.
+    try:
+        winner_name, winner_result = summary.get_winner()
+    except ValueError:
+        winner_name, winner_result = None, None
     lines.extend(
         [
             "## Overall Results",
             "",
-            f"**Winner:** {winner_name}",
+            (
+                f"**Descriptive leader (not promotion-eligible):** {winner_name}"
+                if winner_name is not None
+                else "**No eligible winner:** source/index identity or required measurements are unverified."
+            ),
             "",
         ]
     )
 
-    if winner_name != "baseline":
+    if winner_name not in {None, "baseline"} and winner_result is not None:
         winner_metrics = winner_result.metrics
         winner_value = resolve_metric_key(winner_metrics, primary_metric)
         baseline_value = resolve_metric_key(baseline_metrics, primary_metric)
@@ -201,13 +307,13 @@ def generate_comparison_report(summary: ExperimentSummary) -> str:
             [
                 "✅ **One or more variants met the target improvement threshold.**",
                 "",
-                "Consider deploying the winning variant to production.",
+                "This diagnostic comparison is not a deployment or promotion recommendation.",
             ]
         )
     else:
         lines.extend(
             [
-                "❌ **No variants met the target improvement threshold.**",
+                "No variant is promotion-eligible from this exploratory comparison.",
                 "",
                 "Consider:",
                 "- Tuning variant parameters",
@@ -231,7 +337,13 @@ def generate_json_report(summary: ExperimentSummary) -> dict[str, Any]:
         Dictionary report suitable for JSON serialization
     """
     primary_metric = summary.config.metrics.primary if summary.config.metrics else "ndcg@5"
-    winner_name, winner_result = summary.get_winner()
+    try:
+        winner_name, winner_result = summary.get_winner()
+    except ValueError:
+        winner_name, winner_result = None, None
+    key_metrics = [primary_metric]
+    if summary.config.metrics and summary.config.metrics.secondary:
+        key_metrics.extend(summary.config.metrics.secondary)
 
     return {
         "experiment_name": summary.experiment_name,
@@ -241,20 +353,59 @@ def generate_json_report(summary: ExperimentSummary) -> dict[str, Any]:
             "name": summary.baseline_result.variant_name,
             "run_dir": summary.baseline_result.run_dir,
             "metrics": summary.baseline_result.metrics,
+            "identity_status": summary.baseline_result.identity_status,
+            "execution_order": summary.baseline_result.execution_order,
+            "sample_count": summary.baseline_result.sample_count,
+            "execution_metadata": summary.baseline_result.execution_metadata,
+            "usage_summary": summary.baseline_result.usage_summary,
         },
         "variants": [
             {
                 "name": v.variant_name,
                 "run_dir": v.run_dir,
                 "metrics": v.metrics,
+                "identity_status": v.identity_status,
+                "execution_order": v.execution_order,
+                "sample_count": v.sample_count,
+                "execution_mode": v.execution_mode,
+                "execution_metadata": v.execution_metadata,
+                "usage_summary": v.usage_summary,
+                "matched_per_case": _matched_case_comparison(
+                    summary.baseline_result, v, key_metrics
+                ),
                 "meets_target": summary.meets_target_improvement(v.variant_name),
             }
             for v in summary.variant_results
         ],
-        "winner": {
-            "name": winner_name,
-            "run_dir": winner_result.run_dir,
-            "metrics": winner_result.metrics,
+        "winner": (
+            {
+                "name": winner_name,
+                "run_dir": winner_result.run_dir,
+                "metrics": winner_result.metrics,
+                "selection_kind": "descriptive_leader",
+                "promotion_eligible": False,
+            }
+            if winner_result is not None
+            else None
+        ),
+        "comparison_contract": {
+            "mode": "exploratory_descriptive",
+            "inferential_claims": False,
+            "promotion_claims": False,
+            "cold_start_ms": None,
+            "warm_state": "not verified",
+            "evaluator_overhead_ms": None,
+            "execution_order": [
+                summary.baseline_result.execution_order,
+                *[variant.execution_order for variant in summary.variant_results],
+            ],
+            "sample_counts": {
+                summary.baseline_result.variant_name: summary.baseline_result.sample_count,
+                **{
+                    variant.variant_name: variant.sample_count
+                    for variant in summary.variant_results
+                },
+            },
         },
         "primary_metric": primary_metric,
         "target_improvement": summary.config.metrics.target_improvement

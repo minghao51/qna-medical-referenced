@@ -108,7 +108,9 @@ def test_log_assessment_to_wandb_logs_metrics_and_artifacts(monkeypatch, tmp_pat
     )
 
     assert tracking["status"] == "logged"
-    assert tracking["run_id"] == "run-123"
+    assert tracking["artifact_export_enabled"] is True
+    assert "run_id" not in tracking
+    assert "run_url" not in tracking
     assert fake_wandb.inits[0]["project"] == "demo-project"
     assert fake_wandb.run.logged
     assert fake_wandb.run.logged[0]["retrieval/hit_rate"] == 0.9
@@ -116,7 +118,8 @@ def test_log_assessment_to_wandb_logs_metrics_and_artifacts(monkeypatch, tmp_pat
     assert fake_wandb.run.logged[0]["l6_answer_quality/faithfulness_error_rate"] == 0.0
     assert fake_wandb.run.logged[0]["l6_answer_quality/query_count"] == 3
     assert fake_wandb.run.logged[0]["l6_answer_quality/metric_error_rate"] == 0.0
-    assert fake_wandb.run.logged[0]["steps/l3/quality_histogram/low"] == 1
+    # Dynamic histogram/category names are outside the export allowlist.
+    assert "steps/l3/quality_histogram/low" not in fake_wandb.run.logged[0]
     assert fake_wandb.run.logged_artifacts[0].added_dirs == [str(run_dir)]
     assert fake_wandb.run.finished is True
 

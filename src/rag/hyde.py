@@ -26,7 +26,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.infra.llm.qwen_client import QwenClient
+    from src.infra.llm.interfaces import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ Be specific and include relevant medical terminology."""
 
 async def generate_hypothetical_answer(
     query: str,
-    client: QwenClient,
+    client: LLMClient,
     max_length: int = HYPOTHETICAL_ANSWER_MAX_LENGTH,
 ) -> str:
     """Generate a hypothetical answer to use for query expansion.
@@ -54,7 +54,7 @@ async def generate_hypothetical_answer(
 
     Args:
         query: The user's original query
-        client: QwenClient instance for LLM generation
+        client: LLMClient instance for asynchronous generation
         max_length: Maximum word count for the hypothetical answer
 
     Returns:
@@ -76,7 +76,7 @@ async def generate_hypothetical_answer(
     prompt = HYPOTHETICAL_ANSWER_PROMPT_TEMPLATE.format(max_length=max_length, query=query.strip())
 
     try:
-        hypothetical = client.generate(
+        hypothetical = await client.a_generate(
             prompt=prompt,
             context="",  # No context for hypothetical answer generation
         )
@@ -89,11 +89,11 @@ async def generate_hypothetical_answer(
         if len(words) > max_length:
             hypothetical = " ".join(words[:max_length])
 
-        logger.debug("Generated hypothetical answer for query: %s...", query[:50])
+        logger.debug("Generated hypothetical answer (%d words)", len(words))
         return str(hypothetical)
 
-    except Exception as e:
-        logger.error("Failed to generate hypothetical answer for query '%s': %s", query, e)
+    except Exception:
+        logger.error("Hypothetical answer generation failed")
         return ""
 
 
@@ -132,7 +132,7 @@ def expand_query_with_hyde(
 
 async def expand_query_with_hyde_async(
     query: str,
-    client: QwenClient,
+    client: LLMClient,
     enable_hyde: bool = True,
     max_length: int = HYPOTHETICAL_ANSWER_MAX_LENGTH,
 ) -> list[str]:
@@ -143,7 +143,7 @@ async def expand_query_with_hyde_async(
 
     Args:
         query: The user's original query
-        client: QwenClient instance for LLM generation
+        client: LLMClient instance for asynchronous generation
         enable_hyde: Whether to enable HyDE expansion
         max_length: Maximum word count for the hypothetical answer
 
