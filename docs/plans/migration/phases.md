@@ -344,35 +344,35 @@ Dependency/capability research and private deployment preparation can happen alo
 
 ## Phase 4 — Pydantic AI adapter plus shared evaluations
 
-**Staged start accepted (2026-10-21):** [Fresh-session pickup brief](20261021-phase4-pickup-brief.md). Primary goal: working opt-in Go chat via Pydantic AI; selected upcoming generator MiMo V2.6 Flash (exact API ID/capabilities unverified), superseding earlier DeepSeek selection without changing historical snapshots or serving defaults. Offline/isolated P4-A investigation authorized; present dependency diff/capability findings before project-lock changes or P4-B. Schema-validated output required internally and for user-facing generation. No live calls now; P4-D execution and P4-E cutover remain separately gated. No Phase 4 implementation has started; checkboxes below remain unchecked.
+**Staged start accepted (2026-10-21):** [Fresh-session pickup brief](20261021-phase4-pickup-brief.md). Primary goal: working opt-in Go chat via Pydantic AI; selected upcoming generator MiMo V2.6 Flash, superseding earlier DeepSeek selection without changing historical snapshots or serving defaults. Offline/isolated P4-A investigation authorized; present dependency diff/capability findings before project-lock changes or P4-B. Schema-validated output required internally and for user-facing generation. No live calls now; P4-D execution and P4-E cutover remain separately gated. **P4-A spike delivered 2026-10-21:** [capability report](20261021-phase4a-capability-spike.md) — latest Pydantic AI blocked by the `openai>=3`/litellm wall; compatible candidates `2.31.0` (recommended, `openai`→2.54.0) and `1.66.0` (zero `openai` change) resolved and offline-probed (14/14 ×2, network denied); owner review pending before any project-lock change. **P4-B delivered 2026-10-21:** [adapter handoff](20261021-phase4b-adapter-handoff.md) — owner approved candidate B and the exact dependency diff (applied byte-identical to the reviewed resolution); GLM implementation → Luna review (three P2) → parent repairs (including a gate-caught transient-classification defect) → Luna closure **CLOSED**; isolated gate **1,846 passed ×2**; opt-in only, no default flip, no live calls. P4-C/P4-D/P4-E remain unstarted; their checkboxes remain unchecked.
 
 **Requirements:** R05/R12/R13 and all earlier contracts.
 **Dependencies:** Phases 1–3 exit for integrated comparison. **Decisions:** D03/D04/D07/D10/D16/D18.
 
 ### P4-A: Dependency and provider-capability spike
 
-- [ ] Resolve Pydantic AI slim/provider extras and Pydantic Evals against Python 3.12/current lockfile in an approved change slice.
-- [ ] Record exact versions and supported selected routes; avoid adding every provider SDK speculatively.
-- [ ] Check sync/async APIs, stream delta semantics, structured-output modes, context-manager ownership, usage reporting, and telemetry content controls against those versions.
-- [ ] Use D03's selected Go route and owner-reported eligibility. Verify honest `User-Agent` and stable, opaque per-conversation `x-opencode-session` through fake-transport tests across sync/async/streaming/structured paths; isolate case/variant/judge sessions without mutating shared client state. No impersonation, fake tool traffic, or silent `-free`/paid-route substitution.
-- [ ] Validate endpoint region/model access with explicit credentials only during the separately approved live smoke; account for separate Go subscription/quota versus pay-as-you-go billing.
-- [ ] If compatibility requires an unrelated major stack upgrade, stop and present alternatives rather than silently expanding scope.
+- [x] Resolve Pydantic AI slim/provider extras and Pydantic Evals against Python 3.12/current lockfile in an approved change slice. *Delivered in the authorized isolated spike: full-project scratch resolutions for candidates 2.31.0 and 1.66.0; latest 2.59.0 unsatisfiable. Project-lock application pending owner review.*
+- [x] Record exact versions and supported selected routes; avoid adding every provider SDK speculatively. *Exact pins/diffs recorded; only slim `[openai,evals]` extras resolved; no other provider SDKs added.*
+- [x] Check sync/async APIs, stream delta semantics, structured-output modes, context-manager ownership, usage reporting, and telemetry content controls against those versions. *Fake-transport probe of 2.31.0: 14/14 checks ×2 fresh sandboxed processes, zero network attempts; see the report matrix.*
+- [x] Use D03's selected Go route and owner-reported eligibility. Verify honest `User-Agent` and stable, opaque per-conversation `x-opencode-session` through fake-transport tests across sync/async/streaming/structured paths; isolate case/variant/judge sessions without mutating shared client state. No impersonation, fake tool traffic, or silent `-free`/paid-route substitution. *Headers proven request-scoped against the documented Go base URL; honest app `User-Agent` requires per-request override of the provider default.*
+- [ ] Validate endpoint region/model access with explicit credentials only during the separately approved live smoke; account for separate Go subscription/quota versus pay-as-you-go billing. *Deferred by design to P4-D; pay-as-you-go spillover must stay off.*
+- [x] If compatibility requires an unrelated major stack upgrade, stop and present alternatives rather than silently expanding scope. *Stopped at the `openai>=3` requirement (litellm/langchain-openai conflict); alternatives presented in the report.*
 
-**Exit:** A small supported capability matrix and a reproducible dependency resolution. No blanket assertion that every OpenAI-compatible endpoint supports the same features.
+**Exit:** A small supported capability matrix and a reproducible dependency resolution. No blanket assertion that every OpenAI-compatible endpoint supports the same features. *Both delivered in the [P4-A capability report](20261021-phase4a-capability-spike.md); real Go-route schema/stream behavior and account access remain untested until the gated live smoke.*
 
 ### P4-B: Existing-interface generation implementation
 
 **Primary files:** a focused adapter under `src/infra/llm/`, existing `interfaces.py`/factory, `src/app/factory.py`, `src/config/settings.py`, targeted unit/integration tests.
 
-- [ ] Implement current protocol sync/async/text-stream/structured generation using Pydantic AI.
-- [ ] Separate implementation selection from provider and agentic harness selection.
-- [ ] Reproduce current prompt/history/context behavior for matched tests; record material differences rather than hiding them.
-- [ ] Reuse/close owned provider/model/agent resources correctly.
-- [ ] Preserve stable SSE/history/citation behavior and partial-output retry restrictions.
-- [ ] Add offline test/function-model coverage, a deny-live guard, and provider-client contract tests.
-- [ ] Keep existing clients selectable; no default flip in this slice.
+- [x] Implement current protocol sync/async/text-stream/structured generation using Pydantic AI. *Delivered in `src/infra/llm/pydantic_ai_client.py` (sync-in-loop restriction documented as a material difference).*
+- [x] Separate implementation selection from provider and agentic harness selection. *Provider literal `pydantic-ai` + explicit model settings; no agent harness introduced.*
+- [x] Reproduce current prompt/history/context behavior for matched tests; record material differences rather than hiding them. *Exact `build_medical_messages`-equivalent prompt asserted by test; confounds recorded in the adapter docstring and P4-A/B reports.*
+- [x] Reuse/close owned provider/model/agent resources correctly. *One owned `httpx.AsyncClient` per client, closed by `aclose()`; pydantic-ai does not close injected clients.*
+- [x] Preserve stable SSE/history/citation behavior and partial-output retry restrictions. *Chat wiring change is scope-wrapping only; no-retry-after-emitted-delta asserted by test.*
+- [x] Add offline test/function-model coverage, a deny-live guard, and provider-client contract tests. *23 fake-transport cases + `deny_live_models` fixture (sets/restores `ALLOW_MODEL_REQUESTS`); TestModel/function-model coverage proven at the P4-A probe level.*
+- [x] Keep existing clients selectable; no default flip in this slice. *Default provider remains `qwen`; existing clients unchanged.*
 
-**Acceptance:** Fake/model-contract tests pass for both implementations; current clients need no new hosted token; unsupported schema/request settings fail clearly; actual model identity is correct in diagnostics and cache keys.
+**Acceptance:** Fake/model-contract tests pass for both implementations; current clients need no new hosted token; unsupported schema/request settings fail clearly; actual model identity is correct in diagnostics and cache keys. *Fake-transport contract tests pass for the adapter and all existing clients (gate 1,846 ×2); existing clients need no new token; unsupported modes/invalid settings raise; `self.model` identity feeds the existing telemetry/diagnostics path. Live route/schema behavior and judge-role wiring remain P4-D/P4-C exits.*
 
 ### P4-C: Pydantic Evals tasks and output compatibility
 

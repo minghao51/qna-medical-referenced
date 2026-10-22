@@ -39,6 +39,7 @@ import anyio
 
 from src.config import settings
 from src.core.exceptions import UpstreamServiceError
+from src.infra.llm.conversation_context import conversation_scope
 from src.infra.storage.interfaces import ChatHistoryStore
 from src.infra.telemetry import (
     ErrorCode,
@@ -159,12 +160,13 @@ def process_chat_message(
 
         gen_start = time.time()
         try:
-            with telemetry_operation(
-                Operation.GENERATION,
-                stage=Stage.GENERATION,
-                model=getattr(llm_client, "model", None),
-            ):
-                response = llm_client.generate(prompt=message, context=full_context)
+            with conversation_scope(resolved_session_id):
+                with telemetry_operation(
+                    Operation.GENERATION,
+                    stage=Stage.GENERATION,
+                    model=getattr(llm_client, "model", None),
+                ):
+                    response = llm_client.generate(prompt=message, context=full_context)
         except Exception as exc:
             logger.error("Chat generation failed")
             raise UpstreamServiceError("An error occurred processing your request") from exc
@@ -275,10 +277,20 @@ async def stream_chat_message(
         )
 
         try:
+            # Scope the conversation id around each upstream token pull only,
+            # never across the yields below: while a generator is suspended at a
+            # yield, its consuming task (and any child task it spawns) would
+            # otherwise inherit the contextvar and could attach this
+            # conversation's session header to unrelated requests.
             async with aclosing(
                 llm_client.a_generate_stream(prompt=message, context=full_context)
             ) as stream:
-                async for token in stream:
+                while True:
+                    with conversation_scope(resolved_session_id):
+                        try:
+                            token = await anext(stream)
+                        except StopAsyncIteration:
+                            break
                     accumulated_response += token
                     yield (token, {"done": False})
         except asyncio.CancelledError:

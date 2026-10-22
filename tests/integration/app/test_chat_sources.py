@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ from src.app.factory import create_app
 from src.app.middleware.auth import APIKeyConfig
 from src.app.session import _verify_signed_session_id
 from src.config import settings
+from src.infra.llm.conversation_context import get_conversation_id
 from src.infra.storage.file_chat_history_store import FileChatHistoryStore
 from src.rag.formatting import build_chat_sources, build_context_and_sources
 from src.usecases.chat import stream_chat_message
@@ -302,6 +304,53 @@ async def test_stream_chat_message_uses_async_trace_path_when_pipeline_enabled(
     assert events[0][0] == "ok"
     assert events[-1][1]["done"] is True
     assert events[-1][1]["pipeline"].retrieval.steps[0].name == "query_expansion"
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_message_does_not_leak_conversation_context_across_yields(
+    monkeypatch, tmp_path: Path
+):
+    """The conversation id is scoped around each upstream token pull only.
+
+    While the stream is suspended between tokens, neither the consuming task
+    nor a child task it spawns may observe the conversation id; only the
+    upstream client pull runs inside the scope.
+    """
+
+    class ProbingStreamingClient:
+        async def a_generate_stream(self, prompt: str, context: str):
+            assert get_conversation_id() == "session-leak-probe"
+            yield "to"
+            assert get_conversation_id() == "session-leak-probe"
+            yield "ken"
+
+    async def fake_retrieve_context_with_trace_async(query, top_k=5, hyde_client=None, **kwargs):
+        return "context", [], None
+
+    monkeypatch.setattr(
+        "src.usecases.chat.retrieve_context_with_trace_async",
+        fake_retrieve_context_with_trace_async,
+    )
+
+    async def child_context() -> str | None:
+        return get_conversation_id()
+
+    store = FileChatHistoryStore(tmp_path / "chat_history.json")
+    inherited_values = []
+    async for _token, _metadata in stream_chat_message(
+        llm_client=ProbingStreamingClient(),
+        history_store=store,
+        message="hello",
+        session_id="session-leak-probe",
+    ):
+        # Suspended at the consumer's yield: the consuming task must not carry
+        # the conversation id, and a child task spawned now must not inherit it.
+        assert get_conversation_id() is None
+        inherited = await asyncio.create_task(child_context())
+        inherited_values.append(inherited)
+
+    assert len(inherited_values) >= 2  # two tokens plus the terminal event
+    assert all(value is None for value in inherited_values)
 
 
 @pytest.mark.asyncio

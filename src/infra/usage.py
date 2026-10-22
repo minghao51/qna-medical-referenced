@@ -37,6 +37,7 @@ _USAGE_CONTAINERS = {
     "openai": ("usage",),
     "litellm": ("usage",),
     "gemini": ("usage_metadata",),
+    "pydantic-ai": ("usage",),
 }
 _USAGE_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
     "openai": {
@@ -53,6 +54,11 @@ _USAGE_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
         "input_tokens": ("prompt_token_count", "input_tokens"),
         "output_tokens": ("candidates_token_count", "output_tokens"),
         "total_tokens": ("total_token_count", "total_tokens"),
+    },
+    "pydantic-ai": {
+        "input_tokens": ("prompt_tokens", "input_tokens"),
+        "output_tokens": ("completion_tokens", "output_tokens"),
+        "total_tokens": ("total_tokens",),
     },
 }
 

@@ -29,6 +29,7 @@ dependencies = [
     "sf-hamilton[visualization]>=1.0.0",
     "duckdb>=1.0.0",
     "pyyaml>=6.0.0",
+    "pydantic-ai-slim[openai,evals]==2.31.0",
 ]
 
 [tool.pytest.ini_options]

@@ -53,8 +53,8 @@ class ApiConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    provider: Literal["qwen", "gemini", "litellm"] = "qwen"
-    judge_provider: Literal["qwen", "gemini", "litellm"] | None = None
+    provider: Literal["qwen", "gemini", "litellm", "pydantic-ai"] = "qwen"
+    judge_provider: Literal["qwen", "gemini", "litellm", "pydantic-ai"] | None = None
     model_name: str = "qwen3.5-flash"
     dashscope_api_key: SecretStr = SecretStr("")
     qwen_base_url: str = "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
@@ -65,6 +65,13 @@ class LLMConfig(BaseModel):
     litellm_model: str = ""
     gemini_api_key: SecretStr = SecretStr("")
     gemini_model_name: str = "gemma-4-31b-it"
+    pydantic_ai_base_url: str = "https://opencode.ai/inference/go/openai/v1"
+    pydantic_ai_api_key: SecretStr = SecretStr("")
+    pydantic_ai_model: str = "mimo-v2.6-flash"
+    pydantic_ai_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    pydantic_ai_max_tokens: int = Field(default=2048, ge=1)
+    pydantic_ai_timeout_seconds: float = Field(default=30.0, gt=0.0, le=600.0)
+    pydantic_ai_structured_output_mode: Literal["tool", "native-json-schema"] = "tool"
     judge_model_light: str = "qwen3.5-35b-a3b"
     judge_model_heavy: str = "qwen3.5-flash"
     judge_model_light_litellm: str = "google/gemma-4-31b-it"

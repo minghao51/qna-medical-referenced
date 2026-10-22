@@ -575,6 +575,7 @@ async def evaluate_answer_quality_async(
         "qwen": ("dashscope_api_key", "APP__LLM__DASHSCOPE_API_KEY"),
         "gemini": ("gemini_api_key", "APP__LLM__GEMINI_API_KEY"),
         "litellm": ("openrouter_api_key", "APP__LLM__OPENROUTER_API_KEY"),
+        "pydantic-ai": ("pydantic_ai_api_key", "APP__LLM__PYDANTIC_AI_API_KEY"),
     }
     selected_roles = {"generator": settings.llm.provider, "judge": resolve_judge_provider()}
     missing = []

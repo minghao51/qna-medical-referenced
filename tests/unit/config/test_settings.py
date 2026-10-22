@@ -50,3 +50,31 @@ def test_settings_supports_nested_app_env_overrides(monkeypatch):
 
     assert settings.llm.model_name == "env-override-model"
     assert settings.api.max_message_length == 4321
+
+
+def test_llm_config_pydantic_ai_settings_bounds():
+    """Pydantic AI provider settings reject invalid values explicitly (R05)."""
+    import pytest
+    from pydantic import ValidationError
+
+    from src.config.settings import LLMConfig
+
+    valid = LLMConfig()
+    assert valid.provider == "qwen"  # default flip is not part of this slice
+    assert valid.pydantic_ai_temperature == 0.7
+    assert valid.pydantic_ai_max_tokens == 2048
+    assert valid.pydantic_ai_timeout_seconds == 30.0
+    assert valid.pydantic_ai_structured_output_mode == "tool"
+
+    with pytest.raises(ValidationError):
+        LLMConfig(pydantic_ai_temperature=-0.1)
+    with pytest.raises(ValidationError):
+        LLMConfig(pydantic_ai_temperature=2.1)
+    with pytest.raises(ValidationError):
+        LLMConfig(pydantic_ai_max_tokens=0)
+    with pytest.raises(ValidationError):
+        LLMConfig(pydantic_ai_timeout_seconds=0.0)
+    with pytest.raises(ValidationError):
+        LLMConfig(pydantic_ai_timeout_seconds=600.5)
+    with pytest.raises(ValidationError):
+        LLMConfig(pydantic_ai_structured_output_mode="json_object")

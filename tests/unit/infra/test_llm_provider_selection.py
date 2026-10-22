@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from src.config.settings import LLMConfig
 
 
-@pytest.mark.parametrize("provider", ["qwen", "gemini", "litellm"])
+@pytest.mark.parametrize("provider", ["qwen", "gemini", "litellm", "pydantic-ai"])
 def test_llm_config_accepts_supported_providers(provider):
     assert LLMConfig(provider=provider).provider == provider
 
@@ -36,7 +36,12 @@ def test_client_factory_rejects_unknown_provider_without_qwen_fallback(monkeypat
 
 @pytest.mark.parametrize(
     ("provider", "client_name"),
-    [("qwen", "QwenClient"), ("gemini", "GeminiClient"), ("litellm", "LiteLLMClient")],
+    [
+        ("qwen", "QwenClient"),
+        ("gemini", "GeminiClient"),
+        ("litellm", "LiteLLMClient"),
+        ("pydantic-ai", "PydanticAIClient"),
+    ],
 )
 def test_client_factory_accepts_explicit_supported_provider_and_model(
     monkeypatch, provider, client_name
@@ -63,7 +68,12 @@ def test_client_factory_accepts_explicit_supported_provider_and_model(
 
 @pytest.mark.parametrize(
     ("provider", "client_name"),
-    [("qwen", None), ("gemini", "GeminiClient"), ("litellm", "LiteLLMClient")],
+    [
+        ("qwen", None),
+        ("gemini", "GeminiClient"),
+        ("litellm", "LiteLLMClient"),
+        ("pydantic-ai", "PydanticAIClient"),
+    ],
 )
 def test_client_factory_preserves_configured_provider_defaults(monkeypatch, provider, client_name):
     from src.infra import llm
