@@ -10,7 +10,7 @@ Read `AGENTS.md`, the relevant `.planning/codebase/` references, this brief, [de
 
 ## Fresh-state verification (read before touching anything)
 
-- Recorded history, newest first: `Deliver P4-C evaluation task layer and offline pydantic-ai judge wiring`, `Apply approved Pydantic AI dependency and deliver opt-in P4-B adapter`, `Document delivered migration checkpoints and staged Phase 4 pickup plan`. Verify with `git log -3 --format='%h %s'` (subjects must match in that order) and `git status -uall --porcelain` (clean apart from ignored files).
+- Recorded code state: `3d18434` (`Deliver P4-C evaluation task layer and offline pydantic-ai judge wiring`), on top of `26f511b` (P4-B delivery) and `2e01e6b` (Phase 4 pickup docs). Commits after `3d18434` must be documentation-only — confirm with `git diff 3d18434..HEAD --name-only` listing nothing outside `docs/` — and `git status -uall --porcelain` must be clean apart from ignored files.
 - If a later session finds uncommitted work instead, verify the tree against the P4-C handoff file inventory (13 modified + 5 new paths) before any change; do not reset/stash/clean/checkout or mix in unrelated work.
 - Dependencies are unchanged from the owner-approved P4-B pin: `pydantic-ai-slim[openai,evals]==2.31.0`, lock SHA-256 `7d63f1ce0a02249c2efe7c2ef3de1c37c3eb1d770d278a7ad5845865eb8d6499`. P4-C added **no** dependency; `pydantic-evals` 2.31.0 was already in the lock.
 - Latest verified gates (P4-C session): isolated offline gate **1,903 passed / five warnings ×2** in fresh bwrap processes; Ruff check+format 339 files, MyPy `src` 164 files, docs consistency — all passing. Scratch evidence under `/tmp/qna-p4c-1792678346/` is ephemeral; the P4-C handoff records the numbers and findings.
