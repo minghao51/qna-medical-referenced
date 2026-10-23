@@ -34,6 +34,12 @@ _PROVIDER_CREDENTIALS = {
     "gemini": "APP__LLM__GEMINI_API_KEY",
     "litellm": "APP__LLM__OPENROUTER_API_KEY",
 }
+# Judge-only provider extensions: the pydantic-ai generation path stays fail-closed
+# here until its route/limits are approved (P4-D), so it is not in the shared map.
+_JUDGE_PROVIDER_CREDENTIALS = {
+    **_PROVIDER_CREDENTIALS,
+    "pydantic-ai": "APP__LLM__PYDANTIC_AI_API_KEY",
+}
 _PROVIDER_MODELS = {
     "qwen": "model_name",
     "gemini": "gemini_model_name",
@@ -69,6 +75,8 @@ def _credential_ready(config: Any, provider: str) -> bool:
         value = config.llm.gemini_api_key
     elif provider == "litellm":
         value = config.llm.openrouter_api_key
+    elif provider == "pydantic-ai":
+        value = config.llm.pydantic_ai_api_key
     else:
         return False
     return bool(_secret_value(value).strip())
@@ -155,7 +163,7 @@ def build_preflight_report(
     require_credential(embedding_credential, "embedding")
 
     judge_provider = str(config.llm.judge_provider or generation_provider)
-    judge_credential = _PROVIDER_CREDENTIALS.get(judge_provider)
+    judge_credential = _JUDGE_PROVIDER_CREDENTIALS.get(judge_provider)
     if judge_credential is None:
         errors.append("unsupported_judge_provider")
 
@@ -253,9 +261,12 @@ def build_preflight_report(
                 "required_by": ["api_auth"],
             }
 
-    judge_model_suffix = {"qwen": "", "gemini": "_gemini", "litellm": "_litellm"}.get(
-        judge_provider
-    )
+    judge_model_suffix = {
+        "qwen": "",
+        "gemini": "_gemini",
+        "litellm": "_litellm",
+        "pydantic-ai": "_pydantic_ai",
+    }.get(judge_provider)
     judge_models = None
     if judge_model_suffix is not None:
         judge_models = {

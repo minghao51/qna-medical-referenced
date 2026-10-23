@@ -233,6 +233,14 @@ The documented Go Chat Completions base URL is `https://opencode.ai/inference/go
 | D17 | Baseline profile and generation settings | Owner selected corrected **`baseline`** on 2026-10-16; generation/judge models and prompt/temperature/token limits still require a matched-run snapshot. Cross-encoder assets are not selected | Baseline benchmark capture |
 | D18 | Provider/gateway fallbacks | Disable automatic route/model fallback during comparison; permit only explicitly named operational experiments with actual backend recorded | Live comparisons and resilience variants |
 
+### Session decisions (2026-10-21, P4-C)
+
+- **Judge role wired, generation untouched.** Owner decision "wire now": `judge_provider: pydantic-ai` is accepted end-to-end offline (credential `APP__LLM__PYDANTIC_AI_API_KEY`, `judge_model_{light,heavy}_pydantic_ai`, HTTPS `/v1` endpoint validation, honest `max_completion_tokens`/attempt accounting). `provider: pydantic-ai` for **generation** stays fail-closed in preflight/`effective_roles` until P4-D decides on route widening. Wiring this judge does not select it: default judge remains the generator provider (`qwen`).
+- **Same-route judge is a recorded limitation, not parity evidence.** Default `pydantic-ai` judge and generator share the OpenCode Go route/model family, so matched runs cannot claim independent-judge scoring; D17 judge pinning stays open and P4-D must pin an independent judge before any quality comparison.
+- **CLI selectors deliberately not flipped.** A selectable `pydantic_evals` harness needs materialized corpus/index content (D11 open), so P4-C ships a programmatic runner only. Flipping `--harness`/`--generation-implementation` without materialized inputs would create a selectable path that cannot run honestly.
+- **Runner fan-out is bounded by default** (`deepeval_query_concurrency`) instead of the framework's unlimited per-case concurrency; adversarial case fan-out would multiply paid calls, so the runner — not the caller — owns the bound.
+- **Session role pairing is temporary:** worker `deepseek/deepseek-flash`, reviewer `zai/glm-5.3-flash` for this run only; the standing GLM → Luna xhigh pairing is unchanged.
+
 D11 is accepted as above. D12–D16 and D18 remain open. D17's profile choice and generator are accepted (`baseline`, Go `deepseek-v4.1-flash`); its remaining judge-ID pinning, matched settings snapshot, and capture evidence are not inferred. Recommendations in the other rows are not silently adopted.
 
 ## Uncertainties to resolve experimentally, not by preference

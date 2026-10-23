@@ -213,3 +213,44 @@ def test_effective_roles_rejects_unknown_qwen_endpoint_without_echoing_it(monkey
 def test_effective_roles_rejects_unimplemented_axes(kwargs, message):
     with pytest.raises(ValueError, match=f"Unsupported.*{message}"):
         effective_roles(**kwargs)
+
+
+def test_effective_roles_reports_pydantic_ai_judge_snapshot(monkeypatch):
+    judge_secret = "pydantic-ai-judge-secret-canary"
+    monkeypatch.setattr(settings.llm, "provider", "qwen")
+    monkeypatch.setattr(settings.llm, "judge_provider", "pydantic-ai")
+    monkeypatch.setattr(settings.llm, "pydantic_ai_api_key", SecretStr(judge_secret))
+    monkeypatch.setattr(settings.llm, "judge_model_light_pydantic_ai", "judge-light-model")
+    monkeypatch.setattr(settings.llm, "judge_model_heavy_pydantic_ai", "judge-heavy-model")
+    monkeypatch.setattr(
+        settings.llm, "pydantic_ai_base_url", "https://opencode.ai/inference/go/openai/v1"
+    )
+    monkeypatch.setattr(settings.retry, "max_retries", 3)
+
+    roles = effective_roles(task="judge")
+
+    assert roles["judge"]["provider"] == "pydantic-ai"
+    assert roles["judge"]["endpoint"] == "https://opencode.ai/inference/go/openai/v1"
+    assert roles["judge"]["light_model"] == "judge-light-model"
+    assert roles["judge"]["heavy_model"] == "judge-heavy-model"
+    # The adapter sends max_tokens as the framework's max_completion_tokens field.
+    assert roles["judge"]["max_tokens_parameter"] == "max_completion_tokens"
+    # The adapter retries inside one direct call, so attempts stay honest.
+    assert roles["judge"]["request_attempts"] == 3
+    assert "adapter settings.retry loop" in roles["judge"]["retry_scope"]
+    assert roles["judge"]["credential"] == {
+        "setting": "APP__LLM__PYDANTIC_AI_API_KEY",
+        "configured": True,
+        "required": True,
+    }
+    assert judge_secret not in repr(roles)
+
+
+def test_effective_roles_rejects_unsafe_pydantic_ai_judge_endpoint(monkeypatch):
+    monkeypatch.setattr(settings.llm, "provider", "qwen")
+    monkeypatch.setattr(settings.llm, "judge_provider", "pydantic-ai")
+    monkeypatch.setattr(settings.llm, "pydantic_ai_api_key", SecretStr("synthetic-judge-key"))
+    monkeypatch.setattr(settings.llm, "pydantic_ai_base_url", "http://localhost:8080/v1")
+
+    with pytest.raises(ValueError, match="not a supported HTTPS /v1 route"):
+        effective_roles(task="judge")

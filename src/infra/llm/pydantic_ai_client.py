@@ -49,6 +49,7 @@ Material differences and confounds versus the Qwen baseline:
 
 import asyncio
 import logging
+import math
 import time
 import uuid
 from contextlib import nullcontext
@@ -106,12 +107,55 @@ def _is_transient(exc: Exception) -> bool:
 
 
 class PydanticAIClient:
-    def __init__(self, model: str | None = None):
+    def __init__(
+        self,
+        model: str | None = None,
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        timeout_seconds: float | None = None,
+        raw_prompt: bool = False,
+    ):
         resolved_model = model if model is not None else settings.llm.pydantic_ai_model
         if not isinstance(resolved_model, str) or not resolved_model.strip():
             raise ValueError("LLM model must be a non-empty identifier when provided")
         self.model = resolved_model
-        self._timeout = settings.llm.pydantic_ai_timeout_seconds
+        # Optional overrides let the DeepEval judge wrapper reuse this adapter's
+        # single retry/usage implementation with judge settings and a verbatim
+        # prompt instead of the chat system prompt and user template. Overrides
+        # carry the same bounds as the settings fields they replace.
+        if temperature is not None and (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not math.isfinite(temperature)
+            or not 0.0 <= temperature <= 2.0
+        ):
+            raise ValueError("temperature override must be a finite value from 0 through 2")
+        if max_tokens is not None and (
+            isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1
+        ):
+            raise ValueError("max_tokens override must be a positive integer")
+        if timeout_seconds is not None and (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (int, float))
+            or not math.isfinite(timeout_seconds)
+            or not 0.0 < timeout_seconds <= 600.0
+        ):
+            raise ValueError(
+                "timeout_seconds override must be a finite value above 0 and at most 600"
+            )
+        self._temperature = (
+            settings.llm.pydantic_ai_temperature if temperature is None else float(temperature)
+        )
+        self._max_tokens = (
+            settings.llm.pydantic_ai_max_tokens if max_tokens is None else int(max_tokens)
+        )
+        self._raw_prompt = bool(raw_prompt)
+        self._timeout = (
+            settings.llm.pydantic_ai_timeout_seconds
+            if timeout_seconds is None
+            else float(timeout_seconds)
+        )
         # One app-owned HTTP client for the client's lifetime; closed by aclose().
         self._http_client = httpx.AsyncClient(timeout=self._timeout)
         # The documented openai_client overload keeps SDK-level HTTP retries at
@@ -126,7 +170,9 @@ class PydanticAIClient:
         )
         provider = OpenAIProvider(openai_client=self._openai_client)
         self._model = OpenAIChatModel(self.model, provider=provider)
-        self._text_agent: Agent[object, str] = Agent(self._model, instructions=SYSTEM_PROMPT)
+        self._text_agent: Agent[object, str] = Agent(
+            self._model, instructions=None if self._raw_prompt else SYSTEM_PROMPT
+        )
         self._structured_agents: dict[tuple[type[BaseModel], str], Agent[Any, Any]] = {}
 
     async def aclose(self) -> None:
@@ -144,6 +190,8 @@ class PydanticAIClient:
         )
 
     def _user_prompt(self, prompt: str, context: str) -> str:
+        if self._raw_prompt:
+            return prompt
         return USER_PROMPT_TEMPLATE.format(context=context, prompt=prompt)
 
     def _request_settings(self) -> ModelSettings:
@@ -152,8 +200,8 @@ class PydanticAIClient:
         if conversation_id is not None:
             headers[SESSION_HEADER] = opaque_session_id(conversation_id)
         return ModelSettings(
-            temperature=settings.llm.pydantic_ai_temperature,
-            max_tokens=settings.llm.pydantic_ai_max_tokens,
+            temperature=self._temperature,
+            max_tokens=self._max_tokens,
             extra_headers=headers,
         )
 

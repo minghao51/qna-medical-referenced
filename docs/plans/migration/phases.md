@@ -378,12 +378,14 @@ Dependency/capability research and private deployment preparation can happen alo
 
 **Primary files:** focused task/evaluator integration under `src/evals/`, existing assessment/CLI composition, artifact adapters/readers, multi-turn integration tests.
 
-- [ ] Evaluate plain-Python baseline and adapter tasks on the same frozen cases/index/prompt settings.
-- [ ] Reuse repaired retrieval metrics and existing DeepEval definitions during calibration; avoid duplicate rubrics.
-- [ ] Save normalized per-case outcomes/usage/timings and required-evaluator completeness into the existing artifact contract.
-- [ ] Replay real user/assistant conversation sequences with isolated sessions.
-- [ ] Ensure automatic Pydantic Evals/Logfire export obeys Phase 3's content restrictions; test report export, not just model spans. The documented integration exports case inputs/outputs: D10 permits approved public/synthetic content, but verify mode-specific allowlists in the pinned version and prevent forbidden secret/patient data from leaking in either mode.
-- [ ] Keep old evaluation CLI behavior readable/explicit while documenting new proposed command/config selectors when implemented.
+- [x] Evaluate plain-Python baseline and adapter tasks on the same frozen cases/index/prompt settings. *Offline machinery delivered ([P4-C handoff](20261021-phase4c-evaluation-tasks-handoff.md)): identical frozen inputs and one normalized result model for both implementations, proven with fake transports; an actual scored corpus run stays blocked by D11 corpus/index materialization.*
+- [x] Reuse repaired retrieval metrics and existing DeepEval definitions during calibration; avoid duplicate rubrics. *`MedicalMetricEvaluator` bridges the existing `METRIC_SPECS`/`create_medical_metrics` definitions — no rubric restated; a source-text test guards it.*
+- [x] Save normalized per-case outcomes/usage/timings and required-evaluator completeness into the existing artifact contract. *Projected per-case outcomes, usage snapshots, timings and R07 completeness are written through the existing `ArtifactStore`; missing/skipped/errored/failed can never report complete.*
+- [x] Replay real user/assistant conversation sequences with isolated sessions. *Isolated per-case session replay with fresh generated ids is delivered; real assistant-turn history and contextual-turn metrics remain D13.*
+- [x] Ensure automatic Pydantic Evals/Logfire export obeys Phase 3's content restrictions; test report export, not just model spans. The documented integration exports case inputs/outputs: D10 permits approved public/synthetic content, but verify mode-specific allowlists in the pinned version and prevent forbidden secret/patient data from leaking in either mode. *Verified in 2.31.0 (`ReportCase.inputs/output`, aggregate label keys) and gated: case content, judge reasons, string label values and aggregate label keys export only under `approved_public_synthetic_content` + `content_approved`; canary tests cover all four modes plus approval. No Logfire report export is wired.*
+- [ ] Keep old evaluation CLI behavior readable/explicit while documenting new proposed command/config selectors when implemented. *Legacy CLI behaviour is unchanged; the new runner is programmatic-only (`build_dataset` → `run_dataset` → `project_report`/`write_report`) because a selectable harness needs materialized corpus/index content (D11). Selector wiring is deferred to P4-D.*
+
+**P4-C delivered 2026-10-21:** [evaluation-tasks handoff](20261021-phase4c-evaluation-tasks-handoff.md) — DeepSeek V4.1 Flash implementation → GLM-5.3 Flash review (two P1, one P2, six P3) → parent repairs → closure review **CLOSED**, then three post-closure repairs (metric cleanup ownership, `error_type` projection, bounded runner concurrency); isolated gate **1,903 passed ×2**; statics clean. `judge_provider: pydantic-ai` is now wired end-to-end offline (wrapper, credential, model names, endpoint validation, honest attempt accounting) and remains opt-in. No default flip, no live calls, no CLI selector flip; generation on that route stays fail-closed until P4-D decides.**
 
 ### P4-D: Matched live parity and CI
 

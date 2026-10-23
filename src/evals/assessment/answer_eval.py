@@ -100,6 +100,8 @@ def _runtime_signature(
         "judge_model_heavy_gemini": settings.llm.judge_model_heavy_gemini,
         "judge_model_light_litellm": settings.llm.judge_model_light_litellm,
         "judge_model_heavy_litellm": settings.llm.judge_model_heavy_litellm,
+        "judge_model_light_pydantic_ai": settings.llm.judge_model_light_pydantic_ai,
+        "judge_model_heavy_pydantic_ai": settings.llm.judge_model_heavy_pydantic_ai,
         "judge_temperature": settings.llm.judge_temperature,
         "judge_max_tokens": settings.llm.judge_max_tokens,
         "collection_name": settings.storage.collection_name,
@@ -246,6 +248,31 @@ async def _prepare_answer_case(
             "metrics": False,
         },
         _telemetry_case_id=telemetry_case_id,
+    )
+
+
+async def generate_answer_case(
+    item: dict[str, Any],
+    *,
+    llm_client: Any,
+    top_k: int = 5,
+    retrieval_options: dict[str, Any] | None = None,
+) -> AnswerQualityCase:
+    """Generate one answer for one case without judges or metric construction.
+
+    Thin public seam for the Pydantic Evals task layer: identical frozen inputs,
+    the caller-owned client, and no cache. Judge scoring stays outside the task.
+    """
+    return await _prepare_answer_case(
+        item,
+        top_k=top_k,
+        retrieval_options=retrieval_options,
+        runtime_signature=_runtime_signature(top_k, retrieval_options),
+        retrieval_cache={},
+        generation_cache={},
+        cache_enabled=False,
+        semaphore=asyncio.Semaphore(1),
+        llm_client=llm_client,
     )
 
 

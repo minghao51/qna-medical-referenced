@@ -69,8 +69,12 @@ class Answer(BaseModel):
 def fake_settings(mode: str = "tool", max_retries: int = 3, retry_delay: float = 0.0):
     return SimpleNamespace(
         llm=SimpleNamespace(
+            pydantic_ai_model=MODEL,
+            pydantic_ai_base_url=BASE_URL,
+            pydantic_ai_api_key=SecretStr(API_KEY),
             pydantic_ai_temperature=0.7,
             pydantic_ai_max_tokens=2048,
+            pydantic_ai_timeout_seconds=30.0,
             pydantic_ai_structured_output_mode=mode,
         ),
         retry=SimpleNamespace(max_retries=max_retries, retry_delay=retry_delay),
@@ -93,6 +97,9 @@ def make_client(handler) -> PydanticAIClient:
     model = OpenAIChatModel(MODEL, provider=OpenAIProvider(openai_client=sdk))
     client = PydanticAIClient.__new__(PydanticAIClient)
     client.model = MODEL
+    client._temperature = 0.7
+    client._max_tokens = 2048
+    client._raw_prompt = False
     client._timeout = 30.0
     client._http_client = http
     client._openai_client = sdk
@@ -559,6 +566,8 @@ def test_factory_constructs_pydantic_ai_client_with_synthetic_settings(monkeypat
             pydantic_ai_model=MODEL,
             pydantic_ai_base_url=BASE_URL,
             pydantic_ai_api_key=SecretStr(API_KEY),
+            pydantic_ai_temperature=0.7,
+            pydantic_ai_max_tokens=2048,
             pydantic_ai_timeout_seconds=30.0,
         ),
     )
@@ -683,3 +692,30 @@ def test_generate_outside_event_loop_returns_output(adapter_settings):
         assert len(requests) == 1
     finally:
         asyncio.run(client.aclose())
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"temperature": 2.5},
+        {"temperature": float("nan")},
+        {"max_tokens": 0},
+        {"max_tokens": True},
+        {"timeout_seconds": 0},
+        {"timeout_seconds": 601},
+    ],
+)
+def test_constructor_rejects_out_of_bounds_overrides(adapter_settings, kwargs):
+    with pytest.raises(ValueError):
+        pydantic_ai_client.PydanticAIClient(model=MODEL, **kwargs)
+
+
+def test_constructor_accepts_in_bounds_overrides(adapter_settings):
+    client = pydantic_ai_client.PydanticAIClient(
+        model=MODEL, temperature=0.0, max_tokens=1, timeout_seconds=0.5, raw_prompt=True
+    )
+
+    assert client._temperature == 0.0
+    assert client._max_tokens == 1
+    assert client._timeout == 0.5
+    assert client._raw_prompt is True

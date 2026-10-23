@@ -4,12 +4,14 @@ Judge-provider selection is independent of generation when configured, while
 ``judge_provider=None`` preserves the legacy generation-provider behavior.
 """
 
+from __future__ import annotations
+
 import asyncio
 import importlib.util
 import math
 import os
 import re
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlsplit
 
 import httpx
@@ -29,7 +31,12 @@ except ModuleNotFoundError:
 if "DEEPEVAL_TELEMETRY_OPT_OUT" not in os.environ:
     os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "1"
 
-_SUPPORTED_PROVIDERS = ("qwen", "gemini", "litellm")
+if TYPE_CHECKING:
+    from src.evals.pydantic_ai_judge import PydanticAIJudgeModel
+
+JudgeProvider = Literal["qwen", "gemini", "litellm", "pydantic-ai"]
+
+_SUPPORTED_PROVIDERS = ("qwen", "gemini", "litellm", "pydantic-ai")
 _SUPPORTED_TASKS = ("generation", "judge", "retrieval", "answer_eval", "index_build")
 _MODEL_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,199}\Z")
 _GENERATION_TIMEOUT_SECONDS = 30.0
@@ -104,22 +111,49 @@ def _safe_qwen_endpoint() -> str:
     raise ValueError("Configured Qwen endpoint is not a supported DashScope route.")
 
 
-def _credential(provider: Literal["qwen", "gemini", "litellm"]) -> tuple[str, bool]:
+def _credential(provider: JudgeProvider) -> tuple[str, bool]:
     if provider == "qwen":
         setting_name, value = "APP__LLM__DASHSCOPE_API_KEY", settings.llm.dashscope_api_key
     elif provider == "gemini":
         setting_name, value = "APP__LLM__GEMINI_API_KEY", settings.llm.gemini_api_key
+    elif provider == "pydantic-ai":
+        setting_name, value = "APP__LLM__PYDANTIC_AI_API_KEY", settings.llm.pydantic_ai_api_key
     else:
         setting_name, value = "APP__LLM__OPENROUTER_API_KEY", settings.llm.openrouter_api_key
     return setting_name, bool(value.get_secret_value().strip())
 
 
-def _judge_model_name(provider: Literal["qwen", "gemini", "litellm"], tier: str) -> str:
-    suffix = "" if provider == "qwen" else f"_{provider}"
-    model_name = getattr(settings.llm, f"judge_model_{tier}{suffix}")
+def _judge_model_name(provider: JudgeProvider, tier: str) -> str:
+    if provider == "qwen":
+        model_name = getattr(settings.llm, f"judge_model_{tier}")
+    else:
+        suffix = "pydantic_ai" if provider == "pydantic-ai" else provider
+        model_name = getattr(settings.llm, f"judge_model_{tier}_{suffix}")
     if provider == "litellm" and not model_name.startswith("openrouter/"):
         model_name = f"openrouter/{model_name}"
     return _safe_model_name(model_name)
+
+
+def _safe_pydantic_ai_endpoint() -> str:
+    """Return the configured OpenCode Go route only when it is a plain HTTPS /v1 URL."""
+    try:
+        parsed = urlsplit(settings.llm.pydantic_ai_base_url)
+        host = (parsed.hostname or "").lower()
+        path = parsed.path.rstrip("/")
+        if (
+            parsed.scheme == "https"
+            and host
+            and parsed.username is None
+            and parsed.password is None
+            and parsed.port is None
+            and not parsed.query
+            and not parsed.fragment
+            and path.endswith("/v1")
+        ):
+            return f"https://{host}{path}"
+    except ValueError:
+        pass
+    raise ValueError("Configured Pydantic AI endpoint is not a supported HTTPS /v1 route.")
 
 
 def _raise_cleanup_errors(label: str, errors: list[BaseException]) -> None:
@@ -162,7 +196,7 @@ class QwenModel(DeepEvalBaseLLM):
             max_retries=0,
         )
 
-    def load_model(self) -> "QwenModel":
+    def load_model(self) -> QwenModel:
         return self
 
     def generate(self, prompt: str) -> str:
@@ -237,7 +271,7 @@ class LiteLLMJudgeModel(DeepEvalBaseLLM):
         self._api_key = settings.llm.openrouter_api_key.get_secret_value()
         self.temperature, self.max_tokens, self.timeout_seconds = _judge_parameters()
 
-    def load_model(self) -> "LiteLLMJudgeModel":
+    def load_model(self) -> LiteLLMJudgeModel:
         return self
 
     @staticmethod
@@ -329,7 +363,7 @@ class GeminiJudgeModel(DeepEvalBaseLLM):
             ),
         )
 
-    def load_model(self) -> "GeminiJudgeModel":
+    def load_model(self) -> GeminiJudgeModel:
         return self
 
     def generate(self, prompt: str) -> str:
@@ -411,7 +445,7 @@ class GeminiJudgeModel(DeepEvalBaseLLM):
         return True
 
 
-def resolve_judge_provider() -> Literal["qwen", "gemini", "litellm"]:
+def resolve_judge_provider() -> JudgeProvider:
     """Resolve the selected judge provider, inheriting the generator for legacy config."""
     provider = (
         settings.llm.provider
@@ -424,41 +458,52 @@ def resolve_judge_provider() -> Literal["qwen", "gemini", "litellm"]:
         return "gemini"
     if provider == "litellm":
         return "litellm"
+    if provider == "pydantic-ai":
+        return "pydantic-ai"
     raise ValueError(
-        "Unsupported judge provider; supported providers are qwen, gemini, and litellm."
+        "Unsupported judge provider; supported providers are qwen, gemini, litellm, and "
+        "pydantic-ai."
     )
 
 
-def _require_judge_credential(provider: Literal["qwen", "gemini", "litellm"]) -> None:
+def _require_judge_credential(provider: JudgeProvider) -> None:
     setting_name, configured = _credential(provider)
     if not configured:
         raise ValueError(f"Missing credential for judge provider '{provider}'; set {setting_name}.")
 
 
-def get_light_model() -> QwenModel | LiteLLMJudgeModel | GeminiJudgeModel:
+def get_light_model() -> QwenModel | LiteLLMJudgeModel | GeminiJudgeModel | PydanticAIJudgeModel:
     provider = resolve_judge_provider()
     _require_judge_credential(provider)
     model_name = _judge_model_name(provider, "light")
-    model: QwenModel | LiteLLMJudgeModel | GeminiJudgeModel
+    model: QwenModel | LiteLLMJudgeModel | GeminiJudgeModel | PydanticAIJudgeModel
     if provider == "litellm":
         model = LiteLLMJudgeModel(model_name)
     elif provider == "gemini":
         model = GeminiJudgeModel(model_name)
+    elif provider == "pydantic-ai":
+        from src.evals.pydantic_ai_judge import PydanticAIJudgeModel
+
+        model = PydanticAIJudgeModel(model_name)
     else:
         model = QwenModel(model_name)
     model.usage_role = "judge_light"
     return model
 
 
-def get_heavy_model() -> QwenModel | LiteLLMJudgeModel | GeminiJudgeModel:
+def get_heavy_model() -> QwenModel | LiteLLMJudgeModel | GeminiJudgeModel | PydanticAIJudgeModel:
     provider = resolve_judge_provider()
     _require_judge_credential(provider)
     model_name = _judge_model_name(provider, "heavy")
-    model: QwenModel | LiteLLMJudgeModel | GeminiJudgeModel
+    model: QwenModel | LiteLLMJudgeModel | GeminiJudgeModel | PydanticAIJudgeModel
     if provider == "litellm":
         model = LiteLLMJudgeModel(model_name)
     elif provider == "gemini":
         model = GeminiJudgeModel(model_name)
+    elif provider == "pydantic-ai":
+        from src.evals.pydantic_ai_judge import PydanticAIJudgeModel
+
+        model = PydanticAIJudgeModel(model_name)
     else:
         model = QwenModel(model_name)
     model.usage_role = "judge_heavy"
@@ -605,8 +650,8 @@ def effective_roles(
             required_credentials.append(setting_name)
 
     if "judge" in task_roles:
-        provider = resolve_judge_provider()
-        setting_name, configured = _credential(provider)
+        judge_provider = resolve_judge_provider()
+        setting_name, configured = _credential(judge_provider)
         temperature, max_tokens, timeout_seconds = _judge_parameters()
         credentials["judge"] = {
             "setting": setting_name,
@@ -617,20 +662,32 @@ def effective_roles(
             "qwen": _safe_qwen_endpoint(),
             "gemini": "google-genai",
             "litellm": "openrouter",
-        }[provider]
+            "pydantic-ai": _safe_pydantic_ai_endpoint(),
+        }[judge_provider]
         roles["judge"] = {
-            "provider": provider,
-            "light_model": _judge_model_name(provider, "light"),
-            "heavy_model": _judge_model_name(provider, "heavy"),
+            "provider": judge_provider,
+            "light_model": _judge_model_name(judge_provider, "light"),
+            "heavy_model": _judge_model_name(judge_provider, "heavy"),
             "endpoint": endpoint,
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "max_tokens_parameter": ("max_output_tokens" if provider == "gemini" else "max_tokens"),
+            "max_tokens_parameter": (
+                "max_completion_tokens"
+                if judge_provider == "pydantic-ai"
+                else ("max_output_tokens" if judge_provider == "gemini" else "max_tokens")
+            ),
             "timeout_seconds": timeout_seconds,
-            "request_attempts": 1,
+            # The adapter owns its own settings.retry-bounded loop, so one direct
+            # call can reach the wire more than once; other wrappers call once.
+            "request_attempts": generation_attempts if judge_provider == "pydantic-ai" else 1,
             "sdk_retries": 0,
             "outer_metric_max_attempts": 2,
-            "retry_scope": "one direct model call; outer metric retries are separate",
+            "retry_scope": (
+                "adapter settings.retry loop per direct model call; "
+                "outer metric retries are separate"
+                if judge_provider == "pydantic-ai"
+                else "one direct model call; outer metric retries are separate"
+            ),
             "rubric": {
                 "source": _MEDICAL_RUBRIC_SOURCE,
                 "metric_keys": list(_MEDICAL_RUBRIC_METRICS),

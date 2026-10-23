@@ -21,6 +21,7 @@ def _config(
     dashscope_key="embedding-key",
     gemini_key="generation-key",
     openrouter_key="",
+    pydantic_ai_key="",
     environment="development",
     profile="baseline",
     enable_reranking=False,
@@ -50,6 +51,10 @@ def _config(
             judge_model_heavy_gemini="gemini-heavy",
             judge_model_light_litellm="router-light",
             judge_model_heavy_litellm="router-heavy",
+            judge_model_light_pydantic_ai="pydantic-ai-light",
+            judge_model_heavy_pydantic_ai="pydantic-ai-heavy",
+            pydantic_ai_model="mimo-v2.6-flash",
+            pydantic_ai_api_key=SecretStr(pydantic_ai_key),
         ),
         hype=SimpleNamespace(enabled=False),
         enrichment=SimpleNamespace(
@@ -325,3 +330,24 @@ def test_preflight_outside_development_aliases_report_api_auth_requirements(envi
     assert report["credentials"]["APP__API__API_KEYS"]["required_by"] == ["api_auth"]
     assert report["credentials"]["APP__API__API_KEYS_JSON"]["ready"] is False
     assert report["credentials"]["APP__API__API_KEYS_JSON"]["required_by"] == ["api_auth"]
+
+
+def test_pydantic_ai_judge_provider_is_supported_and_reported():
+    report = preflight.build_preflight_report(
+        _config(judge_provider="pydantic-ai", pydantic_ai_key="synthetic-judge-key")
+    )
+
+    assert "unsupported_judge_provider" not in report["errors"]
+    judge = report["roles"]["judge"]
+    assert judge["provider"] == "pydantic-ai"
+    assert judge["models"] == {"light": "pydantic-ai-light", "heavy": "pydantic-ai-heavy"}
+    assert judge["credential_name"] == "APP__LLM__PYDANTIC_AI_API_KEY"
+    assert judge["credential_ready"] is True
+    assert "synthetic-judge-key" not in json.dumps(report)
+
+
+def test_pydantic_ai_generation_provider_stays_fail_closed():
+    report = preflight.build_preflight_report(_config(provider="pydantic-ai"))
+
+    assert "unsupported_generation_provider" in report["errors"]
+    assert report["roles"]["generation"]["credential_name"] is None

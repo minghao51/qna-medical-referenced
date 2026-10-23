@@ -150,3 +150,43 @@ def test_litellm_judge_passes_configured_key_per_call(monkeypatch):
     model = deepeval_models.LiteLLMJudgeModel("openrouter/test-model")
     assert model.generate("judge prompt") == "ok"
     assert completion.call_args.kwargs["api_key"] == credential
+
+
+def test_pydantic_ai_judge_factory_selects_wrapper_and_judge_models(monkeypatch):
+    monkeypatch.setattr(settings.llm, "provider", "qwen")
+    monkeypatch.setattr(settings.llm, "judge_provider", "pydantic-ai")
+    monkeypatch.setattr(settings.llm, "pydantic_ai_api_key", SecretStr("synthetic-judge-key"))
+    monkeypatch.setattr(settings.llm, "judge_model_light_pydantic_ai", "judge-light-model")
+    monkeypatch.setattr(settings.llm, "judge_model_heavy_pydantic_ai", "judge-heavy-model")
+    monkeypatch.setattr(
+        deepeval_models,
+        "QwenModel",
+        lambda model: pytest.fail("qwen judge must not be constructed for a pydantic-ai judge"),
+    )
+    from src.evals import pydantic_ai_judge
+
+    constructed: list[str] = []
+
+    def _fake_judge(model: str):
+        constructed.append(model)
+        return SimpleNamespace(provider="pydantic-ai", model=model, usage_role="judge")
+
+    monkeypatch.setattr(pydantic_ai_judge, "PydanticAIJudgeModel", _fake_judge)
+
+    light = deepeval_models.get_light_model()
+    heavy = deepeval_models.get_heavy_model()
+
+    assert constructed == ["judge-light-model", "judge-heavy-model"]
+    assert light.usage_role == "judge_light"
+    assert heavy.usage_role == "judge_heavy"
+
+
+def test_pydantic_ai_judge_requires_its_own_credential(monkeypatch):
+    monkeypatch.setattr(settings.llm, "provider", "qwen")
+    monkeypatch.setattr(settings.llm, "judge_provider", "pydantic-ai")
+    monkeypatch.setattr(settings.llm, "pydantic_ai_api_key", SecretStr("   "))
+
+    with pytest.raises(ValueError) as exc_info:
+        deepeval_models.get_light_model()
+
+    assert "APP__LLM__PYDANTIC_AI_API_KEY" in str(exc_info.value)

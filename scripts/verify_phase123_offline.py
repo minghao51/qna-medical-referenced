@@ -53,6 +53,8 @@ additional = [
     "tests/unit/evals/test_judge_lifecycle.py",
     "tests/unit/evals/test_judge_roles.py",
     "tests/unit/evals/test_measurement_completeness.py",
+    "tests/unit/evals/test_pydantic_ai_judge.py",
+    "tests/unit/evals/test_pydantic_evals_tasks.py",
     "tests/unit/evals/test_replay_contract.py",
     "tests/unit/evals/test_review_manifest_execution.py",
     "tests/unit/evals/test_snapshot_execution.py",

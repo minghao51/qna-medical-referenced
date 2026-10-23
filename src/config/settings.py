@@ -78,6 +78,8 @@ class LLMConfig(BaseModel):
     judge_model_heavy_litellm: str = "google/gemma-4-31b-it"
     judge_model_light_gemini: str = "gemma-4-31b-it"
     judge_model_heavy_gemini: str = "gemma-4-31b-it"
+    judge_model_light_pydantic_ai: str = "mimo-v2.6-flash"
+    judge_model_heavy_pydantic_ai: str = "mimo-v2.6-flash"
     judge_temperature: float = 0.0
     judge_max_tokens: int = 1024
 
