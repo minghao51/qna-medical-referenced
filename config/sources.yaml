@@ -24,57 +24,57 @@ web_sources:
       name: "lipid_management_guideline"
     - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/mild-and-moderate-atopic-dermatitis-acg/"
       name: "atopic_dermatitis_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/heart-failure-acg/"
-      name: "heart_failure_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/atrial-fibrillation-acg/"
+    # 2026-10-24: heart-failure-acg, atrial-fibrillation-acg,
+    # chronic-kidney-disease-acg, asthma-diagnosis-management,
+    # obesity-weight-management-acg, allergic-rhinitis-acg, dementia-acg,
+    # bipolar-disorder-acg, gord-acg, osteoarthritis-knee-acg and
+    # stroke-management-acg returned 404 after the ACE site restructure.
+    # Remapped to live successors from the ACE sitemap where one exists;
+    # heart-failure, obesity, GORD and bipolar have no live successor and were
+    # removed (heart failure remains covered by nice_heart_failure, ng236).
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/oral-anticoagulation-for-atrial-fibrillation/"
       name: "atrial_fibrillation_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/chronic-kidney-disease-acg/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/chronic-kidney-disease-delaying-progression-and-reducing-cardiovascular-complications/"
       name: "ckd_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/asthma-diagnosis-management/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/asthma-optimising-long-term-management-with-inhaled-corticosteroid/"
       name: "asthma_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/obesity-weight-management-acg/"
-      name: "obesity_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/allergic-rhinitis-acg/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/allergic-rhinitis-acg---diagnosis-and-management/"
       name: "allergic_rhinitis_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/dementia-acg/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/management-of-mild-and-moderate-dementia-in-older-adults-acg/"
       name: "dementia_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/bipolar-disorder-acg/"
-      name: "bipolar_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/gord-acg/"
-      name: "gord_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/osteoarthritis-knee-acg/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/management-of-knee-osteoarthritis---a-joint-effort-with-patients-acg/"
       name: "osteoarthritis_guideline"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/stroke-management-acg/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-repository-for-clinical-guidelines/singapore-stroke-rehabilitation-guideline----an-adaptation-of-the-australian-and-new-zealand-living-clinical-guidelines-for-stroke-management/"
       name: "stroke_guideline"
 
   ace_cues:
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-cues-overview/"
-      name: "ace_cues_index"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-cues/asthma-management/"
-      name: "ace_cues_asthma"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-cues/inhaler-technique-videos/"
+    # 2026-10-24: ACE discontinued the CUES section (only remaining trace is a
+    # news announcement); overview and asthma-management pages removed. The
+    # inhaler-technique videos page moved up one level.
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/inhaler-technique-videos/"
       name: "ace_cues_inhaler"
 
   ace_drug_guidances:
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/semaglutide-obesity/"
-      name: "semaglutide_obesity"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/empagliflozin/"
-      name: "empagliflozin"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/glp1-diabetes/"
-      name: "glp1_diabetes"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/apixaban/"
-      name: "apixaban"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/pcsk9-inhibitors/"
+    # 2026-10-24: ACE renamed the section (ace-technology-guidances ->
+    # ace-technology-guidance) and all slugs to descriptive titles; remapped via
+    # the live sitemap. semaglutide-obesity and glp1-diabetes have no GLP-1
+    # successor in the sitemap and were removed. empagliflozin and apixaban map
+    # to their class-level successors (name reflects the renamed scope).
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidance/drug-guidance/sodium-glucose-co-transporter-2-(sglt2)-inhibitors-for-type-2-diabetes-mellitus/"
+      name: "sglt2_inhibitors_t2dm"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidance/drug-guidance/novel-oral-anticoagulants-(noacs)-for-the-prevention-of-stroke-and-systemic-embolism-in-non-valvular-atrial-fibrillation/"
+      name: "noacs_atrial_fibrillation"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidance/drug-guidance/pcsk9-inhibitors-for-treating-hypercholesterolaemia/"
       name: "pcsk9_inhibitors"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/biologics-asthma/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidance/drug-guidance/biologics-as-add-on-therapy-for-severe-asthma/"
       name: "biologics_asthma"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/trastuzumab-deruxtecan-nsclc/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidance/drug-guidance/trastuzumab-deruxtecan-for-unresectable-or-metastatic-non-small-cell-lung-cancer-whose-tumours-have-activating-her2--erbb2--mutations-and-who-have-received-a-prior-systemic-therapy/"
       name: "trastuzumab_deruxtecan"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/ribociclib-breast/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidance/drug-guidance/ribociclib-for-the-adjuvant-treatment-of-hr-positive--her2-negative-stage-ii-and-iii-early-breast-cancer-at-high-risk-of-recurrence/"
       name: "ribociclib_breast"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/inavolisib-breast/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidance/drug-guidance/inavolisib-in-combination-with-palbociclib-and-fulvestrant-for-pik3ca-mutated--hr-positive--her2-negative--locally-advanced-or-metastatic-breast-cancer/"
       name: "inavolisib_breast"
-    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidances/drug-guidance/ustekinumab-biosimilar/"
+    - url: "https://www.ace-hta.gov.sg/healthcare-professionals/ace-technology-guidance/drug-guidance/ustekinumab-biosimilar-for-treating-inflammatory-conditions/"
       name: "ustekinumab"
 
   healthhub:
@@ -98,6 +98,13 @@ web_sources:
       name: "active_ageing"
     - url: "https://www.healthhub.sg/well-being-and-lifestyle/personal-care/all-you-need-to-know-about-vaccinations/"
       name: "vaccinations_guide"
+    # 2026-10-24: live-page replacements for the retired ch-api named-slug sources.
+    - url: "https://www.healthhub.sg/well-being-and-lifestyle/food-diet-and-nutrition/recommended_dietary_allowances"
+      name: "healthhub_rda"
+    - url: "https://www.healthhub.sg/well-being-and-lifestyle/pregnancy-and-infant-health/baby-immunisation-inject-to-protect"
+      name: "healthhub_immunisation"
+    - url: "https://www.healthhub.sg/programmes/mindsg/discover"
+      name: "healthhub_mindsg"
 
   hpp_guidelines:
     - url: "https://hpp.moh.gov.sg/guidelines/"
@@ -141,10 +148,10 @@ pdf_sources:
       name: "ace_triple_therapy_inhalers_2025"
     - url: "https://isomer-user-content.by.gov.sg/68/6b7c42ca-5e21-4913-b9ed-6ed0d313e1f4/guidance_pneumococcal_conjugate_vaccines_prevention_of_pneumococcal_disease_adults_(10_feb_2025).pdf"
       name: "ace_pcv20_vaccine_2025"
-    - url: "https://isomer-user-content.by.gov.sg/68/4c5a6e2b-1c9a-4f3e-9b2d-8e7f6a0c3b5d/mild-and-moderate-atopic-dermatitis-acg-(feb-2026).pdf"
-      name: "ace_atopic_dermatitis_2026"
-    - url: "https://isomer-user-content.by.gov.sg/68/7d8b3c4e-2f6a-4b8d-9e1c-5f0a7d9e3b2c/osteoporosis-diagnosis-and-management-acg-(aug-2025).pdf"
-      name: "ace_osteoporosis_2025"
+    - url: "https://isomer-user-content.by.gov.sg/68/064b8c85-e6e6-4ae9-9965-31411b4544d5/Mild and moderate atopic dermatitis (eczema) – a journey from flare to care (Feb 2026) [PDF].pdf"
+      name: "ace_atopic_dermatitis_2026"  # 2026-10-24: old isomer UUID 404; current link taken from the live ACE page
+    - url: "https://isomer-user-content.by.gov.sg/68/4a49cec3-170b-47cb-b1a8-0f7dc15807c0/Osteoporosis diagnosis and management (Aug 2025) [PDF].pdf"
+      name: "ace_osteoporosis_2025"  # 2026-10-24: old isomer UUID 404; current link taken from the live ACE page
 
   healthhub:
     - url: "https://ch-api.healthhub.sg/api/public/content/98f52be9ace040148af419218c9966f8"
@@ -153,9 +160,7 @@ pdf_sources:
       name: "healthhub_nutrient_guidelines"
     - url: "https://ch-api.healthhub.sg/api/public/content/dcd8a51e125b4faf90b467013eae7e73"
       name: "healthhub_healthy365_faq"
-    - url: "https://ch-api.healthhub.sg/api/public/content/recommended-dietary-allowances"
-      name: "healthhub_rda"
-    - url: "https://ch-api.healthhub.sg/api/public/content/childhood-immunisation-schedule"
-      name: "healthhub_immunisation_schedule"
-    - url: "https://ch-api.healthhub.sg/api/public/content/mindsg-mental-health"
-      name: "healthhub_mindsg"
+    # 2026-10-24: the three named-slug ch-api URLs (recommended-dietary-allowances,
+    # childhood-immunisation-schedule, mindsg-mental-health) now return 404; their
+    # content moved to live HealthHub pages added under web_sources.healthhub
+    # (recommended_dietary_allowances, baby_immunisation, mindsg_discover).
