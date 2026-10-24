@@ -156,6 +156,31 @@ class BrokenAfterFirstDelta(httpx.AsyncByteStream):
         raise httpx.RemoteProtocolError("synthetic mid-stream failure")
 
 
+class BlockedAfterUsageChunk(httpx.AsyncByteStream):
+    """Emits the text delta and a usage-bearing chunk, then parks the consumer."""
+
+    def __init__(self) -> None:
+        self.closed = asyncio.Event()
+        # Set when the consumer requests the item AFTER the usage chunk. Async
+        # generators only resume past a yield when the consumer asks for the
+        # next item, so this event is deterministic proof that the adapter
+        # received the full usage chunk before cancellation.
+        self.usage_chunk_consumed = asyncio.Event()
+
+    async def __aiter__(self):
+        yield sse_chunk({"content": "prefix"}).encode("utf-8")
+        yield sse_chunk(
+            None,
+            choices=[],
+            usage={"prompt_tokens": 3, "completion_tokens": 5, "total_tokens": 8},
+        ).encode("utf-8")
+        self.usage_chunk_consumed.set()
+        await asyncio.Event().wait()
+
+    async def aclose(self):
+        self.closed.set()
+
+
 def text_completion(content: str | None) -> dict[str, Any]:
     return {
         "id": "synthetic",
@@ -405,6 +430,65 @@ async def test_stream_cancellation_keeps_owned_client_usable(adapter_settings):
         state["blocked"] = False
         assert await client.a_generate(PROMPT, context=CONTEXT) == "usable again"
         assert len(requests) == 2
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stream_cancellation_settles_usage_failed_without_totals_or_retry(
+    adapter_settings,
+):
+    requests: list[httpx.Request] = []
+    blocked_body: BlockedAfterUsageChunk | None = None
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        nonlocal blocked_body
+        requests.append(request)
+        blocked_body = BlockedAfterUsageChunk()
+        return httpx.Response(200, headers=STREAM_HEADERS, stream=blocked_body)
+
+    client = make_client(handle)
+    try:
+        # Same single-task consumption boundary as the usability test above: the
+        # delta and the usage chunk land on the wire, then the consumer parks on
+        # the blocked read and is cancelled mid-stream.
+        first_delta = asyncio.Event()
+        seen: list[str] = []
+
+        async def consume() -> None:
+            async with aclosing(client.a_generate_stream(PROMPT, context=CONTEXT)) as stream:
+                async for delta in stream:
+                    seen.append(delta)
+                    first_delta.set()
+
+        with capture_usage() as captured:
+            task = asyncio.create_task(consume())
+            await asyncio.wait_for(first_delta.wait(), timeout=5)
+            assert blocked_body is not None
+            # Deterministic handshake (no sleeps): the transport sets this only
+            # after the adapter pulled the item following the usage chunk, so
+            # cancellation is guaranteed to land after that chunk was consumed.
+            await asyncio.wait_for(blocked_body.usage_chunk_consumed.wait(), timeout=5)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        assert seen == ["prefix"]
+        assert len(requests) == 1  # Cancellation starts no retry attempt.
+        # The cancelled attempt settles as failed: usage seen on the wire is
+        # discarded (record_response only runs on a completed stream), so the
+        # run is honestly incomplete instead of carrying partial token totals.
+        usage = captured.usage_by_role["generation"]
+        assert usage["status"] == "incomplete"
+        assert usage["input_tokens"] is None
+        assert usage["output_tokens"] is None
+        assert usage["total_tokens"] is None
+        assert "provider_call_failed" in captured.unknowns
+        assert "provider_sdk_usage_unavailable" in captured.unknowns
+        # Settlement released the blocked transport body; the owned client survives.
+        assert blocked_body is not None
+        assert blocked_body.closed.is_set()
+        assert not client._http_client.is_closed
     finally:
         await client.aclose()
 
@@ -690,6 +774,34 @@ def test_generate_outside_event_loop_returns_output(adapter_settings):
     try:
         assert client.generate(PROMPT, context=CONTEXT) == "sync answer"
         assert len(requests) == 1
+    finally:
+        asyncio.run(client.aclose())
+
+
+def test_sync_generate_repeated_calls_reuse_owned_client_and_agent(adapter_settings):
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=text_completion(f"sync answer {len(requests)}"))
+
+    client = make_client(handle)
+    try:
+        assert client.generate(PROMPT, context=CONTEXT) == "sync answer 1"
+        http_client = client._http_client
+        openai_client = client._openai_client
+        text_agent = client._text_agent
+        assert client.generate(PROMPT, context=CONTEXT) == "sync answer 2"
+        assert client.generate(PROMPT, context=CONTEXT) == "sync answer 3"
+        # Consecutive sync calls reuse the resources built once in the
+        # constructor, never replaced per call. Per-call event-loop lifecycle is
+        # intentionally not asserted here: MockTransport does not exercise loop
+        # affinity (recorded as a test blind spot in the handoff).
+        assert client._http_client is http_client
+        assert client._openai_client is openai_client
+        assert client._text_agent is text_agent
+        assert not client._http_client.is_closed
+        assert len(requests) == 3
     finally:
         asyncio.run(client.aclose())
 

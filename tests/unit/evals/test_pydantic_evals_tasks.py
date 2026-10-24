@@ -13,9 +13,12 @@ import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
+from pydantic import SecretStr
 from pydantic_evals.evaluators import Evaluator, EvaluatorContext
 from pydantic_evals.reporting import EvaluationReportAdapter
 
@@ -64,6 +67,20 @@ class _RecordingClient:
         self.prompts.append(prompt)
         self.session_ids.append(get_conversation_id())
         return f"answer to {prompt}"
+
+
+class _RecordingModelSettingsAgent:
+    """Stand-in for the adapter's text agent that records per-call model settings."""
+
+    def __init__(self) -> None:
+        self.model_settings: list[Any] = []
+
+    async def run(self, user_prompt: str, *, model_settings: Any = None) -> Any:
+        self.model_settings.append(model_settings)
+        return SimpleNamespace(
+            output="synthetic answer",
+            usage=SimpleNamespace(input_tokens=1, output_tokens=1, total_tokens=2),
+        )
 
 
 class _MetricsLedger:
@@ -253,6 +270,57 @@ async def test_baseline_and_adapter_tasks_emit_same_normalized_fields():
 def test_adapter_task_factory_rejects_non_adapter_clients():
     with pytest.raises(TypeError):
         pydantic_tasks.adapter_answer_task(client=_FakeClient("answer"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"temperature": 0.0, "timeout_seconds": 0.5},
+        {"temperature": 2.0, "timeout_seconds": 600.0},
+    ],
+)
+async def test_adapter_task_passes_temperature_and_timeout_overrides_to_the_model_call(
+    monkeypatch, overrides
+):
+    from src.infra.llm import pydantic_ai_client
+    from src.infra.llm.pydantic_ai_client import PydanticAIClient
+
+    monkeypatch.setattr(
+        pydantic_ai_client,
+        "settings",
+        SimpleNamespace(
+            llm=SimpleNamespace(
+                pydantic_ai_model="synthetic-model",
+                pydantic_ai_base_url="https://synthetic.invalid/v1",
+                pydantic_ai_api_key=SecretStr("synthetic-not-a-key"),
+                pydantic_ai_temperature=0.7,
+                pydantic_ai_max_tokens=2048,
+                pydantic_ai_timeout_seconds=30.0,
+                pydantic_ai_structured_output_mode="tool",
+            ),
+            retry=SimpleNamespace(max_retries=1, retry_delay=0.0),
+        ),
+    )
+    client = PydanticAIClient(model="synthetic-model", **overrides)
+    agent = _RecordingModelSettingsAgent()
+    client._text_agent = agent
+    try:
+        task = pydantic_tasks.adapter_answer_task(client=client)
+        result = await task(_case_inputs(_records()[0]))
+    finally:
+        await client.aclose()
+
+    assert result.answer == "synthetic answer"
+    assert result.implementation == "pydantic-ai"
+    assert result.usage["usage_by_role"]["generation"]["total_tokens"] == 2
+    # The overrides reached the adapter's call settings, not just the constructor.
+    assert client._temperature == overrides["temperature"]
+    assert client._timeout == overrides["timeout_seconds"]
+    assert client._http_client.timeout == httpx.Timeout(overrides["timeout_seconds"])
+    assert len(agent.model_settings) == 1
+    assert agent.model_settings[0]["temperature"] == overrides["temperature"]
+    assert agent.model_settings[0]["max_tokens"] == 2048
 
 
 @pytest.mark.asyncio

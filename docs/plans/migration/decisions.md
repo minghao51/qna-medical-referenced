@@ -243,6 +243,10 @@ The documented Go Chat Completions base URL is `https://opencode.ai/inference/go
 
 D11 is accepted as above. D12–D16 and D18 remain open. D17's profile choice and generator are accepted (`baseline`, Go `deepseek-v4.1-flash`); its remaining judge-ID pinning, matched settings snapshot, and capture evidence are not inferred. Recommendations in the other rows are not silently adopted.
 
+## Pickup session decision (2026-10-24) — pydantic-ai generation preflight stays fail-closed
+
+Owner reviewed the pickup-brief leftover item "decide whether `provider="pydantic-ai"` generation preflight/`effective_roles` is widened (currently fail-closed)" and selected **keep fail-closed**. Rationale: Stage A's accepted-incomplete live smoke ended at the baseline structured-output rejection with the adapter's structured modes unreached, so a widened preflight would advertise a generation path whose structured capability is not established; no capability availability is asserted by this record. Preflight/`effective_roles` behavior is unchanged; `judge_provider: pydantic-ai` is unaffected and remains opt-in offline. Recorded with the [offline leftovers handoff](20261024-offline-leftovers-handoff.md).
+
 ## Uncertainties to resolve experimentally, not by preference
 
 1. Can the selected dependency versions coexist with the current Python 3.12 lockfile and provider SDKs?

@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from src.config.settings import Settings
 
 
@@ -78,3 +81,36 @@ def test_llm_config_pydantic_ai_settings_bounds():
         LLMConfig(pydantic_ai_timeout_seconds=600.5)
     with pytest.raises(ValidationError):
         LLMConfig(pydantic_ai_structured_output_mode="json_object")
+
+
+def test_settings_accept_exact_pydantic_ai_bounds_via_app_env(monkeypatch):
+    """Exact documented bounds load through APP__ env overrides and are stored as given."""
+    monkeypatch.setenv("APP__LLM__PYDANTIC_AI_TEMPERATURE", "0.0")
+    monkeypatch.setenv("APP__LLM__PYDANTIC_AI_TIMEOUT_SECONDS", "600.0")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.llm.pydantic_ai_temperature == 0.0
+    assert settings.llm.pydantic_ai_timeout_seconds == 600.0
+
+    monkeypatch.setenv("APP__LLM__PYDANTIC_AI_TEMPERATURE", "2.0")
+
+    upper = Settings(_env_file=None)
+
+    assert upper.llm.pydantic_ai_temperature == 2.0
+    assert upper.llm.pydantic_ai_timeout_seconds == 600.0
+
+
+def test_settings_reject_out_of_bounds_pydantic_ai_values_via_app_env(monkeypatch):
+    """Out-of-bounds APP__ env overrides fail Settings validation."""
+    cases = [
+        ("APP__LLM__PYDANTIC_AI_TEMPERATURE", "2.1"),
+        ("APP__LLM__PYDANTIC_AI_TEMPERATURE", "-0.1"),
+        ("APP__LLM__PYDANTIC_AI_TIMEOUT_SECONDS", "600.1"),
+        ("APP__LLM__PYDANTIC_AI_TIMEOUT_SECONDS", "0"),
+    ]
+    for name, value in cases:
+        monkeypatch.setenv(name, value)
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None)
+        monkeypatch.delenv(name)
