@@ -30,6 +30,7 @@ dependencies = [
     "duckdb>=1.0.0",
     "pyyaml>=6.0.0",
     "pydantic-ai-slim[openai,evals]==2.31.0",
+    "boto3>=1.43.118",
 ]
 
 [tool.pytest.ini_options]
