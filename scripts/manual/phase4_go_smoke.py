@@ -1446,37 +1446,49 @@ async def run_stage_a_operations(
 
     ops_metadata: list[dict[str, Any]] = []
     started = time.monotonic()
+
+    def _build_metadata() -> dict[str, Any]:
+        return {
+            "run": "p4d-stage-a-smoke",
+            # Default ("sdk_transport_mock"): narrowed offline guarantee, NOT an
+            # unconditional claim - SDK requests ride a harness-built in-memory
+            # httpx.MockTransport only, while the synthetic handler is trusted
+            # code outside that guarantee (no I/O, no request retention,
+            # OS-isolated runs). LIVE_TRANSPORT_MODE instead records that requests
+            # left the process only through the shared admission-gated transports.
+            "transport_mode": transport_mode,
+            # Default (None) keeps the offline boundary description; the gated
+            # live runner passes the live boundary value instead.
+            "handler_boundary": handler_boundary or "trusted_callback_os_isolated_no_io",
+            "route": GO_BASE_URL,
+            "model": GO_MODEL,
+            "temperature": TEMPERATURE,
+            "max_output_tokens": MAX_OUTPUT_TOKENS,
+            "input_ceiling_bytes": MAX_INPUT_BODY_BYTES,
+            "transport_attempts_per_call": TOTAL_TRANSPORT_ATTEMPTS,
+            "structured_repair_cap": MAX_STRUCTURED_REPAIRS,
+            "post_cap": MAX_POST_ATTEMPTS,
+            "frozen_hashes": frozen_input_hashes(),
+            "ops": ops_metadata,
+            "admission": harness.admission.metadata(),
+        }
+
     with conversation_scope(harness.session.conversation_id):
-        for spec in ops:
-            if spec.structured_mode is not None:
-                if spec.structured_mode not in STRUCTURED_MODES:
-                    raise SmokeHarnessError("unsupported_structured_mode")
-                harness.adapter.structured_mode = spec.structured_mode
-            await _run_operation(harness, spec, ops_metadata, started, timings=timings)
-    metadata: dict[str, Any] = {
-        "run": "p4d-stage-a-smoke",
-        # Default ("sdk_transport_mock"): narrowed offline guarantee, NOT an
-        # unconditional claim - SDK requests ride a harness-built in-memory
-        # httpx.MockTransport only, while the synthetic handler is trusted
-        # code outside that guarantee (no I/O, no request retention,
-        # OS-isolated runs). LIVE_TRANSPORT_MODE instead records that requests
-        # left the process only through the shared admission-gated transports.
-        "transport_mode": transport_mode,
-        # Default (None) keeps the offline boundary description; the gated
-        # live runner passes the live boundary value instead.
-        "handler_boundary": handler_boundary or "trusted_callback_os_isolated_no_io",
-        "route": GO_BASE_URL,
-        "model": GO_MODEL,
-        "temperature": TEMPERATURE,
-        "max_output_tokens": MAX_OUTPUT_TOKENS,
-        "input_ceiling_bytes": MAX_INPUT_BODY_BYTES,
-        "transport_attempts_per_call": TOTAL_TRANSPORT_ATTEMPTS,
-        "structured_repair_cap": MAX_STRUCTURED_REPAIRS,
-        "post_cap": MAX_POST_ATTEMPTS,
-        "frozen_hashes": frozen_input_hashes(),
-        "ops": ops_metadata,
-        "admission": harness.admission.metadata(),
-    }
+        try:
+            for spec in ops:
+                if spec.structured_mode is not None:
+                    if spec.structured_mode not in STRUCTURED_MODES:
+                        raise SmokeHarnessError("unsupported_structured_mode")
+                    harness.adapter.structured_mode = spec.structured_mode
+                await _run_operation(harness, spec, ops_metadata, started, timings=timings)
+        except BaseException as exc:
+            # Fail fast AND report incompleteness: attach the sanitized
+            # partial metadata (ops completed so far, admission digests and
+            # reservations) so the failure path can still disclose what
+            # happened before the stop. Reservations were never released.
+            exc.partial_metadata = _build_metadata()  # type: ignore[attr-defined]
+            raise
+    metadata: dict[str, Any] = _build_metadata()
     if quota_rates_basis is not None:
         metadata["quota_rates_basis"] = quota_rates_basis
     return metadata
@@ -1681,10 +1693,24 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         metadata = asyncio.run(run_stage_a_live(run))
-    except SmokeHarnessError as exc:
-        print(exc.reason, file=sys.stderr)
-        return 1
-    except Exception as exc:
+    except BaseException as exc:
+        # Fail fast AND report incompleteness: print the sanitized partial
+        # metadata collected before the stop (ops completed, admission
+        # digests, reservations), then the sanitized error identity. Never
+        # print exception details, prompts, responses, headers or the key.
+        partial = getattr(exc, "partial_metadata", None)
+        if isinstance(partial, dict):
+            report: dict[str, Any] = {
+                "status": "incomplete",
+                "error_kind": type(exc).__name__,
+                "partial_metadata": partial,
+            }
+            if isinstance(exc, SmokeHarnessError):
+                report["reason"] = exc.reason
+            print(json.dumps(report, indent=2, sort_keys=True))
+        if isinstance(exc, SmokeHarnessError):
+            print(exc.reason, file=sys.stderr)
+            return 1
         # Never print exception details: only the sanitized type name.
         print(type(exc).__name__, file=sys.stderr)
         return 1

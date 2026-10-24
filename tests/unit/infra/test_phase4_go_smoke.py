@@ -2116,3 +2116,71 @@ async def test_baseline_live_builder_failure_creating_second_transport_closes_fi
     assert sync_delegate.closed.is_set()
     # The exploding async transport never got a delegate to close.
     assert not async_delegate.closed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_run_stage_a_operations_attaches_partial_metadata_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Fail fast AND report incompleteness: partial metadata must survive."""
+    async_delegate = _LiveFakeAsyncDelegate()
+    _patch_live_delegates(monkeypatch, _RecordingSyncDelegate(), async_delegate)
+    run = HARNESS.authorize_stage_a_live(
+        owner_confirmed=True, environ={HARNESS.LIVE_API_KEY_ENV: "synthetic-live-key"}
+    )
+    # The very first op raises a non-harness exception (route capability
+    # rejection shape); the partial metadata must still be attached.
+    original = HARNESS._STAGE_A_OPS_LIVE
+    failing_first = HARNESS._OpSpec(
+        "baseline_text",
+        "baseline-qwen",
+        None,
+        lambda harness: (_ for _ in ()).throw(RuntimeError("synthetic rejection")),
+    )
+    monkeypatch.setattr(HARNESS, "_STAGE_A_OPS_LIVE", (failing_first, *original[1:]))
+    with pytest.raises(RuntimeError) as excinfo:
+        await HARNESS.run_stage_a_live(run)
+    partial = getattr(excinfo.value, "partial_metadata", None)
+    assert isinstance(partial, dict)
+    # The failed op is recorded with its sanitized error identity only.
+    assert [op["op"] for op in partial["ops"]] == ["baseline_text"]
+    assert partial["ops"][0]["outcome"] == "error"
+    assert partial["ops"][0]["error_kind"] == "RuntimeError"
+    assert partial["admission"]["post_attempts_admitted"] == 0
+    assert "frozen_hashes" in partial
+
+
+def test_main_prints_incomplete_partial_report_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    monkeypatch.setenv(HARNESS.LIVE_API_KEY_ENV, "synthetic-live-key")
+
+    class _RouteRejection(RuntimeError):
+        pass
+
+    def _run_with_partial(run: Any) -> Any:
+        raise _RouteRejection("detail-never-printed")
+
+    async def _runner(run: Any) -> dict[str, Any]:
+        return _run_with_partial(run)
+
+    def _boom(run: Any) -> dict[str, Any]:
+        exc = _RouteRejection("detail-never-printed")
+        exc.partial_metadata = {"ops": [{"op": "baseline_text", "outcome": "ok"}]}  # type: ignore[attr-defined]
+        raise exc
+
+    monkeypatch.setattr(HARNESS, "run_stage_a_live", _boom)
+    assert HARNESS.main(["--live", "--owner-confirmed"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "incomplete"
+    assert payload["error_kind"] == "_RouteRejection"
+    assert payload["partial_metadata"]["ops"][0]["op"] == "baseline_text"
+    assert "detail-never-printed" not in json.dumps(payload)
+
+    # Without partial metadata the failure path stays sanitized type-only.
+    monkeypatch.setattr(HARNESS, "run_stage_a_live", _runner)
+    assert HARNESS.main(["--live", "--owner-confirmed"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "_RouteRejection\n"
