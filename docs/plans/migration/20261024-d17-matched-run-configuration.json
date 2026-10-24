@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "comparison_profile": "baseline",
+  "status": "configuration_snapshot_only",
+  "recorded": "2026-10-24",
+  "approver": "repository owner (in-session: \"lets go with D2 and D3 ... opencode deepseek v4.1 flash or longcat\", \"we can use more tokens, i am more worry of cutoff, invalid structures\")",
+  "purpose": "Freeze the owner-matched generation/judge request tuple required by D17 before any live comparison run. Recording the tuple is not permission to run it.",
+  "generator": {
+    "provider": "pydantic-ai",
+    "route": "opencode-go",
+    "endpoint": "https://opencode.ai/inference/go/openai/v1",
+    "model": "deepseek-v4.1-flash",
+    "credential_source": "APP__LLM__PYDANTIC_AI_API_KEY",
+    "temperature": 0.7,
+    "max_tokens": 2048,
+    "timeout_seconds": 30.0,
+    "structured_output_mode": "tool",
+    "price_per_1m_tokens": {
+      "input_usd": 0.15,
+      "output_usd": 0.6
+    },
+    "source_of_selection": "decisions.md, 2026-10-20 matched baseline tuple; reaffirmed 2026-10-21 (D17 profile choice and generator accepted)"
+  },
+  "judge": {
+    "provider": "pydantic-ai",
+    "family": "meituan-longcat",
+    "family_independence_argument": "The matched generator is deepseek-v4.1-flash (DeepSeek family); the judge is LongCat (Meituan family). The candidate deepseek-v4.1-flash judge was rejected because it is the generator itself.",
+    "route": "opencode-go",
+    "endpoint": "https://opencode.ai/inference/go/openai/v1",
+    "model_light": "longcat-2.0",
+    "model_heavy": "longcat-2.0",
+    "credential_source": "APP__LLM__PYDANTIC_AI_API_KEY",
+    "temperature": 0.0,
+    "max_tokens": 16384,
+    "max_tokens_parameter": "max_completion_tokens",
+    "token_limit_rationale": "Owner 2026-10-24: generous output budget preferred over cutoff risk; truncated judge output is the dominant invalid-structure failure mode. Applied as a run-scoped overlay (APP__LLM__JUDGE_MAX_TOKENS=16384); the committed default of 1024 is unchanged.",
+    "prompt_source": "src.evals.metrics.medical.METRIC_SPECS (DeepEval metric prompts, sent verbatim as a single raw user message)",
+    "rubric_metric_keys": [
+      "factual_accuracy",
+      "completeness",
+      "clinical_relevance",
+      "clarity",
+      "answer_relevancy",
+      "faithfulness"
+    ],
+    "price_per_1m_tokens": {
+      "input_usd": 0.3,
+      "output_usd": 1.2,
+      "cached_input_usd": null
+    },
+    "catalog_max_output_tokens": 131072,
+    "catalog_context_window": 1000000
+  },
+  "retrieval": {
+    "search_mode": "rrf_hybrid",
+    "top_k": 5,
+    "overfetch_multiplier": 4,
+    "mmr_lambda": 0.75,
+    "max_chunks_per_source": 3,
+    "max_chunks_per_source_page": 2,
+    "enable_diversification": true,
+    "enable_reranking": false,
+    "reranking_mode": "cross_encoder",
+    "enable_hyde": false,
+    "enable_hype": false,
+    "enable_keyword_extraction": false,
+    "enable_medical_expansion": false,
+    "enable_query_understanding": false,
+    "enable_chunk_summaries": false,
+    "medical_expansion_provider": "noop",
+    "note": "Carried unchanged from the 2026-10-19 baseline configuration snapshot; the reranker asset is still unselected and undownloaded."
+  },
+  "frozen_identity": {
+    "collection": "medical_docs",
+    "chroma_dir": "data/chroma-d11 (gitignored local cache)",
+    "document_count": 2473,
+    "embedding_model": "text-embedding-v4",
+    "embedding_dimensions": 768,
+    "corpus_content_sha256": "27b130d95441e312bd6204c96dcc74fc337b5b8fb1319eaa89ab8e9691520d1d",
+    "index_fingerprint": "a0dc5d29f153f15959a6b195eab48b4b17d56b0cbcf05aba27bd434e49e51915",
+    "freeze_guarantee": true,
+    "source_record": "docs/plans/migration/20261021-d11-frozen-embedding-index-identity.json"
+  },
+  "review_binding": {
+    "manifest_id": "d11-review-manifest-v1",
+    "review_authority": "openai-codex/gpt-6-luna:xhigh",
+    "manifest_sha256": "7e19b572935068e5937fc98f093ba27c040eee0f0a95509b86b08d1cce2e2a0b",
+    "dataset_sha256": "05a329aeb50e5d17ea36180b19943b15a31fbeacc5c52c07f5e93f009793289c",
+    "corpus_sha256": "18f4733dca5ecebc38fcfb92ec00dc45fe537f26427ac9e40c4501e31fe68071",
+    "attestations_content_sha256": "801716eb4a5c1385bff5c8d2e9096f58739ba70789f47299006a512376df119b",
+    "case_count": 8,
+    "answerable_count": 7,
+    "unanswerable_count": 1,
+    "authority_status": "manifest_hash_verified_not_identity_authenticated",
+    "scope": "content-consistency attestations only; no reviewer-identity, qualification, or clinical-endorsement claim"
+  },
+  "budget": {
+    "monthly_incremental_ceiling_usd": 20,
+    "spend_to_date_estimate_usd": 0.0215,
+    "spend_to_date_basis": "about 0.0155 Go quota-value reserved (Stage A smoke, zero cash) plus about 0.006 estimated embedding cost (D11 materialization)",
+    "judge_cost_class_estimate": "at 16,384 output tokens the worst-case judge call is about $0.02; realistic verdict-plus-reasoning usage is far below the cap, and a 100-case x 6-metric pass is estimated in the low single-digit dollars",
+    "live_run_authorized": false
+  },
+  "source": {
+    "git_head": "eb7c7338056d1668a42425b10f90245ab5ea6036",
+    "dependency_lock_sha256": "7d63f1ce0a02249c2efe7c2ef3de1c37c3eb1d770d278a7ad5845865eb8d6499",
+    "dirty": true,
+    "scope": "configuration tuple and identity pointers only; not an atomic tree snapshot and not a runtime semantic identity"
+  },
+  "limitations": [
+    "The judge shares the generator's route (OpenCode Go). Model-family independence is satisfied; route independence is not, and the shared-route confound must be reported with any comparison.",
+    "OpenCode Go acceptance of the judge's max_completion_tokens wire field is unverified; pydantic-ai sends it for models without a known profile.",
+    "Judge availability, latency, usage reporting, and quality are asserted only from the public model catalog, not from a live call.",
+    "The generator's structured-output capability through this route is unestablished: Stage A's live smoke ended at the baseline structured-output rejection with the adapter's structured modes unreached. Adapter generation remains opt-in and preflight stays fail-closed.",
+    "The D11 corpus binding is reproducible only where data/chroma-d11 exists; the committed export script plus the recorded digests are the reproduction path.",
+    "No live baseline exists for this tuple: live_baseline_captured and provider_outputs_captured are false, and no cutover or default-promotion inference follows from this snapshot."
+  ],
+  "flags": {
+    "generator_judge_tuple_owner_matched": true,
+    "live_baseline_captured": false,
+    "provider_outputs_captured": false,
+    "clinical_quality_verified": false,
+    "default_harness_changed": false,
+    "dependencies_changed": false
+  }
+}

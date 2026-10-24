@@ -106,6 +106,7 @@ for path in [
     "tests/unit/evals/test_snapshot_url_guard.py",
     "tests/unit/manual/test_build_labqar_reference_csv.py",
     "tests/unit/manual/test_backfill_d11_collection_metadata.py",
+    "tests/unit/manual/test_export_review_corpus.py",
     "tests/unit/infra/test_stream_retry_telemetry.py",
     "tests/unit/experiments/test_budget_admission.py",
     "tests/unit/evals/test_review_manifest_authentication.py",
