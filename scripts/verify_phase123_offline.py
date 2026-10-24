@@ -74,6 +74,7 @@ additional = [
     "tests/unit/infra/test_history_turns.py",
     "tests/unit/infra/test_llm_provider_selection.py",
     "tests/unit/infra/test_pydantic_ai_client.py",
+    "tests/unit/infra/test_phase4_go_smoke.py",
     "tests/unit/infra/test_nonstream_contract.py",
     "tests/unit/infra/test_nonstream_transport.py",
     "tests/unit/infra/test_stream_cleanup_cancellation.py",

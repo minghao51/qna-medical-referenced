@@ -23,14 +23,17 @@ Read `AGENTS.md`, the relevant `.planning/codebase/` references, this brief, [de
 
 ## Next primary work: P4-D approvals, then a gated tiny smoke (nothing may run before explicit approval)
 
-Before any live call, return to the owner with exact approvals: quota/cash budget for the smoke and pilot; input/case counts; pinned judge model ID/route/settings; and route confirmation. Then run:
+A documentation-only [P4-D approvals pack](20261021-phase4d-approvals-pack.md) now proposes separate stage allocations and lists the still-required execution addendum; it grants no live permission. Wire/token caps, independent judge pinning and safe live run wiring remain unresolved. The subsequently approved [Stage A offline harness](20261021-phase4d-stage-a-offline-handoff.md) is delivered and reviewed (1,930 tests ×2); it is synthetic-only, with no live CLI or verified live billing admission. The owner selected Stage A only: $1 included Go quota value / $0 incremental cash; account confirmations and final live permission remain absent.
 
-1. A tiny same-model/same-route smoke for both implementations: text, stream, structured output, cancellation, and one real RAG case.
-2. The bounded matched pilot with a fixed judge and matched cases.
+Before any live call, obtain the pack's run-specific execution addendum with exact wire/token caps, quota/cash allocations, input/case counts, safe route wiring and route confirmation. Obtain separate explicit run permission for each unblocked stage:
+
+1. A: protocol-only same-model/same-route smoke for both implementations (text, stream, structured output, cancellation); no retrieval or embeddings.
+2. B: one real-RAG smoke case, blocked on D11 materialization and explicit query-embedding permission.
+3. C: bounded matched pilot, additionally blocked on independent judge pinning, review-authority exercise and frozen matched configuration.
 
 Record confounds honestly, including the adapter's `max_completion_tokens` wire mapping, tool vs native-json-schema request shapes, and judge/generator family overlap. Compare quality, completion, TTFT, total latency, token/cost estimates and maintenance trade-offs. Keep pay-as-you-go spillover/auto-top-up off (D18/budget posture). Honest `User-Agent` and `x-opencode-session` only; stop on route rejection with no substitution. Offline CI gates stay first; paid/manual/scheduled live CI remains a separate D16 decision.
 
-**P4-C's judge wiring does not satisfy D17.** The default `pydantic-ai` judge shares the OpenCode Go route and model family with the generator, so a matched run cannot claim independent-judge scoring. Pin an independent judge (different family) or record the overlap as an explicit confound in the pilot report — do not present same-family scoring as parity evidence.
+**P4-C's judge wiring does not satisfy D17.** The default `pydantic-ai` judge shares the OpenCode Go route and model family with the generator, so a matched run cannot claim independent-judge scoring. Pin an independent judge (different family) before stage C or any quality comparison; without that pin C stays blocked. Same-family scoring is not an approved substitute.
 
 ## Prerequisites that still block a real scored comparison (do not pretend readiness)
 
