@@ -6,6 +6,7 @@ This folder is organized by purpose, not by chronology.
 
 - `quickstart.md` — Prerequisites and first-time setup
 - `local-workflows.md` — Canonical local runbook for ingestion, serving, and evals
+- [Data sync and portability runbook](data-sync-runbook.md) — Off-machine R2 mirror, restore to another setup, and frozen-identity verification
 - `configuration.md` — Full environment variable and deployment settings reference
 - [Data-processing boundaries](data-processing-boundaries.md) — Content, access, retention, deletion, provider processing, and no-automatic-PHI-scrubbing limits
 - `dependencies.md` — Dependency management, extras, and troubleshooting
@@ -27,6 +28,7 @@ This folder is organized by purpose, not by chronology.
 ## Data
 
 - `data/sources.md` — Ingestion source inventory
+- [Data sync and portability runbook](data-sync-runbook.md) — R2 mirror of corpus/raw/review, restore procedure, frozen-identity verification
 
 ## Evaluation
 

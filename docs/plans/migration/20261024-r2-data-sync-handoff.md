@@ -6,6 +6,8 @@
 
 Owner 2026-10-24: "is the current artifacts etc also sync to cloud fare etc" → "can we check on the `../egg-n-bacon-housing` cloudfare setup" → "can you help to create the token and bucekt too? yea option a it is" → "and also update the .env and .env.example" → "i have create the bucket, you can leverage the api key from the other project".
 
+**Operator guide:** the durable procedure now lives in [docs/data-sync-runbook.md](../../data-sync-runbook.md) (commands, expected counters, new-machine checklist, troubleshooting, retention limits), linked from `docs/README.md` and `docs/local-workflows.md`.
+
 ## What landed
 
 - **Dependency (option a):** `boto3==1.43.118`, `botocore==1.43.118`, `jmespath==1.1.0`, `s3transfer==0.19.3`; lock delta +51 lines, no unrelated upgrades.

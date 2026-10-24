@@ -182,6 +182,24 @@ uv run pytest
 - Raw eval artifacts: inspect `data/evals/<run_dir>/`
 - Latest eval API payload: `http://localhost:8000/evaluation/latest`
 
+## Backing Up and Restoring Data
+
+The corpus, the frozen vector index (`data/chroma-d11`) and the reviewed evaluation
+artifacts mirror to a private Cloudflare R2 bucket. This is how you move the data to
+another machine without paying to re-embed the corpus.
+
+```bash
+uv run python scripts/manual/r2_sync.py --verify    # compare local vs R2 (read-only)
+uv run python scripts/manual/r2_sync.py --upload    # push local changes
+uv run python scripts/manual/r2_sync.py             # restore local from R2
+```
+
+Run these from the repository root (the tool reads `.env` from the working
+directory), and see [the data sync runbook](data-sync-runbook.md) for the new-machine
+checklist, expected counters, frozen-identity verification, troubleshooting, and the
+retention limits of this mirror (no bucket versioning, so no point-in-time recovery).
+Caches, `rate_limits.db`, chat history, logs and `.env` are never synced.
+
 ## Notes
 
 - If retrieval seems empty or stale, rerun `src.cli.ingest`.
