@@ -18,8 +18,6 @@ Route `https://opencode.ai/inference/go/openai/v1`, model `mimo-v2.6-flash`, tem
 - **Stage C** was blocked (judge pinning, review authority); now ALSO blocked on structured-output capability: the frozen matched configuration cannot claim parity while the baseline's structured mode fails and the adapter's modes are unverified.
 - **Serving/adapter posture unchanged**: the adapter remains opt-in; no default switch; `pydantic-ai` generation preflight stays fail-closed.
 
-## Owner decision requested (pick one)
+## Owner decision (recorded 2026-10-23): option 1 — ACCEPTED as incomplete/rejected
 
-1. **Accept Stage A as incomplete/rejected** — record and move on; text+stream+cancel verified for both implementations is the deliverable.
-2. **Amend the frozen sequence** with one third bounded run covering ONLY ops 8–9 (adapter `tool`, adapter `native-json-schema`; 2–4 POSTs, ≈ $0.0026 quota-value reservation) to complete the protocol picture. Requires explicit owner approval because it skips the failing op 7 — recorded as an owner amendment, not a pass.
-3. Approve a sanitized-diagnostic variant (prints the validation error path, still no raw response bodies) to learn WHY op 7 failed before deciding.
+The owner accepted Stage A as **incomplete: capability rejection at op 7**. No third run, no diagnostic variant. The Stage A deliverable is: text, streaming and cancellation verified for BOTH implementations on the Go route; structured output NOT established (baseline JSON-object mode fails; adapter `tool`/`native-json-schema` modes unverified). Consequences: Stage B remains blocked on D11; Stage C remains blocked on judge pinning, review authority AND structured-output capability; no cutover inference is drawn from this run; the adapter stays opt-in with no default switch. The owner may revisit with a new bounded approval if structured support through the Go route becomes relevant.
