@@ -29,6 +29,30 @@ logger = logging.getLogger(__name__)
 DATA_DIR = DATA_RAW_DIR
 MANIFEST_PATH = DATA_DIR / "download_manifest.json"
 
+# Download order for the web_sources groups in config/sources.yaml (mirrors main()).
+DOWNLOAD_GROUPS = (
+    "ace_clinical_guidelines",
+    "ace_cues",
+    "ace_drug_guidances",
+    "healthhub",
+    "moh",
+    "hpp_guidelines",
+    "international_guidelines",
+)
+
+_GROUP_LOG_LABELS = {
+    "ace_clinical_guidelines": "ACE Clinical Guidelines",
+    "ace_cues": "ACE CUES resources",
+    "ace_drug_guidances": "ACE Drug Guidances",
+    "healthhub": "HealthHub content",
+    "moh": "MOH content",
+    "hpp_guidelines": "HPP Guidelines",
+    "international_guidelines": "International Guidelines (NHS/NICE)",
+}
+
+# Per-group timeouts (seconds); groups not listed use download_group's default.
+_GROUP_TIMEOUTS = {"international_guidelines": 60}
+
 _manifest_lock = asyncio.Lock()
 
 # Manifest cache: avoids re-reading + re-parsing the JSON on every lookup.
@@ -433,23 +457,11 @@ async def main():
 
     all_downloaded = []
 
-    logger.info("[1/6] Downloading ACE Clinical Guidelines...")
-    all_downloaded.extend(await download_group("ace_clinical_guidelines"))
-
-    logger.info("[2/6] Downloading ACE CUES resources...")
-    all_downloaded.extend(await download_group("ace_cues"))
-
-    logger.info("[3/6] Downloading ACE Drug Guidances...")
-    all_downloaded.extend(await download_group("ace_drug_guidances"))
-
-    logger.info("[4/6] Downloading HealthHub content...")
-    all_downloaded.extend(await download_group("healthhub"))
-
-    logger.info("[5/6] Downloading HPP Guidelines...")
-    all_downloaded.extend(await download_group("hpp_guidelines"))
-
-    logger.info("[6/6] Downloading International Guidelines (NHS/NICE)...")
-    all_downloaded.extend(await download_group("international_guidelines", timeout=60))
+    for step, group in enumerate(DOWNLOAD_GROUPS, start=1):
+        logger.info(
+            "[%d/%d] Downloading %s...", step, len(DOWNLOAD_GROUPS), _GROUP_LOG_LABELS[group]
+        )
+        all_downloaded.extend(await download_group(group, timeout=_GROUP_TIMEOUTS.get(group, 30)))
 
     logger.info("=" * 60)
     logger.info("Download complete! Total files in data/raw: %d", len(list_downloaded_files()))

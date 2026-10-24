@@ -90,11 +90,17 @@ def _safe_model_name(value: str) -> str:
 
 
 def _safe_qwen_endpoint() -> str:
-    """Return only the two known DashScope routes, never arbitrary URL components."""
+    """Return only known DashScope routes (legacy + workspace MaaS), never arbitrary URL parts."""
     try:
         parsed = urlsplit(settings.llm.qwen_base_url)
         host = (parsed.hostname or "").lower()
         path = parsed.path
+        # Workspace-scoped Alibaba MaaS hosts keep the <workspace-id>.<region> shape:
+        # a non-empty prefix is required, so the bare suffix host is rejected.
+        host_allowed = host in {
+            "dashscope-us.aliyuncs.com",
+            "dashscope-intl.aliyuncs.com",
+        } or (host.endswith(".maas.aliyuncs.com") and bool(host[: -len(".maas.aliyuncs.com")]))
         if (
             parsed.scheme == "https"
             and parsed.username is None
@@ -103,7 +109,7 @@ def _safe_qwen_endpoint() -> str:
             and "?" not in settings.llm.qwen_base_url
             and "#" not in settings.llm.qwen_base_url
             and path in {"/compatible-mode/v1", "/compatible-mode/v1/"}
-            and host in {"dashscope-us.aliyuncs.com", "dashscope-intl.aliyuncs.com"}
+            and host_allowed
         ):
             return f"https://{host}/compatible-mode/v1"
     except ValueError:

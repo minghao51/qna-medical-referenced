@@ -1,9 +1,9 @@
 {
   "corpus_identity": {
-    "content_sha256": null,
-    "file_count": 0,
-    "reason": "source_tree_empty",
-    "status": "unverified",
+    "content_sha256": "27b130d95441e312bd6204c96dcc74fc337b5b8fb1319eaa89ab8e9691520d1d",
+    "file_count": 121,
+    "reason": null,
+    "status": "verified",
     "version": 1
   },
   "d11_decision": {
@@ -19,7 +19,7 @@
     "batch_size": 10,
     "dimensions": 768,
     "dimensions_match_d11_decision": true,
-    "endpoint": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
+    "endpoint": "https://llm-zz1xabubqkfxuo5m.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
     "model": "text-embedding-v4",
     "provider": "qwen",
     "role_source": "src.evals.deepeval_models.effective_roles",
@@ -30,18 +30,22 @@
     "script": "scripts/manual/build_d11_frozen_identity.py"
   },
   "index_identity": {
-    "build_spec_sha256": null,
-    "collection_name": null,
-    "document_count": null,
-    "embedding_dimensions": null,
-    "embedding_model": null,
-    "fingerprint": null,
-    "freeze_guarantee": false,
-    "reason": "Index snapshot is empty or exceeds the supported document count",
-    "retrieval_weights": null,
-    "snapshot_sha256": null,
-    "source_snapshot_sha256": null,
-    "status": "unverified"
+    "build_spec_sha256": "e8dbeffdc68720d63f1fae82cea0e3006a6008b7a60439ad169559d29fb4a929",
+    "collection_name": "medical_docs",
+    "document_count": 2473,
+    "embedding_dimensions": 768,
+    "embedding_model": "text-embedding-v4",
+    "fingerprint": "a0dc5d29f153f15959a6b195eab48b4b17d56b0cbcf05aba27bd434e49e51915",
+    "freeze_guarantee": true,
+    "reason": null,
+    "retrieval_weights": {
+      "boost": 0.2,
+      "keyword": 0.2,
+      "semantic": 0.6
+    },
+    "snapshot_sha256": "5c4d7e8459d979ed2b1409e3a16c5f43db455e011c0c876309c52bfc2f91e9cb",
+    "source_snapshot_sha256": "27b130d95441e312bd6204c96dcc74fc337b5b8fb1319eaa89ab8e9691520d1d",
+    "status": "verified"
   },
   "schema_version": 1
 }

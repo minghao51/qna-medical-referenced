@@ -406,13 +406,40 @@ def capture_index_identity_from_chroma_dir(
     return build_index_identity_from_capture(capture)
 
 
+def index_identity_with_provenance_cross_check(
+    corpus_identity: Mapping[str, Any],
+    index_identity: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Cross-check a verified index identity against the computed corpus digest.
+
+    The captured build spec's recorded ``source_snapshot_sha256`` (how the
+    index claims it was built) must equal the independently computed corpus
+    ``content_sha256``; a mismatch - or an unavailable corpus digest - means
+    the source provenance cannot be confirmed, so the index identity is
+    downgraded to unverified with the fixed reason
+    ``index_source_provenance_mismatch`` instead of crashing. Unverified
+    index identities pass through unchanged, and the identity blocks stay
+    byte-deterministic.
+    """
+    if index_identity.get("status") != "verified":
+        return dict(index_identity)
+    if index_identity.get("source_snapshot_sha256") != corpus_identity.get("content_sha256"):
+        return unverified_index_identity("index_source_provenance_mismatch")
+    return dict(index_identity)
+
+
 def build_output_document(
     *,
     embedding_identity: Mapping[str, Any],
     corpus_identity: Mapping[str, Any],
     index_identity: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Frame the three identity blocks with the D11 decision record."""
+    """Frame the three identity blocks with the D11 decision record.
+
+    The index identity is first cross-checked against the independently
+    computed corpus digest (see ``index_identity_with_provenance_cross_check``);
+    the embedding and corpus blocks are recorded exactly as computed.
+    """
     return {
         "schema_version": OUTPUT_SCHEMA_VERSION,
         "d11_decision": {
@@ -429,7 +456,9 @@ def build_output_document(
         },
         "embedding_identity": dict(embedding_identity),
         "corpus_identity": dict(corpus_identity),
-        "index_identity": dict(index_identity),
+        "index_identity": index_identity_with_provenance_cross_check(
+            corpus_identity, index_identity
+        ),
         "generation": {
             "script": "scripts/manual/build_d11_frozen_identity.py",
             "offline_only": True,

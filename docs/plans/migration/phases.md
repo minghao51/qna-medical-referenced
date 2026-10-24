@@ -389,6 +389,8 @@ Dependency/capability research and private deployment preparation can happen alo
 
 **Offline leftovers (2026-10-24):** [handoff](20261024-offline-leftovers-handoff.md) — six collected offline tests: P4-B settings-bound acceptance (`pydantic_ai_temperature` 0.0/2.0, `pydantic_ai_timeout_seconds` 600.0), stream-cancellation usage settlement (no fabricated partial totals, no retry, transport released), repeated sync-call lifecycle reuse, and P4-C task-layer upper-bound override pass-through (`temperature=2.0`, `timeout_seconds=600`); isolated gate **1,969 passed / 5 warnings ×2**; statics green (Ruff 346 files, MyPy 164 src, 4 import contracts). Owner decision recorded: `provider="pydantic-ai"` generation preflight/`effective_roles` **stay fail-closed**. No behavior changes.
 
+**D11 materialization (2026-10-24):** [handoff](20261024-d11-materialization-handoff.md) — the keystone is closed: corpus (121 files), embedding (`text-embedding-v4`, 768d, workspace MaaS endpoint per owner decision 1b), and index (`medical_docs`, 2,473 embeddings, fingerprint `a0dc5d29…`) identity blocks all **verified**, `freeze_guarantee: true`. Corpus source repair (29 dead URLs remapped/removed, commit `5096f9a`), LabQAR reference class ingested (CC BY 4.0), `moh` download-group gap fixed, MaaS endpoint allowlist added, URL-credential-guard false positive surgically fixed (owner-approved), collection build metadata + idempotent backfill delivered. Gate **2,031 passed / 5 warnings ×2**; statics green; Luna CLOSED. Recorded spend: ≈ $0.006 estimated (2,473 embeddings).
+
 ### P4-D: Matched live parity and CI
 
 - [ ] Run a tiny approved same-model/same-route smoke for both implementations: text, stream, structured output, cancellation, and one real RAG case.

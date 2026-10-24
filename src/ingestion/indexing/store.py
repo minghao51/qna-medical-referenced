@@ -7,8 +7,11 @@ factory in factory.py. chroma_store.py re-exports the public surface.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
+import stat
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -19,6 +22,7 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 
 from src.config import settings
+from src.config.paths import DATA_RAW_DIR
 from src.core.source_metadata import (
     canonical_source_label,
     display_source_label,
@@ -110,6 +114,131 @@ def _record_store_embedding_span(
             span.mark_error(error_code)
 
 
+# Build-metadata corpus digest limits, mirroring
+# src.evals.assessment.reporting._MAX_CORPUS_* so the collection metadata
+# digest and the D11 corpus provenance fail identically on oversized trees.
+_CORPUS_DIGEST_MAX_ENTRIES = 20_000
+_CORPUS_DIGEST_MAX_FILES = 10_000
+_CORPUS_DIGEST_MAX_BYTES = 512 * 1024 * 1024
+
+
+def _corpus_source_digest(directory: Path) -> str:
+    """Digest a raw corpus tree with the D11 ``source-tree-v1`` scheme.
+
+    Byte-compatible local mirror of
+    ``src.evals.assessment.reporting.content_directory_provenance`` (sorted
+    relative paths, per-file SHA-256 and byte counts over regular files
+    only); the byte compatibility is pinned by
+    ``tests/unit/ingestion/test_collection_build_metadata.py``. Implemented
+    locally because the layered-architecture contract forbids
+    ``src.ingestion`` from importing ``src.evals``. Unlike the provenance
+    source, the tree is not re-stat'ed after hashing: mid-hash mutations are
+    caught downstream when the D11 builder re-derives its own corpus
+    provenance.
+    """
+    reason = "source_tree_unavailable"
+    try:
+        for component in reversed((directory, *directory.parents)):
+            if stat.S_ISLNK(component.lstat().st_mode):
+                raise ValueError(reason)
+        if not stat.S_ISDIR(directory.lstat().st_mode):
+            raise ValueError(reason)
+        file_sizes: dict[str, int] = {}
+        entry_count = 0
+        total_bytes = 0
+        for path in directory.rglob("*"):
+            entry_count += 1
+            if entry_count > _CORPUS_DIGEST_MAX_ENTRIES:
+                reason = "source_tree_too_large"
+                raise ValueError(reason)
+            info = path.lstat()
+            if stat.S_ISLNK(info.st_mode):
+                raise ValueError(reason)
+            if stat.S_ISREG(info.st_mode):
+                relative_path = str(path.relative_to(directory))
+                file_sizes[relative_path] = info.st_size
+                total_bytes += info.st_size
+            elif not stat.S_ISDIR(info.st_mode):
+                raise ValueError(reason)
+        if len(file_sizes) > _CORPUS_DIGEST_MAX_FILES or total_bytes > _CORPUS_DIGEST_MAX_BYTES:
+            reason = "source_tree_too_large"
+            raise ValueError(reason)
+        if not file_sizes:
+            reason = "source_tree_empty"
+            raise ValueError(reason)
+        digest = hashlib.sha256(b"source-tree-v1\0")
+        for relative_path in sorted(file_sizes, key=os.fsencode):
+            path = directory / relative_path
+            path_bytes = os.fsencode(relative_path)
+            file_hash = hashlib.sha256()
+            with path.open("rb") as handle:
+                while chunk := handle.read(1024 * 1024):
+                    file_hash.update(chunk)
+            digest.update(len(path_bytes).to_bytes(8, "big"))
+            digest.update(path_bytes)
+            digest.update(file_sizes[relative_path].to_bytes(8, "big"))
+            digest.update(file_hash.digest())
+        return digest.hexdigest()
+    except (OSError, ValueError):
+        raise ValueError(f"Index build metadata source digest unavailable ({reason})") from None
+
+
+def build_collection_build_metadata(source_digest: str | None = None) -> dict[str, Any] | None:
+    """Build the collection metadata payload certified by the D11 snapshot validator.
+
+    Every value comes from the live typed configuration (``settings`` plus
+    the resolved vector-store runtime config), never from literals, so the
+    collection records how the index was actually built.
+    ``source_chunk_configs`` is a JSON string because Chroma collection
+    metadata values must be scalars; ``src.evals.index_snapshot`` accepts
+    exactly that encoding. The corpus digest is hashed at store-init cost
+    when ``source_digest`` is not supplied. Returns ``None`` when the raw
+    corpus is unavailable: a store constructed without a raw tree cannot
+    honestly claim source provenance, so it is created without collection
+    metadata instead of with an incomplete payload (the D11 builder fails
+    closed on such stores anyway).
+    """
+    # Function-local imports: the factory imports this module (import cycle)
+    # and the chunking package pulls in the chunker core.
+    from src.ingestion.indexing.factory import get_vector_store_runtime_config
+    from src.ingestion.steps.chunking.config import get_source_chunk_configs
+
+    try:
+        resolved_source_digest = (
+            source_digest if source_digest is not None else _corpus_source_digest(DATA_RAW_DIR)
+        )
+    except (OSError, ValueError):
+        logger.debug("Raw corpus unavailable; creating collection without build metadata")
+        return None
+    runtime_config = get_vector_store_runtime_config()
+    return {
+        "source_snapshot_sha256": resolved_source_digest,
+        "embedding_model": settings.llm.embedding_model,
+        "embedding_batch_size": int(settings.llm.embedding_batch_size),
+        "semantic_weight": float(runtime_config["semantic_weight"]),
+        "keyword_weight": float(runtime_config["keyword_weight"]),
+        "boost_weight": float(runtime_config["boost_weight"]),
+        "page_classification_enabled": bool(settings.ingestion.page_classification_enabled),
+        "index_only_classified_pages": bool(settings.ingestion.index_only_classified_pages),
+        "html_extractor_mode": settings.ingestion.html_extractor_mode,
+        "html_extractor_strategy": settings.ingestion.html_extractor_strategy,
+        "pdf_extractor_strategy": settings.ingestion.pdf_extractor_strategy,
+        "pdf_table_extractor": settings.ingestion.pdf_table_extractor,
+        "structured_chunking_enabled": bool(settings.ingestion.structured_chunking_enabled),
+        "source_chunk_configs": json.dumps(
+            get_source_chunk_configs(), ensure_ascii=False, sort_keys=True
+        ),
+        "enable_hype": bool(settings.hype.enabled),
+        "hype_sample_rate": float(settings.hype.sample_rate),
+        "hype_max_chunks": int(settings.hype.max_chunks),
+        "hype_questions_per_chunk": int(settings.hype.questions_per_chunk),
+        "enable_keyword_extraction": bool(settings.enrichment.enable_keyword_extraction),
+        "enable_chunk_summaries": bool(settings.enrichment.enable_chunk_summaries),
+        "keyword_extraction_sample_rate": float(settings.enrichment.keyword_extraction_sample_rate),
+        "keyword_extraction_max_chunks": int(settings.enrichment.keyword_extraction_max_chunks),
+    }
+
+
 class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
     """Vector store backed by ChromaDB persistent storage.
 
@@ -168,6 +297,7 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
                 else client.get_or_create_collection(
                     name=self.collection_name,
                     embedding_function=None,
+                    metadata=build_collection_build_metadata(),
                 )
             )
         elif collection is not None:
@@ -180,6 +310,7 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
             self._collection = self._client.get_or_create_collection(
                 name=self.collection_name,
                 embedding_function=None,
+                metadata=build_collection_build_metadata(),
             )
         else:
             chroma_host = settings.storage.chroma_server_host.strip()
@@ -202,6 +333,7 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
             self._collection = self._client.get_or_create_collection(
                 name=self.collection_name,
                 embedding_function=None,
+                metadata=build_collection_build_metadata(),
             )
         # When no index metadata is supplied, adopt what the collection
         # already persists so provenance survives cold restarts. The factory

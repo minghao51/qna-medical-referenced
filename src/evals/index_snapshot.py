@@ -27,6 +27,10 @@ SNAPSHOT_CONTRACT_VERSION = 1
 _MAX_EXPORT_BYTES = 256 * 1024 * 1024
 _MAX_DOCUMENTS = 250_000
 _SOURCE_DIGEST = re.compile(r"^[0-9a-f]{64}$")
+# URL-shaped strings are inspected only at scheme-anchored spans so free
+# prose containing "://", "?" or "#" away from a real URL is never urlsplit()'ed.
+_SCHEME_PREFIX = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://")
+_URL_SPAN = re.compile(r"[a-zA-Z][a-zA-Z0-9+.\-]*://\S+")
 _REQUIRED_BUILD_METADATA = {
     "source_snapshot_sha256",
     "embedding_model",
@@ -103,10 +107,23 @@ def _reject_credentials(value: Any) -> None:
         for item in value:
             _reject_credentials(item)
     elif isinstance(value, str) and "://" in value:
+        # Only URL-shaped content goes through urlsplit(): running it over
+        # arbitrary prose parses any later "?" or "#" as a URL query/
+        # fragment and false-positives on free text such as "See
+        # https://example.com/x ... is it useful? Yes #indeed". Leading
+        # whitespace is stripped before the scheme-prefix test, and every
+        # scheme-anchored span of the string is checked individually so a
+        # padded or prose-embedded credential-bearing URL is still caught.
+        spans: list[str] = []
+        stripped = value.lstrip()
+        if _SCHEME_PREFIX.match(stripped):
+            spans.append(stripped)
+        spans.extend(found.group(0) for found in _URL_SPAN.finditer(value))
         try:
-            parsed = urlsplit(value)
-            if parsed.username or parsed.password or parsed.query or parsed.fragment:
-                raise SnapshotError(error)
+            for span in spans:
+                parsed = urlsplit(span)
+                if parsed.username or parsed.password or parsed.query or parsed.fragment:
+                    raise SnapshotError(error)
         except ValueError:
             raise SnapshotError(error) from None
 

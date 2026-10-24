@@ -114,10 +114,12 @@ def _verified_document(builder: ModuleType) -> tuple[dict[str, Any], str]:
     capture = builder.freeze_from_payload(_fixture_payload())
     document = builder.build_output_document(
         embedding_identity=builder.build_embedding_identity(_embedder_role()),
+        # Matches the fixture capture's source_snapshot_sha256 ("b" * 64) so
+        # the provenance cross-check keeps the index identity verified.
         corpus_identity={
             "version": 1,
             "status": "verified",
-            "content_sha256": "c" * 64,
+            "content_sha256": "b" * 64,
             "file_count": 2,
             "reason": None,
         },
@@ -173,6 +175,86 @@ def test_verified_capture_extracts_all_identity_fields(builder: ModuleType):
     assert identity["collection_name"] == "d11-fixture"
     assert identity["retrieval_weights"] == {"semantic": 0.6, "keyword": 0.2, "boost": 0.2}
     assert identity["source_snapshot_sha256"] == "b" * 64
+
+
+def test_output_document_downgrades_index_identity_on_provenance_mismatch(
+    builder: ModuleType,
+):
+    capture = builder.freeze_from_payload(_fixture_payload())
+    index_identity = builder.build_index_identity_from_capture(capture)
+    assert index_identity["status"] == "verified"
+    corpus_identity = {
+        "version": 1,
+        "status": "verified",
+        "content_sha256": "c" * 64,  # differs from the captured "b" * 64
+        "file_count": 2,
+        "reason": None,
+    }
+
+    document = builder.build_output_document(
+        embedding_identity=builder.build_embedding_identity(_embedder_role()),
+        corpus_identity=corpus_identity,
+        index_identity=index_identity,
+    )
+
+    downgraded = document["index_identity"]
+    assert downgraded["status"] == "unverified"
+    assert downgraded["reason"] == "index_source_provenance_mismatch"
+    assert downgraded["freeze_guarantee"] is False
+    for field in _UNVERIFIED_IDENTITY_FIELD_NAMES:
+        assert downgraded[field] is None
+    # The other blocks stay exactly as computed.
+    assert document["embedding_identity"]["status"] == "verified"
+    assert document["corpus_identity"] == corpus_identity
+
+
+def test_output_document_keeps_verified_index_identity_on_matching_provenance(
+    builder: ModuleType,
+):
+    capture = builder.freeze_from_payload(_fixture_payload())
+    index_identity = builder.build_index_identity_from_capture(capture)
+
+    document = builder.build_output_document(
+        embedding_identity=builder.build_embedding_identity(_embedder_role()),
+        corpus_identity={
+            "version": 1,
+            "status": "verified",
+            "content_sha256": index_identity["source_snapshot_sha256"],
+            "file_count": 2,
+            "reason": None,
+        },
+        index_identity=index_identity,
+    )
+
+    assert document["index_identity"] == dict(index_identity)
+
+
+def test_provenance_cross_check_downgrades_on_missing_corpus_digest_and_passes_unverified(
+    builder: ModuleType,
+):
+    capture = builder.freeze_from_payload(_fixture_payload())
+    index_identity = builder.build_index_identity_from_capture(capture)
+
+    unavailable_corpus = builder.index_identity_with_provenance_cross_check(
+        {
+            "version": 1,
+            "status": "unverified",
+            "content_sha256": None,
+            "file_count": 0,
+            "reason": "source_tree_unavailable",
+        },
+        index_identity,
+    )
+    assert unavailable_corpus["status"] == "unverified"
+    assert unavailable_corpus["reason"] == "index_source_provenance_mismatch"
+
+    # An already-unverified index identity passes through untouched.
+    untouched = builder.index_identity_with_provenance_cross_check(
+        {"version": 1, "status": "verified", "content_sha256": "c" * 64, "file_count": 2},
+        builder.unverified_index_identity("chroma_directory_missing"),
+    )
+    assert untouched["reason"] == "chroma_directory_missing"
+    assert untouched["status"] == "unverified"
 
 
 def test_serialized_output_holds_only_identity_and_no_content(builder: ModuleType):
