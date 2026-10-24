@@ -1,10 +1,10 @@
 # P4-D Stage A offline harness handoff
 
-**Status: offline harness delivered; live execution unavailable and blocked.** Owner approved the bounded harness slice after selecting Stage A only: at most $1 included Go quota value, $0 incremental cash. No account safety confirmations, current quota valuation or final live-run permission are inferred from credential preparation or “proceed.”
+**Status: offline harness delivered (2026-10-23); the owner-approved gated live-capable runner slice is now ALSO delivered and review-CLOSED — see the [live-runner handoff](20261021-phase4d-stage-a-live-runner-handoff.md). No live call has been made; a live run still requires the owner's final stage-specific confirmation.** Owner approved the bounded harness slice after selecting Stage A only: at most $1 included Go quota value, $0 incremental cash.
 
 ## Delivered
 
-- `scripts/manual/phase4_go_smoke.py`: injectable, trusted synthetic-handler harness exercising actual existing Qwen and Pydantic AI async client paths for nine logical operations. SDK requests use harness-created MockTransport; arbitrary handlers are trusted Python code, not sandboxed. Run only with synthetic keys under OS network/storage isolation. CLI always refuses live execution.
+- `scripts/manual/phase4_go_smoke.py`: injectable, trusted synthetic-handler harness exercising actual existing Qwen and Pydantic AI async client paths for nine logical operations. SDK requests use harness-created MockTransport; arbitrary handlers are trusted Python code, not sandboxed. Run only with synthetic keys under OS network/storage isolation. (This description is now historical: the slice was extended by the gated live-capable runner — see the [live-runner handoff](20261021-phase4d-stage-a-live-runner-handoff.md); the offline path and its guarantees are unchanged.)
 - Exact-route/model/settings/header checks; shared 12-POST admission; one total transport attempt and one structured repair; sanitized metadata with exact outbound-body digests; deterministic blocked-read cancellation and cleanup; per-instance method-global copies avoid changing application module settings. This method-copy approach is maintenance-sensitive and covered by retry/isolation tests, not a new production client implementation.
 - `tests/unit/infra/test_phase4_go_smoke.py`: 27 added cases, synthetic transport only; explicit isolated-gate inventory entry in `scripts/verify_phase123_offline.py`.
 - Failure construction cleanup is awaited on the owning loop. SDK and supplied HTTP resources may both close idempotently; tests require every close to finish before the failure escapes.
@@ -21,6 +21,6 @@ Snapshot, verbatim worker/review responses and gate logs: `/tmp/qna-stage-a-harn
 
 ## Still blocked
 
-See [execution addendum](20261021-phase4d-stage-a-execution-addendum.md) and [planning pack](20261021-phase4d-approvals-pack.md). A live-capable transport/runner is **not implemented**. It needs separately approved implementation with verified model/provider token accounting, quota reservation and actual account eligibility/remaining quota/spillover/top-up confirmations, then final stage-specific execution approval. No existing offline helper may be repurposed with a network-forwarding handler as a bypass.
+See [execution addendum](20261021-phase4d-stage-a-execution-addendum.md), [planning pack](20261021-phase4d-approvals-pack.md) and the [live-runner handoff](20261021-phase4d-stage-a-live-runner-handoff.md). The gated live-capable transport/runner is now implemented and review-CLOSED; the live-run blockers that remain are the owner's final stage-specific run confirmation after reviewing the frozen hashes, effective settings and numeric reservations, plus the standing stop rules. No existing offline helper may be repurposed with a network-forwarding handler as a bypass.
 
 B/C remain unapproved and blocked on their corpus/embedding/judge/review/configuration prerequisites. No eval selector widening, hosted export, live CI, default flip or phase completion.
