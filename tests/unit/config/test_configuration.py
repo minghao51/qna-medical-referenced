@@ -1,6 +1,9 @@
 """Tests for configuration management."""
 
+import yaml
+
 from src.config import settings
+from src.config.settings import CONFIG_DIR, ProductionConfig, StorageConfig
 
 
 def test_retrieval_config_defaults():
@@ -65,6 +68,22 @@ def test_storage_paths():
     assert settings.storage.data_dir
     assert settings.vector_dir
     assert settings.storage.collection_name
+
+
+def test_schema_defaults_match_shipped_yaml():
+    """Schema defaults agree with config/settings.yaml for the served index and profile."""
+    shipped = yaml.safe_load((CONFIG_DIR / "settings.yaml").read_text(encoding="utf-8"))
+
+    assert (
+        StorageConfig().chroma_persist_directory
+        == shipped["storage"]["chroma_persist_directory"]
+        == "data/chroma-d11"
+    )
+    assert (
+        ProductionConfig().production_profile
+        == shipped["production"]["production_profile"]
+        == "baseline"
+    )
 
 
 def test_deepeval_configuration():

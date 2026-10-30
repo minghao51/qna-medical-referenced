@@ -9,11 +9,14 @@ def test_settings_defaults():
     llm_defaults = Settings.model_fields["llm"].default_factory()
     api_defaults = Settings.model_fields["api"].default_factory()
     storage_defaults = Settings.model_fields["storage"].default_factory()
+    production_defaults = Settings.model_fields["production"].default_factory()
 
     assert llm_defaults.model_name == "qwen3.5-flash"
     assert llm_defaults.embedding_model == "text-embedding-v4"
     assert llm_defaults.embedding_batch_size == 10
     assert storage_defaults.collection_name == "medical_docs"
+    assert storage_defaults.chroma_persist_directory == "data/chroma-d11"
+    assert production_defaults.production_profile == "baseline"
     assert api_defaults.max_message_length == 2000
     assert api_defaults.rate_limit_per_minute == 60
     assert api_defaults.anonymous_chat_rate_limit_per_minute == 12

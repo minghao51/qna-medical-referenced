@@ -4,11 +4,11 @@
 
 ## Tech Debt
 
-**Remaining God Module: `src/ingestion/indexing/chroma_store.py` (~1010 lines):**
-- Issue: Single file with multiple responsibilities (ChromaDB client wrapper, embedding orchestration, hybrid search, persistence management)
-- Files: `src/ingestion/indexing/chroma_store.py`
-- Impact: Hard to test, maintain, or add features without risking regressions
-- Note: The previous primary god module (`src/rag/runtime.py`) was successfully split from ~1425 → ~495 lines by extracting `index.py`, `config.py`, `diversification.py`, `query_expansion.py`, and `retrieval.py`
+**Large Vector-Store Core: `src/ingestion/indexing/store.py` (~1050 lines):**
+- Issue: `ChromaVectorStore` still carries several responsibilities (ChromaDB client wrapper, embedding orchestration, hybrid search, persistence management)
+- Files: `src/ingestion/indexing/store.py`
+- Impact: Large surface to test and modify; the public entry point itself is stable
+- Note: The former god module `src/ingestion/indexing/chroma_store.py` is now a ~26-line re-export shim; the previous primary god module (`src/rag/runtime.py`) was successfully split from ~1425 → ~495 lines by extracting `index.py`, `config.py`, `diversification.py`, `query_expansion.py`, and `retrieval.py`
 
 **Massive Code Duplication in Sync/Async Retrieval:**
 - Issue: `retrieve_context_with_trace` and `retrieve_context_with_trace_async` share ~80% identical logic
@@ -44,15 +44,19 @@
 
 ## Previously Addressed Issues
 
+**God Module: `src/ingestion/indexing/chroma_store.py`** — **Refactored (Phase 2, roadmap P2.3):**
+- `chroma_store.py` reduced from ~1010 lines to a ~26-line re-export of the public surface
+- Split into: `src/ingestion/indexing/store.py` (~1050 lines, `ChromaVectorStore` core), `hype_index.py` (~86 lines, HyPE search mixin), `listing.py` (~117 lines, paginated listing mixin), `factory.py` (~113 lines, `ChromaVectorStoreFactory` + accessors)
+
 **God Module: `src/rag/runtime.py`** — **Refactored (2026-04):**
 - From ~1425 lines to ~495 lines
 - Logic extracted to: `src/rag/index.py`, `src/rag/config.py`, `src/rag/diversification.py`, `src/rag/query_expansion.py`, `src/rag/retrieval.py`
 
 **Settings God Object** — **Partially Refactored:**
-- From ~590 lines to ~284 lines
-- Nested config models added in `src/config/models/` (`ApiConfig`, `LLMConfig`, `StorageConfig`, `RetrievalConfig`)
-- Config sources: `config/settings.yaml` + env vars (`APP__` prefix) + `.env`
-- Legacy flat env var names supported via `_LEGACY_FIELD_MAP`
+- From ~590 lines to ~357 lines (`src/config/settings.py`)
+- Nested config models are defined in `src/config/settings.py` (`AppConfig`, `ApiConfig`, `LLMConfig`, `StorageConfig`, `RetrievalConfig`, `TelemetryConfig`, ...)
+- Config sources: `config/settings.yaml` + env vars (`APP__` prefix, `__` nested delimiter) + `.env`
+- No legacy flat env var mapping: only `APP__…` names are read
 
 **Unused Variable in Chat Route** — **Fixed:**
 - File: `src/app/routes/chat.py` — `GeneratorExit`/`CancelledError` handling improved
@@ -142,13 +146,9 @@
 - Files: `src/rag/runtime.py`, `src/usecases/chat.py`
 
 **Large Files with Many Responsibilities:**
-- Why fragile: `chroma_store.py` (~1010L), `retrieval_eval.py` (~765L), `orchestrator.py` (~645L)
+- Why fragile: `store.py` (~1050L), `retrieval_eval.py` (~765L), `orchestrator.py` (~645L)
 - Safe modification: Extract specific responsibilities before adding features
-- Files: `src/ingestion/indexing/chroma_store.py`, `src/evals/assessment/retrieval_eval.py`, `src/evals/assessment/orchestrator.py`
-
-**Settings with Legacy Flat Field Mapping:**
-- Why fragile: 58 legacy field name → nested path mappings in `_LEGACY_FIELD_MAP`; dual access patterns increase complexity
-- Safe modification: Remove legacy mappings after migration period; standardize on nested `settings.api.*` access
+- Files: `src/ingestion/indexing/store.py`, `src/evals/assessment/retrieval_eval.py`, `src/evals/assessment/orchestrator.py`
 
 ---
 
@@ -227,14 +227,13 @@
 
 | Priority | Issue | Effort |
 |---|---|---|
-| P1 | Split `src/ingestion/indexing/chroma_store.py` into focused modules | Large |
+| P1 | Split `src/ingestion/indexing/store.py` into focused modules | Large |
 | P1 | Deduplicate sync/async retrieval functions in `runtime.py` | Medium |
 | P1 | Replace module-level globals with explicit config | Large |
 | P2 | Add vector store health checks | Small |
 | P2 | Narrow exception types | Medium |
 | P2 | Update `marked` and `highlight.js` in frontend | Small |
 | P2 | Pin upper bounds on critical dependencies | Small |
-| P2 | Remove legacy `_LEGACY_FIELD_MAP` after migration | Small |
 | P3 | Remove legacy SHA256 support | Small |
 | P3 | Add API versioning | Medium |
 | P3 | Implement chat history TTL cleanup | Small |

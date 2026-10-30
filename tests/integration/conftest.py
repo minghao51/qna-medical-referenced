@@ -46,6 +46,28 @@ def _fake_embedding(text: str) -> list[float]:
     return [v / norm for v in raw]
 
 
+@pytest.fixture(autouse=True)
+def isolate_rate_limit_db(monkeypatch, tmp_path):
+    """Point the rate limiter at a per-test database instead of project data.
+
+    Anonymous ``/chat`` limiting is keyed by the client IP, and every
+    ``TestClient`` reports the same loopback address, so events shared through
+    one database would make later tests fail with 429s. ``get_connection()``
+    resolves the module global at call time, so patching ``RATE_LIMIT_DB``
+    isolates each test in ``tmp_path`` and never deletes rows from the real
+    ``data/rate_limits.db``. The backend initialises lazily (importing this
+    module no longer touches the filesystem), so the schema is applied here to
+    the freshly patched path; the module-level backend may already have run its
+    one-time init against an earlier test's database.
+    """
+    from src.app.middleware import rate_limit
+
+    db_path = tmp_path / "rate_limits.db"
+    monkeypatch.setattr(rate_limit, "RATE_LIMIT_DB", str(db_path))
+    rate_limit.SQLiteRateLimitBackend(window_seconds=60)._ensure_initialized()
+    return db_path
+
+
 @pytest.fixture
 def fake_chroma_embeddings(monkeypatch, tmp_path):
     """Replace the Qwen embedding API with deterministic offline vectors.

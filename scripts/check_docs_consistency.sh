@@ -19,13 +19,19 @@ targets=(
 )
 
 patterns=(
-  "GEMINI_API_KEY"
   "localhost:8001"
   "synthetic_gemini"
   "gemini_key_present"
   "confidenceCalculator.ts"
   "docs/architecture/README.md"
   "docs/testing/README.md"
+)
+
+# Stale flat provider env names, e.g. `GEMINI_API_KEY=...` or `export DASHSCOPE_API_KEY=...`.
+# Nested names such as `APP__LLM__GEMINI_API_KEY` are the supported form and must not match.
+stale_env_keys=(
+  "GEMINI_API_KEY"
+  "DASHSCOPE_API_KEY"
 )
 
 cd "$ROOT_DIR"
@@ -43,6 +49,16 @@ for pattern in "${patterns[@]}"; do
   matches="$(rg -n --fixed-strings "$pattern" "${targets[@]}" 2>/dev/null || true)"
   if [[ -n "$matches" ]]; then
     echo "Found stale reference: $pattern"
+    echo "$matches"
+    echo
+    failures=1
+  fi
+done
+
+for env_key in "${stale_env_keys[@]}"; do
+  matches="$(rg -n "(^|[^A-Za-z0-9_])${env_key}=" "${targets[@]}" 2>/dev/null || true)"
+  if [[ -n "$matches" ]]; then
+    echo "Found stale reference: ${env_key}="
     echo "$matches"
     echo
     failures=1

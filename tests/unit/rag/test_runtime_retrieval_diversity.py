@@ -42,8 +42,10 @@ def testdiversify_results_can_be_disabled():
     assert [r["id"] for r in diversified] == ["a", "b"]
 
 
-def test_search_hypothetical_questions_only_returns_query_relevant_matches():
-    store = ChromaVectorStore(collection_name="test_hype_search")
+def test_search_hypothetical_questions_only_returns_query_relevant_matches(tmp_path):
+    store = ChromaVectorStore(
+        collection_name="test_hype_search", persist_directory=tmp_path / "chroma"
+    )
     store.clear()
     store.documents = {
         "ids": ["a", "b"],

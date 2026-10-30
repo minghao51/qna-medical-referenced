@@ -10,7 +10,19 @@ The application uses [Pydantic BaseSettings](https://docs.pydantic.dev/latest/co
 
 1. Environment variables (highest priority)
 2. `.env` file in the project root (encrypted with [dotenvx](https://dotenvx.com))
-3. Default values defined in `src/config/settings.py`
+3. `config/settings.yaml`
+4. Default values defined in `src/config/settings.py`
+
+**Environment variable names.** `Settings` is configured with `env_prefix="APP__"` and
+`env_nested_delimiter="__"`, so each variable mirrors the nested settings path in upper case:
+`llm.dashscope_api_key` → `APP__LLM__DASHSCOPE_API_KEY`, `api.api_keys` → `APP__API__API_KEYS`,
+`storage.collection_name` → `APP__STORAGE__COLLECTION_NAME`. There is **no** legacy flat-name
+mapping: names such as `DASHSCOPE_API_KEY`, `MODEL_NAME`, or `API_KEYS` are ignored; only the
+`APP__…` form has any effect.
+
+**Provider default.** `config/settings.yaml` ships `llm.provider: gemini`, so a Gemini API key
+(`APP__LLM__GEMINI_API_KEY`) is required unless you override the provider, e.g.
+`APP__LLM__PROVIDER=qwen` plus `APP__LLM__DASHSCOPE_API_KEY`.
 
 This project uses **dotenvx** for encrypted environment variable management. The `.env` file contains encrypted secrets and is safe to commit to version control.
 
@@ -20,10 +32,24 @@ See [`.context7/dotenvx-best-practices.md`](../.context7/dotenvx-best-practices.
 
 ### LLM Configuration
 
-#### `DASHSCOPE_API_KEY` (required)
+#### `APP__LLM__PROVIDER`
+**Default:** `gemini` (set in `config/settings.yaml`)
+
+Active LLM provider: `qwen`, `gemini`, `litellm`, or `pydantic-ai`.
+
+**When to change:**
+- Set to `qwen` to use DashScope/Qwen and then provide `APP__LLM__DASHSCOPE_API_KEY`
+- Leave as `gemini` for the shipped default, which requires `APP__LLM__GEMINI_API_KEY`
+
+#### `APP__LLM__GEMINI_API_KEY` (required unless provider is overridden)
 **Default:** (empty string)
 
-Alibaba Dashscope API key for Qwen text generation and embeddings.
+Google Gemini API key used when `llm.provider` is `gemini` (the shipped default) or when a Gemini judge model is selected.
+
+#### `APP__LLM__DASHSCOPE_API_KEY`
+**Default:** (empty string)
+
+Alibaba Dashscope API key for Qwen text generation and embeddings. Required when `llm.provider` is `qwen`.
 
 **How to get it:**
 1. Visit [Dashscope Console](https://dashscope-us.aliyuncs.com/)
@@ -37,7 +63,7 @@ Alibaba Dashscope API key for Qwen text generation and embeddings.
 - Rotate keys periodically for production
 - Use separate keys for development and production
 
-#### `MODEL_NAME`
+#### `APP__LLM__MODEL_NAME`
 **Default:** `qwen3.5-flash`
 
 Qwen model to use for text generation.
@@ -52,7 +78,7 @@ Qwen model to use for text generation.
 - Use `qwen-plus` or `qwen-max` for complex medical queries requiring more accuracy
 - Use `qwen3.5-flash` for faster responses in production
 
-#### `EMBEDDING_MODEL`
+#### `APP__LLM__EMBEDDING_MODEL`
 **Default:** `text-embedding-v4`
 
 Qwen model for generating text embeddings (vector representations).
@@ -61,7 +87,7 @@ Qwen model for generating text embeddings (vector representations).
 
 ### Storage Configuration
 
-#### `COLLECTION_NAME`
+#### `APP__STORAGE__COLLECTION_NAME`
 **Default:** `medical_docs`
 
 ChromaDB collection name for vector storage.
@@ -74,13 +100,13 @@ ChromaDB collection name for vector storage.
 **Example:**
 ```bash
 # Development collection
-COLLECTION_NAME=medical_docs_dev
+APP__STORAGE__COLLECTION_NAME=medical_docs_dev
 
 # Production collection
-COLLECTION_NAME=medical_docs_prod
+APP__STORAGE__COLLECTION_NAME=medical_docs_prod
 ```
 
-#### `DATA_DIR`
+#### `APP__STORAGE__DATA_DIR`
 **Default:** `data/raw`
 
 Directory for raw downloaded documents (HTML, PDF files).
@@ -91,10 +117,10 @@ Directory for raw downloaded documents (HTML, PDF files).
 
 **Note:** This directory is created automatically if it doesn't exist.
 
-#### `CHROMA_PERSIST_DIRECTORY`
-**Default:** `data/chroma`
+#### `APP__STORAGE__CHROMA_PERSIST_DIRECTORY`
+**Default:** `data/chroma-d11`
 
-Directory for persistent ChromaDB vector storage.
+Directory for persistent ChromaDB vector storage (the frozen D11 index by default).
 
 **When to change:**
 - When storing vectors on faster storage (SSD)
@@ -102,11 +128,11 @@ Directory for persistent ChromaDB vector storage.
 
 **Important:** This directory contains the vector index. Losing it requires re-indexing all documents.
 
-`VECTOR_DIR` still exists in Python as a backwards-compatible alias, but the environment variable to configure is `CHROMA_PERSIST_DIRECTORY`.
+`VECTOR_DIR` still exists in Python as a backwards-compatible alias, but the environment variable to configure is `APP__STORAGE__CHROMA_PERSIST_DIRECTORY`.
 
 ### Chat Configuration
 
-#### `MAX_MESSAGE_LENGTH`
+#### `APP__API__MAX_MESSAGE_LENGTH`
 **Default:** `2000`
 
 Maximum message length in characters.
@@ -123,21 +149,21 @@ Maximum message length in characters.
 
 ### API Configuration
 
-#### `ENVIRONMENT`
+#### `APP__APP__ENVIRONMENT`
 **Default:** `development`
 
 Runtime environment name. Use `development` or `test` for local work, and `staging` or `production` for internet-exposed deployments.
 
 Outside development/test, treat API keys as the default for any internal or privileged callers. If you expose a mostly anonymous public chat experience, keep the backend behind your own trusted proxy and rely on the anonymous chat limiter plus edge-layer controls rather than disabling rate limiting globally.
 
-#### `API_KEYS`
+#### `APP__API__API_KEYS`
 **Default:** (not set)
 
 Comma-separated list of valid API keys for client authentication.
 
 **Format:**
 ```bash
-API_KEYS=key1,key2,key3
+APP__API__API_KEYS=key1,key2,key3
 ```
 
 **How clients use it:**
@@ -159,28 +185,28 @@ curl -X POST http://localhost:8000/chat \\
 - Never reuse keys across applications
 - Rotate keys regularly
 - Use separate keys for different client types
-- Store keys in dotenvx: `dotenvx set API_KEYS "key1,key2"`
+- Store keys in dotenvx: `dotenvx set APP__API__API_KEYS "key1,key2"`
 
-#### `API_KEYS_JSON`
+#### `APP__API__API_KEYS_JSON`
 **Default:** (not set)
 
 Optional JSON array of richer API key records. This supports stable key IDs, hashed secrets, and metadata for ownership or revocation.
 
 **Format:**
 ```bash
-API_KEYS_JSON=[{"id":"frontend","key":"super-secret-key","owner":"web","role":"client","status":"active"}]
+APP__API__API_KEYS_JSON=[{"id":"frontend","key":"super-secret-key","owner":"web","role":"client","status":"active"}]
 ```
 
 You may provide either `key` or a SHA-256 `hash`.
 
 This is also the recommended format when you want stable key IDs or roles for a trusted demo/admin key.
 
-#### `CORS_ALLOWED_ORIGINS`
+#### `APP__API__CORS_ALLOWED_ORIGINS`
 **Default:** local development origins
 
 Comma-separated list of allowed frontend origins. For production, set this explicitly to the deployed frontend origin.
 
-#### `RATE_LIMIT_PER_MINUTE`
+#### `APP__API__RATE_LIMIT_PER_MINUTE`
 **Default:** `60`
 
 Maximum number of requests allowed per minute per client.
@@ -195,54 +221,62 @@ Maximum number of requests allowed per minute per client.
 - Set to `10` for strict rate limiting
 - Set to `0` to disable rate limiting (not recommended for production)
 
-#### `ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE`
+#### `APP__API__ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE`
 **Default:** `12`
 
-Maximum unauthenticated `POST /chat` requests allowed per minute for a single anonymous browser and IP pair.
+Maximum unauthenticated `POST /chat` requests allowed per minute for a single client IP.
 
 **What it does:**
-- Issues an anonymous browser cookie for `/chat` traffic when API key auth is not used
 - Applies a tighter limit to the expensive LLM-backed chat endpoint
-- Helps prevent one NATed office or school from forcing all anonymous users into the same bucket
+- Keys the bucket as `anon-chat:<client_ip>`; no anonymous browser cookie is issued
+- The client IP is the connection address, or `X-Forwarded-For` / `X-Real-IP` when `APP__API__TRUST_PROXY_HEADERS=true`
 
-#### `RATE_LIMIT_BYPASS_KEY_IDS`
+**Caveats:**
+- All users behind one NAT/shared IP share a single bucket, so raise the limit or add a shared frontend key for large shared networks
+- Enabling `APP__API__TRUST_PROXY_HEADERS` without a trusted proxy lets callers spoof the header and rotate the bucket
+
+#### `APP__API__RATE_LIMIT_BYPASS_KEY_IDS`
 **Default:** empty
 
 Comma-separated authenticated API key IDs that bypass the application rate limiter.
 
-Use this for trusted internal or demo “master” keys defined through `API_KEYS_JSON`.
+Use this for trusted internal or demo “master” keys defined through `APP__API__API_KEYS_JSON`.
 
-#### `RATE_LIMIT_BYPASS_ROLES`
+#### `APP__API__RATE_LIMIT_BYPASS_ROLES`
 **Default:** empty
 
 Comma-separated API key roles that bypass the application rate limiter.
 
-Use this only with `API_KEYS_JSON`, since plain `API_KEYS` values do not carry role metadata.
+Use this only with `APP__API__API_KEYS_JSON`, since plain `APP__API__API_KEYS` values do not carry role metadata.
 
-#### `ANONYMOUS_BROWSER_COOKIE_NAME`
+#### `APP__API__ANONYMOUS_BROWSER_COOKIE_NAME`
 **Default:** `anon_browser_id`
 
-Cookie name used for the anonymous browser identifier that supports `/chat` rate limiting.
+**Deprecated and unused.** Anonymous `/chat` rate limiting is keyed by client IP, so no
+anonymous browser cookie is issued or read. The setting is kept only so existing
+configuration files still parse; changing it has no effect.
 
-#### `CHAT_SESSION_COOKIE_NAME`
+#### `APP__API__CHAT_SESSION_COOKIE_NAME`
 **Default:** `chat_session_id`
 
 Cookie name used for the server-issued anonymous chat session.
 
-#### `CHAT_SESSION_COOKIE_MAX_AGE_SECONDS`
+#### `APP__API__CHAT_SESSION_COOKIE_MAX_AGE_SECONDS`
 **Default:** `2592000`
 
 Lifetime of the anonymous chat session cookie in seconds. The default is 30 days.
 
-#### `CHAT_HISTORY_TTL_SECONDS`
+#### `APP__API__CHAT_HISTORY_TTL_SECONDS`
 **Default:** `2592000`
 
 Retention window for file-backed anonymous chat history in seconds. Expired sessions are pruned during normal history reads and writes.
 
-#### `TRUST_PROXY_HEADERS`
+#### `APP__API__TRUST_PROXY_HEADERS`
 **Default:** `false`
 
 Whether to trust `X-Forwarded-For` and `X-Real-IP` when resolving the client IP address.
+Anonymous `/chat` rate limiting is keyed by that address, so this flag directly controls
+bucket identity.
 
 **When to set:**
 - Set to `true` only when the backend is behind your own trusted reverse proxy or load balancer
@@ -252,7 +286,7 @@ Whether to trust `X-Forwarded-For` and `X-Real-IP` when resolving the client IP 
 
 The evaluation pipeline supports LLM-as-a-judge evaluation via DeepEval framework.
 
-#### `JUDGE_MODEL_LIGHT`
+#### `APP__LLM__JUDGE_MODEL_LIGHT`
 **Default:** `qwen3.5-35b-a3b`
 
 Lightweight judge model for simple classification tasks (Clarity, Answer Relevancy).
@@ -262,7 +296,7 @@ Lightweight judge model for simple classification tasks (Clarity, Answer Relevan
 - Suitable for straightforward scoring tasks
 - Approximately 15x cheaper than heavyweight model
 
-#### `JUDGE_MODEL_HEAVY`
+#### `APP__LLM__JUDGE_MODEL_HEAVY`
 **Default:** `qwen3.5-flash`
 
 Heavyweight judge model for complex reasoning tasks (Factual Accuracy, Completeness, Clinical Relevance, Faithfulness).
@@ -272,7 +306,7 @@ Heavyweight judge model for complex reasoning tasks (Factual Accuracy, Completen
 - Better for nuanced clinical reasoning assessment
 - Higher cost but more accurate judgments
 
-#### `JUDGE_TEMPERATURE`
+#### `APP__LLM__JUDGE_TEMPERATURE`
 **Default:** `0.0`
 
 Temperature setting for judge models (0 = deterministic).
@@ -282,22 +316,19 @@ Temperature setting for judge models (0 = deterministic).
 - 0.0 ensures consistent, reproducible scores
 - Higher values (0.1-0.3) may be used for more nuanced evaluations
 
-#### `ENABLE_DEEPEVAL`
-**Default:** `false`
+#### `APP__LLM__JUDGE_PROVIDER`
+**Default:** (unset — falls back to `llm.provider`)
 
-Enable DeepEval framework for answer quality evaluation.
-
-**When to set:**
-- Set to `true` when running answer quality evaluations
-- Requires `--enable-deepeval` flag in eval pipeline
-- Automatically activates when using `--include-answer-eval`
+Optional provider override for judge models (`qwen`, `gemini`, `litellm`, `pydantic-ai`).
 
 ### Running Evaluation with DeepEval
+
+DeepEval answer-quality metrics are enabled per run through the `--include-answer-eval` CLI flag;
+there is no environment variable or `--enable-deepeval` flag for it.
 
 ```bash
 uv run python -m src.cli.eval_pipeline \
     --include-answer-eval \
-    --enable-deepeval \
     --top-k 5 \
     --dataset-path data/evals/golden_queries.json
 ```
@@ -312,7 +343,7 @@ Estimated cost: $0.70-2.10 per 100 queries.
 
 ### Retry Configuration
 
-#### `MAX_RETRIES`
+#### `APP__RETRY__MAX_RETRIES`
 **Default:** `3`
 
 Maximum number of retry attempts for failed LLM API calls.
@@ -333,14 +364,14 @@ Maximum number of retry attempts for failed LLM API calls.
 - Set to `5` for more resilience in production
 - Set to `1` for faster failure detection
 
-#### `RETRY_DELAY`
+#### `APP__RETRY__RETRY_DELAY`
 **Default:** `1.0`
 
 Initial retry delay in seconds before exponential backoff.
 
 **Formula:**
 ```
-delay = RETRY_DELAY * (2 ^ attempt_number)
+delay = retry.retry_delay * (2 ^ attempt_number)
 ```
 
 **When to adjust:**
@@ -352,81 +383,82 @@ delay = RETRY_DELAY * (2 ^ attempt_number)
 
 ### Production
 ```bash
-ENVIRONMENT=production
-DASHSCOPE_API_KEY=prod_key_secure_random
-MODEL_NAME=qwen-plus
-MAX_MESSAGE_LENGTH=4000
-MAX_RETRIES=5
-RETRY_DELAY=2.0
-RATE_LIMIT_PER_MINUTE=120
-API_KEYS_JSON=[{"id":"internal-dashboard","key":"replace-me","owner":"ops","role":"master","status":"active"}]
-RATE_LIMIT_BYPASS_KEY_IDS=internal-dashboard
-CORS_ALLOWED_ORIGINS=https://your-frontend.example.com
+APP__APP__ENVIRONMENT=production
+APP__LLM__PROVIDER=qwen
+APP__LLM__DASHSCOPE_API_KEY=prod_key_secure_random
+APP__LLM__MODEL_NAME=qwen-plus
+APP__API__MAX_MESSAGE_LENGTH=4000
+APP__RETRY__MAX_RETRIES=5
+APP__RETRY__RETRY_DELAY=2.0
+APP__API__RATE_LIMIT_PER_MINUTE=120
+APP__API__API_KEYS_JSON=[{"id":"internal-dashboard","key":"replace-me","owner":"ops","role":"master","status":"active"}]
+APP__API__RATE_LIMIT_BYPASS_KEY_IDS=internal-dashboard
+APP__API__CORS_ALLOWED_ORIGINS=https://your-frontend.example.com
 ```
 
 ### Testing
 ```bash
-ENVIRONMENT=test
-COLLECTION_NAME=medical_docs_test
-MAX_MESSAGE_LENGTH=1000
-RATE_LIMIT_PER_MINUTE=0
-MAX_RETRIES=1
-RETRY_DELAY=0.1
+APP__APP__ENVIRONMENT=test
+APP__STORAGE__COLLECTION_NAME=medical_docs_test
+APP__API__MAX_MESSAGE_LENGTH=1000
+APP__API__RATE_LIMIT_PER_MINUTE=0
+APP__RETRY__MAX_RETRIES=1
+APP__RETRY__RETRY_DELAY=0.1
 ```
 
 ## Troubleshooting
 
 ### Backend fails to start in production
 
-**Cause:** `ENVIRONMENT` is set to `staging` or `production` without configured API keys.
+**Cause:** `APP__APP__ENVIRONMENT` is set to `staging` or `production` without configured API keys.
 
-**Solution:** Set `API_KEYS` or `API_KEYS_JSON` before starting the API.
+**Solution:** Set `APP__API__API_KEYS` or `APP__API__API_KEYS_JSON` before starting the API.
 
 ### "Empty response from Qwen API" error
 
 **Cause:** API key is invalid or missing.
 
 **Solution:**
-1. Verify `DASHSCOPE_API_KEY` is set: `dotenvx get DASHSCOPE_API_KEY`
+1. Verify the key for the active provider is set: `dotenvx get APP__LLM__GEMINI_API_KEY` (default provider) or `dotenvx get APP__LLM__DASHSCOPE_API_KEY` when `APP__LLM__PROVIDER=qwen`
 2. Check the key is valid at [Dashscope Console](https://dashscope-us.aliyuncs.com/)
 3. Ensure the key has not been rotated or revoked
-4. Update key: `dotenvx set DASHSCOPE_API_KEY "new_key"`
+4. Update key: `dotenvx set APP__LLM__DASHSCOPE_API_KEY "new_key"`
 
 ### Rate limit errors during testing
 
-**Cause:** `RATE_LIMIT_PER_MINUTE` is too low for automated tests.
+**Cause:** `APP__API__RATE_LIMIT_PER_MINUTE` is too low for automated tests.
 
-**Solution:** Set `RATE_LIMIT_PER_MINUTE=0` in test environment to disable rate limiting.
+**Solution:** Set `APP__API__RATE_LIMIT_PER_MINUTE=0` in test environment to disable rate limiting.
 
 ### Slow responses
 
 **Cause:** Model is too slow or retry delays are too long.
 
 **Solutions:**
-1. Use `MODEL_NAME=qwen3.5-flash` for faster responses
-2. Reduce `MAX_RETRIES` to fail faster
-3. Reduce `RETRY_DELAY` for quicker retries
+1. Use `APP__LLM__MODEL_NAME=qwen3.5-flash` for faster responses
+2. Reduce `APP__RETRY__MAX_RETRIES` to fail faster
+3. Reduce `APP__RETRY__RETRY_DELAY` for quicker retries
 4. Check network latency to Dashscope API
 
 ### "Collection not found" error
 
-**Cause:** Vector index hasn't been built or `COLLECTION_NAME` is wrong.
+**Cause:** Vector index hasn't been built or `storage.collection_name` is wrong.
 
 **Solutions:**
 1. Run the ingestion pipeline to build the index:
    ```bash
    uv run python -m src.cli.ingest
    ```
-2. Verify `COLLECTION_NAME` matches the indexed collection
-3. Check `CHROMA_PERSIST_DIRECTORY` exists and contains index files
+2. Verify `APP__STORAGE__COLLECTION_NAME` matches the indexed collection
+3. Check `APP__STORAGE__CHROMA_PERSIST_DIRECTORY` exists and contains index files
 
 ### High API costs
 
-**Cause:** `MAX_MESSAGE_LENGTH` is too high or expensive model is used.
+**Cause:** `APP__API__MAX_MESSAGE_LENGTH` is too high or expensive model is used.
 
 **Solutions:**
-1. Reduce `MAX_MESSAGE_LENGTH` to truncate longer prompts
-2. Use `MODEL_NAME=qwen3.5-flash` instead of `qwen-plus`
+1. Reduce `APP__API__MAX_MESSAGE_LENGTH` to truncate longer prompts
+2. Use `APP__LLM__MODEL_NAME=qwen3.5-flash` instead of `qwen-plus`
 3. Implement caching for common queries
 4. Monitor usage and set up cost alerts
 
@@ -434,14 +466,14 @@ RETRY_DELAY=0.1
 
 Before deploying to production, ensure:
 
-- [ ] `DASHSCOPE_API_KEY` is set from environment variable, not in code
-- [ ] `ENVIRONMENT` is set correctly for the deployment
-- [ ] `API_KEYS` or `API_KEYS_JSON` is set for any internal/admin callers
-- [ ] `CORS_ALLOWED_ORIGINS` only includes trusted frontend origins
+- [ ] The provider API key (`APP__LLM__GEMINI_API_KEY` for the default provider, or `APP__LLM__DASHSCOPE_API_KEY` when `APP__LLM__PROVIDER=qwen`) is set from environment variable, not in code
+- [ ] `APP__APP__ENVIRONMENT` is set correctly for the deployment
+- [ ] `APP__API__API_KEYS` or `APP__API__API_KEYS_JSON` is set for any internal/admin callers
+- [ ] `APP__API__CORS_ALLOWED_ORIGINS` only includes trusted frontend origins
 - [ ] `.env.keys` file is **NEVER** committed to version control
 - [ ] `DOTENV_PRIVATE_KEY` is stored in secure vault (1Password, etc.)
-- [ ] `RATE_LIMIT_PER_MINUTE` is set to prevent abuse
-- [ ] `ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE` is set for public chat deployments
+- [ ] `APP__API__RATE_LIMIT_PER_MINUTE` is set to prevent abuse
+- [ ] `APP__API__ANONYMOUS_CHAT_RATE_LIMIT_PER_MINUTE` is set for public chat deployments
 - [ ] SSL/TLS is enabled for API endpoints
 - [ ] API keys are rotated regularly
 - [ ] Separate API keys for development and production

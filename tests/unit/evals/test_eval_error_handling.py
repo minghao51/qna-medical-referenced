@@ -18,6 +18,9 @@ import pytest
 
 from src.config.settings import settings
 
+# Every test here drives the real retrieval + DeepEval judge path.
+pytestmark = [pytest.mark.slow, pytest.mark.live_api]
+
 
 @pytest.fixture(autouse=True)
 def _force_qwen_provider(monkeypatch):

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import secrets
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 
 from fastapi import Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.app.logging import log_event
@@ -50,7 +50,21 @@ def get_connection():
 class SQLiteRateLimitBackend(RateLimitBackend):
     def __init__(self, window_seconds: int = 60):
         self.window_seconds = window_seconds
-        self._init_db()
+        # Schema setup is deferred to first use: constructing the backend (and
+        # therefore importing this module, which builds ``rate_limiter`` at
+        # import time) must not create or migrate the database file.
+        self._init_lock = threading.Lock()
+        self._initialized = False
+
+    def _ensure_initialized(self) -> None:
+        """Apply the schema/migration exactly once, safely across threads."""
+        if self._initialized:
+            return
+        with self._init_lock:
+            if self._initialized:
+                return
+            self._init_db()
+            self._initialized = True
 
     def _init_db(self) -> None:
         with get_connection() as conn:
@@ -84,6 +98,7 @@ class SQLiteRateLimitBackend(RateLimitBackend):
         conn.execute("DELETE FROM rate_limit_events WHERE occurred_at < ?", (cutoff,))
 
     def check(self, key: str, limit: int, now: int | None = None) -> RateLimitDecision:
+        self._ensure_initialized()
         if limit <= 0:
             return RateLimitDecision(True, limit, limit, 0)
         current = now or int(time.time())
@@ -144,9 +159,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         auth = getattr(request.state, "auth", None)
         rate_key, limit = self._build_rate_limit_key(request, auth)
         if limit <= 0:
-            response = await call_next(request)
-            self._attach_browser_cookie(request, response, auth)
-            return response
+            return await call_next(request)
         decision = await asyncio.to_thread(rate_limiter.backend.check, rate_key, limit)
         if not decision.allowed:
             log_event(
@@ -165,14 +178,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             response.headers["X-RateLimit-Limit"] = str(decision.limit)
             response.headers["X-RateLimit-Remaining"] = "0"
             response.headers["X-RateLimit-Reset"] = str(decision.retry_after)
-            self._attach_browser_cookie(request, response, auth)
             return response
 
         response = await call_next(request)
         response.headers["X-RateLimit-Limit"] = str(decision.limit)
         response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
         response.headers["X-RateLimit-Reset"] = "0"
-        self._attach_browser_cookie(request, response, auth)
         return response
 
     def _build_rate_limit_key(self, request: Request, auth) -> tuple[str, int]:
@@ -186,9 +197,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         limit = rate_limiter.requests_per_minute
 
         if request.url.path in ANONYMOUS_CHAT_PATHS:
-            browser_id = self._get_or_create_browser_id(request)
+            # Keyed on the server-derived client IP: the former anon_browser_id
+            # cookie was client-controlled and unsigned, so rotating it bypassed
+            # the limit. ``_get_client_ip`` honors trust_proxy_headers.
             limit = settings.api.anonymous_chat_rate_limit_per_minute
-            return f"anon-chat:{client_ip}:{browser_id}", limit
+            return f"anon-chat:{client_ip}", limit
 
         return f"ip:{client_ip}", limit
 
@@ -217,32 +230,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 return str(real_ip)
 
         return request.client.host if request.client else "unknown"
-
-    @staticmethod
-    def _get_or_create_browser_id(request: Request) -> str:
-        cookie_name = settings.api.anonymous_browser_cookie_name
-        browser_id = request.cookies.get(cookie_name)
-        if browser_id:
-            return str(browser_id)
-
-        browser_id = secrets.token_urlsafe(24)
-        request.state.rate_limit_browser_id = browser_id
-        return browser_id
-
-    @staticmethod
-    def _attach_browser_cookie(request: Request, response: Response, auth) -> None:
-        if auth or request.url.path not in ANONYMOUS_CHAT_PATHS:
-            return
-
-        browser_id = getattr(request.state, "rate_limit_browser_id", None)
-        if not browser_id:
-            return
-
-        response.set_cookie(
-            key=settings.api.anonymous_browser_cookie_name,
-            value=browser_id,
-            max_age=60 * 60 * 24 * 365,
-            httponly=True,
-            samesite="lax",
-            secure=not settings.is_development,
-        )

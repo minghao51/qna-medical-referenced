@@ -12,6 +12,17 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 
+def _expected_index_metadata() -> dict:
+    """Build metadata the no-build readiness gate expects for a frozen index.
+
+    Reuses the production helper so the synthetic store cannot drift from the
+    gate it is validated by.
+    """
+    from src.rag.index import _expected_index_metadata as expected
+
+    return expected()
+
+
 @pytest.fixture
 def lifecycle(monkeypatch, tmp_path):
     import src.config as config
@@ -87,7 +98,7 @@ def lifecycle(monkeypatch, tmp_path):
                     control.build_finished.set()
             self.documents = {
                 "contents": [] if control.cold else ["synthetic evidence"],
-                "index_metadata": {},
+                "index_metadata": _expected_index_metadata(),
             }
             self.last_indexing_stats = {}
 

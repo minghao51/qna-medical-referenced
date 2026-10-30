@@ -16,16 +16,94 @@ import logging
 import threading
 from typing import Any
 
-from src.config.context import get_runtime_state
+from src.config.context import RuntimeState, get_runtime_state
 from src.ingestion.indexing.chroma_store import (
     get_vector_store,
     get_vector_store_runtime_config,
 )
+from src.ingestion.indexing.store import build_collection_build_metadata
 from src.ingestion.pipeline import IngestionRunConfig, run_ingestion
 from src.ingestion.runtime_config import apply_runtime_config, build_experiment_runtime_config
 
 logger = logging.getLogger(__name__)
 _INITIALIZATION_LOCK = threading.Lock()
+
+# Provenance keys recorded at build time. Indexes built before provenance was
+# introduced lack them; warn instead of failing startup for those artifacts.
+_PROVENANCE_KEYS = ("source_snapshot_sha256",)
+
+# Fallback build-critical keys, used only when the build payload itself cannot
+# be produced (see ``_required_build_keys``). Provenance keys stay WARN-only,
+# but a map missing any required build key must fail closed instead of earning
+# validation credit.
+_REQUIRED_BUILD_KEYS = (
+    "embedding_model",
+    "embedding_batch_size",
+    "semantic_weight",
+    "keyword_weight",
+    "boost_weight",
+)
+
+# Validation credit for the no-build metadata gate. Tracked separately from
+# ``vector_store_initialized``: a permissive initialization (allow_build=True)
+# loads a populated index without checking its metadata, so it marks the store
+# initialized but must never earn validation credit. Credit is bound to both
+# the runtime signature and the concrete store instance, because the factory
+# can hand back a different store under an unchanged signature.
+_VALIDATED_SIGNATURE_ATTR = "vector_store_validated_signature"
+
+
+def _store_identity(vector_store: Any) -> int:
+    """Identity of the concrete store instance owning the validated index."""
+    return id(vector_store)
+
+
+def _validation_credit(state: RuntimeState) -> tuple[str, int] | None:
+    value = getattr(state, _VALIDATED_SIGNATURE_ATTR, None)
+    if (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and isinstance(value[0], str)
+        and isinstance(value[1], int)
+    ):
+        return value
+    return None
+
+
+def _expected_index_metadata() -> dict[str, Any]:
+    """Effective build metadata implied by the live configuration.
+
+    Starts from the same payload written at build time and overlays the
+    resolved vector-store runtime config, so extractor, chunking and
+    enrichment keys are compared on equal terms. When the raw corpus is
+    unavailable the source digest cannot be re-derived, but the rest of the
+    build configuration is still compared.
+    """
+    built = build_collection_build_metadata()
+    if built is None:
+        built = build_collection_build_metadata(include_source_digest=False) or {}
+    expected: dict[str, Any] = dict(built)
+    for key, value in get_vector_store_runtime_config().items():
+        if key == "index_metadata":
+            expected.update(dict(value or {}))
+        else:
+            expected[key] = value
+    return expected
+
+
+def _required_build_keys() -> tuple[str, ...]:
+    """Build keys a loaded index must record before it may earn credit.
+
+    Derived from the payload the index is certified with, i.e. the same build
+    metadata written at build time, with the corpus digest skipped (provenance
+    is WARN-only at startup). A newly added build key therefore becomes
+    required automatically. Runtime-only keys such as ``collection_name`` are
+    not part of that build payload and are never required here.
+    """
+    built = build_collection_build_metadata(include_source_digest=False)
+    if built is None:
+        return _REQUIRED_BUILD_KEYS
+    return tuple(key for key in built if key not in _PROVENANCE_KEYS)
 
 
 def _vector_store_runtime_signature() -> str:
@@ -87,6 +165,9 @@ def _initialize_vector_store(
         vector_store = get_vector_store()
 
         if rebuild:
+            # Drop validation credit first: a failed clear must not leave an
+            # index certified as verified while it is being replaced.
+            setattr(state, _VALIDATED_SIGNATURE_ATTR, None)
             vector_store.clear()
             with state._lock:
                 state.vector_store_initialized = False
@@ -94,24 +175,45 @@ def _initialize_vector_store(
 
         documents = vector_store.documents
         if documents.get("contents"):
-            if not allow_build:
-                expected = get_vector_store_runtime_config()
+            # Only validate until this store/config is known-good: the expected
+            # view re-derives the corpus digest, so re-checking it on every
+            # retrieval would hash the raw tree per request. Credit is recorded
+            # only by this gate, so a permissive load cannot grant it.
+            credit = (runtime_signature, _store_identity(vector_store))
+            if not allow_build and _validation_credit(state) != credit:
                 metadata = documents.get("index_metadata") or {}
-                metadata_keys = {
-                    "embedding_model": "embedding_model",
-                    "embedding_batch_size": "embedding_batch_size",
-                    "semantic_weight": "semantic_weight",
-                    "keyword_weight": "keyword_weight",
-                    "boost_weight": "boost_weight",
-                }
-                for config_key, metadata_key in metadata_keys.items():
-                    if metadata_key in metadata and metadata[metadata_key] != expected.get(
-                        config_key
-                    ):
-                        raise RuntimeError(
-                            "Existing index configuration does not match runtime settings; "
-                            "allow_build=False prevents rebuilding"
+                expected = _expected_index_metadata()
+                missing_required = [key for key in _required_build_keys() if key not in metadata]
+                mismatched = sorted(
+                    key
+                    for key, value in metadata.items()
+                    if key in expected and expected[key] != value
+                )
+                for key in _PROVENANCE_KEYS:
+                    if key not in metadata:
+                        logger.warning(
+                            "Existing index metadata is missing provenance key '%s'; "
+                            "the index predates provenance recording. Rebuild the index "
+                            "to record its source snapshot.",
+                            key,
                         )
+                if missing_required:
+                    collection_label = getattr(vector_store, "collection_name", "<unknown>")
+                    raise RuntimeError(
+                        "Existing index metadata is missing required build keys "
+                        f"({', '.join(missing_required)}) for collection "
+                        f"'{collection_label}'; it cannot be verified at startup. "
+                        "Use the frozen index "
+                        "(APP__STORAGE__CHROMA_PERSIST_DIRECTORY=data/chroma-d11) "
+                        "or rebuild with `python -m src.cli.ingest --force-rebuild`."
+                    )
+                if mismatched:
+                    raise RuntimeError(
+                        "Existing index configuration does not match runtime settings "
+                        f"({', '.join(mismatched)}); "
+                        "allow_build=False prevents rebuilding"
+                    )
+                setattr(state, _VALIDATED_SIGNATURE_ATTR, credit)
             with state._lock:
                 if not state.vector_store_initialized:
                     state.vector_store_initialized = True
@@ -207,7 +309,9 @@ async def initialize_runtime_index_async(
 
 
 def reset_runtime_index_state() -> None:
-    get_runtime_state().reset_vector_store_state()
+    state = get_runtime_state()
+    state.reset_vector_store_state()
+    setattr(state, _VALIDATED_SIGNATURE_ATTR, None)
 
 
 def get_runtime_status() -> dict[str, Any]:
@@ -236,6 +340,9 @@ def configure_runtime_for_experiment(experiment: dict[str, Any] | None = None) -
     state.retrieval_overrides = copy.deepcopy(dict(experiment.get("retrieval", {})))
     state.production_profile = None
     state.reset_vector_store_state()
+    # A reset runtime may be served by a different store instance, so any prior
+    # validation credit for the old store/config must be dropped as well.
+    setattr(state, _VALIDATED_SIGNATURE_ATTR, None)
     return {
         "ingestion": ingestion,
         "embedding_index": embedding_index,

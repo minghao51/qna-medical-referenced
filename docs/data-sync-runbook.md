@@ -65,7 +65,7 @@ are involved.
 ## Daily commands
 
 ```bash
-# Compare local vs R2 without transferring anything (safe, read-only)
+# Compare local vs R2 without transferring anything (read-only: sizes + SHA-256)
 uv run python scripts/manual/r2_sync.py --verify
 
 # Push local changes (new corpus files, refreshed artifacts)
@@ -81,10 +81,26 @@ uv run python scripts/manual/r2_sync.py --only review --upload
 Behaviour worth knowing:
 
 - **Idempotent.** A file is skipped when the remote size differs from the local
-  size by at most 100 bytes. Re-running either direction is safe.
-- **Download is atomic.** Each file lands as `<name>.r2part` and is then
-  `os.replace`d into position, so an interrupted run never leaves a truncated
-  file in place.
+  size by at most 100 bytes. Re-running either direction is safe. Transfer
+  decisions are size-only; no extra bytes are transferred to decide.
+- **Contained.** A remote key is only written under the selected sync set's
+  local directory. Keys carrying an absolute path, a `..` component, or a
+  directory marker are skipped and reported on stderr (`<set>: skipped unsafe
+  remote key: ...`), and the resolved destination must stay inside the sync
+  root, so `raw/../../.env` can never escape it.
+- **Download is atomic and self-cleaning.** Each file lands as `<name>.r2part`
+  and is then `os.replace`d into position, so an interrupted run never leaves a
+  truncated file in place. A failed transfer removes its `.r2part` temp file,
+  leftovers from an earlier interrupted run are deleted before a download
+  starts, and `*.r2part` files are excluded from local enumeration, so a
+  leftover partial file is never uploaded.
+- **`--verify` hashes size-equal pairs.** After the size check, objects whose
+  local and remote sizes are exactly equal are compared by SHA-256, so
+  same-size content drift is reported as `checksum_mismatch` instead of being
+  hidden by the size tolerance. Pairs within the 100-byte tolerance but of
+  unequal size are still counted as `ok` without an extra read. Verification is
+  therefore slower than before (one read per size-equal file) but remains
+  strictly read-only: nothing is written locally or in the bucket.
 - **Additive only.** Neither direction deletes objects. `--upload` does not
   prune, and download does not remove local files missing from R2.
 - **Fail-closed.** Missing configuration prints one line to stderr and exits 1
@@ -104,15 +120,18 @@ review: 3 transferred, 0 up-to-date, 0 remote-missing
 Steady state (`--verify`):
 
 ```text
-corpus: ok=6, missing_locally=0, missing_in_r2=0, size_mismatch=0
-raw: ok=121, missing_locally=0, missing_in_r2=0, size_mismatch=0
-review: ok=3, missing_locally=0, missing_in_r2=0, size_mismatch=0
-VERIFY OK: ok=130, missing_locally=0, missing_in_r2=0, size_mismatch=0
+corpus: ok=6, missing_locally=0, missing_in_r2=0, size_mismatch=0, checksum_mismatch=0
+raw: ok=121, missing_locally=0, missing_in_r2=0, size_mismatch=0, checksum_mismatch=0
+review: ok=3, missing_locally=0, missing_in_r2=0, size_mismatch=0, checksum_mismatch=0
+VERIFY OK: ok=130, missing_locally=0, missing_in_r2=0, size_mismatch=0, checksum_mismatch=0
 ```
 
 Counters mean: `missing_in_r2` = local work not yet backed up; `missing_locally`
 = remote objects not present here (relevant before a restore); `size_mismatch` =
-same key, different size — investigate before trusting either side.
+same key, different size — investigate before trusting either side;
+`checksum_mismatch` = same key, same size, different bytes (silent drift or
+corruption) — do not upload or download over it until you know which side is
+correct.
 
 ## Move to another setup
 
@@ -140,11 +159,31 @@ Follow this order; steps 5–6 are what prove the move worked.
    ```
 
 4. **Point the app at the restored store.** The committed default
-   (`storage.chroma_persist_directory`) is `data/chroma`, which stays empty. Set:
+   (`storage.chroma_persist_directory`) is already `data/chroma-d11`, the frozen D11
+   store downloaded in step 3, so no override is needed. Override only if you keep
+   the store elsewhere:
 
    ```bash
    APP__STORAGE__CHROMA_PERSIST_DIRECTORY=data/chroma-d11
    ```
+
+   Cross-encoder reranking is **opt-in** and is *not* part of the served default
+   (`production.production_profile: baseline`). Selecting
+   `APP__PRODUCTION__PRODUCTION_PROFILE=baseline_cross_encoder` requires the
+   `reranking` dependency group (`uv sync --group reranking`; the default image
+   installs `--no-dev` and therefore omits it) plus the local reranker model assets
+   (`retrieval.reranker_model`). Serving profiles never rename the collection: the
+   frozen `medical_docs` name is preserved, and only experiment runs derive their
+   own suffixed collections.
+
+   **Recorded deviation:** the shipped served profile changed from
+   `baseline_cross_encoder` to `baseline` as part of this deployment-contract work
+   (approved in the fix plan), because the default image installs no optional
+   dependency groups and ships no reranker assets, so a cross-encoder default
+   cannot serve as shipped. `baseline_cross_encoder` remains available opt-in with
+   `uv sync --group reranking` plus provisioned local assets. This deviation is
+   recorded here for the owner to ratify in the migration decision register
+   (`docs/plans/migration/decisions.md`).
 
 5. **Verify the frozen identity** — the fingerprints must match the committed
    record (`docs/plans/migration/20261021-d11-frozen-embedding-index-identity.json`):
@@ -187,12 +226,20 @@ Follow this order; steps 5–6 are what prove the move worked.
 | `SignatureDoesNotMatch` | Wrong secret for the access key id, or credentials from a different account |
 | `AccessDenied` / `NoSuchBucket` | Token not scoped to the configured bucket, or `R2_BUCKET` typo |
 | `size_mismatch` in verify | Same key with different bytes — inspect before uploading or downloading |
-| Downloads silently skip everything | Expected when sizes differ by ≤ 100 bytes; a genuine change of a few bytes is below the tolerance |
+| `checksum_mismatch` in verify | Same key, same size, different content — compare both copies before syncing; a re-run will not self-heal it |
+| `skipped unsafe remote key` on download | The bucket holds a key with an absolute path, `..` component, or directory marker; it is not written locally. Inspect the bucket rather than relaxing containment |
+| Downloads silently skip everything | Expected when sizes differ by ≤ 100 bytes; a genuine change of a few bytes is below the tolerance. Run `--verify` to catch same-size drift by checksum |
+| Startup: `Existing index metadata is missing required build keys (...)` | The selected index predates build-metadata/provenance recording and cannot be verified. Point `APP__STORAGE__CHROMA_PERSIST_DIRECTORY` at the frozen `data/chroma-d11` artifact (the shipped default) or rebuild with `python -m src.cli.ingest --force-rebuild` |
 
 ## Security and retention limits
 
 - Credentials live only in `.env` (mode `600`, gitignored). The tool prints
-  bucket/prefix names and counters — never keys, never the endpoint's account id.
+  bucket/prefix names and counters; credentials and the endpoint's account id are
+  never printed. The one deliberate exception is the `skipped unsafe remote key`
+  message: it includes a sanitized fragment of the *rejected* remote key (sync
+  prefix stripped, control characters replaced with `?`, length-capped) so a
+  hostile object name cannot inject terminal escapes or dump a long identifier.
+  Accepted keys themselves are never echoed.
 - Prefer a **bucket-scoped** token. A shared account-wide token can reach every
   bucket in the account and is a wider blast radius than this project needs.
 - **No versioning or lifecycle rule is configured** on the bucket. This runbook

@@ -166,7 +166,20 @@ Expanded benchmark snapshot:
 | HyPE / HyDE | `hype_10pct` | Same quality as `hype_disabled`, slightly faster |
 | Reranking | `cross_encoder_only` | `NDCG@K` 0.7205 vs 0.6813 baseline, `evidence_hit_rate` 0.1852 vs 0.0185 |
 
-The default served runtime now uses `baseline_cross_encoder`, which keeps baseline ingestion/indexing settings and enables cross-encoder reranking at retrieval time.
+The default served runtime profile is `baseline`, and it serves the frozen D11 index
+(`storage.chroma_persist_directory` = `data/chroma-d11`, collection `medical_docs`)
+read-only. Cross-encoder reranking is **opt-in**: select `baseline_cross_encoder` and
+install the `reranking` dependency group (`uv sync --group reranking`) plus the local
+reranker model assets; the default image build (`--no-dev`) does not include them.
+
+**Recorded deviation:** the shipped served profile changed from
+`baseline_cross_encoder` to `baseline` as part of this deployment-contract work
+(approved in the fix plan). The change is deliberate, not an accident of
+configuration drift: the default image installs no optional dependency groups and
+ships no reranker assets, so a cross-encoder default cannot serve as shipped.
+`baseline_cross_encoder` remains available opt-in with `uv sync --group reranking`
+plus provisioned local assets. This deviation is recorded here for the owner to
+ratify in the migration decision register (`docs/plans/migration/decisions.md`).
 
 ## API Surface
 

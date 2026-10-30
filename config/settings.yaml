@@ -70,7 +70,7 @@ llm:
 storage:
   collection_name: medical_docs  # ChromaDB collection name
   data_dir: data/raw             # Raw data directory (PDFs, HTML, markdown)
-  chroma_persist_directory: data/chroma  # Local ChromaDB storage path
+  chroma_persist_directory: data/chroma-d11  # Local ChromaDB storage path (frozen D11 index)
   chroma_server_host: ""         # ChromaDB server host (empty = local mode)
   chroma_server_port: 8000       # ChromaDB server port
 
@@ -167,4 +167,4 @@ wandb:
 # Production Configuration
 # =============================================================================
 production:
-  production_profile: baseline_cross_encoder  # Experiment profile for production deployment
+  production_profile: baseline  # Served profile; cross-encoder reranking is opt-in (see docs/data-sync-runbook.md)

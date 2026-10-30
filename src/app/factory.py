@@ -4,11 +4,17 @@ This module provides the application factory pattern for creating and
 configuring the FastAPI application. It sets up middleware, routes,
 lifecycle hooks, and CORS policies.
 
-Middleware Order (Important):
-    1. CORS - Handles cross-origin requests (must be first)
-    2. RateLimit - Enforces rate limiting per client
-    3. APIKey - Validates authentication
-    4. RequestID - Adds unique request IDs for tracing and must run outermost
+Middleware Order (Important, outermost to innermost):
+    1. CORS - Handles cross-origin requests; outermost so preflight and
+       auth-error responses still carry CORS headers
+    2. Request Lifecycle - Gates shutdown admission
+    3. RequestID - Adds unique request IDs for tracing
+    4. APIKey - Validates authentication
+    5. RateLimit - Enforces rate limiting per client
+    6. router
+
+Starlette wraps middleware in reverse registration order, so the middleware
+added last is the outermost layer.
 
 Example:
     Create a test application:
@@ -245,6 +251,19 @@ async def lifespan(app: FastAPI):
             if apply_production_profile(profile_name):
                 logger.info(f"Production profile applied: {profile_name}")
 
+        chroma_host = settings.storage.chroma_server_host.strip()
+        index_location = (
+            f"{chroma_host}:{settings.storage.chroma_server_port}"
+            if chroma_host
+            else str(settings.storage.chroma_persist_directory)
+        )
+        logger.info(
+            "Serving index: location=%s collection_name=%s production_profile=%s",
+            index_location,
+            settings.storage.collection_name,
+            profile_name or "none",
+        )
+
         # The worker warms the singleton off-loop. Shield/drain it on cancellation
         # so it cannot publish readiness after cleanup has reset the factory/state.
         initialization = asyncio.create_task(initialize_runtime_index_async(allow_build=False))
@@ -268,11 +287,12 @@ def create_app() -> FastAPI:
     Returns:
         FastAPI: Configured application instance ready to run
 
-    Middleware configuration:
+    Middleware configuration (outermost to innermost):
         - CORS: Allows requests from frontend dev servers
+        - Lifecycle: Rejects requests once shutdown has started
         - RequestID: Adds X-Request-ID header for tracing
-        - RateLimit: Limits requests to 60/minute per client
         - APIKey: Validates X-API-Key header if configured
+        - RateLimit: Limits requests to 60/minute per client
 
     Routes:
         - /health: Health check endpoint
@@ -293,7 +313,19 @@ def create_app() -> FastAPI:
     app.state.request_lifecycle = request_lifecycle
     app.state.telemetry = None
 
-    # CORS must be first middleware
+    # Registration order below is innermost-first: Starlette reverses it, so the
+    # last add_middleware call becomes the outermost layer.
+    # Rate limiting (prevents abuse)
+    app.add_middleware(RateLimitMiddleware)
+    # Authentication before rate-limit key selection
+    app.add_middleware(APIKeyMiddleware)
+    # Request tracking outside auth so errors also carry request ids
+    app.add_middleware(RequestIDMiddleware)
+    # Shutdown gate must reject requests before they reach app work.
+    app.add_middleware(_RequestLifecycleMiddleware, tracker=request_lifecycle)
+    # CORS registered last so it is outermost: preflight (which the API-key
+    # middleware would answer with 401) and auth-error responses carry the
+    # Access-Control-Allow-* headers the browser needs.
     # Allows frontend to communicate with backend during development
     # For production, update allow_origins with actual frontend domain
     app.add_middleware(
@@ -305,14 +337,6 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-Request-ID", "X-API-Key"],
     )
-    # Rate limiting (prevents abuse)
-    app.add_middleware(RateLimitMiddleware)
-    # Authentication before rate-limit key selection
-    app.add_middleware(APIKeyMiddleware)
-    # Request tracking outermost so errors also carry request ids
-    app.add_middleware(RequestIDMiddleware)
-    # Outermost gate: shutdown must reject requests before they reach app work.
-    app.add_middleware(_RequestLifecycleMiddleware, tracker=request_lifecycle)
 
     # Register route modules
     app.include_router(health_router)

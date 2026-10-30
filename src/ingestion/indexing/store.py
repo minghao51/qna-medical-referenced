@@ -183,7 +183,9 @@ def _corpus_source_digest(directory: Path) -> str:
         raise ValueError(f"Index build metadata source digest unavailable ({reason})") from None
 
 
-def build_collection_build_metadata(source_digest: str | None = None) -> dict[str, Any] | None:
+def build_collection_build_metadata(
+    source_digest: str | None = None, *, include_source_digest: bool = True
+) -> dict[str, Any] | None:
     """Build the collection metadata payload certified by the D11 snapshot validator.
 
     Every value comes from the live typed configuration (``settings`` plus
@@ -197,46 +199,59 @@ def build_collection_build_metadata(source_digest: str | None = None) -> dict[st
     honestly claim source provenance, so it is created without collection
     metadata instead of with an incomplete payload (the D11 builder fails
     closed on such stores anyway).
+
+    ``include_source_digest=False`` skips the corpus hash entirely and omits
+    ``source_snapshot_sha256``; startup checks use it to compare persisted
+    configuration when provenance cannot be re-derived.
     """
     # Function-local imports: the factory imports this module (import cycle)
     # and the chunking package pulls in the chunker core.
     from src.ingestion.indexing.factory import get_vector_store_runtime_config
     from src.ingestion.steps.chunking.config import get_source_chunk_configs
 
-    try:
-        resolved_source_digest = (
-            source_digest if source_digest is not None else _corpus_source_digest(DATA_RAW_DIR)
-        )
-    except (OSError, ValueError):
-        logger.debug("Raw corpus unavailable; creating collection without build metadata")
-        return None
+    resolved_source_digest: str | None = None
+    if include_source_digest:
+        try:
+            resolved_source_digest = (
+                source_digest if source_digest is not None else _corpus_source_digest(DATA_RAW_DIR)
+            )
+        except (OSError, ValueError):
+            logger.debug("Raw corpus unavailable; creating collection without build metadata")
+            return None
     runtime_config = get_vector_store_runtime_config()
-    return {
-        "source_snapshot_sha256": resolved_source_digest,
-        "embedding_model": settings.llm.embedding_model,
-        "embedding_batch_size": int(settings.llm.embedding_batch_size),
-        "semantic_weight": float(runtime_config["semantic_weight"]),
-        "keyword_weight": float(runtime_config["keyword_weight"]),
-        "boost_weight": float(runtime_config["boost_weight"]),
-        "page_classification_enabled": bool(settings.ingestion.page_classification_enabled),
-        "index_only_classified_pages": bool(settings.ingestion.index_only_classified_pages),
-        "html_extractor_mode": settings.ingestion.html_extractor_mode,
-        "html_extractor_strategy": settings.ingestion.html_extractor_strategy,
-        "pdf_extractor_strategy": settings.ingestion.pdf_extractor_strategy,
-        "pdf_table_extractor": settings.ingestion.pdf_table_extractor,
-        "structured_chunking_enabled": bool(settings.ingestion.structured_chunking_enabled),
-        "source_chunk_configs": json.dumps(
-            get_source_chunk_configs(), ensure_ascii=False, sort_keys=True
-        ),
-        "enable_hype": bool(settings.hype.enabled),
-        "hype_sample_rate": float(settings.hype.sample_rate),
-        "hype_max_chunks": int(settings.hype.max_chunks),
-        "hype_questions_per_chunk": int(settings.hype.questions_per_chunk),
-        "enable_keyword_extraction": bool(settings.enrichment.enable_keyword_extraction),
-        "enable_chunk_summaries": bool(settings.enrichment.enable_chunk_summaries),
-        "keyword_extraction_sample_rate": float(settings.enrichment.keyword_extraction_sample_rate),
-        "keyword_extraction_max_chunks": int(settings.enrichment.keyword_extraction_max_chunks),
-    }
+    payload: dict[str, Any] = {}
+    if resolved_source_digest is not None:
+        payload["source_snapshot_sha256"] = resolved_source_digest
+    payload.update(
+        {
+            "embedding_model": settings.llm.embedding_model,
+            "embedding_batch_size": int(settings.llm.embedding_batch_size),
+            "semantic_weight": float(runtime_config["semantic_weight"]),
+            "keyword_weight": float(runtime_config["keyword_weight"]),
+            "boost_weight": float(runtime_config["boost_weight"]),
+            "page_classification_enabled": bool(settings.ingestion.page_classification_enabled),
+            "index_only_classified_pages": bool(settings.ingestion.index_only_classified_pages),
+            "html_extractor_mode": settings.ingestion.html_extractor_mode,
+            "html_extractor_strategy": settings.ingestion.html_extractor_strategy,
+            "pdf_extractor_strategy": settings.ingestion.pdf_extractor_strategy,
+            "pdf_table_extractor": settings.ingestion.pdf_table_extractor,
+            "structured_chunking_enabled": bool(settings.ingestion.structured_chunking_enabled),
+            "source_chunk_configs": json.dumps(
+                get_source_chunk_configs(), ensure_ascii=False, sort_keys=True
+            ),
+            "enable_hype": bool(settings.hype.enabled),
+            "hype_sample_rate": float(settings.hype.sample_rate),
+            "hype_max_chunks": int(settings.hype.max_chunks),
+            "hype_questions_per_chunk": int(settings.hype.questions_per_chunk),
+            "enable_keyword_extraction": bool(settings.enrichment.enable_keyword_extraction),
+            "enable_chunk_summaries": bool(settings.enrichment.enable_chunk_summaries),
+            "keyword_extraction_sample_rate": float(
+                settings.enrichment.keyword_extraction_sample_rate
+            ),
+            "keyword_extraction_max_chunks": int(settings.enrichment.keyword_extraction_max_chunks),
+        }
+    )
+    return payload
 
 
 class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
@@ -423,8 +438,7 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
         self.clear()
 
         self._index_metadata = dict(payload.get("index_metadata", {}) or {})
-        if self._index_metadata:
-            self._collection.modify(metadata=self._index_metadata)
+        self._apply_index_metadata()
 
         normalized_metadatas = metadatas or [{} for _ in ids]
         non_empty_embeddings = bool(embeddings) and all(bool(vector) for vector in embeddings)
@@ -450,8 +464,20 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
         self._persist_legacy_snapshot()
 
     def _apply_index_metadata(self) -> None:
-        if self._index_metadata:
-            self._collection.modify(metadata=self._index_metadata)
+        """Overlay ``_index_metadata`` on the collection's persisted metadata.
+
+        ``collection.modify(metadata=...)`` replaces the whole metadata map
+        (Chroma has no merge), so writing a runtime-supplied partial overlay
+        directly used to drop frozen provenance keys such as
+        ``source_snapshot_sha256``. Merge onto the persisted view instead and
+        only write when the merged result actually differs; ``_index_metadata``
+        always reflects that merged view.
+        """
+        persisted = dict(self._collection.metadata or {})
+        merged = {**persisted, **self._index_metadata}
+        self._index_metadata = merged
+        if merged != persisted:
+            self._collection.modify(metadata=merged)
 
     def _tokenize(self, text: str) -> list[str]:
         return tokenize_text(text)
@@ -568,8 +594,17 @@ class ChromaVectorStore(HypotheticalQuestionSearchMixin, DocumentListingMixin):
         return embedding
 
     def set_index_metadata(self, metadata: dict[str, Any] | None = None) -> None:
+        """Authoritatively replace the collection's persisted metadata map.
+
+        This is the explicit restore path: ``migrate.py`` and legacy snapshot
+        restores stamp the source index's provenance and expect it verbatim, so
+        the supplied map is written as-is and persisted keys absent from it are
+        dropped on purpose. Partial runtime overlays keep MERGING into the
+        persisted metadata instead; those enter through the constructor or the
+        ``documents`` setter, which call ``_apply_index_metadata``.
+        """
         self._index_metadata = dict(metadata or {})
-        self._collection.modify(metadata=self._index_metadata)
+        self._collection.modify(metadata=dict(self._index_metadata))
         self._persist_legacy_snapshot()
 
     def add_documents(self, documents: list[dict], batch_size: int | None = None) -> dict:

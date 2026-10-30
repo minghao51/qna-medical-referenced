@@ -44,6 +44,8 @@ class ApiConfig(BaseModel):
     anonymous_chat_rate_limit_per_minute: int = 12
     rate_limit_bypass_key_ids: str = ""
     rate_limit_bypass_roles: str = ""
+    # Deprecated and unused: anonymous /chat limiting is keyed by client IP, so no
+    # browser cookie is issued. Kept only for backwards-compatible config parsing.
     anonymous_browser_cookie_name: str = "anon_browser_id"
     chat_session_cookie_name: str = "chat_session_id"
     chat_session_cookie_max_age_seconds: int = 2592000
@@ -87,7 +89,8 @@ class LLMConfig(BaseModel):
 class StorageConfig(BaseModel):
     collection_name: str = "medical_docs"
     data_dir: str = "data/raw"
-    chroma_persist_directory: str = "data/chroma"
+    # Matches config/settings.yaml: the frozen D11 index, not legacy data/chroma.
+    chroma_persist_directory: str = "data/chroma-d11"
     chroma_server_host: str = ""
     chroma_server_port: int = 8000
 
@@ -177,7 +180,8 @@ class WandbConfig(BaseModel):
 
 
 class ProductionConfig(BaseModel):
-    production_profile: str | None = "baseline_cross_encoder"
+    # Matches config/settings.yaml; cross-encoder reranking is opt-in.
+    production_profile: str | None = "baseline"
 
 
 class TelemetryConfig(BaseModel):

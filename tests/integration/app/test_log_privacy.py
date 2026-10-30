@@ -13,8 +13,10 @@ def test_429_does_not_log_browser_cookie_ip_or_forwarded_address(lifecycle, monk
     monkeypatch.setattr(control.settings.api, "trust_proxy_headers", True)
     browser = "synthetic-browser-secret-canary"
     address = "synthetic-patient-address-canary"
-    with TestClient(control.factory.create_app()) as client:
-        client.cookies.set(control.settings.api.anonymous_browser_cookie_name, browser)
+    # Anonymous limiting is keyed by client IP, so a fixed client address gives this
+    # test its own bucket without relying on the removed anon_browser_id cookie.
+    with TestClient(control.factory.create_app(), client=("10.20.0.1", 1234)) as client:
+        client.cookies.set("anon_browser_id", browser)
         headers = {"X-Forwarded-For": address}
         assert (
             client.post(

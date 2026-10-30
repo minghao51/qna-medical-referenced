@@ -26,11 +26,15 @@ HTTP interface built on FastAPI. Contains routes, middleware, schemas, and error
 | Security | `src/app/security.py` | API key validation (bcrypt + SHA256 legacy), `AuthContext`, deployment security checks |
 | Session | `src/app/session.py` | Anonymous chat session management via cookies |
 
-**Middleware execution order** (outermost to innermost):
-1. `CORSMiddleware` — cross-origin request handling
-2. `RateLimitMiddleware` — sliding-window rate limiting via SQLite
-3. `APIKeyMiddleware` — validates `X-API-Key` header
-4. `RequestIDMiddleware` — adds `X-Request-ID` header
+**Middleware execution order** (outermost to innermost, as registered in
+`src/app/factory.py`; Starlette reverses registration order, so the last
+`add_middleware` call is outermost):
+1. `CORSMiddleware` — cross-origin request handling; outermost so preflight (`OPTIONS`) responses and auth-error responses (e.g. a 401) still carry `Access-Control-Allow-*` headers
+2. `_RequestLifecycleMiddleware` — shutdown admission gate
+3. `RequestIDMiddleware` — adds `X-Request-ID` header
+4. `APIKeyMiddleware` — validates `X-API-Key` header
+5. `RateLimitMiddleware` — sliding-window rate limiting via SQLite
+6. router
 
 ### 2. Use Case Layer (`src/usecases/`)
 
@@ -208,9 +212,10 @@ deleted. The main chat flow calls `src/rag/runtime.py` and `src/usecases/chat.py
 User → Frontend (SvelteKit)
   → POST /chat (SSE streaming)
     → CORSMiddleware
-    → RateLimitMiddleware (sliding-window check via SQLite)
-    → APIKeyMiddleware (validate X-API-Key if configured)
+    → _RequestLifecycleMiddleware (shutdown admission gate)
     → RequestIDMiddleware (attach X-Request-ID)
+    → APIKeyMiddleware (validate X-API-Key if configured)
+    → RateLimitMiddleware (sliding-window check via SQLite)
     → chat route handler
       → ensure_chat_session (set/refresh anonymous session cookie)
       → stream_chat_message()

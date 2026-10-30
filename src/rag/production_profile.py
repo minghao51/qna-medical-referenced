@@ -111,7 +111,17 @@ def apply_production_profile(name: str | None = None) -> bool:
     from src.config.context import get_runtime_state
     from src.rag.index import configure_runtime_for_experiment
 
-    configure_runtime_for_experiment(profile)
+    # Serving reuses the frozen index, so a profile must not rename the
+    # collection. Strip the profile's collection keys before the runtime
+    # overlay; experiment runs still derive their own suffixed collections
+    # through src.experiments.config (load/resolve of the experiment file).
+    overlay = dict(profile)
+    embedding_index = dict(overlay.get("embedding_index") or {})
+    embedding_index.pop("collection_name", None)
+    embedding_index.pop("collection_name_suffix", None)
+    overlay["embedding_index"] = embedding_index
+
+    configure_runtime_for_experiment(overlay)
     get_runtime_state().production_profile = name
     logger.info("Applied production profile: %s", name)
     return True

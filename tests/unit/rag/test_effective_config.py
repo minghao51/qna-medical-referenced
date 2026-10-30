@@ -11,6 +11,17 @@ from src.rag.config import get_runtime_retrieval_config, resolve_retrieval_confi
 from src.usecases.runtime_config import get_runtime_config_view
 
 
+def _expected_index_metadata() -> dict:
+    """Build metadata the no-build readiness gate expects for a frozen index.
+
+    Reuses the production helper so the synthetic store cannot drift from the
+    gate it is validated by.
+    """
+    from src.rag.index import _expected_index_metadata as expected
+
+    return expected()
+
+
 @pytest.fixture(autouse=True)
 def isolated_runtime(monkeypatch):
     monkeypatch.setattr(context, "_state", context.RuntimeState())
@@ -108,6 +119,27 @@ def test_unknown_requested_profile_does_not_claim_to_be_applied(monkeypatch):
     assert get_runtime_config_view()["production_profile"] is None
 
 
+def test_serving_profile_preserves_the_configured_collection_name(monkeypatch):
+    monkeypatch.setattr(settings.storage, "collection_name", "medical_docs")
+
+    assert production_profile.apply_production_profile("baseline") is True
+
+    assert get_runtime_config_view()["production_profile"] == "baseline"
+    assert (
+        factory.ChromaVectorStoreFactory.get_runtime_config()["collection_name"] == "medical_docs"
+    )
+
+    # Experiment runs are unchanged: the registered profile keeps its derived
+    # suffixed collection and an experiment run still applies it.
+    registered = production_profile.get_production_profile("baseline")
+    assert registered["embedding_index"]["collection_name_suffix"] == "comprehensive_ablation"
+    index.configure_runtime_for_experiment(registered)
+    assert (
+        factory.ChromaVectorStoreFactory.get_runtime_config()["collection_name"]
+        == "medical_docs_comprehensive_ablation"
+    )
+
+
 @pytest.mark.parametrize(
     ("provider", "custom_litellm", "expected"),
     [
@@ -135,7 +167,10 @@ def retrieval_leaves(monkeypatch):
     class Store:
         def __init__(self, **kwargs):
             assert "indexing_features" not in kwargs
-            self.documents = {"contents": ["synthetic evidence"]}
+            self.documents = {
+                "contents": ["synthetic evidence"],
+                "index_metadata": _expected_index_metadata(),
+            }
             self.last_indexing_stats = {}
 
         def similarity_search_with_trace(self, query, *, top_k, search_mode):

@@ -528,25 +528,29 @@ paths:
       tags: [Evaluation]
       summary: Evaluate a single answer
       description: Evaluate one query-answer-context pair using DeepEval metrics (for debugging).
-      parameters:
-        - name: query
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The question or query text
-        - name: answer
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The generated answer to evaluate
-        - name: context
-          in: query
-          required: true
-          schema:
-            type: string
-          description: The retrieved context used to generate the answer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query, answer, context]
+              properties:
+                query:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: The question or query text
+                answer:
+                  type: string
+                  minLength: 1
+                  maxLength: 8000
+                  description: The generated answer to evaluate
+                context:
+                  type: string
+                  minLength: 1
+                  maxLength: 16000
+                  description: The retrieved context used to generate the answer
       responses:
         "200":
           description: Evaluation metrics
@@ -741,6 +745,9 @@ components:
         status:
           type: string
           example: "healthy"
+        ready:
+          type: boolean
+          example: true
         runtime:
           type: object
           additionalProperties: true
@@ -951,10 +958,13 @@ components:
               type: integer
             avg_hit_rate:
               type: number
+              nullable: true
             avg_mrr:
               type: number
+              nullable: true
             avg_latency_p50:
               type: number
+              nullable: true
         sources:
           type: object
           properties:
@@ -996,8 +1006,10 @@ components:
           type: object
           additionalProperties: true
         findings:
-          type: object
-          additionalProperties: true
+          type: array
+          items:
+            type: object
+            additionalProperties: true
         caching_bug_note:
           type: string
 

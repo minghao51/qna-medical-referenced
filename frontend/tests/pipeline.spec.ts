@@ -560,6 +560,18 @@ test.describe('Error Handling', () => {
 	});
 
 	test('New Chat clears messages', async ({ page }) => {
+		await page.route(/\/history/, async (route) => {
+			if (route.request().method() === 'DELETE') {
+				await route.fulfill({ status: 204, body: '' });
+				return;
+			}
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ history: [] })
+			});
+		});
+
 		await sendMessage(page, 'Test message');
 
 		await expect(page.locator('.message.user')).toBeVisible();

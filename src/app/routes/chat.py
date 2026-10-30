@@ -184,6 +184,8 @@ async def chat(
     response = Response()
     ensure_chat_session(request, response)
     headers = {k: v for k, v in dict(response.headers).items() if k.lower() != "content-length"}
+    headers["Cache-Control"] = "no-cache"
+    headers["X-Accel-Buffering"] = "no"
 
     return _ChatStreamingResponse(
         chat_stream_generator(request, payload, include_pipeline),

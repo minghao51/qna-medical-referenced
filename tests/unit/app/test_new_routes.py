@@ -2,14 +2,21 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from starlette.requests import Request
 
 from src.app.routes import config, documents, experiments, health
+from src.config.context import get_runtime_state
 
 
 def _make_request() -> Request:
-    scope = {"type": "http", "method": "GET", "path": "/documents", "headers": []}
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/documents",
+        "headers": [],
+        "app": FastAPI(),
+    }
     request = Request(scope)
     request.state.request_id = "test-request-id"
     return request
@@ -69,6 +76,12 @@ class TestGetConfig:
                 "enable_keyword_extraction": True,
                 "enable_chunk_summaries": False,
             },
+        )
+        state = get_runtime_state()
+        monkeypatch.setattr(
+            state,
+            "indexing_features",
+            {"enable_keyword_extraction": True, "enable_chunk_summaries": False},
         )
 
         req = _make_request()

@@ -50,10 +50,13 @@ async def test_litellm_judge_model_a_generate(monkeypatch):
 
 
 def test_get_light_model_returns_litellm_when_configured(monkeypatch):
+    from pydantic import SecretStr
+
     from src.evals.deepeval_models import settings as _settings
 
     monkeypatch.setattr(_settings.llm, "provider", "litellm")
     monkeypatch.setattr(_settings.llm, "judge_model_light_litellm", "google/gemma-4-31b-it")
+    monkeypatch.setattr(_settings.llm, "openrouter_api_key", SecretStr("test-key"))
 
     model = get_light_model()
     assert isinstance(model, LiteLLMJudgeModel)
@@ -62,10 +65,13 @@ def test_get_light_model_returns_litellm_when_configured(monkeypatch):
 
 
 def test_get_heavy_model_returns_litellm_when_configured(monkeypatch):
+    from pydantic import SecretStr
+
     from src.evals.deepeval_models import settings as _settings
 
     monkeypatch.setattr(_settings.llm, "provider", "litellm")
     monkeypatch.setattr(_settings.llm, "judge_model_heavy_litellm", "google/gemma-4-31b-it")
+    monkeypatch.setattr(_settings.llm, "openrouter_api_key", SecretStr("test-key"))
 
     model = get_heavy_model()
     assert isinstance(model, LiteLLMJudgeModel)
@@ -92,12 +98,15 @@ def test_get_heavy_model_returns_qwen_by_default(monkeypatch):
 
 
 def test_litellm_judge_model_preserves_openrouter_prefix(monkeypatch):
+    from pydantic import SecretStr
+
     from src.evals.deepeval_models import settings as _settings
 
     monkeypatch.setattr(_settings.llm, "provider", "litellm")
     monkeypatch.setattr(
         _settings.llm, "judge_model_light_litellm", "openrouter/google/gemma-4-31b-it"
     )
+    monkeypatch.setattr(_settings.llm, "openrouter_api_key", SecretStr("test-key"))
 
     model = get_light_model()
     assert model.model is model

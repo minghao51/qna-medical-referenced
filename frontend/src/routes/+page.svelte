@@ -33,6 +33,8 @@
 	let PipelinePanelComponent = $state<typeof import('$lib/components/PipelinePanel.svelte').default | null>(null);
 	let SourceDistributionChartComponent = $state<typeof import('$lib/components/SourceDistributionChart.svelte').default | null>(null);
 	let MarkdownRendererComponent = $state<typeof import('$lib/components/MarkdownRenderer.svelte').default | null>(null);
+	let activeStreamController: AbortController | null = null;
+	let requestGeneration = 0;
 
 	type RenderableSource = {
 		canonicalLabel: string;
@@ -99,6 +101,13 @@
 		}
 	}
 
+	function abortActiveStream() {
+		if (activeStreamController) {
+			activeStreamController.abort();
+			activeStreamController = null;
+		}
+	}
+
 	async function sendMessage() {
 		if (!input.trim() || loading) return;
 
@@ -110,6 +119,11 @@
 		input = '';
 		loading = true;
 		error = '';
+
+		const generation = ++requestGeneration;
+		abortActiveStream();
+		const controller = new AbortController();
+		activeStreamController = controller;
 
 		messages = [...messages, { role: 'user', content: userMessage, timestamp: Date.now() }];
 		await tick();
@@ -125,7 +139,12 @@
 
 		try {
 			const url = chatStreamUrl(includePipelineForSession);
-			const res = await fetch(url, chatFetchRequest(userMessage, url));
+			const res = await fetch(url, {
+				...chatFetchRequest(userMessage, url),
+				signal: controller.signal
+			});
+
+			if (generation !== requestGeneration) return;
 
 			if (!res.ok) {
 				throw new Error(await parseApiError(res));
@@ -142,6 +161,7 @@
 			while (true) {
 				const { done, value } = await reader.read();
 				if (done) break;
+				if (generation !== requestGeneration) return;
 
 				buffer += decoder.decode(value, { stream: true });
 				const lines = buffer.split('\n');
@@ -149,6 +169,7 @@
 
 				for (const line of lines) {
 					if (!line.startsWith('data: ')) continue;
+					if (generation !== requestGeneration) return;
 					const dataStr = line.slice(6);
 					try {
 						const data = JSON.parse(dataStr);
@@ -179,10 +200,18 @@
 				}
 			}
 		} catch (e) {
+			if (generation !== requestGeneration || controller.signal.aborted) {
+				return;
+			}
 			error = e instanceof Error ? e.message : 'Failed to send message.';
 			console.error(e);
 		} finally {
-			loading = false;
+			if (activeStreamController === controller) {
+				activeStreamController = null;
+			}
+			if (generation === requestGeneration) {
+				loading = false;
+			}
 		}
 	}
 
@@ -194,14 +223,23 @@
 	}
 
 	async function clearChat() {
-		messages = [];
-		loading = false;
-		showPipeline = false;
+		const generation = ++requestGeneration;
+		abortActiveStream();
+		error = '';
 		try {
 			await clearHistory();
 		} catch (e) {
+			if (generation !== requestGeneration) return;
+			loading = false;
+			error = e instanceof Error ? e.message : 'Failed to clear chat history.';
 			console.error('Failed to clear history on server:', e);
+			return;
 		}
+
+		if (generation !== requestGeneration) return;
+		messages = [];
+		loading = false;
+		showPipeline = false;
 	}
 
 	async function copyMessage(content: string, index: number) {
@@ -217,6 +255,10 @@
 	onMount(() => {
 		loadHistory();
 		loadHealth();
+		return () => {
+			requestGeneration += 1;
+			abortActiveStream();
+		};
 	});
 
 	function hasPipeline(message: Message): boolean {

@@ -11,6 +11,26 @@ object's size differs from the local size by at most 100 bytes (the housing
 convention), so re-running either direction only transfers what changed. A
 local file with no remote object is treated as "needs upload".
 
+Remote keys are confined to the selected sync set's local directory: keys with
+absolute paths, ``..`` components, or directory markers are skipped and
+reported, and the resolved destination must stay inside the sync root.
+Interrupted downloads are cleaned up: each file lands as ``<name>.r2part`` and
+is renamed into place only on success. A failed transfer removes its temp file,
+leftovers from an earlier interrupted run are removed before a download starts,
+and ``*.r2part`` files are excluded from local enumeration so they are never
+uploaded.
+
+``--verify`` is read-only and additionally compares SHA-256 digests of size-equal
+pairs, so same-size content drift is reported instead of hidden by the size
+tolerance. Verify is report-only by design: it prints ``VERIFY OK`` when every
+counter is zero and ``VERIFY MISMATCH`` (with the same counters) otherwise, and
+exits 0 in both cases. Investigate a mismatch before trusting either side.
+
+Remote-controlled keys are sanitized before they reach the terminal: the sync
+prefix is stripped, control characters are replaced, and the remainder is
+length-capped, so a hostile object name cannot inject terminal escapes or dump
+long identifiers.
+
 Exclusion policy: this script never syncs ``data/evals/cache``,
 ``rate_limits.db``, chat-history files, logs, or ``.env``. Those paths are
 simply not part of any sync set, so they are never enumerated or written.
@@ -27,6 +47,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -45,6 +66,14 @@ RAW_DIR = REPO_ROOT / "data" / "raw"
 REVIEW_DIR = REPO_ROOT / "data" / "evals" / "review"
 
 _SIZE_TOLERANCE_BYTES = 100
+
+# Temp-file suffix for atomic downloads; also excluded from local enumeration.
+_PARTIAL_SUFFIX = ".r2part"
+_CHECKSUM_CHUNK_BYTES = 1024 * 1024
+
+# Printed keys come from the bucket, so they are untrusted: cap the length and
+# replace non-printable characters before reporting them.
+_MAX_DISPLAY_KEY_CHARS = 120
 
 # Bounded transfer concurrency; boto3 S3 clients are thread-safe for the
 # operations used here (download_file / upload_file / list_objects_v2).
@@ -97,9 +126,74 @@ def _iter_local(prefix: str, local_dir: Path) -> list[tuple[Path, str]]:
     for path in sorted(local_dir.rglob("*")):
         if not path.is_file() or path.is_symlink():
             continue
+        if path.name.endswith(_PARTIAL_SUFFIX):
+            continue
         key = f"{prefix}/{path.relative_to(local_dir).as_posix()}"
         files.append((path, key))
     return files
+
+
+def _safe_local_path(prefix: str, local_dir: Path, key: str) -> Path | None:
+    """Resolve an R2 key under ``local_dir``; ``None`` when the key is unsafe.
+
+    Rejects keys that do not belong to the prefix, carry an absolute path, a
+    ``..`` component, or a directory marker (trailing slash). The resolved
+    destination must stay inside the resolved sync root, so symlinked parents
+    cannot redirect a write outside it.
+    """
+    prefix_root = f"{prefix}/"
+    if not key.startswith(prefix_root):
+        return None
+    relative = key[len(prefix_root) :]
+    if not relative or relative.endswith("/"):
+        return None
+    parts = Path(relative).parts
+    if not parts or Path(relative).is_absolute() or ".." in parts:
+        return None
+    root = local_dir.resolve()
+    target = (local_dir / relative).resolve()
+    if target == root or not target.is_relative_to(root):
+        return None
+    return target
+
+
+def _sanitize_key_for_display(key: str, prefix: str) -> str:
+    """Make a remote-controlled object key safe to print.
+
+    The sync prefix is already in the message, so it is stripped; remaining
+    control characters (including ANSI escapes) are replaced with ``?`` and the
+    result is capped at ``_MAX_DISPLAY_KEY_CHARS`` so an arbitrary bucket key
+    cannot manipulate the terminal or dump a long identifier.
+    """
+    prefix_root = f"{prefix}/"
+    displayed = key[len(prefix_root) :] if key.startswith(prefix_root) else key
+    cleaned = "".join(char if char.isprintable() else "?" for char in displayed)
+    if len(cleaned) > _MAX_DISPLAY_KEY_CHARS:
+        cleaned = cleaned[: _MAX_DISPLAY_KEY_CHARS - 3] + "..."
+    return cleaned
+
+
+def _sha256_local(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(_CHECKSUM_CHUNK_BYTES):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sha256_remote(s3: Any, bucket: str, key: str) -> str:
+    digest = hashlib.sha256()
+    body = s3.get_object(Bucket=bucket, Key=key)["Body"]
+    try:
+        while chunk := body.read(_CHECKSUM_CHUNK_BYTES):
+            digest.update(chunk)
+    finally:
+        # Streaming bodies hold an HTTP connection open; close it even when a
+        # read fails so the failure cannot leak the connection.
+        close = getattr(body, "close", None)
+        if callable(close):
+            close()
+    return digest.hexdigest()
 
 
 def _remote_sizes(s3: Any, bucket: str, prefix: str) -> dict[str, int]:
@@ -112,6 +206,15 @@ def _remote_sizes(s3: Any, bucket: str, prefix: str) -> dict[str, int]:
     return sizes
 
 
+def _remove_stale_partials(local_dir: Path) -> None:
+    """Delete ``*.r2part`` temp files left by an interrupted earlier run."""
+    if not local_dir.exists():
+        return
+    for path in local_dir.rglob(f"*{_PARTIAL_SUFFIX}"):
+        if path.is_file():
+            path.unlink(missing_ok=True)
+
+
 def _download_all(s3: Any, bucket: str, pending: list[tuple[Path, str, int]]) -> int:
     """Download each pending file atomically (temp file + os.replace)."""
     if not pending:
@@ -121,9 +224,13 @@ def _download_all(s3: Any, bucket: str, pending: list[tuple[Path, str, int]]) ->
     def _one(item: tuple[Path, str, int]) -> None:
         local_path, key, _size = item
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = local_path.parent / (local_path.name + ".r2part")
-        s3.download_file(bucket, key, str(tmp))
-        os.replace(tmp, local_path)
+        tmp = local_path.parent / (local_path.name + _PARTIAL_SUFFIX)
+        try:
+            s3.download_file(bucket, key, str(tmp))
+            os.replace(tmp, local_path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
     transferred = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -172,6 +279,7 @@ def _sync_set(
         "missing_locally": 0,
         "missing_in_r2": 0,
         "size_mismatch": 0,
+        "checksum_mismatch": 0,
     }
 
     if mode == "verify":
@@ -181,42 +289,55 @@ def _sync_set(
                 res["missing_in_r2"] += 1
             elif key not in local_by_key:
                 res["missing_locally"] += 1
-            elif abs(local_by_key[key].stat().st_size - remote_sizes[key]) > _SIZE_TOLERANCE_BYTES:
-                res["size_mismatch"] += 1
             else:
-                res["ok"] += 1
+                local_path = local_by_key[key]
+                local_size = local_path.stat().st_size
+                remote_size = remote_sizes[key]
+                if abs(local_size - remote_size) > _SIZE_TOLERANCE_BYTES:
+                    res["size_mismatch"] += 1
+                elif local_size == remote_size and _sha256_local(local_path) != _sha256_remote(
+                    s3, bucket, key
+                ):
+                    res["checksum_mismatch"] += 1
+                else:
+                    res["ok"] += 1
         return res
 
     if mode == "download":
+        _remove_stale_partials(local_dir)
         if not remote_sizes:
             res["remote_missing"] = len(local_by_key)
             return res
         pending: list[tuple[Path, str, int]] = []
         for key, size in sorted(remote_sizes.items()):
-            local_path = local_by_key.get(key)
-            if local_path is None:
-                rel = key.removeprefix(prefix + "/")
-                local_path = local_dir / rel
+            destination = _safe_local_path(prefix, local_dir, key)
+            if destination is None:
+                print(
+                    f"{prefix}: skipped unsafe remote key: "
+                    f"{_sanitize_key_for_display(key, prefix)}",
+                    file=sys.stderr,
+                )
+                continue
             if (
-                local_path.exists()
-                and abs(local_path.stat().st_size - size) <= _SIZE_TOLERANCE_BYTES
+                destination.exists()
+                and abs(destination.stat().st_size - size) <= _SIZE_TOLERANCE_BYTES
             ):
                 res["up_to_date"] += 1
             else:
-                pending.append((local_path, key, size))
+                pending.append((destination, key, size))
         res["remote_missing"] = sum(1 for key in local_by_key if key not in remote_sizes)
         res["transferred"] = _download_all(s3, bucket, pending)
         return res
 
     # upload
-    pending = []
+    pending_uploads: list[tuple[Path, str]] = []
     for path, key in local_files:
         size = path.stat().st_size
         if key in remote_sizes and abs(remote_sizes[key] - size) <= _SIZE_TOLERANCE_BYTES:
             res["up_to_date"] += 1
         else:
-            pending.append((path, key))
-    res["transferred"] = _upload_all(s3, bucket, pending)
+            pending_uploads.append((path, key))
+    res["transferred"] = _upload_all(s3, bucket, pending_uploads)
     return res
 
 
@@ -284,6 +405,7 @@ def main() -> int:
         "missing_locally": 0,
         "missing_in_r2": 0,
         "size_mismatch": 0,
+        "checksum_mismatch": 0,
     }
     for prefix, local_dir in sets:
         res = _sync_set(s3, bucket, args.mode, prefix, local_dir)
@@ -292,10 +414,12 @@ def main() -> int:
             totals["missing_locally"] += res["missing_locally"]
             totals["missing_in_r2"] += res["missing_in_r2"]
             totals["size_mismatch"] += res["size_mismatch"]
+            totals["checksum_mismatch"] += res["checksum_mismatch"]
             print(
                 f"{prefix}: ok={res['ok']}, missing_locally={res['missing_locally']}, "
                 f"missing_in_r2={res['missing_in_r2']}, "
-                f"size_mismatch={res['size_mismatch']}"
+                f"size_mismatch={res['size_mismatch']}, "
+                f"checksum_mismatch={res['checksum_mismatch']}"
             )
         else:
             print(
@@ -305,11 +429,20 @@ def main() -> int:
             )
 
     if args.mode == "verify":
-        print(
-            f"VERIFY OK: ok={totals['ok']}, missing_locally={totals['missing_locally']}, "
+        counters = (
+            f"ok={totals['ok']}, missing_locally={totals['missing_locally']}, "
             f"missing_in_r2={totals['missing_in_r2']}, "
-            f"size_mismatch={totals['size_mismatch']}"
+            f"size_mismatch={totals['size_mismatch']}, "
+            f"checksum_mismatch={totals['checksum_mismatch']}"
         )
+        drift = (
+            totals["missing_locally"]
+            + totals["missing_in_r2"]
+            + totals["size_mismatch"]
+            + totals["checksum_mismatch"]
+        )
+        # Report-only: drift is reported, not enforced, so the exit code stays 0.
+        print(f"{'VERIFY MISMATCH' if drift else 'VERIFY OK'}: {counters}")
     return 0
 
 

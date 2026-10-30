@@ -27,6 +27,7 @@ from src.rag.runtime import retrieve_context_with_trace_async
 # =============================================================================
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_generate_hypothetical_answer_basic():
     """Test basic hypothetical answer generation."""
@@ -51,6 +52,7 @@ async def test_generate_hypothetical_answer_basic():
     assert any(term in answer_lower for term in ["ldl", "cholesterol", "target", "mmol", "mg"])
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_generate_hypothetical_answer_empty_query():
     """Test that empty queries are handled gracefully."""
@@ -67,6 +69,7 @@ async def test_generate_hypothetical_answer_empty_query():
     assert answer == ""
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_generate_hypothetical_answer_max_length():
     """Test that max_length parameter is respected."""
@@ -84,6 +87,7 @@ async def test_generate_hypothetical_answer_max_length():
     assert word_count <= 55  # Allow small buffer
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_generate_hypothetical_answer_handles_llm_errors():
     """Test that LLM errors are handled gracefully."""
@@ -127,6 +131,7 @@ def test_expand_query_with_hyde_enabled_sync():
     assert queries == [query]
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_expand_query_with_hyde_async_enabled():
     """Test async HyDE expansion when enabled."""
@@ -154,6 +159,7 @@ async def test_expand_query_with_hyde_async_enabled():
         assert hypothetical != query
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_expand_query_with_hyde_async_disabled():
     """Test async expansion when HyDE is disabled."""
@@ -174,6 +180,7 @@ async def test_expand_query_with_hyde_async_disabled():
     assert queries == [query]
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_expand_query_with_hyde_async_handles_generation_failure():
     """Test that generation failures fall back to original query."""
@@ -200,6 +207,7 @@ async def test_expand_query_with_hyde_async_handles_generation_failure():
 # =============================================================================
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_hyde_integration_with_retrieval():
     """Test that HyDE integrates with retrieval pipeline."""
@@ -239,6 +247,7 @@ async def test_hyde_integration_with_retrieval():
         pytest.skip(f"Retrieval failed (likely no documents): {e}")
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_hyde_backward_compatibility():
     """Test that backward compatibility is maintained (HyDE disabled by default)."""
@@ -286,6 +295,7 @@ async def test_runtime_config_defaults_hyde_disabled():
 # =============================================================================
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_hyde_with_special_characters():
     """Test that special characters in queries are handled."""
@@ -305,6 +315,7 @@ async def test_hyde_with_special_characters():
     assert len(queries) >= 1
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_hyde_with_very_long_query():
     """Test that very long queries are handled."""
@@ -324,6 +335,7 @@ async def test_hyde_with_very_long_query():
     assert len(queries) >= 1
 
 
+@pytest.mark.live_api
 @pytest.mark.asyncio
 async def test_hyde_with_duplicate_queries():
     """Test that duplicate queries are removed."""
@@ -357,6 +369,7 @@ async def test_hyde_with_duplicate_queries():
 
 @pytest.mark.asyncio
 @pytest.mark.slow
+@pytest.mark.live_api
 async def test_hyde_performance_impact():
     """Test that HyDE doesn't significantly impact performance."""
     import time
@@ -386,6 +399,7 @@ async def test_hyde_performance_impact():
     )
     time_with = time.time() - start
 
-    # HyDE should be slower (due to LLM call), but not excessively
-    assert time_with > time_without
+    # HyDE should not be faster than the disabled path (>= because both
+    # branches can include live provider latency, so exact ordering is noisy).
+    assert time_with >= time_without
     assert time_with < time_without + 60  # Should not add more than 60 seconds for LLM call

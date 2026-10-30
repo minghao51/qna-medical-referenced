@@ -33,6 +33,7 @@ def _build_client(
     trust_proxy_headers: bool = False,
     rate_limit_bypass_key_ids: str = "",
     rate_limit_bypass_roles: str = "",
+    client_address: tuple[str, int] | None = None,
 ):
     monkeypatch.setattr("src.app.factory.validate_security_configuration", lambda: None)
     monkeypatch.setattr("src.app.factory.initialize_runtime_index_async", lambda: None)
@@ -44,7 +45,6 @@ def _build_client(
             "api_keys_json": None,
             "session_signing_secret": SecretStr("synthetic-session-signing-secret-for-tests"),
             "anonymous_chat_rate_limit_per_minute": anonymous_chat_rate_limit,
-            "anonymous_browser_cookie_name": "anon_browser_id",
             "chat_session_cookie_name": "chat_session_id",
             "chat_session_cookie_max_age_seconds": 3600,
             "trust_proxy_headers": trust_proxy_headers,
@@ -61,7 +61,11 @@ def _build_client(
         "src.app.middleware.rate_limit.rate_limiter",
         RateLimiter(requests_per_minute=rate_limit),
     )
-    return TestClient(app)
+    # Anonymous limiting is IP-keyed, so callers opt into a fixed client address
+    # to keep buckets deterministic between tests that share the SQLite backend.
+    if client_address is None:
+        return TestClient(app)
+    return TestClient(app, client=client_address)
 
 
 def test_chat_requires_valid_api_key(monkeypatch, tmp_path: Path):
@@ -78,6 +82,40 @@ def test_chat_requires_valid_api_key(monkeypatch, tmp_path: Path):
     assert invalid.status_code == 403
     assert missing.headers["X-Request-ID"]
     assert missing.json()["error"]["request_id"] == missing.headers["X-Request-ID"]
+
+
+def test_cors_preflight_on_chat_without_api_key(monkeypatch, tmp_path: Path):
+    """CORS is outermost, so preflight succeeds before the API-key middleware."""
+    client = _build_client(monkeypatch, tmp_path, api_keys="secret-key")
+
+    response = client.options(
+        "/chat",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert 200 <= response.status_code < 300
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "POST" in response.headers["access-control-allow-methods"]
+
+
+def test_auth_error_response_carries_cors_headers(monkeypatch, tmp_path: Path):
+    """A 401 raised by API-key auth still reaches the browser with CORS headers."""
+    client = _build_client(monkeypatch, tmp_path, api_keys="secret-key")
+
+    for method, path in (("POST", "/chat"), ("GET", "/history")):
+        response = client.request(
+            method,
+            path,
+            headers={"Origin": "http://localhost:5173"},
+            json={"message": "hello"} if method == "POST" else None,
+        )
+
+        assert response.status_code == 401, path
+        assert response.headers["access-control-allow-origin"] == "http://localhost:5173", path
 
 
 def test_chat_success_and_rate_limit_headers(monkeypatch, tmp_path: Path):
@@ -219,7 +257,7 @@ def test_evaluation_ablation_returns_consistent_error(monkeypatch, tmp_path: Pat
     assert response.json()["detail"] == "Failed to load ablation results"
 
 
-def test_anonymous_chat_rate_limit_scoped_by_browser_cookie(monkeypatch, tmp_path: Path):
+def test_anonymous_chat_rate_limit_scoped_by_client_ip(monkeypatch, tmp_path: Path):
     async def mock_stream_chat_message(**kwargs):
         yield (
             "ok",
@@ -242,6 +280,7 @@ def test_anonymous_chat_rate_limit_scoped_by_browser_cookie(monkeypatch, tmp_pat
         api_keys=None,
         rate_limit=50,
         anonymous_chat_rate_limit=2,
+        client_address=("10.10.0.1", 1234),
     )
 
     first = client.post("/chat", json={"message": "hello", "session_id": "s1"})
@@ -249,13 +288,69 @@ def test_anonymous_chat_rate_limit_scoped_by_browser_cookie(monkeypatch, tmp_pat
     third = client.post("/chat", json={"message": "blocked", "session_id": "s1"})
 
     assert first.status_code == 200
-    assert first.cookies.get("anon_browser_id")
     assert second.status_code == 200
     assert third.status_code == 429
+    # No anonymous browser cookie is issued any more.
+    assert "anon_browser_id" not in first.cookies
 
-    other_browser = TestClient(client.app)
-    fresh = other_browser.post("/chat", json={"message": "new browser", "session_id": "s2"})
+    other_ip = TestClient(client.app, client=("10.10.0.2", 1234))
+    fresh = other_ip.post("/chat", json={"message": "new client ip", "session_id": "s2"})
     assert fresh.status_code == 200
+
+
+def test_anonymous_chat_limit_not_bypassable_by_rotating_browser_cookie(
+    monkeypatch, tmp_path: Path
+):
+    """Regression: the old anon_browser_id cookie key let callers rotate past the limit."""
+
+    async def mock_stream_chat_message(**kwargs):
+        yield ("ok", {"done": True, "sources": [], "pipeline": None})
+
+    monkeypatch.setattr("src.app.routes.chat.stream_chat_message", mock_stream_chat_message)
+    client = _build_client(
+        monkeypatch,
+        tmp_path,
+        api_keys=None,
+        rate_limit=50,
+        anonymous_chat_rate_limit=2,
+        client_address=("10.11.0.1", 1234),
+    )
+
+    statuses = []
+    for index in range(4):
+        # Rotate the (now ignored) cookie on every request, as the bypass did.
+        client.cookies.set("anon_browser_id", f"rotated-browser-{index}")
+        response = client.post(
+            "/chat",
+            json={"message": "hello", "session_id": "s1"},
+        )
+        statuses.append(response.status_code)
+
+    assert statuses == [200, 200, 429, 429]
+
+
+def test_anonymous_chat_limit_applies_without_any_cookie(monkeypatch, tmp_path: Path):
+    """Same client IP and no cookies still hits the anonymous chat limit."""
+
+    async def mock_stream_chat_message(**kwargs):
+        yield ("ok", {"done": True, "sources": [], "pipeline": None})
+
+    monkeypatch.setattr("src.app.routes.chat.stream_chat_message", mock_stream_chat_message)
+    client = _build_client(
+        monkeypatch,
+        tmp_path,
+        api_keys=None,
+        rate_limit=50,
+        anonymous_chat_rate_limit=2,
+        client_address=("10.12.0.1", 1234),
+    )
+
+    statuses = [
+        client.post("/chat", json={"message": "hello", "session_id": "s1"}).status_code
+        for _ in range(3)
+    ]
+
+    assert statuses == [200, 200, 429]
 
 
 def test_anonymous_chat_uses_forwarded_ip_when_proxy_headers_enabled(monkeypatch, tmp_path: Path):
@@ -282,6 +377,7 @@ def test_anonymous_chat_uses_forwarded_ip_when_proxy_headers_enabled(monkeypatch
         rate_limit=50,
         anonymous_chat_rate_limit=1,
         trust_proxy_headers=True,
+        client_address=("10.13.0.1", 1234),
     )
 
     first = client.post(
@@ -328,6 +424,7 @@ def test_anonymous_chat_limit_still_applies_when_global_limit_disabled(monkeypat
         api_keys=None,
         rate_limit=0,
         anonymous_chat_rate_limit=1,
+        client_address=("10.14.0.1", 1234),
     )
 
     first = client.post("/chat", json={"message": "hello", "session_id": "s1"})
@@ -352,8 +449,10 @@ def test_chat_history_isolated_by_server_session_cookie(monkeypatch, tmp_path: P
         "src.app.routes.chat.stream_chat_message",
         mock_stream_chat_message,
     )
-    client_a = _build_client(monkeypatch, tmp_path, api_keys=None, rate_limit=50)
-    client_b = TestClient(client_a.app)
+    client_a = _build_client(
+        monkeypatch, tmp_path, api_keys=None, rate_limit=50, client_address=("10.15.0.1", 1234)
+    )
+    client_b = TestClient(client_a.app, client=("10.15.0.2", 1234))
 
     first = client_a.post("/chat", json={"message": "hello", "session_id": "shared-client-value"})
     second = client_b.post("/chat", json={"message": "hello", "session_id": "shared-client-value"})

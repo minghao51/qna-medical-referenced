@@ -194,6 +194,7 @@ def test_none_query_handling():
     assert sources == []
 
 
+@pytest.mark.live_api
 def test_negative_top_k_validation():
     """Test that negative top_k values are handled."""
     from src.rag.runtime import retrieve_context
@@ -218,6 +219,7 @@ def test_empty_string_query():
     assert sources == []
 
 
+@pytest.mark.live_api
 def test_invalid_retrieval_options():
     """Test that invalid retrieval options don't crash."""
     from src.rag.runtime import retrieve_context
