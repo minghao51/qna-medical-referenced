@@ -45,6 +45,7 @@ This folder is organized by purpose, not by chronology.
 Active design documents:
 
 - [Multi-harness migration planning package](plans/migration/README.md) — Implementation spec, phased plan, decision register, and environment/API-key guide
+- [Audit follow-ups (2026-10-30)](plans/migration/20261030-audit-followups.md) — Open items after the `d6d3455` hardening commit: profile ratification, admin authorization, read-only boot, contract drift, and test hygiene
 - [Phase 4 fresh-session pickup brief](plans/migration/20261021-phase4-pickup-brief.md) — Next work: Pydantic AI / Go MiMo capability spike; staged approvals, no live calls yet
 - [Auth preflight parity closure](plans/migration/20261021-auth-preflight-parity-handoff.md) — Latest verified implementation: legacy-hash/JSON-precedence readiness repaired; gate 1,814 ×2
 - [Offline hardening closure](plans/migration/20261021-offline-hardening-handoff.md) — HyDE logging repaired; review-context/API-key assessments complete; gate 1,794 ×2

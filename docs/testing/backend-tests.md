@@ -2,14 +2,45 @@
 
 This repo has three practical backend test modes:
 
-## Fast Feedback
+## Fast Feedback (offline, deterministic)
 
 ```bash
-uv run pytest
+uv run pytest -m "not slow and not live_api and not live_openrouter and not deepeval and not e2e_real_apis and not network"
 uv run ruff check .
 ```
 
-Use this for normal development. Many tests use fixtures and local state only.
+This is the gate CI should use and the one to use for normal development:
+roughly 50 seconds, no provider calls, no corpus or index required.
+A bare `uv run pytest` also works, but `tests/conftest.py` only auto-skips
+`live_api` tests; `slow` tests are still selected, so the run is much longer.
+
+## Why a run can appear to hang for hours
+
+Two independent effects:
+
+1. **Unmarked live-network tests.** Some "unit" tests drive real retrieval and
+   DeepEval judges (each 60–210 s) or construct a real provider client. If they
+   are not marked `live_api` or `slow`, a default run executes them.
+   All such tests are now marked; `tests/conftest.py` skips `live_api` unless
+   `RUN_LIVE_QWEN_TESTS=1`.
+2. **Orphaned process behind a pipe.** `timeout 600 uv run pytest ... | tail`
+   kills `uv`, but the pytest child keeps running and holds the pipe, so the
+   shell waits far longer than the timeout.
+
+Use a hard kill and a file redirect when bounding a run:
+
+```bash
+timeout -s KILL 900 uv run pytest -q > /tmp/pytest.log 2>&1; echo "exit=$?"
+```
+
+## Running live/slow tests deliberately
+
+```bash
+RUN_LIVE_QWEN_TESTS=1 uv run pytest -m "slow or live_api"
+```
+
+Live tests spend real provider quota and require the configured provider key
+(`APP__LLM__DASHSCOPE_API_KEY`, or the active provider's key).
 
 ## Ingestion-Dependent Tests
 
@@ -64,7 +95,10 @@ Tests are organized into three tiers:
 
 ## Environment Notes
 
-- Live-model behavior depends on `DASHSCOPE_API_KEY`.
-- Tests marked `live_api` require real API access.
+- Live-model behavior depends on the active provider's nested key
+  (`APP__LLM__DASHSCOPE_API_KEY`, `APP__LLM__GEMINI_API_KEY`, …). Flat names
+  such as `DASHSCOPE_API_KEY` are ignored: settings use `APP__` with `__` nesting.
+- Tests marked `live_api` require real API access and are skipped unless
+  `RUN_LIVE_QWEN_TESTS=1`.
 - ChromaDB store/search/migration tests run **offline** in CI with stubbed embeddings (deterministic vectors via the `fake_chroma_embeddings` fixture in `tests/integration/conftest.py`); NLTK stopwords resolve from a vendored copy in `tests/integration/fixtures/nltk_data`.
 - If retrieval-oriented tests fail because the index is missing, rebuild with `uv run python -m src.cli.ingest`.
