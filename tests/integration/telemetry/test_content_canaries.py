@@ -158,7 +158,12 @@ def _hosted_export_config() -> TelemetryConfig:
         retention_days=30,
         retention_approved=True,
         token=SecretStr("SYNTHETIC_TELEMETRY_TOKEN"),
-        shutdown_timeout_seconds=0.1,
+        # These tests assert content sanitation, not the bounded-lifecycle
+        # contract (covered in tests/unit/infra/test_telemetry_lifecycle.py and
+        # test_explicit_export_destination.py). A 100 ms budget raced the
+        # lifecycle thread hand-off under CPU contention and flipped aclose()
+        # to False; 1 s keeps the same seam with scheduling headroom.
+        shutdown_timeout_seconds=1.0,
     )
 
 
