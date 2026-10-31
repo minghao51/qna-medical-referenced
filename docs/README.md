@@ -44,6 +44,10 @@ This folder is organized by purpose, not by chronology.
 
 Active design documents:
 
+- [Maintainability agent handoff](plans/maintainability-agent-handoff.md) — Start here for the verified project/setup improvement plan; implementation requires approval
+- [Maintainability implementation specification](plans/maintainability-implementation-plan.md) — Sequenced work packages, contracts, acceptance gates, ownership and rollback
+- [Verified findings and corrections](plans/maintainability-verification.md) — Source evidence and corrections to the earlier review, including test/coverage counts
+
 - [Multi-harness migration planning package](plans/migration/README.md) — Implementation spec, phased plan, decision register, and environment/API-key guide
 - [Audit follow-ups (2026-10-30)](plans/migration/20261030-audit-followups.md) — Open items after the `d6d3455` hardening commit: profile ratification, admin authorization, read-only boot, contract drift, and test hygiene
 - [Phase 4 fresh-session pickup brief](plans/migration/20261021-phase4-pickup-brief.md) — Next work: Pydantic AI / Go MiMo capability spike; staged approvals, no live calls yet
