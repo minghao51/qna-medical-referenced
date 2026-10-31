@@ -102,3 +102,63 @@ from private history. Never run live tests merely to reproduce a long run.
 6. Updated plan checklist and docs/current-status links.
 
 Do not mark gated tasks done because their implementation was skipped.
+
+## Progress log
+
+### M0 — baseline reproduced (unchanged from verification)
+
+2,284 passed / 2 skipped / 117 deselected, 82% coverage, all static gates green.
+The run also proved the suite wrote project data (details under M1).
+
+### M1 — test opt-ins and data isolation (commit `4c8a35f`)
+
+- `tests/conftest.py` gates `live_api`, `live_openrouter` and `e2e_real_apis`
+  independently (2^3 matrix covered without provider calls).
+- Session-level mutation guard fingerprints the whole `data/` tree and fails the
+  run on any created/modified/removed file; `tests/unit/test_test_isolation_policy.py`
+  statically rejects unisolated `ChromaVectorStore(...)` constructions.
+- Tests that reached the real index, `data/processed` or `data/raw` are isolated.
+  The guard found three leaks that content hashes had hidden: the raw-corpus PDF
+  loader in two tests and the dataset builder, which rewrote ten artifacts with
+  identical bytes.
+- Placeholders replaced with real contracts: `download_with_retry` attempts and
+  terminal failure, `ArtifactStore` write failures leaving no residue, and two
+  offline artifact tests extracted from the live-marked eval module.
+
+### Data cleanup (not a commit; `data/` is gitignored)
+
+Removed the three test collections (`test_empty`, `test_embedding`,
+`test_source_metadata`) and six `/tmp`-sourced artifacts. Re-ran the offline
+identity builder: corpus identity (`data/raw`, 121 files) and index identity
+(`medical_docs`, 2,473 docs, fingerprint `a0dc5d29…`) match the recorded frozen
+identity exactly. Backup: `/tmp/cleanup-backup`. The local corpus no longer
+matches any earlier R2 upload; re-upload remains an owner decision.
+
+### M2 — command surface and coverage (commit `4d38a1e`)
+
+`scripts/check_backend.sh` (with `Makefile`) is the single source of the marker
+selection: `fast`, `offline`, `unit`, `integration`, `coverage`, `lint`,
+`smoke`, `frontend-check`, `frontend-test`. Coverage left pytest `addopts`; the
+coverage mode reports project-wide with an explicit 80% floor against a measured
+82% baseline. CI uses one offline coverage job plus smoke, attaches no secrets
+and has job timeouts. Shell-policy tests pin selection, quoting, exit codes and
+read-only lint.
+
+Measured after M1+M2: fast 2,315 passed / 1 skipped / 115 deselected (~41 s);
+offline 2,336 passed (~44 s); coverage 82% (floor 80); all of `data/` unchanged
+across every mode.
+
+### Also fixed: telemetry canary flake (commit `7a7815e`)
+
+The two hosted-export canary tests asserted `aclose()` against a 100 ms budget;
+under CPU contention the lifecycle thread hand-off exceeded it and returned
+False. Test budget is now 1 s, with the bounded-lifecycle contract still
+asserted by the blocking-exporter unit tests.
+
+### Still open
+
+M3 dependency-audit repair, M4 docs/config truth-sync, M5/M6 artifact
+containment and HTTP contracts, M7 frontend parser tests, M8/M9 extraction,
+M10 serving metadata, M11 strict sync integrity, M12 deployment hardening — all
+under their existing approval gates. R2 re-upload/re-freeze is a separate
+owner decision.
