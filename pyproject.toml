@@ -42,8 +42,6 @@ addopts = [
     "-ra",
     "--durations=10",
     "--import-mode=importlib",
-    "--cov=src",
-    "--cov-report=term-missing:skip-covered",
 ]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
