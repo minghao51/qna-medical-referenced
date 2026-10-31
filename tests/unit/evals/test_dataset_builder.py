@@ -5,7 +5,18 @@ import pytest
 
 pytestmark = pytest.mark.slow
 
+from src.evals import dataset_builder
 from src.evals.dataset_builder import build_retrieval_dataset, normalize_golden_queries
+
+
+@pytest.fixture(autouse=True)
+def _no_real_corpus(monkeypatch):
+    """Keep dataset construction off data/raw: these tests assert fixture/cache behaviour.
+
+    Reading the corpus also persisted PDF artifacts into data/processed, which the
+    session data guard (tests/conftest.py) rejects.
+    """
+    monkeypatch.setattr(dataset_builder, "get_documents", list)
 
 
 def _write_cached_run(
