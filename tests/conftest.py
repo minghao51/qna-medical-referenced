@@ -102,13 +102,11 @@ def pytest_collection_modifyitems(config, items):
         elif "/e2e/" in item.nodeid:
             item.add_marker(pytest.mark.e2e)
 
-    if LIVE_QWEN_ENABLED:
-        return
-
     skip_live = pytest.mark.skip(reason="Set RUN_LIVE_QWEN_TESTS=1 to run live Qwen API tests")
-    for item in items:
-        if "live_api" in item.keywords:
-            item.add_marker(skip_live)
+    if not LIVE_QWEN_ENABLED:
+        for item in items:
+            if "live_api" in item.keywords:
+                item.add_marker(skip_live)
 
     if not REAL_API_TESTS_ENABLED:
         skip_real_api = pytest.mark.skip(
@@ -189,3 +187,104 @@ def _ensure_live_openrouter_available():
         pytest.skip(_LIVE_OPENROUTER_PRECHECK)
 
     _LIVE_OPENROUTER_PRECHECK = "ok"
+
+
+# =============================================================================
+# Project-data mutation guard
+# =============================================================================
+#
+# Tests must isolate project data explicitly: they may read `data/` fixtures but
+# must never write it. The frozen index is synced as an immutable artifact and
+# the rest (processed/evals artifacts, chat history, rate-limit DB, raw corpus,
+# silver/gold layers) is runtime state, so a test that writes any of it has
+# silently changed project data.
+#
+# The guard fingerprints the whole `data/` tree at session start and fails the
+# session if anything was created, modified or removed. It never reads file
+# contents and never deletes anything. Deliberate data work (live provider
+# runs, fixture regeneration) disables it with QNA_TEST_DATA_GUARD=0 or an
+# opt-in flag.
+
+_DATA_GUARD_BASELINE: dict[str, tuple[int, int]] = {}
+
+
+def _data_guard_active(config) -> bool:
+    if os.environ.get("QNA_TEST_DATA_GUARD") == "0":
+        return False
+    if LIVE_QWEN_ENABLED or LIVE_OPENROUTER_ENABLED or REAL_API_TESTS_ENABLED:
+        return False
+    # Under xdist the controller observes every worker's writes; workers would
+    # only report their peers' mutations.
+    return not hasattr(config, "workerinput")
+
+
+def _data_fingerprint() -> dict[str, tuple[int, int]]:
+    from src.config.paths import DATA_DIR
+
+    fingerprint: dict[str, tuple[int, int]] = {}
+    if not DATA_DIR.exists():
+        return fingerprint
+    for path in DATA_DIR.rglob("*"):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        if path.is_file():
+            fingerprint[str(path)] = (stat.st_size, stat.st_mtime_ns)
+    return fingerprint
+
+
+def _data_changes(
+    before: dict[str, tuple[int, int]], after: dict[str, tuple[int, int]]
+) -> list[str]:
+    changes = [f"created {path}" for path in sorted(after.keys() - before.keys())]
+    changes += [f"removed {path}" for path in sorted(before.keys() - after.keys())]
+    changes += [
+        f"modified {path}"
+        for path in sorted(before.keys() & after.keys())
+        if before[path] != after[path]
+    ]
+    return changes
+
+
+def pytest_sessionstart(session) -> None:
+    if not _data_guard_active(session.config):
+        return
+    _DATA_GUARD_BASELINE.clear()
+    _DATA_GUARD_BASELINE.update(_data_fingerprint())
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if not _DATA_GUARD_BASELINE:
+        return None
+    before = dict(_DATA_GUARD_BASELINE)
+    _DATA_GUARD_BASELINE.clear()
+    changes = _data_changes(before, _data_fingerprint())
+    if not changes:
+        return None
+
+    shown = changes[:10]
+    message = [
+        "PROJECT DATA MUTATED BY TESTS: the offline suite must not write "
+        "project data under data/ (frozen index, processed/evals artifacts, "
+        "chat history, rate-limit DB, raw corpus, silver/gold layers).",
+        f"{len(changes)} change(s); first {len(shown)}:",
+    ]
+    message += [f"  - {change}" for change in shown]
+    message.append(
+        "Isolate the offending test: pass persist_directory=tmp_path / 'chroma' (or patch "
+        "settings.storage.chroma_persist_directory), and patch "
+        "src.ingestion.artifacts.DATA_PROCESSED_DIR for artifact writes. "
+        "Set QNA_TEST_DATA_GUARD=0 only for deliberate data work."
+    )
+    text = "\n".join(message)
+
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None:
+        reporter.write_line(text, red=True)
+    else:  # pragma: no cover - non-terminal runs
+        print(text)
+
+    if session.exitstatus == 0:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+    return session.exitstatus

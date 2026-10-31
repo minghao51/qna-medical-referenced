@@ -9,12 +9,13 @@ requires_live_api = pytest.mark.live_api
 
 class TestEmbedding:
     @pytest.fixture
-    def vector_store(self):
+    def vector_store(self, tmp_path):
         store = ChromaVectorStore(
             collection_name="test_embedding",
             semantic_weight=0.6,
             keyword_weight=0.2,
             boost_weight=0.2,
+            persist_directory=tmp_path / "chroma",
         )
         store.clear()
         yield store

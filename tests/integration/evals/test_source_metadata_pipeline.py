@@ -1,12 +1,18 @@
 import json
 
+from src.config import settings
 from src.evals.checks.l5_index import assess_l5_index_quality
 from src.ingestion.indexing.chroma_store import ChromaVectorStore
 
 
-def test_vector_store_preserves_source_metadata_and_l5_distributions(tmp_path):
+def test_vector_store_preserves_source_metadata_and_l5_distributions(tmp_path, monkeypatch):
     vector_dir = tmp_path / "vectors"
     vector_dir.mkdir()
+    # The L5 check opens its own store for the collection, so the settings-level
+    # persist directory (not only the constructor argument) must be isolated.
+    monkeypatch.setattr(
+        settings.storage, "chroma_persist_directory", str(tmp_path / "chroma-store")
+    )
     store = ChromaVectorStore(collection_name="test_source_metadata")
     store.embeddings_file = vector_dir / "test_source_metadata.json"
     store.clear()

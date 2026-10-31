@@ -30,7 +30,7 @@ def _set_html_extractor_strategy(strategy: str) -> None:
     get_runtime_state().html_extractor_strategy = strategy
 
 
-from src.ingestion.steps.load_pdfs import get_documents
+from src.ingestion.steps.load_pdfs import PDFLoader
 
 # =============================================================================
 # Network Failure Tests
@@ -39,22 +39,49 @@ from src.ingestion.steps.load_pdfs import get_documents
 
 @pytest.mark.asyncio
 async def test_network_timeout_with_retry():
-    """Test that network timeouts trigger retry logic."""
+    """Transient timeouts are retried by download_with_retry, which returns None
+    once all max_retries attempts are exhausted."""
+    from unittest.mock import AsyncMock
 
-    with patch("httpx.AsyncClient.get") as mock_get:
-        # Mock timeout on first attempt, success on second
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.content = b"%PDF-1.4\n%test content"
-        mock_response.headers = {"content-type": "application/pdf"}
+    import httpx
 
-        # First call times out, second succeeds
-        mock_get.side_effect = [Exception("Timeout"), mock_response]
+    from src.ingestion.steps._utils import download_with_retry
 
-        # Note: This test documents expected behavior - actual retry logic
-        # may be implemented at a different level
-        # For now, we verify the function handles the error gracefully
-        pytest.skip("Test is incomplete: no function under test is invoked")
+    url = "https://example.invalid/test.pdf"
+    request = httpx.Request("GET", url)
+    payload = b"%PDF-1.4\n%test content"
+
+    # One transient timeout, then success: 2 transport attempts, payload returned.
+    success = httpx.Response(200, content=payload, request=request)
+    transport = AsyncMock(
+        side_effect=[httpx.ReadTimeout("simulated timeout", request=request), success]
+    )
+    with (
+        patch("httpx.AsyncClient.get", new=transport),
+        patch("src.ingestion.steps._utils.asyncio.sleep", new=AsyncMock()) as fake_sleep,
+    ):
+        response = await download_with_retry(url, max_retries=3)
+
+    assert transport.await_count == 2
+    assert [call.args for call in transport.await_args_list] == [(url,), (url,)]
+    assert [call.args for call in fake_sleep.await_args_list] == [(1,)]  # 2**0, no real wait
+    assert response is not None
+    assert response.status_code == 200
+    assert response.content == payload
+
+    # Always-transient failure: exactly max_retries attempts, then None.
+    transport = AsyncMock(
+        side_effect=[httpx.ReadTimeout("always times out", request=request) for _ in range(3)]
+    )
+    with (
+        patch("httpx.AsyncClient.get", new=transport),
+        patch("src.ingestion.steps._utils.asyncio.sleep", new=AsyncMock()) as fake_sleep,
+    ):
+        response = await download_with_retry(url, max_retries=3)
+
+    assert transport.await_count == 3
+    assert [call.args for call in fake_sleep.await_args_list] == [(1,), (2,)]
+    assert response is None
 
 
 @pytest.mark.asyncio
@@ -102,8 +129,9 @@ def test_corrupted_pdf_handling():
             _ = len(reader.pages)
 
 
-def test_empty_html_handling():
+def test_empty_html_handling(tmp_path: Path, monkeypatch):
     """Test that empty HTML files are handled correctly."""
+    monkeypatch.setattr("src.ingestion.artifacts.DATA_PROCESSED_DIR", tmp_path / "processed")
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create empty HTML file
         empty_file = Path(tmpdir) / "empty.html"
@@ -136,17 +164,20 @@ def test_empty_markdown_handling():
 # =============================================================================
 
 
-def test_retrieval_with_empty_vector_store():
+def test_retrieval_with_empty_vector_store(tmp_path: Path):
     """Test that retrieval with empty vector store doesn't crash."""
-    with tempfile.TemporaryDirectory():
-        # Create empty vector store
-        store = ChromaVectorStore(collection_name="test_empty", embedding_model="text-embedding-v4")
+    # Create empty vector store
+    store = ChromaVectorStore(
+        collection_name="test_empty",
+        embedding_model="text-embedding-v4",
+        persist_directory=tmp_path / "chroma",
+    )
 
-        # Try search with no documents
-        results = store.similarity_search("test query", top_k=5, search_mode="semantic_only")
+    # Try search with no documents
+    results = store.similarity_search("test query", top_k=5, search_mode="semantic_only")
 
-        # Should return empty list, not crash
-        assert results == []
+    # Should return empty list, not crash
+    assert results == []
 
 
 def test_chunking_with_no_documents():
@@ -241,14 +272,19 @@ def test_invalid_retrieval_options():
 # =============================================================================
 
 
-def test_clear_error_messages_for_missing_files():
+def test_clear_error_messages_for_missing_files(tmp_path: Path, monkeypatch):
     """Test that missing file errors have clear messages."""
+    from src.ingestion.steps import load_pdfs
 
-    # This should work even if no PDFs exist
-    result = get_documents()
+    # Process an empty synthetic corpus: the real data/raw corpus is not a test
+    # fixture, and artifact persistence must never reach data/processed.
+    monkeypatch.setattr(load_pdfs, "persist_source_artifact", lambda artifact: None)
+    real_loader = PDFLoader
+    monkeypatch.setattr(load_pdfs, "PDFLoader", lambda: real_loader(tmp_path))
 
-    # Should return empty list, not crash
-    assert isinstance(result, list)
+    result = load_pdfs.get_documents()
+
+    assert result == []
 
 
 def test_api_key_error_messages():
@@ -393,8 +429,9 @@ class TestHTMLExtractorStrategy:
             _set_html_extractor_strategy(strategy)
             assert get_html_extractor_strategy() == strategy
 
-    def test_cascade_depth_written_to_artifact(self, tmp_path: Path):
+    def test_cascade_depth_written_to_artifact(self, tmp_path: Path, monkeypatch):
 
+        monkeypatch.setattr("src.ingestion.artifacts.DATA_PROCESSED_DIR", tmp_path / "processed")
         html_content = (
             "<html><head><title>Test</title></head><body><h1>Hello</h1><p>World</p></body></html>"
         )
@@ -414,7 +451,8 @@ class TestHTMLExtractorStrategy:
             assert isinstance(meta["cascade_depth"], int)
             assert "html_extractor_strategy" in meta
 
-    def test_selected_extractor_written_to_artifact(self, tmp_path: Path):
+    def test_selected_extractor_written_to_artifact(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("src.ingestion.artifacts.DATA_PROCESSED_DIR", tmp_path / "processed")
         html_content = "<html><body><p>Simple paragraph content here.</p></body></html>"
         test_html = tmp_path / "simple_page.html"
         test_html.write_text(html_content, encoding="utf-8")

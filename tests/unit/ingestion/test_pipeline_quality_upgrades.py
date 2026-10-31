@@ -119,7 +119,9 @@ def test_chunker_preserves_ingestion_source_metadata():
     assert chunks[0]["metadata"]["domain_type"] == "organization"
 
 
-def test_dataset_builder_filters_split_and_label_confidence(tmp_path: Path):
+def test_dataset_builder_filters_split_and_label_confidence(tmp_path: Path, monkeypatch):
+    # The synthetic builder reads the corpus; keep it off the real data/raw PDFs.
+    monkeypatch.setattr("src.evals.dataset_builder.get_documents", list)
     dataset_file = tmp_path / "dataset.json"
     dataset_file.write_text(
         """
@@ -158,6 +160,7 @@ def test_pdf_loader_marks_empty_pages_for_ocr(monkeypatch, tmp_path: Path):
 
     monkeypatch.setattr("src.ingestion.steps.load_pdfs.PdfReader", FakeReader)
     monkeypatch.setattr(PDFLoader, "_extract_with_pdfplumber", lambda self, path: [""])
+    monkeypatch.setattr("src.ingestion.artifacts.DATA_PROCESSED_DIR", tmp_path / "processed")
     pdf_path = tmp_path / "empty.pdf"
     pdf_path.write_bytes(b"%PDF-1.4\n")
 

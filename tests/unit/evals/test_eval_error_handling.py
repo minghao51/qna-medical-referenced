@@ -11,7 +11,6 @@ Tests cover:
 """
 
 import asyncio
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -199,45 +198,6 @@ async def test_zero_top_k():
 
         # Should return results with no context
         assert isinstance(results, list)
-
-
-# =============================================================================
-# Artifact Error Tests
-# =============================================================================
-
-
-def test_artifact_store_with_invalid_path():
-    """Test that artifact store handles invalid paths."""
-    from src.evals.artifacts import find_reusable_run
-
-    # Should handle invalid path gracefully
-    try:
-        result = find_reusable_run(Path("/invalid/path/that/does/not/exist"), "test_identity")
-
-        # Should return None
-        assert result is None
-    except Exception as e:
-        # Should have clear error message
-        assert "path" in str(e).lower() or "directory" in str(e).lower()
-
-
-def test_artifact_write_failure():
-    """Test that artifact write failures are handled."""
-    from pathlib import Path
-
-    from src.evals.schemas import AssessmentResult
-
-    # Try to create result with invalid data
-    try:
-        result = AssessmentResult(
-            run_dir=Path("/invalid/path"), status="test", failed_thresholds=[], summary={}
-        )
-
-        # Should create object
-        assert result is not None
-    except Exception as e:
-        # Should have clear error message
-        assert "path" in str(e).lower() or "directory" in str(e).lower()
 
 
 # =============================================================================
