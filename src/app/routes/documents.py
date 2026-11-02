@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.app.dependencies import get_vector_store
 from src.config.context import get_runtime_state
+from src.core.source_metadata import sanitize_external_url
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,9 @@ def list_documents(
         "limit": limit,
         "items": paged["items"],
         "source_type_counts": paged["source_type_counts"],
+        "global_source_type_counts": paged.get("global_source_type_counts", {}),
         "index_metadata": paged["index_metadata"],
+        "index_identity": paged.get("index_identity"),
     }
 
 
@@ -78,4 +81,17 @@ def get_document(doc_id: str, request: Request) -> dict[str, Any]:
 
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
-    return cast(dict[str, Any], result)
+
+    metadata = result.get("metadata") or {}
+    metadata = metadata if isinstance(metadata, dict) else {}
+    return {
+        **cast(dict[str, Any], result),
+        "canonical_label": metadata.get("canonical_label") or None,
+        "display_label": metadata.get("display_label") or None,
+        "logical_name": metadata.get("logical_name") or None,
+        "source_url": sanitize_external_url(metadata.get("source_url")),
+        "domain": metadata.get("domain") or None,
+        "source_type": metadata.get("source_type") or None,
+        "source_class": metadata.get("source_class") or None,
+        "page": metadata.get("page"),
+    }

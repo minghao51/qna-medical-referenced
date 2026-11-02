@@ -39,7 +39,6 @@
 			id={`tab-${tab.id}`}
 			role="tab"
 			aria-selected={activeTab === tab.id}
-			aria-controls={`panel-${tab.id}`}
 			tabindex={activeTab === tab.id ? 0 : -1}
 			class="tab-button"
 			class:active={activeTab === tab.id}
@@ -106,7 +105,14 @@
 	}
 
 	@media (max-width: 600px) {
+		.tab-nav {
+			flex-wrap: wrap;
+			overflow-x: visible;
+		}
+
 		.tab-button {
+			flex: 1 1 auto;
+			justify-content: center;
 			padding: 0.5rem 0.75rem;
 			font-size: 0.85rem;
 		}

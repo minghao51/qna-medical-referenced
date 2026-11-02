@@ -101,6 +101,7 @@ async function mockChatResponse(page: Page, includePipeline = true) {
 }
 
 async function sendMessage(page: Page, message: string) {
+	await page.locator('.chat-container[data-hydrated="true"]').waitFor();
 	const textarea = page.locator('textarea');
 	await textarea.click();
 	await textarea.evaluate(
@@ -123,10 +124,18 @@ async function expectAssistantResponse(page: Page) {
 	return assistant;
 }
 
+async function openPipeline(page: Page) {
+	const panel = page.locator('.pipeline-panel');
+	if (!(await panel.isVisible().catch(() => false))) {
+		await page.locator('.pipeline-btn').first().click();
+	}
+	await expect(panel).toBeVisible();
+}
+
 test.describe('Pipeline Visualization', () => {
 	test.beforeEach(async ({ page }) => {
 		await mockChatResponse(page, false);
-		await page.goto('/');
+		await page.goto('/ask');
 	});
 
 	test('pipeline toggle checkbox is visible', async ({ page }) => {
@@ -179,25 +188,22 @@ test.describe('Pipeline Visualization', () => {
 test.describe('Confidence Indicators', () => {
 	test.beforeEach(async ({ page }) => {
 		await mockChatResponse(page);
-		await page.goto('/');
+		await page.goto('/ask');
 		await page.locator('.pipeline-toggle input[type="checkbox"]').check();
 	});
 
-	test('confidence badge appears on assistant message with pipeline', async ({ page }) => {
+	test('recorded turn status and summary replace the confidence badge', async ({ page }) => {
 		await sendMessage(page, 'What is normal cholesterol?');
 		const assistant = await expectAssistantResponse(page);
 
-		// Pipeline button appears when pipeline is enabled
 		const pipelineBtn = page.locator('.pipeline-btn');
 		await expect(pipelineBtn).toBeVisible();
-
-		// Click to show pipeline
 		await pipelineBtn.click();
 
-		// Confidence badge in message header
-		const badge = assistant.locator('.confidence-badge');
-		await expect(badge).toBeVisible();
-		await expect(badge).toContainText(/High|Medium|Low/i);
+		await expect(assistant.locator('.turn-status')).toHaveText('Complete');
+		await expect(assistant.locator('.turn-summary')).toContainText('source entries');
+		await expect(assistant.locator('.turn-summary')).toContainText('Recorded trace available');
+		await expect(assistant.locator('.confidence-badge')).toHaveCount(0);
 	});
 
 	test('source quality indicators appear for sources', async ({ page }) => {
@@ -217,7 +223,7 @@ test.describe('Confidence Indicators', () => {
 test.describe('Pipeline Panel', () => {
 	test.beforeEach(async ({ page }) => {
 		await mockChatResponse(page);
-		await page.goto('/');
+		await page.goto('/ask');
 		// Enable pipeline toggle for these tests
 		await page.locator('.pipeline-toggle input[type="checkbox"]').check();
 	});
@@ -225,6 +231,29 @@ test.describe('Pipeline Panel', () => {
 	test('pipeline panel is hidden by default', async ({ page }) => {
 		const panel = page.locator('.pipeline-panel');
 		await expect(panel).not.toBeVisible();
+	});
+
+	test('pipeline panel is a named modal dialog with contained focus', async ({ page }) => {
+		await sendMessage(page, 'What is LDL?');
+		await expectAssistantResponse(page);
+		await openPipeline(page);
+
+		const dialog = page.getByRole('dialog', { name: 'Pipeline Details' });
+		await expect(dialog).toBeVisible();
+		expect(await dialog.evaluate((element) => element.matches(':modal'))).toBe(true);
+		expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden');
+
+		for (let index = 0; index < 12; index += 1) {
+			await page.keyboard.press('Tab');
+			expect(
+				await page.evaluate(() => Boolean(document.activeElement?.closest('.pipeline-panel')))
+			).toBe(true);
+		}
+
+		await page.keyboard.press('Escape');
+		await expect(dialog).not.toBeVisible();
+		await expect(page.locator('.pipeline-btn').first()).toBeFocused();
+		expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('visible');
 	});
 
 	test('pipeline button appears on assistant message when enabled', async ({ page }) => {
@@ -236,31 +265,35 @@ test.describe('Pipeline Panel', () => {
 		await expect(pipelineBtn).toContainText(/Show|Hide/);
 	});
 
-	test('pipeline panel is visible after sending message with pipeline', async ({ page }) => {
+	test('pipeline panel stays closed until the recorded trace is requested', async ({ page }) => {
 		await sendMessage(page, 'What is LDL?');
 		await expectAssistantResponse(page);
 
-		// Panel should be visible automatically since showPipeline is set to true after response
 		const panel = page.locator('.pipeline-panel');
+		await expect(panel).not.toBeVisible();
+		await page.locator('.pipeline-btn').first().click();
 		await expect(panel).toBeVisible({ timeout: 10000 });
 		await expect(panel).toContainText('Pipeline Details');
 	});
 
-	test('pipeline panel shows confidence breakdown', async ({ page }) => {
+	test('pipeline panel shows recorded diagnostics, not a confidence score', async ({ page }) => {
 		await sendMessage(page, 'What is HDL?');
 		await expectAssistantResponse(page);
 
+		await openPipeline(page);
 		const panel = page.locator('.pipeline-panel');
 		await expect(panel).toBeVisible({ timeout: 10000 });
 
-		await expect(page.locator('.confidence-header')).toBeVisible();
-		await expect(panel).toContainText('Overall Confidence');
-		await expect(page.locator('.confidence-breakdown')).toBeVisible();
+		await expect(page.locator('.recorded-summary')).toBeVisible();
+		await expect(panel).toContainText('Recorded pipeline evidence');
+		await expect(panel).not.toContainText('Overall Confidence');
+		await expect(page.locator('.confidence-breakdown')).toHaveCount(0);
 	});
 
 	test('pipeline panel shows flow diagram', async ({ page }) => {
 		await sendMessage(page, 'What is triglycerides?');
 		await expectAssistantResponse(page);
+		await openPipeline(page);
 
 		const flowDiagram = page.locator('.flow-diagram');
 		await expect(flowDiagram).toBeVisible({ timeout: 10000 });
@@ -270,6 +303,7 @@ test.describe('Pipeline Panel', () => {
 	test('pipeline panel shows retrieval stage details', async ({ page }) => {
 		await sendMessage(page, 'Explain cholesterol');
 		await expectAssistantResponse(page);
+		await openPipeline(page);
 
 		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
 		await expect(page.locator('.pipeline-panel')).toContainText('Retrieval');
@@ -279,6 +313,7 @@ test.describe('Pipeline Panel', () => {
 	test('pipeline panel shows context stage', async ({ page }) => {
 		await sendMessage(page, 'What are lipoproteins?');
 		await expectAssistantResponse(page);
+		await openPipeline(page);
 
 		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
 		await expect(page.locator('.pipeline-panel')).toContainText('Context Assembly');
@@ -288,6 +323,7 @@ test.describe('Pipeline Panel', () => {
 	test('pipeline panel shows generation stage', async ({ page }) => {
 		await sendMessage(page, 'What is heart disease?');
 		await expectAssistantResponse(page);
+		await openPipeline(page);
 
 		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
 		await expect(page.locator('.pipeline-panel')).toContainText('Generation');
@@ -297,13 +333,13 @@ test.describe('Pipeline Panel', () => {
 	test('pipeline panel can be toggled', async ({ page }) => {
 		await sendMessage(page, 'What is blood pressure?');
 		await expectAssistantResponse(page);
+		await openPipeline(page);
 
-		// Panel should be visible
+		// Panel is visible after requesting the recorded trace.
 		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
 
-		// Click the pipeline button to hide
-		const pipelineBtn = page.locator('.pipeline-btn');
-		await pipelineBtn.click();
+		// Close the modal; the background is inert while it is open.
+		await page.keyboard.press('Escape');
 
 		// Panel should be hidden now
 		await expect(page.locator('.pipeline-panel')).not.toBeVisible();
@@ -342,21 +378,22 @@ test.describe('Pipeline Panel', () => {
 		}
 	});
 
-	test('metric bars display correctly', async ({ page }) => {
+	test('panel exposes recorded fields instead of a confidence metric bar', async ({ page }) => {
 		await sendMessage(page, 'What is metabolic syndrome?');
 		await expectAssistantResponse(page);
+		await openPipeline(page);
 
-		await expect(page.locator('.pipeline-panel')).toBeVisible({ timeout: 10000 });
-
-		const metricBars = page.locator('.metric-bar');
-		await expect(metricBars.first()).toBeVisible();
+		const panel = page.locator('.pipeline-panel');
+		await expect(panel).toBeVisible({ timeout: 10000 });
+		await expect(panel.locator('.recorded-summary')).toBeVisible();
+		await expect(panel.locator('.metric-bar')).toHaveCount(0);
 	});
 });
 
 test.describe('Sources Display', () => {
 	test.beforeEach(async ({ page }) => {
 		await mockChatResponse(page);
-		await page.goto('/');
+		await page.goto('/ask');
 		// Enable pipeline to get sources
 		await page.locator('.pipeline-toggle input[type="checkbox"]').check();
 	});
@@ -551,7 +588,7 @@ test.describe('Chat with Pipeline Enabled', () => {
 test.describe('Error Handling', () => {
 	test.beforeEach(async ({ page }) => {
 		await mockChatResponse(page, false);
-		await page.goto('/');
+		await page.goto('/ask');
 	});
 
 	test('handles empty input gracefully', async ({ page }) => {
@@ -578,7 +615,7 @@ test.describe('Error Handling', () => {
 
 		await page.locator('button:has-text("New Chat")').click();
 
-		await expect(page.locator('.message')).not.toBeVisible();
+		await expect(page.locator('.message')).toHaveCount(0);
 		await expect(page.locator('.welcome')).toBeVisible();
 	});
 
@@ -601,7 +638,7 @@ test.describe('Error Handling', () => {
 
 test.describe('Navigation', () => {
 	test('can navigate to eval page', async ({ page }) => {
-		await page.goto('/');
+		await page.goto('/ask');
 		await page.goto('/eval');
 		await expect(page).toHaveURL(/eval/);
 	});

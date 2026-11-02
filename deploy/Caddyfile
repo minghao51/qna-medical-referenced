@@ -1,0 +1,34 @@
+# Ingress for the private Cloudflare Tunnel demo.
+#
+# - Only this container receives the plaintext operator API key.
+# - /api/* is proxied to the backend with the prefix stripped and the key added
+#   server-side, so the browser never holds a credential.
+# - Cloudflare Tunnel is the only path to this port; the host publishes nothing.
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	handle_path /api/* {
+		reverse_proxy backend:8000 {
+			header_up X-API-Key {$OPERATOR_API_KEY}
+			# Cloudflare Tunnel supplies the real client address; the backend
+			# only trusts these headers because no other path reaches it.
+			header_up X-Forwarded-For {http.request.header.Cf-Connecting-IP}
+			header_up X-Real-IP {http.request.header.Cf-Connecting-IP}
+			# Keep chat/SSE responses unbuffered.
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy frontend:5173
+	}
+}

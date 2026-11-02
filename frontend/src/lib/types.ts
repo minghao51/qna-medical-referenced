@@ -91,12 +91,15 @@ export interface PipelineTrace {
 	};
 }
 
+export type MessageStatus = 'pending' | 'complete' | 'incomplete' | 'error';
+
 export interface Message {
 	role: 'user' | 'assistant';
 	content: string;
 	sources?: Array<ChatSource | string>;
 	pipeline?: PipelineTrace;
 	timestamp?: number;
+	status?: MessageStatus;
 }
 
 export interface ApiErrorPayload {
@@ -446,16 +449,120 @@ export interface ExperimentConfigSummary {
 	name: string;
 	description: string;
 	variant_count: number;
-	primary_metric: string;
+	primary_metric: string | null;
 	has_results: boolean;
+	availability?: 'available' | 'error';
+	error?: string;
+}
+
+export type ResearchSchemaKind = 'legacy_feature_addition' | 'unsupported';
+
+export interface ExperimentArtifact {
+	report_id: string;
+	report_sha256: string | null;
+	schema_kind: ResearchSchemaKind;
+	availability: 'available' | 'unavailable';
+	config_ref: string | null;
+	config_binding: 'explicit_archive_association' | null;
+	case_records_availability: 'not_exposed_by_report_api';
+	comparable: false;
+}
+
+export type MetricDirection = 'higher' | 'lower' | 'neutral';
+export type MetricUnit = 'score' | 'ratio' | 'ms' | 'count' | 'number';
+export type MetricFamily =
+	| 'ranking_diagnostic'
+	| 'reviewed_evidence'
+	| 'answer_judgment'
+	| 'latency'
+	| 'measurement'
+	| 'unspecified';
+
+export interface MetricDisplayDefinition {
+	definition_id: string;
+	label: string;
+	unit: MetricUnit;
+	direction: MetricDirection;
+	family: MetricFamily;
+}
+
+export type CoverageState = 'complete' | 'partial' | 'not_recorded' | 'inconsistent';
+export type CoverageExpectedBasis = 'recorded' | 'legacy_one_slot_per_query' | 'unknown';
+export type CoverageReason =
+	| 'invalid_metric_shape'
+	| 'invalid_mean'
+	| 'invalid_count'
+	| 'missing_mean'
+	| 'mean_without_measurements'
+	| 'counts_exceed_expected'
+	| 'unaccounted_slots'
+	| 'counts_not_recorded'
+	| 'expected_not_recorded'
+	| 'no_expected_measurements';
+
+export interface MetricCoverage extends MetricDisplayDefinition {
+	metric_key: string;
+	mean: number | null;
+	measured_slots: number | null;
+	expected_slots: number | null;
+	failed_slots: number | null;
+	skipped_slots: number | null;
+	errored_cases: number | null;
+	expected_basis: CoverageExpectedBasis;
+	coverage_state: CoverageState;
+	reason_codes: CoverageReason[];
+}
+
+export interface MetricCoverageTotals {
+	measured_slots: number | null;
+	expected_slots: number | null;
+	failed_slots: number | null;
+	skipped_slots: number | null;
+	coverage_state: CoverageState;
+}
+
+export interface LegacyArchiveVariant {
+	name: string;
+	role: 'baseline' | 'variant';
+	measurement_status: string | null;
+	query_count: number | null;
+	answer_metrics: MetricCoverage[];
+	coverage_totals: MetricCoverageTotals;
+}
+
+export interface LegacyArchiveProjection {
+	schema_kind: ResearchSchemaKind;
+	report_id: string | null;
+	report_sha256: string | null;
+	identity_status: 'byte_revision_recorded' | 'unverified';
+	config_ref: string | null;
+	config_binding: 'explicit_archive_association' | null;
+	comparable: false;
+	historical_binding: 'not_established';
+	declared_winner: string | null;
+	variants: LegacyArchiveVariant[];
+}
+
+export interface MetricDelta {
+	absolute: number | null;
+	relative_percent: number | null;
+	absolute_label: string;
+	relative_label: string;
+	favorability: 'improved' | 'worsened' | 'unchanged' | 'unknown';
 }
 
 export interface ExperimentReportSummary {
 	file: string;
-	experiment_name: string;
-	timestamp: string;
-	winner: string | null;
-	any_target_met: boolean | null;
+	report_id?: string;
+	report_sha256?: string | null;
+	schema_kind?: ResearchSchemaKind;
+	availability?: 'available' | 'unavailable' | 'unsupported' | 'error';
+	error?: string;
+	config_ref?: string | null;
+	experiment_name?: string;
+	timestamp?: string;
+	winner?: string | null;
+	any_target_met?: boolean | null;
 }
 
 export interface ExperimentListResponse {
@@ -471,6 +578,7 @@ export interface ExperimentVariantResult {
 }
 
 export interface ExperimentReport {
+	_artifact?: ExperimentArtifact;
 	experiment_name: string;
 	timestamp: string;
 	config: Record<string, unknown>;
@@ -494,6 +602,94 @@ export interface ParsedExperimentConfig {
 	experiment_file: string;
 }
 
+export type CatalogAvailability =
+	| 'available'
+	| 'missing'
+	| 'malformed'
+	| 'unsupported'
+	| 'inventory_reference';
+
+export type CatalogKind =
+	| 'query_fixture'
+	| 'conversation_fixture'
+	| 'review_dataset'
+	| 'reference_csv'
+	| 'retrieval_index';
+
+export interface ResearchCatalogEntry {
+	catalog_id: string;
+	label: string;
+	kind: CatalogKind;
+	availability: CatalogAvailability;
+	availability_reason: string | null;
+	origin_ref: string;
+	revision_sha256: string | null;
+	record_unit: 'question' | 'conversation' | 'case' | 'row' | 'chunk';
+	record_count: number | null;
+	turn_count: number | null;
+	split_counts: Record<string, number> | null;
+	label_confidence_counts: Record<string, number> | null;
+	raw_review_status_counts: Record<string, number> | null;
+	review_status_missing_count: number | null;
+	review_authority: 'not_assessed' | 'manifest_declared_not_authenticated';
+	case_projection: 'available' | 'summary_only' | 'unavailable';
+	inventory_ref: string | null;
+}
+
+export interface ResearchCatalogOverlap {
+	left_catalog_id: string;
+	left_revision: string;
+	right_catalog_id: string;
+	right_revision: string;
+	method: 'exact_stored_query_text';
+	left_unique_query_count: number;
+	right_unique_query_count: number;
+	intersection_unique_query_count: number;
+	normalization: 'none';
+	near_duplicate_status: 'not_assessed';
+}
+
+export interface ResearchCatalogResponse {
+	datasets: ResearchCatalogEntry[];
+	overlap: ResearchCatalogOverlap[];
+}
+
+export interface ResearchCaseLocator {
+	revision_sha256: string;
+	source_ordinal: number;
+}
+
+export interface ResearchStoredTurn {
+	role: string | null;
+	content: string | null;
+}
+
+export interface ResearchCatalogCase {
+	locator: ResearchCaseLocator;
+	source_case_id: string | null;
+	question: string | null;
+	expected_keywords: string[] | null;
+	expected_source_labels: string[] | null;
+	split: string | null;
+	difficulty: string | null;
+	query_category: string | null;
+	source_family: string | null;
+	topic: string | null;
+	label_confidence: string | null;
+	raw_review_status: string | null;
+	normalized_review_status: string | null;
+	stored_turns: ResearchStoredTurn[] | null;
+}
+
+export interface ResearchCatalogCasesResponse {
+	catalog_id: string;
+	revision_sha256: string;
+	total: number;
+	offset: number;
+	limit: number;
+	items: ResearchCatalogCase[];
+}
+
 export interface DocumentListItem {
 	id: string;
 	source: string;
@@ -503,6 +699,11 @@ export interface DocumentListItem {
 	content_type: string;
 	content_preview: string;
 	content_length: number;
+	canonical_label?: string | null;
+	display_label?: string | null;
+	logical_name?: string | null;
+	source_url?: string | null;
+	domain?: string | null;
 }
 
 export interface DocumentListResponse {
@@ -511,7 +712,9 @@ export interface DocumentListResponse {
 	limit: number;
 	items: DocumentListItem[];
 	source_type_counts: Record<string, number>;
+	global_source_type_counts?: Record<string, number>;
 	index_metadata?: Record<string, unknown>;
+	index_identity?: string | null;
 }
 
 export interface DocumentDetailResponse {
@@ -519,6 +722,14 @@ export interface DocumentDetailResponse {
 	content: string;
 	metadata: Record<string, unknown>;
 	content_length: number;
+	canonical_label?: string | null;
+	display_label?: string | null;
+	logical_name?: string | null;
+	source_url?: string | null;
+	domain?: string | null;
+	source_type?: string | null;
+	source_class?: string | null;
+	page?: number | null;
 }
 
 export interface EvaluationRunSummary {

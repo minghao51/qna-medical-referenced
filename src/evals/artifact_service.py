@@ -17,6 +17,15 @@ from src.evals.assessment.l6_contract import (
 
 logger = logging.getLogger(__name__)
 
+
+class InvalidRunDirectoryError(ValueError):
+    """An explicit run selection was not a confined evaluation-run name."""
+
+
+# Per-record guard for JSONL reads: a single malformed/oversized line must not
+# turn a small drill-down page into an unbounded payload or a 500 response.
+_MAX_JSONL_RECORD_CHARS = 1_000_000
+
 _HISTORY_NUMERIC_FIELDS = {
     "duration_s",
     "failed_thresholds_count",
@@ -424,10 +433,43 @@ class EvaluationService:
             raise FileNotFoundError("No evaluation runs found")
         return self.load_run_payload(run_dir)
 
+    def resolve_run_dir(self, run_dir_name: str | None) -> Path:
+        """Resolve an optional run selection strictly inside the evaluation root.
+
+        No argument selects the latest valid run, as before. An explicit run is
+        confined to one directory name under ``_evals_dir``; traversal, separators,
+        dot-only names and symlink escapes are rejected instead of falling back.
+        """
+        if run_dir_name is None:
+            run_dir = self.get_latest_run_dir()
+            if run_dir is None:
+                raise FileNotFoundError("No evaluation runs found")
+            return run_dir
+
+        name = str(run_dir_name).strip()
+        if (
+            not name
+            or name in {".", ".."}
+            or "\x00" in name
+            or "/" in name
+            or "\\" in name
+            or Path(name).name != name
+        ):
+            raise InvalidRunDirectoryError("Invalid run directory identifier")
+
+        try:
+            root = self._evals_dir.resolve()
+            candidate = (root / name).resolve()
+        except (OSError, RuntimeError) as exc:
+            raise InvalidRunDirectoryError("Invalid run directory identifier") from exc
+        if candidate.parent != root or candidate.name != name:
+            raise InvalidRunDirectoryError("Invalid run directory identifier")
+        if not candidate.is_dir():
+            raise FileNotFoundError(f"Run directory not found: {name}")
+        return candidate
+
     def load_evaluation_run(self, run_dir_name: str) -> dict[str, Any]:
-        target_dir = self._evals_dir / run_dir_name
-        if not target_dir.exists():
-            raise FileNotFoundError(f"Run directory not found: {run_dir_name}")
+        target_dir = self.resolve_run_dir(run_dir_name)
         return self.load_run_payload(target_dir)
 
     def load_ablation_results(self) -> dict[str, Any]:
@@ -564,38 +606,61 @@ class EvaluationService:
             "total_variants": len(runs),
         }
 
-    def load_step_records(self, stage: str, limit: int) -> dict[str, Any]:
-        run_dir = self.get_latest_run_dir()
-        if run_dir is None:
-            raise FileNotFoundError("No evaluation runs found")
-        step_metrics = self.read_json_if_exists(run_dir / "step_metrics.json")
+    def load_step_records(
+        self, stage: str, limit: int, run_dir: str | None = None
+    ) -> dict[str, Any]:
+        target_dir = self.resolve_run_dir(run_dir)
+        step_metrics = self.read_json_if_exists(target_dir / "step_metrics.json")
         if not isinstance(step_metrics, dict) or not step_metrics:
             raise FileNotFoundError("Step metrics not found")
         stage_data = step_metrics.get(stage, {})
         records = stage_data.get("records", []) if isinstance(stage_data, dict) else []
-        return {"stage": stage, "records": records[:limit], "total_count": len(records)}
+        return {
+            "stage": stage,
+            "run_dir": target_dir.name,
+            "records": records[:limit],
+            "total_count": len(records),
+        }
 
-    def load_l6_records(self, limit: int) -> dict[str, Any]:
-        run_dir = self.get_latest_run_dir()
-        if run_dir is None:
-            raise FileNotFoundError("No evaluation runs found")
-        l6_rows_path = run_dir / "l6_answer_quality.jsonl"
+    def load_l6_records(self, limit: int, run_dir: str | None = None) -> dict[str, Any]:
+        target_dir = self.resolve_run_dir(run_dir)
+        l6_rows_path = target_dir / "l6_answer_quality.jsonl"
         if not l6_rows_path.exists():
             raise FileNotFoundError("L6 answer quality records not found")
 
-        records = []
+        # Stream the file so a small page never loads the whole artifact; keep
+        # valid records up to ``limit`` and skip malformed/oversized lines safely.
+        records: list[Any] = []
+        total_count = 0
+        malformed_count = 0
         with l6_rows_path.open(encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()
-                if line:
-                    records.append(json.loads(line))
-        return {"records": records[:limit], "total_count": len(records)}
+                if not line:
+                    continue
+                total_count += 1
+                if len(line) > _MAX_JSONL_RECORD_CHARS:
+                    malformed_count += 1
+                    logger.warning("Skipping oversized L6 record in %s", target_dir.name)
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    malformed_count += 1
+                    logger.warning("Skipping malformed L6 record in %s", target_dir.name)
+                    continue
+                if len(records) < limit:
+                    records.append(record)
+        return {
+            "run_dir": target_dir.name,
+            "records": records,
+            "total_count": total_count,
+            "malformed_count": malformed_count,
+        }
 
-    def load_step_metrics(self, stage: str) -> dict[str, Any]:
-        run_dir = self.get_latest_run_dir()
-        if run_dir is None:
-            raise FileNotFoundError("No evaluation runs found")
-        step_metrics = self.read_json_if_exists(run_dir / "step_metrics.json")
+    def load_step_metrics(self, stage: str, run_dir: str | None = None) -> dict[str, Any]:
+        target_dir = self.resolve_run_dir(run_dir)
+        step_metrics = self.read_json_if_exists(target_dir / "step_metrics.json")
         if not isinstance(step_metrics, dict) or not step_metrics:
             raise FileNotFoundError("Step metrics not found")
         if stage not in step_metrics:
@@ -603,12 +668,10 @@ class EvaluationService:
         stage_metrics = step_metrics[stage]
         if not isinstance(stage_metrics, dict):
             raise ValueError("Stage metrics are malformed")
-        return dict(stage_metrics)
+        return {**stage_metrics, "run_dir": target_dir.name}
 
     def load_answer_quality_details(self, run_dir_name: str) -> dict[str, Any]:
-        target_dir = self._evals_dir / run_dir_name
-        if not target_dir.exists():
-            raise FileNotFoundError(f"Run directory not found: {run_dir_name}")
+        target_dir = self.resolve_run_dir(run_dir_name)
 
         results_path = target_dir / L6_ANSWER_QUALITY_ROWS
         if not results_path.exists():

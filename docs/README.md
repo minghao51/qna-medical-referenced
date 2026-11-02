@@ -7,6 +7,9 @@ This folder is organized by purpose, not by chronology.
 - `quickstart.md` — Prerequisites and first-time setup
 - `local-workflows.md` — Canonical local runbook for ingestion, serving, and evals
 - [Data sync and portability runbook](data-sync-runbook.md) — Off-machine R2 mirror, restore to another setup, and frozen-identity verification
+- [Deployment pickup brief](plans/20261101-deployment-pickup.md) — Owner inputs, G-AUTH evidence and rollback for the approved private demo
+- [Transfer and run on another machine](deployment/transfer-and-run.md) — Worktree/data transfer, local image build, smoke checks and evidence
+- [Local Docker preview handoff](deployment/local-preview-handoff.md) — Current restart state, localhost build/run and PR steps
 - `configuration.md` — Full environment variable and deployment settings reference
 - [Data-processing boundaries](data-processing-boundaries.md) — Content, access, retention, deletion, provider processing, and no-automatic-PHI-scrubbing limits
 - `dependencies.md` — Dependency management, extras, and troubleshooting
@@ -21,6 +24,7 @@ This folder is organized by purpose, not by chronology.
 
 ## Deployment
 
+- [Private Cloudflare Access demo](deployment/cloudflare-demo.md) — Login-gated showcase: Tunnel, Access, no published ports, server-side key injection
 - `public-app-deployment.md` — Publishing the app with anonymous public access
 - `anonymous-sessions.md` — Cookie-backed chat history behavior
 - `admin-api-auth.md` — Optional backend API-key usage
@@ -44,6 +48,11 @@ This folder is organized by purpose, not by chronology.
 
 Active design documents:
 
+- [Fieldnote continuation handoff](../assets/svg/continuation-handoff.md) — P01–P10 offline-complete; deployment/auth pickup
+- [P10 readiness report](plans/20261101-p10-readiness.md) — verified offline gates, residual risks and release posture
+- [P09.1/P10.1 Ask and hardening follow-up](plans/20261102-p09p10-ask-surface-and-hardening.md) — workbench Ask surface, modal inspector and responsive fixes
+- [Accessibility audit](testing/accessibility.md) — axe, accessibility-tree and keyboard evidence
+- [Cloudflare demo deployment runbook](deployment/cloudflare-demo.md) — staged private demo setup
 - [Maintainability agent handoff](plans/maintainability-agent-handoff.md) — Start here for the verified project/setup improvement plan; implementation requires approval
 - [Maintainability implementation specification](plans/maintainability-implementation-plan.md) — Sequenced work packages, contracts, acceptance gates, ownership and rollback
 - [Verified findings and corrections](plans/maintainability-verification.md) — Source evidence and corrections to the earlier review, including test/coverage counts

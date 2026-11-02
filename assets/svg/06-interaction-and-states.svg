@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1220" viewBox="0 0 1440 1220" role="img" aria-labelledby="title description"><title id="title">Interaction and state matrix</title><desc id="description">Explicit pending, incomplete, empty, unavailable, unauthorized, stale and selection states. No fabricated live stage durations.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1220" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text x="340" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Overview</text>
+<line x1="340" y1="60" x2="412" y2="60" stroke="#006B61" stroke-width="3"/>
+<text x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text x="692" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Research</text>
+<text x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text x="48" y="122" font-size="12" font-weight="700" style="fill:#006B61" class="">06 / STATE CONTRACT</text>
+<text x="48" y="176" font-size="42" font-weight="400" style="fill:#182D32" class="serif">Make uncertainty and failure legible.</text>
+<text x="48" y="210" font-size="17" font-weight="400" style="fill:#506469" class="">Preserve the question, distinguish unavailable from empty, and never convert absence into a zero.</text>
+<rect x="48" y="267" width="660" height="191" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="48" y="267" width="5" height="191" fill="#006B61"/>
+<text x="72" y="296" font-size="11" font-weight="700" style="fill:#506469" class="">01 / WAITING</text>
+<text x="72" y="330" font-size="22" font-weight="700" style="fill:#182D32" class="">Answer is being generated</text>
+<text x="72" y="361" font-size="14" font-weight="400" style="fill:#506469" class="">The detailed trace arrives at completion.</text>
+<text x="72" y="384" font-size="14" font-weight="400" style="fill:#506469" class="">Do not invent live stage progress or elapsed values.</text>
+<text x="72" y="431" font-size="14" font-weight="700" style="fill:#006B61" class="">Stop response →</text>
+<rect x="732" y="267" width="660" height="191" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="732" y="267" width="5" height="191" fill="#B34322"/>
+<text x="756" y="296" font-size="11" font-weight="700" style="fill:#506469" class="">02 / INTERRUPTED</text>
+<text x="756" y="330" font-size="22" font-weight="700" style="fill:#182D32" class="">This answer is incomplete</text>
+<text x="756" y="361" font-size="14" font-weight="400" style="fill:#506469" class="">Retain partial text with an explicit warning.</text>
+<text x="756" y="384" font-size="14" font-weight="400" style="fill:#506469" class="">Do not show a completed / verified badge.</text>
+<text x="756" y="431" font-size="14" font-weight="700" style="fill:#006B61" class="">Ask again →</text>
+<rect x="48" y="482" width="660" height="191" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="48" y="482" width="5" height="191" fill="#B34322"/>
+<text x="72" y="511" font-size="11" font-weight="700" style="fill:#506469" class="">03 / EMPTY INDEX</text>
+<text x="72" y="545" font-size="22" font-weight="700" style="fill:#182D32" class="">No chunks are available</text>
+<text x="72" y="576" font-size="14" font-weight="400" style="fill:#506469" class="">The service is reachable, but the index is not ready.</text>
+<text x="72" y="599" font-size="14" font-weight="400" style="fill:#506469" class="">Explain readiness and link to setup guidance.</text>
+<text x="72" y="646" font-size="14" font-weight="700" style="fill:#006B61" class="">Check service status →</text>
+<rect x="732" y="482" width="660" height="191" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="732" y="482" width="5" height="191" fill="#006B61"/>
+<text x="756" y="511" font-size="11" font-weight="700" style="fill:#506469" class="">04 / NO RESULTS</text>
+<text x="756" y="545" font-size="22" font-weight="700" style="fill:#182D32" class="">No matching chunks</text>
+<text x="756" y="576" font-size="14" font-weight="400" style="fill:#506469" class="">Proposed text search returned no matches.</text>
+<text x="756" y="599" font-size="14" font-weight="400" style="fill:#506469" class="">Keep the query and offer a filter reset.</text>
+<text x="756" y="646" font-size="14" font-weight="700" style="fill:#006B61" class="">Reset filters →</text>
+<rect x="48" y="697" width="660" height="191" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="48" y="697" width="5" height="191" fill="#B34322"/>
+<text x="72" y="726" font-size="11" font-weight="700" style="fill:#506469" class="">05 / SERVICE ERROR</text>
+<text x="72" y="760" font-size="22" font-weight="700" style="fill:#182D32" class="">Could not load the evidence</text>
+<text x="72" y="791" font-size="14" font-weight="400" style="fill:#506469" class="">Keep the last successful view, labelled stale.</text>
+<text x="72" y="814" font-size="14" font-weight="400" style="fill:#506469" class="">Show a safe error code and request ID, not raw errors.</text>
+<text x="72" y="861" font-size="14" font-weight="700" style="fill:#006B61" class="">Retry →</text>
+<rect x="732" y="697" width="660" height="191" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="732" y="697" width="5" height="191" fill="#B34322"/>
+<text x="756" y="726" font-size="11" font-weight="700" style="fill:#506469" class="">06 / OLD SNAPSHOT</text>
+<text x="756" y="760" font-size="22" font-weight="700" style="fill:#182D32" class="">Snapshot freshness is unknown</text>
+<text x="756" y="791" font-size="14" font-weight="400" style="fill:#506469" class="">D11 is frozen. Retrieval does not verify currency.</text>
+<text x="756" y="814" font-size="14" font-weight="400" style="fill:#506469" class="">A publication date is not an ingestion timestamp.</text>
+<text x="756" y="861" font-size="14" font-weight="700" style="fill:#006B61" class="">Read methodology →</text>
+<rect x="48" y="912" width="660" height="191" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="48" y="912" width="5" height="191" fill="#006B61"/>
+<text x="72" y="941" font-size="11" font-weight="700" style="fill:#506469" class="">07 / TRACE ABSENT</text>
+<text x="72" y="975" font-size="22" font-weight="700" style="fill:#182D32" class="">No breakdown recorded</text>
+<text x="72" y="1006" font-size="14" font-weight="400" style="fill:#506469" class="">History currently stores messages, not full traces.</text>
+<text x="72" y="1029" font-size="14" font-weight="400" style="fill:#506469" class="">Do not reconstruct scores or calls from answer text.</text>
+<text x="72" y="1076" font-size="14" font-weight="700" style="fill:#006B61" class="">Back to conversation →</text>
+<rect x="732" y="912" width="660" height="191" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="732" y="912" width="5" height="191" fill="#B34322"/>
+<text x="756" y="941" font-size="11" font-weight="700" style="fill:#506469" class="">08 / ACCESS REQUIRED</text>
+<text x="756" y="975" font-size="22" font-weight="700" style="fill:#182D32" class="">Research access required</text>
+<text x="756" y="1006" font-size="14" font-weight="400" style="fill:#506469" class="">Keep the private lab boundary; explain missing access.</text>
+<text x="756" y="1029" font-size="14" font-weight="400" style="fill:#506469" class="">Authentication UI and role gating are proposed.</text>
+<text x="756" y="1076" font-size="14" font-weight="700" style="fill:#006B61" class="">Back to Ask →</text>
+<text x="48" y="1150" font-size="13" font-weight="400" style="fill:#506469" class="">Selection: teal rule + label + aria-selected. Loading: aria-busy. Errors: role=alert. Rate limit: respect Retry-After if supplied.</text>
+<line x1="48" y1="1168" x2="1392" y2="1168" stroke="#CED5D0" stroke-width="1"/>
+<text x="48" y="1195" font-size="12" font-weight="400" style="fill:#506469" class="">DESIGN PROPOSAL • Repository snapshot, not a live service</text>
+</svg>

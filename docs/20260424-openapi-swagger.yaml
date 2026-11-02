@@ -383,9 +383,17 @@ paths:
             type: string
             enum: [l0, l1, l2, l3, l4, l5]
           description: Pipeline stage identifier
+        - name: run_dir
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            Optional explicit evaluation run directory name. Omitted selects the latest valid
+            run; a missing or invalid explicit run is an error, never a latest fallback.
       responses:
         "200":
-          description: Stage metrics
+          description: Stage metrics with the actual selected run_dir
           content:
             application/json:
               schema:
@@ -419,6 +427,14 @@ paths:
             maximum: 500
             default: 100
           description: Maximum number of records to return
+        - name: run_dir
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            Optional explicit evaluation run directory name. Omitted selects the latest valid
+            run; a missing or invalid explicit run is an error, never a latest fallback.
       responses:
         "200":
           description: Stage records
@@ -429,6 +445,9 @@ paths:
                 properties:
                   stage:
                     type: string
+                  run_dir:
+                    type: string
+                    description: Actual selected run directory
                   records:
                     type: array
                     items:
@@ -456,6 +475,14 @@ paths:
             maximum: 500
             default: 100
           description: Maximum number of records to return
+        - name: run_dir
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            Optional explicit evaluation run directory name. Omitted selects the latest valid
+            run; a missing or invalid explicit run is an error, never a latest fallback.
       responses:
         "200":
           description: L6 records
@@ -464,10 +491,18 @@ paths:
               schema:
                 type: object
                 properties:
+                  run_dir:
+                    type: string
+                    description: Actual selected run directory
                   records:
                     type: array
                     items:
                       type: object
+                  total_count:
+                    type: integer
+                  malformed_count:
+                    type: integer
+                    description: Records skipped because a JSONL line was malformed or oversized
                   total_count:
                     type: integer
         "404":
@@ -584,7 +619,11 @@ paths:
       operationId: listExperiments
       tags: [Experiments]
       summary: List experiment configs and output reports
-      description: Browse experiment YAML configs and their JSON output reports stored under experiments/.
+      description: >
+        Browse experiment YAML configs and archived report metadata. Requires
+        authenticated request state even when no API-key records are configured.
+      security:
+        - ApiKeyAuth: []
       responses:
         "200":
           description: Experiment list
@@ -592,13 +631,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /experiments/{experiment_name}/results:
     get:
       operationId: getExperimentResults
       tags: [Experiments]
       summary: Get experiment results
-      description: Get the full JSON report for a specific experiment.
+      description: >
+        Get the raw JSON report plus additive `_artifact` byte-revision metadata.
+        The archive winner remains historical data, not a promotion decision.
+      security:
+        - ApiKeyAuth: []
       parameters:
         - name: experiment_name
           in: path
@@ -614,15 +659,21 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           description: Report not found
+        "422":
+          description: Report is oversized, malformed, or has an unsupported schema
 
   /experiments/{experiment_name}/config:
     get:
       operationId: getExperimentConfig
       tags: [Experiments]
       summary: Get parsed experiment config
-      description: Get the parsed YAML configuration for a specific experiment.
+      description: Get a bounded, contained experiment YAML config for a specific experiment.
+      security:
+        - ApiKeyAuth: []
       parameters:
         - name: experiment_name
           in: path
@@ -638,8 +689,118 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           description: Experiment config not found
+
+  /research-data/datasets:
+    get:
+      operationId: listResearchDatasets
+      tags: [ResearchCatalog]
+      summary: List fixed research dataset catalog entries
+      description: >-
+        Bounded summaries of the nine allowlisted catalog IDs plus exact current-file query-text
+        overlap. Every entry has independent availability; missing files do not erase others.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Catalog entries and overlap observations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchCatalogList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /research-data/datasets/{dataset_id}:
+    get:
+      operationId: getResearchDataset
+      tags: [ResearchCatalog]
+      summary: Get one research dataset catalog entry
+      description: Current metadata for one allowlisted logical catalog ID; never a filesystem path.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - golden-original
+              - golden-comprehensive
+              - golden-diverse
+              - golden-expanded
+              - golden-all
+              - golden-conversations
+              - d11-review
+              - lab-reference
+              - d11-index
+          description: Fixed logical catalog identifier
+      responses:
+        "200":
+          description: Catalog entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchCatalogEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown catalog ID (safe code `catalog_not_found`)
+
+  /research-data/datasets/{dataset_id}/cases:
+    get:
+      operationId: getResearchDatasetCases
+      tags: [ResearchCatalog]
+      summary: Get revision-bound fixture case projections
+      description: >-
+        Bounded case rows for query/conversation fixtures. The requested revision must match the
+        source bytes read for this request; ordinals are valid only inside that revision.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: dataset_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: revision
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Expected SHA-256 of the current source file bytes
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Revision-bound case page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchCasePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown catalog ID or unavailable source (safe codes `catalog_not_found`, `catalog_unavailable`)
+        "409":
+          description: Summary-only entry or revision mismatch (safe codes `catalog_cases_unavailable`, `catalog_revision_changed`)
 
 components:
   securitySchemes:
@@ -852,6 +1013,22 @@ components:
           description: First 200 characters of the chunk content
         content_length:
           type: integer
+        canonical_label:
+          type: string
+          nullable: true
+        display_label:
+          type: string
+          nullable: true
+        logical_name:
+          type: string
+          nullable: true
+        source_url:
+          type: string
+          nullable: true
+          description: Only a safe recorded http(s) URL, otherwise null
+        domain:
+          type: string
+          nullable: true
 
     DocumentListResponse:
       type: object
@@ -870,9 +1047,19 @@ components:
           type: object
           additionalProperties:
             type: integer
+          description: Existing filtered semantics; counts for the selected source_type
+        global_source_type_counts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Global facets from the full metadata mirror, independent of source_type
         index_metadata:
           type: object
           additionalProperties: true
+        index_identity:
+          type: string
+          nullable: true
+          description: Verified source-snapshot digest when available; not a publication count
 
     DocumentDetailResponse:
       type: object
@@ -886,6 +1073,30 @@ components:
           additionalProperties: true
         content_length:
           type: integer
+        canonical_label:
+          type: string
+          nullable: true
+        display_label:
+          type: string
+          nullable: true
+        logical_name:
+          type: string
+          nullable: true
+        source_url:
+          type: string
+          nullable: true
+        domain:
+          type: string
+          nullable: true
+        source_type:
+          type: string
+          nullable: true
+        source_class:
+          type: string
+          nullable: true
+        page:
+          type: integer
+          nullable: true
 
     HistoryResponse:
       type: object
@@ -1033,8 +1244,14 @@ components:
                 type: integer
               primary_metric:
                 type: string
+                nullable: true
               has_results:
                 type: boolean
+              availability:
+                type: string
+                enum: [available, error]
+              error:
+                type: string
         reports:
           type: array
           items:
@@ -1042,12 +1259,28 @@ components:
             properties:
               file:
                 type: string
+              report_id:
+                type: string
+              report_sha256:
+                type: string
+                nullable: true
+              schema_kind:
+                type: string
+                enum: [legacy_feature_addition, unsupported]
+              availability:
+                type: string
+                enum: [available, unavailable, unsupported, error]
+              error:
+                type: string
+              config_ref:
+                type: string
+                nullable: true
               experiment_name:
                 type: string
               timestamp:
                 type: string
               winner:
-                type: object
+                type: string
                 nullable: true
               any_target_met:
                 type: boolean
@@ -1072,6 +1305,194 @@ components:
               type: object
               nullable: true
               additionalProperties: true
+
+    ResearchCatalogEntry:
+      type: object
+      required:
+        - catalog_id
+        - label
+        - kind
+        - availability
+        - origin_ref
+        - record_unit
+        - review_authority
+        - case_projection
+      properties:
+        catalog_id:
+          type: string
+          description: Fixed logical ID, never a path
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [query_fixture, conversation_fixture, review_dataset, reference_csv, retrieval_index]
+        availability:
+          type: string
+          enum: [available, missing, malformed, unsupported, inventory_reference]
+        availability_reason:
+          type: string
+          nullable: true
+          enum: [file_missing, root_missing, invalid_json, schema_mismatch, size_cap_exceeded, record_cap_exceeded]
+        origin_ref:
+          type: string
+          description: Safe repository-relative known source reference
+        revision_sha256:
+          type: string
+          nullable: true
+          description: SHA-256 of the current source bytes; not historical dataset identity
+        record_unit:
+          type: string
+          enum: [question, conversation, case, row, chunk]
+        record_count:
+          type: integer
+          nullable: true
+        turn_count:
+          type: integer
+          nullable: true
+        split_counts:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: integer
+        label_confidence_counts:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: integer
+        raw_review_status_counts:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: integer
+          description: Stored/declared statuses only; no normalized default is substituted
+        review_status_missing_count:
+          type: integer
+          nullable: true
+        review_authority:
+          type: string
+          enum: [not_assessed, manifest_declared_not_authenticated]
+        case_projection:
+          type: string
+          enum: [available, summary_only, unavailable]
+        inventory_ref:
+          type: string
+          nullable: true
+
+    ResearchCatalogList:
+      type: object
+      required: [datasets, overlap]
+      properties:
+        datasets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResearchCatalogEntry"
+        overlap:
+          type: array
+          items:
+            type: object
+            properties:
+              left_catalog_id:
+                type: string
+              left_revision:
+                type: string
+              right_catalog_id:
+                type: string
+              right_revision:
+                type: string
+              method:
+                type: string
+                enum: [exact_stored_query_text]
+              left_unique_query_count:
+                type: integer
+              right_unique_query_count:
+                type: integer
+              intersection_unique_query_count:
+                type: integer
+              normalization:
+                type: string
+                enum: [none]
+              near_duplicate_status:
+                type: string
+                enum: [not_assessed]
+
+    ResearchCasePage:
+      type: object
+      required: [catalog_id, revision_sha256, total, offset, limit, items]
+      properties:
+        catalog_id:
+          type: string
+        revision_sha256:
+          type: string
+        total:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              locator:
+                type: object
+                properties:
+                  revision_sha256:
+                    type: string
+                  source_ordinal:
+                    type: integer
+              source_case_id:
+                type: string
+                nullable: true
+              question:
+                type: string
+                nullable: true
+              expected_keywords:
+                type: array
+                nullable: true
+                items:
+                  type: string
+              expected_source_labels:
+                type: array
+                nullable: true
+                items:
+                  type: string
+              split:
+                type: string
+                nullable: true
+              difficulty:
+                type: string
+                nullable: true
+              query_category:
+                type: string
+                nullable: true
+              source_family:
+                type: string
+                nullable: true
+              topic:
+                type: string
+                nullable: true
+              label_confidence:
+                type: string
+                nullable: true
+              raw_review_status:
+                type: string
+                nullable: true
+              normalized_review_status:
+                type: string
+                nullable: true
+              stored_turns:
+                type: array
+                nullable: true
+                items:
+                  type: object
+                  properties:
+                    role:
+                      type: string
+                      nullable: true
+                    content:
+                      type: string
+                      nullable: true
 
   responses:
     Unauthorized:

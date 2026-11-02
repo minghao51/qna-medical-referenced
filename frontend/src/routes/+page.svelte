@@ -1,1057 +1,756 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
-	import type { ChatSource, Message, SourceDomainType, PipelineTrace as PipelineTraceType } from '$lib/types';
+	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/AppShell.svelte';
-	import ConfidenceBadge from '$lib/components/ConfidenceBadge.svelte';
-	import SourceQualityIndicator from '$lib/components/SourceQualityIndicator.svelte';
-	import { calculateConfidence, getDomainType } from '$lib/confidenceCalculator';
+	import ResearchNav from '$lib/components/ResearchNav.svelte';
+	import LoadingSkeleton from '$lib/components/LoadingSkeleton.svelte';
 	import {
-		fetchHealthStatus,
-		getHistory,
-		clearHistory,
-		chatStreamUrl,
-		chatFetchRequest,
-		parseApiError
+		getDocuments,
+		getExperiments,
+		getExperimentResults
 	} from '$lib/utils/api';
-	import { getSafeExternalUrl } from '$lib/utils/url';
-	import type { HealthResponse } from '$lib/types';
-	import '../lib/styles/markdown.css';
+	import { formatDecimal } from '$lib/utils/eval';
+	import { normalizeLegacyArchive } from '$lib/utils/research';
+	import type {
+		DocumentListResponse,
+		ExperimentListResponse,
+		ExperimentReport,
+		LegacyArchiveProjection
+	} from '$lib/types';
 
-	const MAX_MESSAGE_LENGTH = 2000;
+	type LoadState = 'loading' | 'available' | 'missing' | 'unauthorized' | 'error';
 
-	let messages: Message[] = $state([]);
-	let input = $state('');
-	let loading = $state(false);
-	let error = $state('');
-	let showPipeline = $state(true);
-	let includePipelineForSession = $state(true);
-	let messagesContainer: HTMLDivElement | undefined = $state();
-	let copiedIndex: number | null = $state(null);
-	let sourcePanelTabs: Record<number, 'citations' | 'distribution'> = $state({});
-	let healthStatus: HealthResponse | null = $state(null);
-	let operationalNotice = $state('');
-	let PipelinePanelComponent = $state<typeof import('$lib/components/PipelinePanel.svelte').default | null>(null);
-	let SourceDistributionChartComponent = $state<typeof import('$lib/components/SourceDistributionChart.svelte').default | null>(null);
-	let MarkdownRendererComponent = $state<typeof import('$lib/components/MarkdownRenderer.svelte').default | null>(null);
-	let activeStreamController: AbortController | null = null;
-	let requestGeneration = 0;
+	let archiveState = $state<LoadState>('loading');
+	let archiveError = $state('');
+	let archive = $state<LegacyArchiveProjection | null>(null);
+	let archiveTimestamp = $state<string | null>(null);
+	let corpusState = $state<LoadState>('loading');
+	let corpusError = $state('');
+	let corpusTotal = $state<number | null>(null);
+	let corpusCounts = $state<Record<string, number>>({});
 
-	type RenderableSource = {
-		canonicalLabel: string;
-		displayLabel: string;
-		source: string;
-		url: string | null;
-		page?: number;
-		sourceType: string;
-		sourceClass: string;
-		domain: string | null;
-		domainType: SourceDomainType;
-		contentType?: string;
-		key: string;
-	};
+	const preferredReportId = 'medical_semantic_chunking_exp';
 
-	async function loadHistory() {
-		try {
-			const data = await getHistory();
-			if ((data.history as Message[]).some((message) => message.role === 'assistant')) {
-				void ensureMarkdownRenderer();
-			}
-			messages = data.history as Message[];
-			await tick();
-			scrollToBottom();
-		} catch (e) {
-			console.error('Failed to load history:', e);
-		}
+	function isUnauthorized(message: string): boolean {
+		return /401|x-api-key|missing .*key/i.test(message);
 	}
 
-	async function loadHealth() {
-		try {
-			healthStatus = await fetchHealthStatus();
-			if (!healthStatus.ready) {
-				operationalNotice = 'Backend is reachable, but the runtime index is not ready yet.';
-			} else {
-				operationalNotice = '';
-			}
-		} catch (e) {
-			operationalNotice = e instanceof Error ? e.message : 'Backend status unavailable.';
-		}
+	function formatCount(value: number | null | undefined): string {
+		return typeof value === 'number' && Number.isFinite(value)
+			? value.toLocaleString('en-US')
+			: 'N/A';
 	}
 
-	async function scrollToBottom() {
-		if (messagesContainer) {
-			messagesContainer.scrollTop = messagesContainer.scrollHeight;
-		}
+	function formatReportDate(value: string | null): string {
+		if (!value) return 'Date not provided';
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return value;
+		return date.toLocaleDateString('en-GB', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric'
+		});
 	}
 
-	async function ensurePipelinePanel() {
-		if (!PipelinePanelComponent) {
-			PipelinePanelComponent = (await import('$lib/components/PipelinePanel.svelte')).default;
-		}
-	}
-
-	async function ensureSourceDistributionChart() {
-		if (!SourceDistributionChartComponent) {
-			SourceDistributionChartComponent = (await import('$lib/components/SourceDistributionChart.svelte')).default;
-		}
-	}
-
-	async function ensureMarkdownRenderer() {
-		if (!MarkdownRendererComponent) {
-			MarkdownRendererComponent = (await import('$lib/components/MarkdownRenderer.svelte')).default;
-		}
-	}
-
-	function abortActiveStream() {
-		if (activeStreamController) {
-			activeStreamController.abort();
-			activeStreamController = null;
-		}
-	}
-
-	async function sendMessage() {
-		if (!input.trim() || loading) return;
-
-		const userMessage = input.trim();
-		if (userMessage.length > MAX_MESSAGE_LENGTH) {
-			error = `Message too long (${userMessage.length}/${MAX_MESSAGE_LENGTH} characters).`;
-			return;
-		}
-		input = '';
-		loading = true;
-		error = '';
-
-		const generation = ++requestGeneration;
-		abortActiveStream();
-		const controller = new AbortController();
-		activeStreamController = controller;
-
-		messages = [...messages, { role: 'user', content: userMessage, timestamp: Date.now() }];
-		await tick();
-		scrollToBottom();
-
-		let assistantMessage: Message = {
-			role: 'assistant',
-			content: '',
-			timestamp: Date.now()
-		};
-		void ensureMarkdownRenderer();
-		messages = [...messages, assistantMessage];
-
-		try {
-			const url = chatStreamUrl(includePipelineForSession);
-			const res = await fetch(url, {
-				...chatFetchRequest(userMessage, url),
-				signal: controller.signal
-			});
-
-			if (generation !== requestGeneration) return;
-
-			if (!res.ok) {
-				throw new Error(await parseApiError(res));
-			}
-
-			const reader = res.body?.getReader();
-			if (!reader) {
-				throw new Error('No response body');
-			}
-
-			const decoder = new TextDecoder();
-			let buffer = '';
-
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				if (generation !== requestGeneration) return;
-
-				buffer += decoder.decode(value, { stream: true });
-				const lines = buffer.split('\n');
-				buffer = lines.pop() || '';
-
-				for (const line of lines) {
-					if (!line.startsWith('data: ')) continue;
-					if (generation !== requestGeneration) return;
-					const dataStr = line.slice(6);
-					try {
-						const data = JSON.parse(dataStr);
-						if (data.content !== undefined) {
-							assistantMessage.content += data.content;
-						}
-						if (data.done) {
-							if (data.sources) {
-								assistantMessage.sources = data.sources;
-							}
-							if (data.pipeline) {
-								assistantMessage.pipeline = data.pipeline;
-								showPipeline = true;
-								void ensurePipelinePanel();
-							}
-							if (data.error) {
-								const code = data.error_code ? `[${data.error_code}] ` : '';
-								const req = data.request_id ? ` (request ${data.request_id})` : '';
-								error = `${code}${data.error}${req}`;
-							}
-						}
-						messages = [...messages.slice(0, -1), { ...assistantMessage }];
-						await tick();
-						scrollToBottom();
-					} catch (e) {
-						console.error('Failed to parse SSE data:', e);
-					}
-				}
-			}
-		} catch (e) {
-			if (generation !== requestGeneration || controller.signal.aborted) {
-				return;
-			}
-			error = e instanceof Error ? e.message : 'Failed to send message.';
-			console.error(e);
-		} finally {
-			if (activeStreamController === controller) {
-				activeStreamController = null;
-			}
-			if (generation === requestGeneration) {
-				loading = false;
-			}
-		}
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter' && !e.shiftKey) {
-			e.preventDefault();
-			sendMessage();
-		}
-	}
-
-	async function clearChat() {
-		const generation = ++requestGeneration;
-		abortActiveStream();
-		error = '';
-		try {
-			await clearHistory();
-		} catch (e) {
-			if (generation !== requestGeneration) return;
-			loading = false;
-			error = e instanceof Error ? e.message : 'Failed to clear chat history.';
-			console.error('Failed to clear history on server:', e);
-			return;
-		}
-
-		if (generation !== requestGeneration) return;
-		messages = [];
-		loading = false;
-		showPipeline = false;
-	}
-
-	async function copyMessage(content: string, index: number) {
-		await navigator.clipboard.writeText(content);
-		copiedIndex = index;
-		setTimeout(() => { copiedIndex = null; }, 2000);
-	}
-
-	function formatTime(timestamp: number): string {
-		return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-	}
-
-	onMount(() => {
-		loadHistory();
-		loadHealth();
-		return () => {
-			requestGeneration += 1;
-			abortActiveStream();
-		};
-	});
-
-	function hasPipeline(message: Message): boolean {
-		return message.role === 'assistant' && message.pipeline !== undefined;
-	}
-
-	function extractRetrievalConfig(pipeline: PipelineTraceType): Record<string, unknown> | null {
-		const steps = pipeline.retrieval?.steps ?? [];
-		for (const step of steps) {
-			if (step.details?.search_mode !== undefined) {
-				return step.details as Record<string, unknown>;
-			}
-		}
-		return null;
-	}
-
-	function formatTitleCase(value: string): string {
-		return value
-			.split(/[_\s-]+/)
-			.filter(Boolean)
-			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-			.join(' ');
-	}
-
-	function inferSourceType(source: string): string {
-		const lowered = source.toLowerCase();
-		if (lowered.endsWith('.pdf')) return 'pdf';
-		if (lowered.endsWith('.csv')) return 'reference_csv';
-		if (lowered.endsWith('.md') || lowered.endsWith('.html')) return 'html';
-		return 'other';
-	}
-
-	function sourceTypeLabel(sourceType: string): string {
+	function sourceTypeLabel(type: string): string {
 		const labels: Record<string, string> = {
 			pdf: 'PDF',
 			html: 'HTML',
-			reference_csv: 'Reference CSV',
-			other: 'Other'
+			markdown: 'Markdown',
+			reference_csv: 'Lab reference',
+			csv: 'Lab reference',
+			reference: 'Lab reference'
 		};
-		return labels[sourceType] ?? formatTitleCase(sourceType);
+		return labels[type] ?? type.replace(/_/g, ' ');
 	}
 
-	function sourceClassLabel(sourceClass: string): string {
-		const labels: Record<string, string> = {
-			guideline_pdf: 'Guideline PDF',
-			guideline_html: 'Guideline HTML',
-			reference_csv: 'Reference CSV',
-			index_page: 'Index Page',
-			unknown: 'Unknown'
-		};
-		return labels[sourceClass] ?? formatTitleCase(sourceClass);
+	function percent(part: number | null | undefined, whole: number | null | undefined): number {
+		if (typeof part !== 'number' || typeof whole !== 'number' || whole <= 0) return 0;
+		return Math.min(100, Math.max(0, (part / whole) * 100));
 	}
 
-	function getSourceTab(index: number): 'citations' | 'distribution' {
-		return sourcePanelTabs[index] ?? 'citations';
-	}
+	const baseline = $derived(
+		archive?.variants.find((variant) => variant.role === 'baseline') ??
+			archive?.variants[0] ??
+			null
+	);
+	const faithfulness = $derived(
+		baseline?.answer_metrics.find((metric) => metric.metric_key === 'faithfulness') ?? null
+	);
+	const totals = $derived(baseline?.coverage_totals ?? null);
+	const corpusEntries = $derived(
+		Object.entries(corpusCounts).sort((left, right) => right[1] - left[1])
+	);
+	const maxCorpusCount = $derived(
+		Math.max(0, ...Object.values(corpusCounts).filter((value) => Number.isFinite(value)))
+	);
 
-	function setSourceTab(index: number, tab: 'citations' | 'distribution') {
-		if (tab === 'distribution') {
-			void ensureSourceDistributionChart();
-		}
-		sourcePanelTabs = { ...sourcePanelTabs, [index]: tab };
-	}
-
-	function normalizeSource(source: ChatSource | string): RenderableSource {
-		if (typeof source === 'string') {
-			const safeUrl = getSafeExternalUrl(source);
-			const domain = safeUrl ? new URL(safeUrl).hostname.toLowerCase() : null;
-			const sourceType = inferSourceType(source);
-			return {
-				canonicalLabel: source,
-				displayLabel: source,
-				source,
-				url: safeUrl,
-				sourceType,
-				sourceClass: sourceType === 'reference_csv' ? 'reference_csv' : 'unknown',
-				domain,
-				domainType: domain ? getDomainType(domain) : 'unknown',
-				key: `${safeUrl ?? source}::`
-			};
-		}
-
-		const safeUrl = getSafeExternalUrl(source.source_url || source.url);
-		const canonicalLabel =
-			source.canonical_label || source.display_label || source.label || source.source || 'Unknown source';
-		const displayLabel = source.display_label || source.label || canonicalLabel;
-		const canonicalSource = source.source || source.source_url || source.url || canonicalLabel;
-		const domain = source.domain || (safeUrl ? new URL(safeUrl).hostname.toLowerCase() : null);
-		const sourceType = source.source_type || inferSourceType(canonicalSource);
-		const sourceClass =
-			source.source_class || (sourceType === 'reference_csv' ? 'reference_csv' : 'unknown');
-		return {
-			canonicalLabel,
-			displayLabel,
-			source: canonicalSource,
-			url: safeUrl,
-			page: source.page,
-			sourceType,
-			sourceClass,
-			domain,
-			domainType: source.domain_type || (domain ? getDomainType(domain) : 'unknown'),
-			contentType: source.content_type,
-			key: `${canonicalSource}::${source.page ?? ''}`
-		};
-	}
-
-	function getRenderableSources(message: Message): RenderableSource[] {
-		if (!message.sources?.length) return [];
-
-		const deduped = new Map<string, RenderableSource>();
-		for (const source of message.sources) {
-			const normalized = normalizeSource(source);
-			if (!deduped.has(normalized.key)) {
-				deduped.set(normalized.key, normalized);
+	async function loadArchive() {
+		archiveState = 'loading';
+		archiveError = '';
+		try {
+			const list = await getExperiments<ExperimentListResponse>();
+			const candidates = list.reports.filter(
+				(report) => report.availability === 'available' && typeof report.report_id === 'string'
+			);
+			const summary =
+				candidates.find((report) => report.report_id === preferredReportId) ?? candidates[0];
+			if (!summary?.report_id) {
+				archiveState = 'missing';
+				return;
 			}
+
+			const report = await getExperimentResults<ExperimentReport>(summary.report_id);
+			const projection = normalizeLegacyArchive(report);
+			if (projection.schema_kind !== 'legacy_feature_addition' || projection.variants.length === 0) {
+				archiveState = 'missing';
+				return;
+			}
+			archive = projection;
+			archiveTimestamp = report.timestamp ?? null;
+			archiveState = 'available';
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Archived report unavailable.';
+			archiveError = message;
+			archiveState = isUnauthorized(message) ? 'unauthorized' : 'error';
 		}
-
-		return Array.from(deduped.values());
 	}
 
-	function buildDistribution(
-		sources: RenderableSource[],
-		field: 'sourceType' | 'sourceClass'
-	): Record<string, number> {
-		return sources.reduce<Record<string, number>>((acc, source) => {
-			const value = source[field];
-			if (!value || value === 'unknown') return acc;
-			const label = field === 'sourceType' ? sourceTypeLabel(value) : sourceClassLabel(value);
-			acc[label] = (acc[label] ?? 0) + 1;
-			return acc;
-		}, {});
+	async function loadCorpus() {
+		corpusState = 'loading';
+		corpusError = '';
+		try {
+			const data = await getDocuments<DocumentListResponse>({ limit: 1, offset: 0 });
+			corpusTotal = data.total;
+			corpusCounts = data.source_type_counts ?? {};
+			corpusState = 'available';
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Index inventory unavailable.';
+			corpusError = message;
+			corpusState = isUnauthorized(message) ? 'unauthorized' : 'error';
+		}
 	}
+
+	onMount(() => {
+		void loadArchive();
+		void loadCorpus();
+	});
 </script>
 
+<svelte:head>
+	<title>Fieldnote · Research workspace</title>
+</svelte:head>
+
 <AppShell current="/">
-<div class="chat-container">
-	<header>
-		<div class="header-left">
-			<h1>Health Screening Q&A</h1>
-			<label class="pipeline-toggle">
-				<input type="checkbox" bind:checked={includePipelineForSession} />
-				<span>Show pipeline details</span>
-			</label>
-		</div>
-		<button onclick={clearChat}>New Chat</button>
-	</header>
-
-	{#if operationalNotice}
-		<div class="status-banner">{operationalNotice}</div>
-	{/if}
-
-	<div class="messages" bind:this={messagesContainer}>
-		{#if messages.length === 0}
-			<div class="welcome">
-				<p>Ask me anything about your health screening results.</p>
+	<div class="workspace">
+		<section class="hero" aria-labelledby="workspace-title">
+			<div class="hero-copy">
+				<p class="eyebrow">Private research / engineering evidence</p>
+				<h1 id="workspace-title">What changes actually improve this system?</h1>
+				<p class="lede">
+					Inspect the dataset, the configuration and the measurement—not just the highest
+					score.
+				</p>
+				<p class="privacy-note">
+					Private lab · public or synthetic questions only · no clinical-suitability claim
+				</p>
 			</div>
-		{/if}
+			<div class="lab-card">
+				<p class="card-eyebrow">Posture</p>
+				<ul>
+					<li>Archived metrics, not a live benchmark run</li>
+					<li>CLI/YAML execution; no run button in the browser</li>
+					<li>Comparisons remain unavailable until a verified cohort exists</li>
+				</ul>
+			</div>
+		</section>
 
-		{#each messages as msg, index}
-			{@const renderableSources = getRenderableSources(msg)}
-			{@const typeDistribution = buildDistribution(renderableSources, 'sourceType')}
-			{@const classDistribution = buildDistribution(renderableSources, 'sourceClass')}
-			<div class="message {msg.role}">
-				<div class="message-header">
-					<span class="role-label">{msg.role === 'user' ? 'You' : 'Assistant'}</span>
-					{#if msg.timestamp}
-						<span class="timestamp">{formatTime(msg.timestamp)}</span>
-					{/if}
-					{#if msg.role === 'assistant' && msg.pipeline}
-						{@const conf = calculateConfidence(msg.pipeline)}
-						<ConfidenceBadge level={conf.level} score={conf.overall} showScore={false} />
-					{/if}
-					{#if msg.role === 'assistant'}
-						<button
-							class="copy-btn"
-							onclick={() => copyMessage(msg.content, index)}
-							title="Copy message"
-						>
-							{copiedIndex === index ? '✓ Copied' : 'Copy'}
-						</button>
-					{/if}
-				</div>
-					<div class="content">
-						{#if msg.role === 'assistant'}
-							{#if MarkdownRendererComponent}
-								{@const MarkdownRenderer = MarkdownRendererComponent}
-								<MarkdownRenderer content={msg.content} />
-							{:else}
-								{msg.content}
-							{/if}
-						{:else}
-							{msg.content}
-						{/if}
-				</div>
-				{#if renderableSources.length > 0}
-					<div class="sources-panel">
-						<div class="sources-panel-header">
-							<strong>Sources</strong>
-							<div class="source-tabs">
-								<button
-									type="button"
-									class:active={getSourceTab(index) === 'citations'}
-									onclick={() => setSourceTab(index, 'citations')}
-								>
-									Citations
-								</button>
-								<button
-									type="button"
-									class:active={getSourceTab(index) === 'distribution'}
-									onclick={() => setSourceTab(index, 'distribution')}
-								>
-									Distribution
-								</button>
-							</div>
+		<ResearchNav current="/" />
+
+		<div class="primary-grid">
+			<section class="card archive-card" aria-labelledby="archive-title">
+				<p class="card-eyebrow">Local archived report</p>
+				<h2 id="archive-title">A strong average can hide missing measurements.</h2>
+
+				{#if archiveState === 'loading'}
+					<LoadingSkeleton count={2} type="card" />
+				{:else if archiveState === 'available'}
+					{#if faithfulness}
+					<p class="report-meta">
+						{formatReportDate(archiveTimestamp)} · 57-query baseline · revision
+						{archive?.report_sha256 ? `${archive.report_sha256.slice(0, 12)}…` : 'not recorded'}
+					</p>
+
+					<div class="metric-headline">
+						<div>
+							<p class="metric-label">Faithfulness mean</p>
+							<p class="metric-value">{formatDecimal(faithfulness.mean, 4)}</p>
 						</div>
-						{#if getSourceTab(index) === 'citations'}
-							<ol class="sources-list">
-								{#each renderableSources as source, sourceIndex}
-									<li class="source-card">
-										<div class="source-card-top">
-											<span class="source-index">{sourceIndex + 1}.</span>
-											<div class="source-title-wrap">
-												{#if source.url}
-													<a href={source.url} target="_blank" rel="noopener noreferrer" class="source-link">
-														{source.displayLabel}
-													</a>
-												{:else}
-													<span class="source-text">{source.displayLabel}</span>
-												{/if}
-												{#if source.domain}
-													<span class="source-domain">{source.domain}</span>
-												{/if}
-											</div>
-										</div>
-										<div class="source-badges">
-											<span class="source-type-pill">{sourceTypeLabel(source.sourceType)}</span>
-											{#if source.sourceClass !== 'unknown'}
-												<span class="source-class-pill">{sourceClassLabel(source.sourceClass)}</span>
-											{/if}
-											<SourceQualityIndicator
-												source={source.domain ?? source.url ?? source.source}
-												sourceType={source.sourceType}
-												domainType={source.domainType}
-											/>
-											{#if source.contentType}
-												<span class="source-meta-pill">{formatTitleCase(source.contentType)}</span>
-											{/if}
-										</div>
-									</li>
-								{/each}
-							</ol>
-						{:else}
-								<div class="distribution-grid">
-									{#if Object.keys(typeDistribution).length > 0}
-										<div class="distribution-card">
-											{#if SourceDistributionChartComponent}
-												{@const SourceDistributionChart = SourceDistributionChartComponent}
-												<SourceDistributionChart distribution={typeDistribution} title="Source Types" height={180} />
-											{/if}
-										</div>
-									{/if}
-									{#if Object.keys(classDistribution).length > 0}
-										<div class="distribution-card">
-											{#if SourceDistributionChartComponent}
-												{@const SourceDistributionChart = SourceDistributionChartComponent}
-												<SourceDistributionChart distribution={classDistribution} title="Source Classes" height={180} />
-											{/if}
-										</div>
-									{/if}
-								{#if Object.keys(typeDistribution).length === 0 && Object.keys(classDistribution).length === 0}
-									<p class="distribution-empty">No structured source distribution available yet.</p>
-								{/if}
-							</div>
-						{/if}
+						<div class="metric-counts">
+							<span>{formatCount(faithfulness.measured_slots)} measured</span>
+							<span>{formatCount(faithfulness.failed_slots)} failed</span>
+							<span>{formatCount(faithfulness.expected_slots)} expected</span>
+						</div>
+					</div>
+
+					<div
+						class="coverage-bar"
+						role="img"
+						aria-label={`Faithfulness coverage: ${formatCount(faithfulness.measured_slots)} measured, ${formatCount(faithfulness.failed_slots)} failed, ${formatCount(faithfulness.expected_slots)} expected`}
+					>
+						<span
+							class="bar-measured"
+							style={`width:${percent(faithfulness.measured_slots, faithfulness.expected_slots)}%`}
+						></span>
+						<span
+							class="bar-failed"
+							style={`width:${percent(faithfulness.failed_slots, faithfulness.expected_slots)}%`}
+						></span>
+					</div>
+
+					<p class="coverage-note">
+						Read coverage before comparing quality. Across six answer metrics,
+						{formatCount(totals?.measured_slots)} of {formatCount(totals?.expected_slots)} slots were
+						measured and {formatCount(totals?.failed_slots)} failed. The archived winner is
+						historical, not current eligibility.
+					</p>
+
+					{#if archive?.identity_status !== 'byte_revision_recorded'}
+						<p class="state-note">Report revision bytes are not verified for this artifact.</p>
+					{/if}
+
+					<a class="button" href="/research/evaluations">Inspect evaluation coverage →</a>
+					{:else}
+						<div class="state-block" role="status">
+							<h3>Faithfulness measurement not recorded</h3>
+							<p>
+								This archive is readable, but it does not expose the expected answer-metric coverage.
+							</p>
+							<a class="text-link" href="/eval?tab=quality">Open legacy evaluation diagnostics</a>
+						</div>
+					{/if}
+				{:else}
+					<div class="state-block" role="status">
+						<h3>
+							{#if archiveState === 'unauthorized'}
+								Archived report requires operator access
+							{:else if archiveState === 'missing'}
+								No archived report is available
+							{:else}
+								Archived report unavailable
+							{/if}
+						</h3>
+						<p>
+							{#if archiveState === 'unauthorized'}
+								This private-lab view needs the authenticated gateway. It does not fall back to a
+								latest run.
+							{:else if archiveState === 'missing'}
+								No supported report artifact was found for this workspace.
+							{:else}
+								{archiveError || 'The report could not be read safely.'}
+							{/if}
+						</p>
+						<a class="text-link" href="/eval">Open legacy evaluation diagnostics</a>
 					</div>
 				{/if}
-				{#if hasPipeline(msg)}
-						<button
-							class="pipeline-btn"
-							onclick={() => {
-								showPipeline = !showPipeline;
-								if (showPipeline) {
-									void ensurePipelinePanel();
-								}
-							}}
-							class:active={showPipeline}
-						>
-						{showPipeline ? 'Hide' : 'Show'} Pipeline Details
-					</button>
-					{@const retrievalCfg = extractRetrievalConfig(msg.pipeline!)}
-					{#if retrievalCfg}
-						<div class="config-chips">
-							{#if typeof retrievalCfg.search_mode === 'string'}
-								<span class="chip">{retrievalCfg.search_mode.replace(/_/g, ' ')}</span>
-							{/if}
-							{#if retrievalCfg.enable_diversification === true}
-								<span class="chip">diversified</span>
-							{/if}
-							{#if retrievalCfg.enable_hyde === true}
-								<span class="chip accent">HyDE</span>
-							{/if}
-							{#if retrievalCfg.enable_reranking === true}
-								<span class="chip accent">reranked</span>
-							{/if}
-							{#if typeof retrievalCfg.top_k === 'number'}
-								<span class="chip">top-{retrievalCfg.top_k}</span>
-							{/if}
-						</div>
+			</section>
+
+			<section class="card ask-card" aria-labelledby="ask-title">
+				<p class="card-eyebrow">Q&amp;A workbench</p>
+				<h2 id="ask-title">Ask. Inspect a turn. Understand the retrieval.</h2>
+				<p>
+					Use public or synthetic questions only. This is not a clinical product, and answers
+					are not medical advice.
+				</p>
+				<ul class="plain-list">
+					<li>Current conversation stays cookie-bound</li>
+					<li>Source entries and recorded trace are inspected after completion</li>
+					<li>Unavailable sources or traces say so rather than being reconstructed</li>
+				</ul>
+				<a class="button" href="/ask">Open Q&amp;A workbench →</a>
+			</section>
+		</div>
+
+		<section class="pathways" aria-labelledby="pathways-title">
+			<div class="section-heading">
+				<p class="card-eyebrow">Three ways to investigate</p>
+				<h2 id="pathways-title">Start with the evidence behind the score.</h2>
+			</div>
+			<div class="pathway-grid">
+				<a class="pathway" href="/research/evaluations">
+					<span class="pathway-index">01</span>
+					<h3>Evaluations</h3>
+					<p>See execution, measurement and eligibility as separate states.</p>
+					<span class="pathway-action">Inspect reports →</span>
+				</a>
+				<a class="pathway" href="/research/features">
+					<span class="pathway-index">02</span>
+					<h3>Features</h3>
+					<p>Separate a configured capability from an effective, measured change.</p>
+					<span class="pathway-action">Compare feature evidence →</span>
+				</a>
+				<a class="pathway" href="/research/datasets">
+					<span class="pathway-index">03</span>
+					<h3>Datasets</h3>
+					<p>Know what was tested, what overlaps and what the labels can support.</p>
+					<span class="pathway-action">Inspect dataset cards →</span>
+				</a>
+			</div>
+			<p class="pending-note">
+				Comparison views remain unavailable until a verified cohort exists.
+			</p>
+		</section>
+
+		<section class="card corpus-card" aria-labelledby="corpus-title">
+			<div>
+				<p class="card-eyebrow">Frozen index context</p>
+				<h2 id="corpus-title">What is in the frozen index?</h2>
+
+				{#if corpusState === 'loading'}
+					<LoadingSkeleton count={1} type="card" />
+				{:else if corpusState === 'available'}
+					<p class="corpus-total">
+						{formatCount(corpusTotal)} indexed chunks · counts, not publications
+					</p>
+					{#if corpusEntries.length > 0}
+						<dl class="corpus-counts">
+							{#each corpusEntries as [type, count]}
+								<div class="corpus-row">
+									<dt>{sourceTypeLabel(type)}</dt>
+									<dd>
+										<span class="corpus-bar" aria-hidden="true">
+											<span style={`width:${percent(count, maxCorpusCount)}%`}></span>
+										</span>
+										<strong>{formatCount(count)}</strong>
+									</dd>
+								</div>
+							{/each}
+						</dl>
+					{:else}
+						<p class="state-note">Source-type counts were not provided by the index.</p>
 					{/if}
+					<p class="corpus-note">
+						Source: local D11 <code>medical_docs</code> index, read-only count. Do not pool these
+						inventories with query or case counts.
+					</p>
+					<a class="text-link" href="/evidence">Inspect indexed chunks →</a>
+				{:else}
+					<div class="state-block" role="status">
+						<h3>
+							{corpusState === 'unauthorized'
+								? 'Index inventory requires operator access'
+								: 'Index inventory unavailable'}
+						</h3>
+						<p>
+							{corpusState === 'unauthorized'
+								? 'The private-lab boundary is unchanged; the workspace does not substitute zero counts.'
+								: corpusError || 'The index count could not be read.'}
+						</p>
+					</div>
 				{/if}
 			</div>
-		{/each}
+			<aside class="unit-note">
+				<p class="card-eyebrow">Units differ</p>
+				<p>
+					Chunks, questions, conversations and review cases are different units. They are shown
+					separately and never summed into one evidence total.
+				</p>
+			</aside>
+		</section>
 
-		{#if loading}
-			<div class="message assistant loading">
-				<div class="typing-indicator">
-					<span></span>
-					<span></span>
-					<span></span>
-				</div>
-			</div>
-		{/if}
-
-		{#if error}
-			<div class="error">{error}</div>
-		{/if}
+		<p class="footer-note">
+			Archived metrics are shown with their recorded denominators. No live run, promotion or
+			clinical-suitability claim is implied.
+		</p>
 	</div>
-
-	<div class="input-area">
-		<textarea
-			bind:value={input}
-			onkeydown={handleKeydown}
-			placeholder="Ask a question..."
-			rows="2"
-			maxlength={MAX_MESSAGE_LENGTH}
-			disabled={loading}
-		></textarea>
-		<button onclick={sendMessage} disabled={loading || !input.trim() || input.trim().length > MAX_MESSAGE_LENGTH}>
-			Send
-		</button>
-	</div>
-
-		{#if showPipeline && messages.length > 0}
-			{@const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && m.pipeline)}
-			{#if lastAssistantMsg?.pipeline && PipelinePanelComponent}
-				{@const PipelinePanel = PipelinePanelComponent}
-				<PipelinePanel pipeline={lastAssistantMsg.pipeline} isOpen={showPipeline} />
-			{/if}
-		{/if}
-</div>
 </AppShell>
 
 <style>
-	.chat-container {
-		width: 100%;
-		min-height: calc(100vh - 8rem);
+	.workspace {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 1.75rem;
 	}
 
-	header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 1rem;
-		flex-wrap: wrap;
-		gap: 1rem;
+	.eyebrow,
+	.card-eyebrow {
+		margin: 0 0 0.5rem;
+		color: var(--muted-color);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
 	}
 
-	.header-left {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
+	.hero {
+		display: grid;
+		grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.8fr);
+		gap: 2rem;
+		align-items: start;
 	}
 
-	header h1 {
-		font-size: 1.85rem;
+	h1 {
+		max-width: 18ch;
 		margin: 0;
+		font-size: clamp(2rem, 4.2vw, 3.35rem);
+		letter-spacing: -0.02em;
 	}
 
-	.pipeline-toggle {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
+	.lede {
+		max-width: 52ch;
+		margin: 1rem 0 0;
+		font-size: 1.05rem;
+		color: var(--secondary);
+	}
+
+	.privacy-note {
+		margin: 1rem 0 0;
+		font-size: 0.82rem;
+		color: var(--rust);
+	}
+
+	.lab-card {
+		padding: 0.25rem 0 0.25rem 1.25rem;
+		border-left: 3px solid var(--teal);
+	}
+
+	.lab-card ul,
+	.plain-list {
+		margin: 0;
+		padding-left: 1.1rem;
+		color: var(--secondary);
 		font-size: 0.9rem;
-		cursor: pointer;
-		user-select: none;
 	}
 
-	.pipeline-toggle input[type='checkbox'] {
-		cursor: pointer;
-		width: 16px;
-		height: 16px;
+	.lab-card li + li,
+	.plain-list li + li {
+		margin-top: 0.45rem;
 	}
 
-	header button {
-		padding: 0.65rem 0.95rem;
-		background: white;
+	.primary-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr);
+		gap: 1.25rem;
+	}
+
+	.card {
+		padding: 1.5rem;
 		border: 1px solid var(--border-color);
-		border-radius: 999px;
-		cursor: pointer;
+		border-radius: 14px;
+		background: #fffdf8;
 	}
 
-	header button:hover {
-		background: var(--surface-subtle);
+	.card h2 {
+		margin: 0 0 0.75rem;
+		font-size: clamp(1.35rem, 2.2vw, 1.75rem);
 	}
 
-	.messages {
-		flex: 1;
-		overflow-y: auto;
-		padding: 1rem;
-		border: 1px solid var(--border-color);
-		border-radius: 18px;
-		background: white;
+	.report-meta {
+		margin: 0 0 1rem;
+		color: var(--muted-color);
+		font-size: 0.82rem;
 	}
 
-	.welcome {
-		text-align: center;
-		color: #666;
-		margin-top: 2rem;
-	}
-
-	.message {
-		margin-bottom: 1rem;
-		padding: 1rem;
-		border-radius: 8px;
-		max-width: 90%;
-	}
-
-	@media (max-width: 768px) {
-		.message {
-			max-width: 95%;
-		}
-	}
-
-	.message.user {
-		background: #e3f2fd;
-		margin-left: auto;
-	}
-
-	.message.assistant {
-		background: #f5f5f5;
-		margin-right: auto;
-	}
-
-	.message.loading {
-		opacity: 0.6;
-	}
-
-	.message-header {
+	.metric-headline {
 		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		margin-bottom: 0.5rem;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.metric-label {
+		margin: 0;
+		color: var(--muted-color);
 		font-size: 0.8rem;
 	}
 
-	.role-label {
-		font-weight: 600;
-		color: #666;
+	.metric-value {
+		margin: 0.1rem 0 0;
+		font-family: var(--font-heading);
+		font-size: 2.6rem;
+		line-height: 1;
 	}
 
-	.timestamp {
-		color: #999;
-	}
-
-	.copy-btn {
-		margin-left: auto;
-		padding: 0.2rem 0.5rem;
-		background: transparent;
-		border: 1px solid #ddd;
-		border-radius: 3px;
-		cursor: pointer;
-		font-size: 0.75rem;
-		color: #666;
-		transition: all 0.2s;
-	}
-
-	.copy-btn:hover {
-		background: #e0e0e0;
-	}
-
-	.typing-indicator {
+	.metric-counts {
 		display: flex;
-		gap: 4px;
-		padding: 0.5rem;
-	}
-
-	.typing-indicator span {
-		width: 8px;
-		height: 8px;
-		background: #666;
-		border-radius: 50%;
-		animation: typing 1.4s infinite ease-in-out;
-	}
-
-	.typing-indicator span:nth-child(1) {
-		animation-delay: 0s;
-	}
-
-	.typing-indicator span:nth-child(2) {
-		animation-delay: 0.2s;
-	}
-
-	.typing-indicator span:nth-child(3) {
-		animation-delay: 0.4s;
-	}
-
-	@keyframes typing {
-		0%, 60%, 100% {
-			transform: translateY(0);
-			opacity: 0.4;
-		}
-		30% {
-			transform: translateY(-6px);
-			opacity: 1;
-		}
-	}
-
-	.content {
-		white-space: pre-wrap;
-		line-height: 1.5;
-	}
-
-	.content :global(code) {
-		background: #e0e0e0;
-		padding: 0.1rem 0.3rem;
-		border-radius: 3px;
-		font-family: monospace;
-		font-size: 0.9em;
-	}
-
-	.content :global(strong) {
-		font-weight: 600;
-	}
-
-	.sources-panel {
-		margin-top: 0.5rem;
-		font-size: 0.85rem;
-		color: #666;
-		display: grid;
-		gap: 0.5rem;
-		padding: 0.75rem;
-		border: 1px solid #dbe3ec;
-		border-radius: 0.85rem;
-		background: #f8fbfd;
-	}
-
-	.sources-panel-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-	}
-
-	.source-tabs {
-		display: flex;
-		gap: 0.4rem;
 		flex-wrap: wrap;
-	}
-
-	.source-tabs button {
-		border: 1px solid #c8d6e5;
-		background: white;
-		color: #456;
-		padding: 0.35rem 0.7rem;
-		border-radius: 999px;
+		gap: 0.4rem;
 		font-size: 0.78rem;
-		cursor: pointer;
+		color: var(--secondary);
 	}
 
-	.source-tabs button.active {
-		background: #0f766e;
-		border-color: #0f766e;
-		color: white;
+	.metric-counts span {
+		padding: 0.25rem 0.5rem;
+		border: 1px solid var(--border-color);
+		border-radius: 4px;
 	}
 
-	.sources-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		gap: 0.45rem;
-	}
-
-	.source-card {
-		display: grid;
-		gap: 0.55rem;
-		padding: 0.75rem;
-		border-radius: 0.8rem;
-		background: white;
-		border: 1px solid #e2e8f0;
-	}
-
-	.source-card-top {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		align-items: start;
-		gap: 0.65rem;
-	}
-
-	.source-title-wrap {
-		display: grid;
-		gap: 0.25rem;
-	}
-
-	.source-index {
-		min-width: 1.5rem;
-		font-weight: 600;
-		color: #6b7280;
-	}
-
-	.source-badges {
+	.coverage-bar {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
+		height: 12px;
+		margin: 1rem 0 0.5rem;
+		overflow: hidden;
+		border-radius: 999px;
+		background: var(--surface-strong);
 	}
 
-	.source-type-pill,
-	.source-class-pill,
-	.source-meta-pill {
+	.bar-measured {
+		background: var(--teal);
+	}
+
+	.bar-failed {
+		background: var(--rust);
+	}
+
+	.coverage-note,
+	.corpus-note,
+	.footer-note {
+		color: var(--secondary);
+		font-size: 0.86rem;
+	}
+
+	.state-note {
+		margin: 0.5rem 0 0;
+		color: var(--rust);
+		font-size: 0.82rem;
+	}
+
+	.button {
 		display: inline-flex;
 		align-items: center;
-		padding: 0.2rem 0.5rem;
-		border-radius: 999px;
-		font-size: 0.72rem;
-		font-weight: 600;
-	}
-
-	.source-type-pill {
-		background: #dbeafe;
-		color: #1d4ed8;
-	}
-
-	.source-class-pill {
-		background: #dcfce7;
-		color: #15803d;
-	}
-
-	.source-meta-pill {
-		background: #fef3c7;
-		color: #b45309;
-	}
-
-	.source-link,
-	.source-text {
-		font-size: 0.95rem;
-		color: #4b5563;
-		word-break: break-word;
-	}
-
-	.source-link {
+		min-height: 44px;
+		margin-top: 1rem;
+		padding: 0.6rem 1rem;
+		border-radius: 6px;
+		background: var(--teal);
+		color: #fff;
+		font-weight: 700;
 		text-decoration: none;
 	}
 
-	.source-link:hover {
+	.button:hover {
+		background: #00574f;
+	}
+
+	.text-link,
+	.pathway-action {
+		color: var(--teal);
+		font-weight: 700;
 		text-decoration: underline;
+		text-underline-offset: 2px;
 	}
 
-	.source-domain {
-		font-size: 0.8rem;
-		color: #64748b;
+	.ask-card {
+		border-color: var(--ink);
+		background: var(--ink);
+		color: var(--paper);
 	}
 
-	.distribution-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: 0.75rem;
+	.ask-card h2 {
+		color: var(--paper);
 	}
 
-	.distribution-card {
-		padding: 0.5rem;
-		background: white;
-		border: 1px solid #e2e8f0;
-		border-radius: 0.8rem;
+	.ask-card p,
+	.ask-card .plain-list {
+		color: #c7d1cf;
 	}
 
-	.distribution-empty {
-		margin: 0;
-		color: #64748b;
-		font-size: 0.9rem;
+	.ask-card .card-eyebrow {
+		color: #9fc7bf;
 	}
 
-	.pipeline-btn {
+	.ask-card .button {
+		background: var(--paper);
+		color: var(--ink);
+	}
+
+	.plain-list {
 		margin-top: 0.75rem;
-		padding: 0.5rem 1rem;
-		background: #e3f2fd;
-		color: #1976d2;
-		border: 1px solid #2196f3;
-		border-radius: 4px;
-		cursor: pointer;
-		font-size: 0.85rem;
-		font-weight: 500;
-		transition: all 0.2s ease;
 	}
 
-	.pipeline-btn:hover {
-		background: #bbdefb;
-		border-color: #1976d2;
-	}
-
-	.pipeline-btn.active {
-		background: #1976d2;
-		color: white;
-		border-color: #1565c0;
-	}
-
-	.config-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.35rem;
-		margin-top: 0.5rem;
-	}
-
-	.chip {
-		padding: 0.15rem 0.5rem;
-		border-radius: 999px;
-		font-size: 0.7rem;
-		font-weight: 600;
-		background: #e8edf2;
-		color: #475569;
-	}
-
-	.chip.accent {
-		background: #dbeafe;
-		color: #1d4ed8;
-	}
-
-	.error {
-		color: #d32f2f;
-		padding: 0.5rem;
-		background: #ffebee;
-		border-radius: 4px;
-	}
-
-	.status-banner {
-		border: 1px solid #f0c36d;
-		background: #fff7e6;
-		color: #7a4b00;
-		border-radius: 12px;
-		padding: 0.85rem 1rem;
-		font-size: 0.95rem;
-	}
-
-	.input-area {
-		display: flex;
-		gap: 0.5rem;
-		padding: 1rem;
-		border: 1px solid var(--border-color);
-		border-radius: 18px;
-		background: white;
-	}
-
-	.input-area textarea {
-		flex: 1;
-		padding: 0.75rem;
+	.pathways {
+		padding: 1.5rem;
 		border: 1px solid var(--border-color);
 		border-radius: 14px;
-		resize: none;
-		font-family: inherit;
-		font-size: 1rem;
 		background: var(--surface-subtle);
 	}
 
-	.input-area textarea:focus {
-		outline: none;
-		border-color: #2196f3;
+	.section-heading {
+		margin-bottom: 1rem;
 	}
 
-	.input-area button {
-		padding: 0.75rem 1.5rem;
-		background: #1f4f82;
-		color: white;
-		border: none;
-		border-radius: 999px;
-		cursor: pointer;
-		font-weight: 500;
+	.section-heading h2 {
+		margin: 0;
+		font-size: clamp(1.4rem, 2.2vw, 1.8rem);
 	}
 
-	.input-area button:hover:not(:disabled) {
-		background: #1976d2;
+	.pathway-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 1rem;
 	}
 
-	.input-area button:disabled {
-		background: #ccc;
-		cursor: not-allowed;
+	.pathway {
+		display: flex;
+		flex-direction: column;
+		min-height: 100%;
+		padding: 1.1rem;
+		border: 1px solid var(--border-color);
+		border-radius: 10px;
+		background: #fffdf8;
+		color: var(--ink);
+		text-decoration: none;
 	}
 
-	/* Optimal line length for wide screens */
-	@media (min-width: 1400px) {
-		.message.assistant .content {
-			max-width: 75ch;
+	.pathway:hover {
+		border-color: var(--teal);
+	}
+
+	.pathway-index {
+		color: var(--rust);
+		font-family: var(--font-heading);
+		font-size: 0.9rem;
+	}
+
+	.pathway h3 {
+		margin: 0.5rem 0;
+		font-size: 1.2rem;
+	}
+
+	.pathway p {
+		flex: 1;
+		margin: 0 0 0.9rem;
+		color: var(--secondary);
+		font-size: 0.88rem;
+	}
+
+	.pending-note {
+		margin: 1rem 0 0;
+		color: var(--muted-color);
+		font-size: 0.8rem;
+	}
+
+	.corpus-card {
+		display: grid;
+		grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.7fr);
+		gap: 1.5rem;
+	}
+
+	.corpus-total {
+		margin: 0 0 0.9rem;
+		font-family: var(--font-heading);
+		font-size: 1.35rem;
+	}
+
+	.corpus-counts {
+		display: grid;
+		gap: 0.55rem;
+		margin: 0 0 1rem;
+	}
+
+	.corpus-row {
+		display: grid;
+		grid-template-columns: 7rem minmax(0, 1fr);
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.corpus-counts dt {
+		color: var(--muted-color);
+		font-size: 0.78rem;
+	}
+
+	.corpus-counts dd {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 4rem;
+		align-items: center;
+		gap: 0.65rem;
+		margin: 0;
+		font-size: 0.82rem;
+	}
+
+	.corpus-counts dd strong {
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+	}
+
+	.corpus-bar {
+		display: block;
+		height: 12px;
+		overflow: hidden;
+		border-radius: 2px;
+		background: var(--surface-strong);
+	}
+
+	.corpus-bar span {
+		display: block;
+		height: 100%;
+		border-radius: 2px;
+		background: var(--teal);
+	}
+
+	.corpus-row:nth-child(2) .corpus-bar span {
+		background: var(--blue);
+	}
+
+	.unit-note {
+		padding: 1rem;
+		border-left: 3px solid var(--blue);
+		background: var(--surface-subtle);
+		font-size: 0.86rem;
+		color: var(--secondary);
+	}
+
+	.state-block {
+		padding: 1rem;
+		border: 1px dashed var(--border-color);
+		border-radius: 8px;
+		background: var(--surface-subtle);
+	}
+
+	.state-block h3 {
+		margin: 0 0 0.5rem;
+		font-size: 1rem;
+	}
+
+	.state-block p {
+		margin: 0 0 0.5rem;
+		color: var(--secondary);
+		font-size: 0.88rem;
+	}
+
+	.footer-note {
+		margin: 0;
+		padding-top: 0.5rem;
+		border-top: 1px solid var(--border-color);
+	}
+
+	@media (max-width: 1024px) {
+		.hero,
+		.primary-grid,
+		.corpus-card {
+			grid-template-columns: 1fr;
+		}
+
+		.pathway-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.card,
+		.pathways {
+			padding: 1.1rem;
+		}
+
+		.corpus-row {
+			grid-template-columns: 5.5rem minmax(0, 1fr);
+			gap: 0.5rem;
+		}
+
+		.corpus-counts dd {
+			grid-template-columns: minmax(0, 1fr) 3rem;
+			gap: 0.4rem;
 		}
 	}
 </style>

@@ -2,9 +2,10 @@
 	import type { Snippet } from 'svelte';
 	import { scale } from 'svelte/transition';
 
-	let { title, timing, expanded = $bindable(false), children }: {
+	let { title, timing, timingLabel = '', expanded = $bindable(false), children }: {
 		title: string;
 		timing: number;
+		timingLabel?: string;
 		expanded?: boolean;
 		children?: Snippet;
 	} = $props();
@@ -15,6 +16,8 @@
 		<span class="step-title">{title}</span>
 		{#if timing > 0}
 			<span class="step-timing">{timing}ms</span>
+		{:else if timingLabel}
+			<span class="step-timing placeholder">{timingLabel}</span>
 		{/if}
 		<span class="expand-icon {expanded ? 'expanded' : ''}">▶</span>
 	</button>
@@ -72,7 +75,7 @@
 
 	.step-timing {
 		background: #e3f2fd;
-		color: #1976d2;
+		color: #1d4ed8;
 		padding: 0.25rem 0.5rem;
 		border-radius: 4px;
 		font-size: 0.85rem;

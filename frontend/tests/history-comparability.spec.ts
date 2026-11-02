@@ -162,6 +162,42 @@ async function openTrending(
 	).toBeVisible();
 }
 
+test('explicit run outside the history page loads directly and is not replaced by latest', async ({
+	page
+}) => {
+	const outsideRun = {
+		...latestFixture,
+		run_dir: '20260101T000000Z_outside',
+		summary: { ...latestFixture.summary, duration_s: 9 }
+	};
+	await mockEvaluationApi(page, historyFixture, undefined, outsideRun);
+	// Registered after the helper so this delayed latest response is the one used.
+	await page.route(/\/evaluation\/latest$/, async (route) => {
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(latestFixture)
+		});
+	});
+
+	await page.goto('/eval?run=local:20260101T000000Z_outside');
+	await expect(page.locator('.run-bar-primary')).toContainText('20260101T000000Z_outside');
+	await expect(page.locator('.run-bar-meta')).toContainText('Duration 9.00s');
+	await page.waitForTimeout(500);
+	await expect(page.locator('.run-bar-primary')).toContainText('20260101T000000Z_outside');
+	await expect(page.locator('.run-bar-primary')).not.toContainText('latest');
+});
+
+test('default eval load requests only the latest run', async ({ page }) => {
+	let runRequests = 0;
+	await mockEvaluationApi(page, historyFixture, () => (runRequests += 1));
+	await page.goto('/eval');
+	await expect(page.locator('.run-bar-primary')).toBeVisible();
+	await page.waitForTimeout(300);
+	expect(runRequests).toBe(0);
+});
+
 test('history shows N/A without comparisons and retains diagnostic filtering/selection', async ({
 	page
 }) => {

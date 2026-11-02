@@ -135,12 +135,12 @@
 
 	.node-timing {
 		font-size: 0.75rem;
-		color: #6b7280;
+		color: #374151;
 		font-family: monospace;
 	}
 
 	.node-timing.skipped-label {
-		color: #9ca3af;
+		color: #4b5563;
 		font-style: italic;
 	}
 

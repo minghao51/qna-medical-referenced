@@ -8,6 +8,7 @@ dist/
 .venv/
 .env.*
 !.env.example
+!.env.demo.example
 .vscode/
 .idea/
 frontend/
@@ -19,6 +20,14 @@ data/rate_limits.db
 docs/
 *.md
 !README.md
-tests/
+tests/*
+!tests/fixtures/
+tests/fixtures/*
+!tests/fixtures/golden_queries.json
+!tests/fixtures/golden_queries_comprehensive.json
+!tests/fixtures/golden_queries_diverse.json
+!tests/fixtures/golden_queries_expanded.json
+!tests/fixtures/golden_queries_all.json
+!tests/fixtures/golden_conversations.json
 .playwright/
 .git/

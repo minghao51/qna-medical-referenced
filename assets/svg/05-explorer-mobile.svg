@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1220" viewBox="0 0 390 1220" role="img" aria-labelledby="title description"><title id="title">Evidence explorer mobile with filter sheet</title><desc id="description">PDF selected in results. Proposed modal filter sheet shown below as an interaction specification.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="390" height="1220" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="390" height="80" fill="#F7F4ED"/>
+<rect x="24" y="23" width="8" height="30" fill="#B34322"/>
+<text x="44" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text x="314" y="46" font-size="14" font-weight="700" style="fill:#182D32" class="">Menu</text>
+<line x1="24" y1="79" x2="366" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text x="24" y="122" font-size="11" font-weight="700" style="fill:#006B61" class="">EVIDENCE / D11</text>
+<text x="24" y="167" font-size="29" font-weight="400" style="fill:#182D32" class="serif">Browse the evidence.</text>
+<text x="24" y="204" font-size="15" font-weight="400" style="fill:#506469" class="">Chunks, not publications.</text>
+<text x="24" y="228" font-size="15" font-weight="400" style="fill:#506469" class="">The source may be incomplete.</text>
+<rect x="24" y="263" width="170" height="44" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="40" y="291" font-size="15" font-weight="700" style="fill:#182D32" class="">Filters · 1 applied</text>
+<rect x="206" y="263" width="160" height="44" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="222" y="291" font-size="15" font-weight="700" style="fill:#182D32" class="">All types</text>
+<rect x="24" y="327" width="57" height="26" fill="#E5F1EA" rx="3"/>
+<text x="34" y="345" font-size="12" font-weight="700" style="fill:#006B61" class="">PDF ×</text>
+<text x="148" y="346" font-size="14" font-weight="400" style="fill:#506469" class="">1,306 chunks</text>
+<rect x="24" y="378" width="342" height="147" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="40" y="407" font-size="19" font-weight="700" style="fill:#182D32" class="">Basal insulin in</text>
+<text x="40" y="432" font-size="19" font-weight="700" style="fill:#182D32" class="">type 2 diabetes</text>
+<text x="40" y="464" font-size="13" font-weight="400" style="fill:#506469" class="">PDF · Page 1 · Chunk 0</text>
+<text x="40" y="489" font-size="12" font-weight="400" style="fill:#506469" class="">Approximately 1 in 4 Singaporeans…</text>
+<text x="40" y="512" font-size="14" font-weight="700" style="fill:#006B61" class="">Inspect chunk →</text>
+<rect x="24" y="541" width="342" height="147" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="40" y="570" font-size="19" font-weight="700" style="fill:#182D32" class="">Basal insulin in</text>
+<text x="40" y="595" font-size="19" font-weight="700" style="fill:#182D32" class="">type 2 diabetes</text>
+<text x="40" y="627" font-size="13" font-weight="400" style="fill:#506469" class="">PDF · Page 1 · Chunk 1</text>
+<text x="40" y="652" font-size="12" font-weight="400" style="fill:#506469" class="">Patient education and shared…</text>
+<text x="40" y="675" font-size="14" font-weight="700" style="fill:#006B61" class="">Inspect chunk →</text>
+<line x1="24" y1="727" x2="366" y2="727" stroke="#CED5D0" stroke-width="1"/>
+<text x="24" y="759" font-size="11" font-weight="700" style="fill:#006B61" class="">FILTER SHEET / OPEN STATE</text>
+<rect x="0" y="788" width="390" height="365" fill="#FFFFFF" stroke="#CED5D0" rx="14"/>
+<text x="24" y="829" font-size="22" font-weight="700" style="fill:#182D32" class="">Filter evidence</text>
+<text x="316" y="829" font-size="14" font-weight="700" style="fill:#006B61" class="">Close</text>
+<text x="24" y="865" font-size="14" font-weight="400" style="fill:#506469" class="">Choose one source type</text>
+<circle cx="35" cy="892" r="9" fill="#CED5D0"/>
+<text x="56" y="897" font-size="15" font-weight="400" style="fill:#182D32" class="">All</text>
+<text x="302" y="897" font-size="14" font-weight="400" style="fill:#506469" class="">2,473</text>
+<circle cx="35" cy="936" r="9" fill="#006B61"/>
+<text x="56" y="941" font-size="15" font-weight="700" style="fill:#182D32" class="">PDF</text>
+<text x="302" y="941" font-size="14" font-weight="400" style="fill:#506469" class="">1,306</text>
+<circle cx="35" cy="980" r="9" fill="#CED5D0"/>
+<text x="56" y="985" font-size="15" font-weight="400" style="fill:#182D32" class="">HTML</text>
+<text x="302" y="985" font-size="14" font-weight="400" style="fill:#506469" class="">597</text>
+<circle cx="35" cy="1024" r="9" fill="#CED5D0"/>
+<text x="56" y="1029" font-size="15" font-weight="400" style="fill:#182D32" class="">Lab reference</text>
+<text x="302" y="1029" font-size="14" font-weight="400" style="fill:#506469" class="">460</text>
+<circle cx="35" cy="1068" r="9" fill="#CED5D0"/>
+<text x="56" y="1073" font-size="15" font-weight="400" style="fill:#182D32" class="">Markdown</text>
+<text x="302" y="1073" font-size="14" font-weight="400" style="fill:#506469" class="">110</text>
+<rect x="24" y="1098" width="342" height="44" fill="#006B61" rx="4"/>
+<text x="40" y="1126" font-size="15" font-weight="700" style="fill:#FFFFFF" class="">Apply PDF filter</text>
+<line x1="24" y1="1168" x2="366" y2="1168" stroke="#CED5D0" stroke-width="1"/>
+<text x="24" y="1195" font-size="10" font-weight="400" style="fill:#506469" class="">SPEC • Radio group; focus trapped; Escape closes</text>
+</svg>

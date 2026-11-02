@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1320" viewBox="0 0 390 1320" role="img" aria-labelledby="title description"><title id="title">Mobile Q&amp;A and full-turn inspector</title><desc id="description">Conversation and drilldown represented as sequential mobile views. Synthetic response and trace values; no private user information.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="390" height="1320" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="390" height="80" fill="#F7F4ED"/>
+<rect x="24" y="23" width="8" height="30" fill="#B34322"/>
+<text x="44" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text x="314" y="46" font-size="14" font-weight="700" style="fill:#182D32" class="">Menu</text>
+<line x1="24" y1="79" x2="366" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text x="24" y="122" font-size="11" font-weight="700" style="fill:#006B61" class="">ASK / TURN 02</text>
+<rect x="24" y="140" width="204" height="26" fill="#FBECE2" rx="3"/>
+<text x="34" y="158" font-size="12" font-weight="700" style="fill:#B34322" class="">ILLUSTRATIVE CONTENT</text>
+<text x="24" y="210" font-size="25" font-weight="400" style="fill:#182D32" class="serif">What should I ask at my</text>
+<text x="24" y="242" font-size="25" font-weight="400" style="fill:#182D32" class="serif">next appointment?</text>
+<text x="24" y="307" font-size="11" font-weight="700" style="fill:#006B61" class="">FIELDNOTE</text>
+<text x="24" y="341" font-size="15" font-weight="400" style="fill:#182D32" class="">Ask your clinician to explain your treatment</text>
+<text x="24" y="367" font-size="15" font-weight="400" style="fill:#182D32" class="">goals, address your concerns, and discuss</text>
+<text x="24" y="393" font-size="15" font-weight="400" style="fill:#182D32" class="">appropriate and safe medicine use. [1]</text>
+<text x="24" y="441" font-size="12" font-weight="700" style="fill:#006B61" class="">[1] ACE guidance · Page 1 · Open source ↗</text>
+<rect x="24" y="466" width="342" height="44" fill="#006B61" rx="4"/>
+<text x="40" y="494" font-size="15" font-weight="700" style="fill:#FFFFFF" class="">Inspect turn 02 →</text>
+<text x="24" y="542" font-size="12" font-weight="400" style="fill:#506469" class="">Answer and trace shown here are synthetic.</text>
+<text x="24" y="563" font-size="12" font-weight="400" style="fill:#506469" class="">This is not individualized medical advice.</text>
+<line x1="24" y1="599" x2="366" y2="599" stroke="#CED5D0" stroke-width="1"/>
+<text x="24" y="630" font-size="10" font-weight="700" style="fill:#006B61" class="">AFTER “INSPECT TURN” / FULL-SCREEN SHEET</text>
+<rect x="0" y="657" width="390" height="595" fill="#FFFFFF" stroke="#CED5D0" rx="12"/>
+<text x="24" y="697" font-size="14" font-weight="700" style="fill:#006B61" class="">← Back to answer</text>
+<text x="24" y="742" font-size="25" font-weight="400" style="fill:#182D32" class="serif">Turn 02 breakdown</text>
+<text x="24" y="774" font-size="13" font-weight="400" style="fill:#506469" class="">Complete · total 1.80 s · synthetic</text>
+<line x1="24" y1="795" x2="366" y2="795" stroke="#CED5D0" stroke-width="1"/>
+<text x="24" y="827" font-size="17" font-weight="700" style="fill:#182D32" class="">01  Retrieval / expanded</text>
+<text x="270" y="827" font-size="13" font-weight="400" style="fill:#182D32" class="mono">300 ms</text>
+<text x="24" y="862" font-size="14" font-weight="400" style="fill:#182D32" class="">Query expansion · 20 ms</text>
+<text x="24" y="891" font-size="14" font-weight="400" style="fill:#182D32" class="">Semantic search · 200 ms</text>
+<text x="24" y="920" font-size="14" font-weight="400" style="fill:#182D32" class="">Reranking · skipped</text>
+<rect x="24" y="950" width="342" height="73" fill="#E5F1EA" rx="4"/>
+<text x="40" y="978" font-size="15" font-weight="700" style="fill:#182D32" class="">Rank 1 · Page 1 · chunk 1</text>
+<text x="40" y="1006" font-size="14" font-weight="700" style="fill:#006B61" class="">Raw scores &amp; excerpt →</text>
+<text x="24" y="1060" font-size="16" font-weight="700" style="fill:#182D32" class="">02  Context / 2 chunks · 900 chars</text>
+<text x="24" y="1102" font-size="16" font-weight="700" style="fill:#182D32" class="">03  Generation / 1,400 ms</text>
+<text x="24" y="1145" font-size="12" font-weight="400" style="fill:#506469" class="">Context duration and exact usage not recorded.</text>
+<text x="24" y="1169" font-size="12" font-weight="400" style="fill:#506469" class="">100 ms falls outside the two measured stages.</text>
+<text x="24" y="1193" font-size="12" font-weight="400" style="fill:#506469" class="">Show unavailable fields as “not recorded”.</text>
+<line x1="24" y1="1268" x2="366" y2="1268" stroke="#CED5D0" stroke-width="1"/>
+<text x="24" y="1295" font-size="10" font-weight="400" style="fill:#506469" class="">PROPOSED UI • Back restores focus and scroll</text>
+</svg>

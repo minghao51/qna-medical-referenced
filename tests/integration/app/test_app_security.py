@@ -495,6 +495,28 @@ def test_evaluate_single_requires_authenticated_request(monkeypatch, tmp_path: P
     assert response.json()["detail"] == "Missing X-API-Key header"
 
 
+def test_research_catalog_requires_authenticated_state(monkeypatch, tmp_path: Path):
+    client = _build_client(monkeypatch, tmp_path, api_keys=None, rate_limit=50)
+
+    listing = client.get("/research-data/datasets")
+    detail = client.get("/research-data/datasets/golden-all")
+
+    assert listing.status_code == 401
+    assert detail.status_code == 401
+    assert listing.json()["detail"] == "Missing X-API-Key header"
+
+
+def test_research_catalog_lists_allowlisted_entries_with_key(monkeypatch, tmp_path: Path):
+    client = _build_client(monkeypatch, tmp_path, api_keys="secret-key", rate_limit=50)
+
+    response = client.get("/research-data/datasets", headers={"X-API-Key": "secret-key"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["datasets"]) == 9
+    assert payload["datasets"][0]["catalog_id"] == "golden-original"
+
+
 def test_evaluate_single_validates_payload_shape(monkeypatch, tmp_path: Path):
     client = _build_client(monkeypatch, tmp_path, api_keys="secret-key", rate_limit=50)
 

@@ -30,6 +30,14 @@ COPY src/ ./src/
 COPY config/settings.yaml ./config/settings.yaml
 COPY config/sources.yaml ./config/sources.yaml
 COPY experiments/ ./experiments/
+# Owner-approved public/synthetic fixture bundle (G-FIXTURES): six named files only.
+# The rest of tests/ is not part of the runtime image.
+COPY tests/fixtures/golden_queries.json tests/fixtures/golden_queries.json
+COPY tests/fixtures/golden_queries_comprehensive.json tests/fixtures/golden_queries_comprehensive.json
+COPY tests/fixtures/golden_queries_diverse.json tests/fixtures/golden_queries_diverse.json
+COPY tests/fixtures/golden_queries_expanded.json tests/fixtures/golden_queries_expanded.json
+COPY tests/fixtures/golden_queries_all.json tests/fixtures/golden_queries_all.json
+COPY tests/fixtures/golden_conversations.json tests/fixtures/golden_conversations.json
 RUN mkdir -p /app/data/chroma /app/data/evals /app/data/evals_comprehensive_ablation /app/data/processed /app/data/raw
 
 EXPOSE 8000

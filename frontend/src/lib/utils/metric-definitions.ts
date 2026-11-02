@@ -1,3 +1,5 @@
+import type { MetricDisplayDefinition } from '../types';
+
 // Human-readable definitions for various pipeline and retrieval metrics
 
 export const stageNames: Record<string, string> = {
@@ -63,10 +65,67 @@ export const metricDefinitions: Record<string, string> = {
 	'mrr': 'Mean Reciprocal Rank: How high up the list the FIRST relevant result appears (1.0 = 1st, 0.5 = 2nd, etc).',
 	'precision_at_k': 'Percentage of the top K results that are actually relevant.',
 	'recall_at_k': 'Percentage of ALL relevant chunks that were successfully found in the top K results.',
-	'ndcg_at_k': 'Graded ranking quality: gives much higher scores when the BEST results are strictly at the top.',
+	'ndcg_at_k': 'Legacy keyword/source ranking diagnostic; not interchangeable with reviewed-evidence nDCG or medical correctness.',
 	'source_hit_rate': 'Percentage of queries that correctly identified the right source document.',
 	'exact_chunk_hit_rate': 'Percentage of queries that retrieved the exact intended text chunk.',
-	'evidence_hit_rate': 'Percentage of queries that retrieved enough evidence to fully answer the question.',
+	'evidence_hit_rate': 'Legacy evidence-match diagnostic; not proof of a correct or complete medical answer.',
 	'latency_p50_ms': 'Median time taken to return search results (50% of requests are faster than this).',
 	'latency_p95_ms': '95th percentile latency (only 5% of requests are slower than this).'
 };
+
+// Mirrors REQUIRED_ANSWER_METRICS, without importing backend/runtime code.
+export const answerMetricKeys = [
+	'factual_accuracy', 'completeness', 'clinical_relevance', 'clarity',
+	'answer_relevancy', 'faithfulness'
+] as const;
+
+const answerMetricLabels: Record<string, string> = {
+	factual_accuracy: 'Factual accuracy (judge)',
+	completeness: 'Completeness (judge)',
+	clinical_relevance: 'Clinical relevance (judge)',
+	clarity: 'Clarity (judge)',
+	answer_relevancy: 'Answer relevancy (judge)',
+	faithfulness: 'Faithfulness (judge)'
+};
+const legacyRankingKeys = new Set([
+	'ndcg_at_k', 'mrr', 'hit_rate_at_k', 'precision_at_k', 'recall_at_k',
+	'source_hit_rate', 'exact_chunk_hit_rate', 'evidence_hit_rate'
+]);
+const reviewedEvidenceKeys = new Set([
+	'evidence_ndcg_at_k', 'evidence_mrr', 'evidence_hit_rate_at_k',
+	'evidence_precision_at_k', 'evidence_recall_at_k'
+]);
+
+export function getMetricDisplayDefinition(key: string): MetricDisplayDefinition {
+	const label = key.replaceAll('_', ' ');
+	if (Object.hasOwn(answerMetricLabels, key)) {
+		return {
+			definition_id: `answer-judgment:${key}`, label: answerMetricLabels[key],
+			unit: 'score', direction: 'higher', family: 'answer_judgment'
+		};
+	}
+	if (legacyRankingKeys.has(key) || reviewedEvidenceKeys.has(key)) {
+		const reviewed = reviewedEvidenceKeys.has(key);
+		return {
+			definition_id: `${reviewed ? 'evidence-qrels' : 'legacy-diagnostic'}:${key}`,
+			label: `${label} (${reviewed ? 'reviewed evidence' : 'legacy diagnostic'})`,
+			unit: key.includes('ndcg') || key.includes('mrr') ? 'score' : 'ratio',
+			direction: 'higher', family: reviewed ? 'reviewed_evidence' : 'ranking_diagnostic'
+		};
+	}
+	if (key.endsWith('_ms')) {
+		return { definition_id: `duration:${key}`, label, unit: 'ms', direction: 'lower', family: 'latency' };
+	}
+	if (key === 'metric_error_rate' || key === 'error_rate') {
+		return { definition_id: `measurement:${key}`, label, unit: 'ratio', direction: 'lower', family: 'measurement' };
+	}
+	if (key.endsWith('_count') || key.startsWith('metric_evaluations_')) {
+		return {
+			definition_id: `count:${key}`, label, unit: 'count',
+			direction: key === 'error_count' || key === 'metric_evaluations_failed' ? 'lower' : 'neutral',
+			family: 'measurement'
+		};
+	}
+	// Unknown metrics can be inspected, but have no assumed desirable direction.
+	return { definition_id: `unspecified:${key}`, label, unit: 'number', direction: 'neutral', family: 'unspecified' };
+}

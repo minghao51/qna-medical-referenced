@@ -1,0 +1,130 @@
+name: Deploy Demo
+
+# Manual, review-gated demo deployment. Pushing a `demo-deploy-*` tag is the
+# equivalent of clicking "Run workflow" on that commit.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "demo-deploy-*"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: demo-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set lowercase image names
+        id: images
+        run: |
+          owner="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "backend=ghcr.io/${owner}/qna-medical-referenced-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=ghcr.io/${owner}/qna-medical-referenced-frontend" >> "$GITHUB_OUTPUT"
+
+      - name: Require the demo origin repository variable
+        env:
+          DEMO_ORIGIN: ${{ vars.DEMO_ORIGIN }}
+        run: |
+          if [ -z "$DEMO_ORIGIN" ]; then
+            echo "Set repository variable DEMO_ORIGIN to the Access hostname, e.g. https://lab.example.com" >&2
+            exit 1
+          fi
+          case "$DEMO_ORIGIN" in
+            */) echo "DEMO_ORIGIN must not end with a slash" >&2; exit 1 ;;
+            https://*) ;;
+            *) echo "DEMO_ORIGIN must be an https URL" >&2; exit 1 ;;
+          esac
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: runtime
+          push: true
+          tags: |
+            ${{ steps.images.outputs.backend }}:${{ github.sha }}
+            ${{ steps.images.outputs.backend }}:latest
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: runtime
+          push: true
+          build-args: |
+            VITE_API_URL=${{ vars.DEMO_ORIGIN }}/api
+          tags: |
+            ${{ steps.images.outputs.frontend }}:${{ github.sha }}
+            ${{ steps.images.outputs.frontend }}:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  deploy:
+    needs: build
+    # Disabled until the VM is prepared and the `demo` environment/secrets exist.
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: demo
+      url: ${{ vars.DEMO_ORIGIN }}
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Sync deployment files
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i "$HOME/.ssh/id_ed25519" -o IdentitiesOnly=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH/deploy'"
+          scp -i "$HOME/.ssh/id_ed25519" -o IdentitiesOnly=yes \
+            docker-compose.demo.yml "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/docker-compose.demo.yml"
+          scp -i "$HOME/.ssh/id_ed25519" -o IdentitiesOnly=yes \
+            deploy/Caddyfile "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/deploy/Caddyfile"
+
+      - name: Pull images and restart the demo stack
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          ssh -i "$HOME/.ssh/id_ed25519" -o IdentitiesOnly=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$DEPLOY_PATH' && IMAGE_TAG='$IMAGE_TAG' docker compose --env-file .env.demo -f docker-compose.demo.yml pull && IMAGE_TAG='$IMAGE_TAG' docker compose --env-file .env.demo -f docker-compose.demo.yml up -d --remove-orphans"

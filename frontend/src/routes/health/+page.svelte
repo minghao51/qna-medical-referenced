@@ -86,11 +86,26 @@
 				</section>
 
 				{#if health.runtime}
-					<section class="status-card">
+					<section class="status-card runtime-card">
 						<h2>Runtime</h2>
 						<dl class="kv-list">
 							{#each Object.entries(health.runtime) as [key, val]}
-								<div class="kv-row"><dt>{key}</dt><dd>{typeof val === 'object' ? JSON.stringify(val) : String(val)}</dd></div>
+								{@const valueText = typeof val === 'object' ? JSON.stringify(val) : String(val)}
+								<div class="kv-row">
+									<dt>{key}</dt>
+									<dd>
+										{#if valueText.length > 80}
+											<details class="runtime-detail">
+												<summary aria-label={`Show full value for ${key}`}>
+													{valueText.slice(0, 72)}…
+												</summary>
+												<pre>{valueText}</pre>
+											</details>
+										{:else}
+											{valueText}
+										{/if}
+									</dd>
+								</div>
 							{/each}
 						</dl>
 					</section>
@@ -140,7 +155,12 @@
 	.status-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+		align-items: start;
 		gap: 1rem;
+	}
+
+	.runtime-card {
+		grid-column: 1 / -1;
 	}
 
 	.status-card {
@@ -210,8 +230,10 @@
 	}
 
 	.kv-row {
-		display: flex;
-		justify-content: space-between;
+		display: grid;
+		grid-template-columns: minmax(8rem, auto) minmax(0, 1fr);
+		align-items: start;
+		gap: 1rem;
 		padding: 0.3rem 0;
 		border-bottom: 1px solid var(--surface-subtle);
 		font-size: 0.88rem;
@@ -227,12 +249,15 @@
 	}
 
 	dd {
+		min-width: 0;
 		margin: 0;
 		font-weight: 600;
+		overflow-wrap: anywhere;
+		text-align: right;
 	}
 
 	dd.ok {
-		color: #059669;
+		color: var(--success);
 	}
 
 	dd.warn {
@@ -242,6 +267,41 @@
 	dd.mono {
 		font-family: monospace;
 		font-size: 0.82rem;
+	}
+
+	.runtime-detail {
+		text-align: left;
+	}
+
+	.runtime-detail summary {
+		color: var(--teal);
+		cursor: pointer;
+		overflow-wrap: anywhere;
+	}
+
+	@media (max-width: 480px) {
+		.kv-row {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 0.15rem;
+		}
+
+		dd {
+			text-align: left;
+		}
+	}
+
+	.runtime-detail pre {
+		max-height: 14rem;
+		margin: 0.5rem 0 0;
+		padding: 0.6rem;
+		overflow: auto;
+		border: 1px solid var(--border-color);
+		border-radius: 6px;
+		background: var(--surface-subtle);
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+		font-size: 0.72rem;
+		text-align: left;
 	}
 
 	.muted {

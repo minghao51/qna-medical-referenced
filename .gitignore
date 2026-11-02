@@ -19,6 +19,7 @@ venv*/
 # .env is now encrypted with dotenvx - safe to commit
 .env.*
 !.env.example
+!.env.demo.example
 .env.keys
 .env.backup
 

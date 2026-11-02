@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1120" viewBox="0 0 1440 1120" role="img" aria-labelledby="title description"><title id="title">Chunk detail and provenance</title><desc id="description">Real D11 chunk excerpt with original URL, metadata and limitations. Human readable title is proposed display mapping.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1120" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text x="340" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Overview</text>
+<text x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text x="550" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Evidence</text>
+<line x1="550" y1="60" x2="622" y2="60" stroke="#006B61" stroke-width="3"/>
+<text x="692" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Research</text>
+<text x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text x="48" y="122" font-size="14" font-weight="700" style="fill:#006B61" class="">← Evidence / PDF / Chunk 1</text>
+<text x="48" y="185" font-size="42" font-weight="400" style="fill:#182D32" class="serif">Basal insulin in type 2 diabetes</text>
+<text x="48" y="222" font-size="17" font-weight="400" style="fill:#506469" class="">An excerpt from ACE guidance, hosted by the Diabetes Society of Singapore.</text>
+<rect x="48" y="249" width="43" height="26" fill="#E5F1EA" rx="3"/>
+<text x="58" y="267" font-size="12" font-weight="700" style="fill:#006B61" class="">PDF</text>
+<rect x="120" y="249" width="64" height="26" fill="#E5F1EA" rx="3"/>
+<text x="130" y="267" font-size="12" font-weight="700" style="fill:#006B61" class="">Page 1</text>
+<rect x="211" y="249" width="92" height="26" fill="#E5F1EA" rx="3"/>
+<text x="221" y="267" font-size="12" font-weight="700" style="fill:#006B61" class="">Frozen D11</text>
+<rect x="350" y="249" width="211" height="26" fill="#FBECE2" rx="3"/>
+<text x="360" y="267" font-size="12" font-weight="700" style="fill:#B34322" class="">Guideline ≠ personal advice</text>
+<rect x="48" y="318" width="850" height="540" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="76" y="357" font-size="12" font-weight="700" style="fill:#006B61" class="">THE INDEXED EXCERPT</text>
+<text x="76" y="404" font-size="19" font-weight="400" style="fill:#182D32" class="serif">able to reach their glycaemic targets despite optimal treatment</text>
+<text x="76" y="435" font-size="19" font-weight="400" style="fill:#182D32" class="serif">with non-insulin T2DM medications alone should be started on</text>
+<text x="76" y="466" font-size="19" font-weight="400" style="fill:#182D32" class="serif">insulin therapy.</text>
+<text x="76" y="497" font-size="19" font-weight="400" style="fill:#182D32" class="serif">5</text>
+<text x="76" y="528" font-size="19" font-weight="400" style="fill:#182D32" class="serif">Patient education and shared decision making is integral to the</text>
+<text x="76" y="559" font-size="19" font-weight="400" style="fill:#182D32" class="serif">successful initiation of insulin for patients with T2DM.</text>
+<text x="76" y="590" font-size="19" font-weight="400" style="fill:#182D32" class="serif">Health care professionals play an important role in empowering</text>
+<text x="76" y="621" font-size="19" font-weight="400" style="fill:#182D32" class="serif">patients and their caregivers by engaging them</text>
+<text x="76" y="652" font-size="19" font-weight="400" style="fill:#182D32" class="serif">in discussions relating to insulin use, from addressing</text>
+<text x="76" y="683" font-size="19" font-weight="400" style="fill:#182D32" class="serif">insulin-related concerns, to appropriate and safe use, and</text>
+<line x1="76" y1="733" x2="870" y2="733" stroke="#CED5D0" stroke-width="1"/>
+<text x="76" y="767" font-size="14" font-weight="400" style="fill:#506469" class="">Excerpt reproduced from chunk 1. Line breaks reflowed; text preserved.</text>
+<text x="76" y="792" font-size="14" font-weight="400" style="fill:#506469" class="">This chunk begins mid-sentence and ends mid-sentence.</text>
+<text x="76" y="817" font-size="14" font-weight="400" style="fill:#506469" class="">Read the original for eligibility, contraindications and complete recommendations.</text>
+<g id="provenance">
+<text x="938" y="346" font-size="24" font-weight="700" style="fill:#182D32" class="">Provenance</text>
+<text x="938" y="388" font-size="11" font-weight="700" style="fill:#506469" class="">SOURCE LABEL</text>
+<text x="938" y="413" font-size="15" font-weight="400" style="fill:#182D32" class="">ace_diabetes_insulin_2024</text>
+<text x="938" y="453" font-size="11" font-weight="700" style="fill:#506469" class="">SOURCE CLASS</text>
+<text x="938" y="478" font-size="15" font-weight="400" style="fill:#182D32" class="">guideline_pdf</text>
+<text x="938" y="518" font-size="11" font-weight="700" style="fill:#506469" class="">HOST</text>
+<text x="938" y="543" font-size="15" font-weight="400" style="fill:#182D32" class="">www.diabetes.org.sg</text>
+<text x="938" y="583" font-size="11" font-weight="700" style="fill:#506469" class="">POSITION</text>
+<text x="938" y="608" font-size="15" font-weight="400" style="fill:#182D32" class="">Page 1 · chunk index 1</text>
+<text x="938" y="648" font-size="11" font-weight="700" style="fill:#506469" class="">SOURCE UPDATED</text>
+<text x="938" y="673" font-size="15" font-weight="400" style="fill:#182D32" class="">Not provided by the API</text>
+<text x="938" y="713" font-size="11" font-weight="700" style="fill:#506469" class="">INGESTED / VERIFIED</text>
+<text x="938" y="738" font-size="15" font-weight="400" style="fill:#182D32" class="">Not established</text>
+<rect x="938" y="806" width="247" height="44" fill="#006B61" rx="4"/>
+<text x="954" y="834" font-size="15" font-weight="700" style="fill:#FFFFFF" class="">Open original PDF ↗</text>
+</g>
+<line x1="48" y1="904" x2="1392" y2="904" stroke="#CED5D0" stroke-width="1"/>
+<text x="48" y="943" font-size="20" font-weight="700" style="fill:#182D32" class="">Technical metadata</text>
+<text x="48" y="975" font-size="14" font-weight="400" style="fill:#182D32" class="mono">ID: initiating-basal-insulin-in-type-2-diabetes-mellit_p1_chunk_1</text>
+<text x="48" y="1004" font-size="14" font-weight="400" style="fill:#506469" class="">Raw quality_score: 1.0 · processing heuristic, not clinical validity. Character offsets are extraction metadata.</text>
+<text x="48" y="1034" font-size="13" font-weight="400" style="fill:#506469" class="">Proposed route /evidence/[id] replaces the current modal; preserve /documents links through redirects.</text>
+<line x1="48" y1="1068" x2="1392" y2="1068" stroke="#CED5D0" stroke-width="1"/>
+<text x="48" y="1095" font-size="12" font-weight="400" style="fill:#506469" class="">DESIGN PROPOSAL • Repository snapshot, not a live service</text>
+</svg>
