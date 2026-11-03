@@ -131,7 +131,7 @@ Edit `.env.demo` and set:
 - `DEMO_ORIGIN` — the final Access hostname, no trailing slash.
 - `REGISTRY=local` and `IMAGE_TAG=local` if building locally; use `ghcr.io/<owner>` and a commit SHA for GHCR.
 - `CLOUDFLARE_TUNNEL_TOKEN`.
-- Provider credentials actually approved for the demo.
+- `APP__LLM__PYDANTIC_AI_API_KEY` for OpenCode Go generation/judging and `APP__LLM__DASHSCOPE_API_KEY` for the frozen Qwen embeddings.
 - Keep `APP__API__API_KEYS_JSON` matching `OPERATOR_API_KEY`.
 
 For a local build without GHCR, the image names are local tags such as `local/qna-medical-referenced-backend:local`; nothing is pushed.
@@ -151,7 +151,7 @@ The first build downloads Python/Bun base images and dependencies. The frontend 
 
 ### Option B — use GHCR images and the workflow
 
-Commit/push the working tree, set the GitHub variables/secrets described in `cloudflare-demo.md`, and let the `Deploy Demo` workflow build and deploy. This requires a commit, which is not yet made.
+Commit/push the working tree, set the GitHub variables/secrets described in `cloudflare-demo.md`, and let the `Deploy Demo` workflow build and deploy. Deploy by immutable commit SHA, not an uncommitted tree.
 
 Do **not** run `docker compose pull` for a local-only build; pull only when the images exist in GHCR.
 

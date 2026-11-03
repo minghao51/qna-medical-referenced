@@ -346,8 +346,22 @@ def test_pydantic_ai_judge_provider_is_supported_and_reported():
     assert "synthetic-judge-key" not in json.dumps(report)
 
 
-def test_pydantic_ai_generation_provider_stays_fail_closed():
-    report = preflight.build_preflight_report(_config(provider="pydantic-ai"))
+def test_pydantic_ai_generation_provider_is_supported_and_reported():
+    report = preflight.build_preflight_report(
+        _config(provider="pydantic-ai", pydantic_ai_key="synthetic-generation-key")
+    )
 
-    assert "unsupported_generation_provider" in report["errors"]
-    assert report["roles"]["generation"]["credential_name"] is None
+    assert "unsupported_generation_provider" not in report["errors"]
+    generation = report["roles"]["generation"]
+    assert generation["provider"] == "pydantic-ai"
+    assert generation["model"] == "mimo-v2.6-flash"
+    assert generation["credential_name"] == "APP__LLM__PYDANTIC_AI_API_KEY"
+    assert generation["credential_ready"] is True
+    assert "synthetic-generation-key" not in json.dumps(report)
+
+
+def test_pydantic_ai_generation_provider_reports_missing_key():
+    report = preflight.build_preflight_report(_config(provider="pydantic-ai", pydantic_ai_key=""))
+
+    assert "missing_required_credential:APP__LLM__PYDANTIC_AI_API_KEY" in report["errors"]
+    assert report["roles"]["generation"]["credential_ready"] is False

@@ -4,17 +4,28 @@
 
 ### LLM Providers
 
-#### Alibaba Dashscope / Qwen (Primary)
+#### OpenCode Go / Pydantic AI (Primary — served generation and judge)
+- **SDK:** `pydantic-ai-slim[openai]` + `openai` AsyncOpenAI transport
+- **Client:** `src/infra/llm/pydantic_ai_client.py` — `PydanticAIClient`
+- **Base URL:** `https://opencode.ai/inference/go/openai/v1`
+- **Models:**
+  - Chat: `mimo-v2.6-flash` (default)
+  - Judge (light/heavy): `longcat-2.0`
+- **Auth:** `APP__LLM__PYDANTIC_AI_API_KEY`
+- **Usage:** Served chat generation and DeepEval LLM-as-judge evaluation
+- **Boundary:** OpenCode Go is a coding-agent route; the owner reconfirmed workload eligibility on 2026-11-03. No automatic fallback or silent model substitution.
+
+#### Alibaba Dashscope / Qwen (Embeddings and index-time enrichment)
 - **SDK:** `openai` Python SDK (OpenAI-compatible API)
 - **Client:** `src/infra/llm/qwen_client.py` — `QwenClient` using `openai.AsyncOpenAI` and `openai.OpenAI`
-- **Base URL:** `https://dashscope-us.aliyuncs.com/compatible-mode/v1` (US region) or `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (international)
+- **Base URL:** `https://dashscope-us.aliyuncs.com/compatible-mode/v1` (US region) or a configured MaaS workspace endpoint
 - **Models:**
-  - Chat: `qwen3.5-flash` (default), `qwen3.5-plus`, `qwen-plus`, `qwen-max`, `qwen3.5-27b`
-  - Embedding: `text-embedding-v4` (2048 dimensions)
-  - Judge (light): `qwen3.5-35b-a3b`
-  - Judge (heavy): `qwen3.5-flash`
-- **Auth:** `DASHSCOPE_API_KEY` env var (or `APP__LLM__DASHSCOPE_API_KEY`)
-- **Usage:** RAG answer generation, embedding vectors, HyDE, HyPE, keyword extraction, chunk summarization, LLM-as-judge evaluation
+  - Chat fallback: `qwen3.5-flash` (default), `qwen3.5-plus`, `qwen-plus`, `qwen-max`, `qwen3.5-27b`
+  - Embedding: `text-embedding-v4` (768 dimensions in the frozen D11 index)
+  - Qwen judge fallback (light): `qwen3.5-35b-a3b`
+  - Qwen judge fallback (heavy): `qwen3.5-flash`
+- **Auth:** `APP__LLM__DASHSCOPE_API_KEY`
+- **Usage:** Embedding vectors for the frozen index; HyDE, HyPE, keyword extraction, chunk summarization, and explicitly selected Qwen generation/judging
 
 #### LiteLLM / OpenRouter (Secondary)
 - **SDK:** `litellm` Python SDK
@@ -24,10 +35,10 @@
 - **Usage:** Alternative LLM provider when `LLM_PROVIDER=litellm`
 - **Config:** `LITELLM_MODEL` overrides `OPENROUTER_MODEL` if set; supports any LiteLLM-compatible provider
 
-### Google Gemini (Experimental)
-- **Auth:** `GEMINI_API_KEY` env var
-- **Model:** `models/gemini-3-flash-preview`
-- **Config:** `GEMINI__MODEL` env var
+### Google Gemini (Fallback)
+- **Auth:** `APP__LLM__GEMINI_API_KEY`
+- **Model:** `gemma-4-31b-it` (configured fallback)
+- **Config:** `APP__LLM__PROVIDER=gemini`
 - **Note:** Referenced in `.env.example`; appears experimental/supplementary, not actively used in codebase
 
 ## Databases
@@ -86,6 +97,7 @@ No external webhook integrations detected. The application is a standalone API s
 
 | SDK                    | Import Location                          | Purpose                                      |
 |------------------------|------------------------------------------|----------------------------------------------|
+| `pydantic-ai-slim`    | `src/infra/llm/pydantic_ai_client.py`, `src/evals/pydantic_ai_judge.py` | OpenCode Go generation and judge adapter |
 | `openai`               | `src/infra/llm/qwen_client.py`, `src/ingestion/indexing/embedding.py`, `src/evals/deepeval_models.py` | LLM client for Qwen/Dashscope (OpenAI-compatible) |
 | `litellm`              | `src/infra/llm/litellm_client.py`, `src/evals/deepeval_models.py` | Multi-provider LLM gateway                   |
 | `chromadb`             | `src/ingestion/indexing/chroma_store.py`, `src/ingestion/indexing/migrate.py` | Vector database                              |
@@ -114,11 +126,13 @@ No external webhook integrations detected. The application is a standalone API s
 | `APP__APP__ENVIRONMENT`         | `settings.app.environment`           | No       | `development`                                    |
 | `APP__API__CORS_ALLOWED_ORIGINS`| `settings.api.cors_allowed_origins`  | No       | `http://localhost:5173,...`                      |
 | `APP__API__RATE_LIMIT_PER_MINUTE`| `settings.api.rate_limit_per_minute`| No       | `60`                                             |
-| `APP__LLM__DASHSCOPE_API_KEY`   | `settings.llm.dashscope_api_key`     | Yes*     | —                                                |
+| `APP__LLM__PYDANTIC_AI_API_KEY` | `settings.llm.pydantic_ai_api_key` | Yes | — |
+| `APP__LLM__DASHSCOPE_API_KEY`   | `settings.llm.dashscope_api_key`     | Yes | —                                                |
+| `APP__LLM__PYDANTIC_AI_MODEL`   | `settings.llm.pydantic_ai_model`     | No       | `mimo-v2.6-flash`                                |
 | `APP__LLM__MODEL_NAME`          | `settings.llm.model_name`            | No       | `qwen3.5-flash`                                  |
 | `APP__LLM__QWEN_BASE_URL`       | `settings.llm.qwen_base_url`         | No       | `https://dashscope-us.aliyuncs.com/compatible-mode/v1` |
 | `APP__LLM__EMBEDDING_MODEL`     | `settings.llm.embedding_model`       | No       | `text-embedding-v4`                              |
-| `APP__LLM__PROVIDER`            | `settings.llm.provider`              | No       | `qwen`                                           |
+| `APP__LLM__PROVIDER`            | `settings.llm.provider`              | No       | `pydantic-ai`                                    |
 | `APP__LLM__OPENROUTER_API_KEY`  | `settings.llm.openrouter_api_key`    | No       | —                                                |
 | `APP__STORAGE__COLLECTION_NAME` | `settings.storage.collection_name`   | No       | `medical_docs`                                   |
 | `APP__STORAGE__CHROMA_PERSIST_DIRECTORY` | `settings.storage.chroma_persist_directory` | No | `data/chroma`                       |

@@ -71,6 +71,7 @@ async def test_qwen_model_a_generate_uses_async_client(monkeypatch):
 
 def test_get_light_model_returns_light_model(monkeypatch):
     monkeypatch.setattr(settings.llm, "provider", "qwen")
+    monkeypatch.setattr(settings.llm, "judge_provider", None)
     model = get_light_model()
     assert model.model is model
     assert model.model_name == settings.llm.judge_model_light
@@ -79,6 +80,7 @@ def test_get_light_model_returns_light_model(monkeypatch):
 
 def test_get_heavy_model_returns_heavy_model(monkeypatch):
     monkeypatch.setattr(settings.llm, "provider", "qwen")
+    monkeypatch.setattr(settings.llm, "judge_provider", None)
     model = get_heavy_model()
     assert model.model is model
     assert model.model_name == settings.llm.judge_model_heavy

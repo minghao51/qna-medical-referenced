@@ -20,9 +20,7 @@ The application uses [Pydantic BaseSettings](https://docs.pydantic.dev/latest/co
 mapping: names such as `DASHSCOPE_API_KEY`, `MODEL_NAME`, or `API_KEYS` are ignored; only the
 `APP__…` form has any effect.
 
-**Provider default.** `config/settings.yaml` ships `llm.provider: gemini`, so a Gemini API key
-(`APP__LLM__GEMINI_API_KEY`) is required unless you override the provider, e.g.
-`APP__LLM__PROVIDER=qwen` plus `APP__LLM__DASHSCOPE_API_KEY`.
+**Provider default.** `config/settings.yaml` ships `llm.provider: pydantic-ai`, which serves chat generation through the OpenCode Go endpoint with `mimo-v2.6-flash`. The judge defaults to the same provider with `longcat-2.0`. Embeddings remain on Qwen/DashScope because the frozen D11 index is bound to `text-embedding-v4`; `APP__LLM__DASHSCOPE_API_KEY` is therefore required. The Gemini, Qwen, and LiteLLM generation paths remain available as explicit overrides.
 
 This project uses **dotenvx** for encrypted environment variable management. The `.env` file contains encrypted secrets and is safe to commit to version control.
 
@@ -33,23 +31,24 @@ See [`.context7/dotenvx-best-practices.md`](../.context7/dotenvx-best-practices.
 ### LLM Configuration
 
 #### `APP__LLM__PROVIDER`
-**Default:** `gemini` (set in `config/settings.yaml`)
+**Default:** `pydantic-ai` (set in `config/settings.yaml`)
 
 Active LLM provider: `qwen`, `gemini`, `litellm`, or `pydantic-ai`.
 
 **When to change:**
+- Leave as `pydantic-ai` for the shipped OpenCode Go path (`mimo-v2.6-flash`)
 - Set to `qwen` to use DashScope/Qwen and then provide `APP__LLM__DASHSCOPE_API_KEY`
-- Leave as `gemini` for the shipped default, which requires `APP__LLM__GEMINI_API_KEY`
+- Set to `gemini` and provide `APP__LLM__GEMINI_API_KEY` for the fallback path
 
-#### `APP__LLM__GEMINI_API_KEY` (required unless provider is overridden)
+#### `APP__LLM__GEMINI_API_KEY` (fallback only)
 **Default:** (empty string)
 
-Google Gemini API key used when `llm.provider` is `gemini` (the shipped default) or when a Gemini judge model is selected.
+Google Gemini API key used when `llm.provider` is `gemini` or when a Gemini judge model is selected.
 
 #### `APP__LLM__DASHSCOPE_API_KEY`
 **Default:** (empty string)
 
-Alibaba Dashscope API key for Qwen text generation and embeddings. Required when `llm.provider` is `qwen`.
+Alibaba Dashscope API key for Qwen embeddings and index-time enrichment. Required because the frozen D11 index uses `text-embedding-v4`; also required when `llm.provider` or `judge_provider` is `qwen`.
 
 **How to get it:**
 1. Visit [Dashscope Console](https://dashscope-us.aliyuncs.com/)
@@ -66,17 +65,42 @@ Alibaba Dashscope API key for Qwen text generation and embeddings. Required when
 #### `APP__LLM__MODEL_NAME`
 **Default:** `qwen3.5-flash`
 
-Qwen model to use for text generation.
+Qwen model used for index-time enrichment and any explicitly selected Qwen generation role. It is **not** the served chat model while `llm.provider` is `pydantic-ai`.
 
 **Options:**
-- `qwen3.5-flash` - Fast, cost-effective, good for real-time chat (default)
+- `qwen3.5-flash` - Fast, cost-effective Qwen default for explicitly selected Qwen generation
 - `qwen3.5-plus` - Balanced performance and quality
 - `qwen-plus` - Higher quality
 - `qwen-max` - Highest quality, slower
 
 **When to change:**
 - Use `qwen-plus` or `qwen-max` for complex medical queries requiring more accuracy
-- Use `qwen3.5-flash` for faster responses in production
+- Use `qwen3.5-flash` for faster responses when serving Qwen generation
+
+#### `APP__LLM__PYDANTIC_AI_MODEL`
+**Default:** `mimo-v2.6-flash`
+
+OpenCode Go chat model used when `llm.provider` is `pydantic-ai` (the shipped default).
+
+#### `APP__LLM__PYDANTIC_AI_BASE_URL`
+**Default:** `https://opencode.ai/inference/go/openai/v1`
+
+OpenCode Go OpenAI-compatible endpoint. Do not point this at the separate Console pay-as-you-go route without an explicit decision.
+
+#### `APP__LLM__PYDANTIC_AI_API_KEY`
+**Default:** (empty string)
+
+OpenCode Go credential used by both the served chat model and the pydantic-ai judge. Required while `llm.provider` or `judge_provider` is `pydantic-ai`.
+
+#### `APP__LLM__JUDGE_MODEL_LIGHT_PYDANTIC_AI` / `APP__LLM__JUDGE_MODEL_HEAVY_PYDANTIC_AI`
+**Default:** `longcat-2.0` for both
+
+OpenCode Go judge models used when `judge_provider` is `pydantic-ai`. The judge is intentionally a different model family from the served MiMo generator.
+
+#### `APP__LLM__JUDGE_MAX_TOKENS`
+**Default:** `16384`
+
+Output cap for judge calls. LongCat is a reasoning family; the larger cap avoids truncated verdict structures.
 
 #### `APP__LLM__EMBEDDING_MODEL`
 **Default:** `text-embedding-v4`
@@ -317,7 +341,7 @@ Temperature setting for judge models (0 = deterministic).
 - Higher values (0.1-0.3) may be used for more nuanced evaluations
 
 #### `APP__LLM__JUDGE_PROVIDER`
-**Default:** (unset — falls back to `llm.provider`)
+**Default:** `pydantic-ai` (set in `config/settings.yaml`)
 
 Optional provider override for judge models (`qwen`, `gemini`, `litellm`, `pydantic-ai`).
 
@@ -335,7 +359,7 @@ uv run python -m src.cli.eval_pipeline \
 
 ### Cost Optimization
 
-The evaluation uses model tiering to reduce costs:
+The default judge is OpenCode Go `longcat-2.0`, which is independent of the MiMo generator. The legacy Qwen tiering remains available only when the judge provider is explicitly set to `qwen`:
 - Simple metrics (Clarity, Answer Relevancy): qwen3.5-35b-a3b (~15x cheaper)
 - Complex metrics (Factual Accuracy, Completeness, Clinical Relevance, Faithfulness): qwen3.5-flash
 
@@ -419,10 +443,10 @@ APP__RETRY__RETRY_DELAY=0.1
 **Cause:** API key is invalid or missing.
 
 **Solution:**
-1. Verify the key for the active provider is set: `dotenvx get APP__LLM__GEMINI_API_KEY` (default provider) or `dotenvx get APP__LLM__DASHSCOPE_API_KEY` when `APP__LLM__PROVIDER=qwen`
-2. Check the key is valid at [Dashscope Console](https://dashscope-us.aliyuncs.com/)
+1. Verify the key for the active provider is set: `dotenvx get APP__LLM__PYDANTIC_AI_API_KEY` (default provider), `dotenvx get APP__LLM__GEMINI_API_KEY` for Gemini, or `dotenvx get APP__LLM__DASHSCOPE_API_KEY` for Qwen/embeddings
+2. Check the key is valid at the provider console
 3. Ensure the key has not been rotated or revoked
-4. Update key: `dotenvx set APP__LLM__DASHSCOPE_API_KEY "new_key"`
+4. Update the matching `APP__LLM__…_API_KEY` value in `.env`
 
 ### Rate limit errors during testing
 
@@ -435,10 +459,10 @@ APP__RETRY__RETRY_DELAY=0.1
 **Cause:** Model is too slow or retry delays are too long.
 
 **Solutions:**
-1. Use `APP__LLM__MODEL_NAME=qwen3.5-flash` for faster responses
+1. Use `APP__LLM__PYDANTIC_AI_MODEL=mimo-v2.6-flash` for faster responses on the default provider
 2. Reduce `APP__RETRY__MAX_RETRIES` to fail faster
 3. Reduce `APP__RETRY__RETRY_DELAY` for quicker retries
-4. Check network latency to Dashscope API
+4. Check network latency to the selected provider endpoint
 
 ### "Collection not found" error
 
@@ -458,7 +482,7 @@ APP__RETRY__RETRY_DELAY=0.1
 
 **Solutions:**
 1. Reduce `APP__API__MAX_MESSAGE_LENGTH` to truncate longer prompts
-2. Use `APP__LLM__MODEL_NAME=qwen3.5-flash` instead of `qwen-plus`
+2. Use `APP__LLM__PYDANTIC_AI_MODEL=mimo-v2.6-flash` for the default chat path, or a cheaper explicit fallback model
 3. Implement caching for common queries
 4. Monitor usage and set up cost alerts
 
@@ -466,7 +490,7 @@ APP__RETRY__RETRY_DELAY=0.1
 
 Before deploying to production, ensure:
 
-- [ ] The provider API key (`APP__LLM__GEMINI_API_KEY` for the default provider, or `APP__LLM__DASHSCOPE_API_KEY` when `APP__LLM__PROVIDER=qwen`) is set from environment variable, not in code
+- [ ] The provider API key (`APP__LLM__PYDANTIC_AI_API_KEY` for the default provider, `APP__LLM__GEMINI_API_KEY` for Gemini, or `APP__LLM__DASHSCOPE_API_KEY` for embeddings/Qwen) is set from environment variable, not in code
 - [ ] `APP__APP__ENVIRONMENT` is set correctly for the deployment
 - [ ] `APP__API__API_KEYS` or `APP__API__API_KEYS_JSON` is set for any internal/admin callers
 - [ ] `APP__API__CORS_ALLOWED_ORIGINS` only includes trusted frontend origins

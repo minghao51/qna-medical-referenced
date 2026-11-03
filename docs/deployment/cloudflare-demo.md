@@ -62,7 +62,7 @@ Run from a repository checkout (the script imports the app's bcrypt helper):
 uv run python scripts/prepare_demo_env.py --origin https://lab.example.com
 ```
 
-This writes `.env.demo` (mode 600) from the template and generates the session secret, the plaintext operator key and its matching bcrypt `API_KEYS_JSON` record with role `operator`. Then fill `CLOUDFLARE_TUNNEL_TOKEN` and the provider credentials. The script never prints the generated secrets.
+This writes `.env.demo` (mode 600) from the template and generates the session secret, the plaintext operator key and its matching bcrypt `API_KEYS_JSON` record with role `operator`. Then fill `CLOUDFLARE_TUNNEL_TOKEN`, `APP__LLM__PYDANTIC_AI_API_KEY` (OpenCode Go) and `APP__LLM__DASHSCOPE_API_KEY` (embeddings). The script never prints the generated secrets.
 
 Manual generation, if preferred:
 
@@ -74,7 +74,7 @@ uv run python -c 'from src.app.security import generate_api_key_record; import j
 
 Use the same plaintext in `OPERATOR_API_KEY` and as the hashed record in `APP__API__API_KEYS_JSON`. Set `DEMO_ORIGIN` without a trailing slash, for example `https://lab.example.com`.
 
-Keep `.env.demo` at `chmod 600`; it contains the provider key, session secret, tunnel token and operator key.
+Keep `.env.demo` at `chmod 600`; it contains the OpenCode Go and DashScope keys, session secret, tunnel token and operator key.
 
 ## 3. Create the Cloudflare Tunnel
 

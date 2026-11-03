@@ -33,17 +33,16 @@ _PROVIDER_CREDENTIALS = {
     "qwen": "APP__LLM__DASHSCOPE_API_KEY",
     "gemini": "APP__LLM__GEMINI_API_KEY",
     "litellm": "APP__LLM__OPENROUTER_API_KEY",
-}
-# Judge-only provider extensions: the pydantic-ai generation path stays fail-closed
-# here until its route/limits are approved (P4-D), so it is not in the shared map.
-_JUDGE_PROVIDER_CREDENTIALS = {
-    **_PROVIDER_CREDENTIALS,
     "pydantic-ai": "APP__LLM__PYDANTIC_AI_API_KEY",
 }
+# Judge-only providers use the same credential map; generation is supported here
+# because the running app serves OpenCode Go text/stream generation.
+_JUDGE_PROVIDER_CREDENTIALS = dict(_PROVIDER_CREDENTIALS)
 _PROVIDER_MODELS = {
     "qwen": "model_name",
     "gemini": "gemini_model_name",
     "litellm": "litellm_model",
+    "pydantic-ai": "pydantic_ai_model",
 }
 _OPTIONAL_PACKAGES = {
     "evaluation": "deepeval",

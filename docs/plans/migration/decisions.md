@@ -270,6 +270,18 @@ Two separately approved leftover stages delivered in one session; both are docum
 
 Owner reviewed the pickup-brief leftover item "decide whether `provider="pydantic-ai"` generation preflight/`effective_roles` is widened (currently fail-closed)" and selected **keep fail-closed**. Rationale: Stage A's accepted-incomplete live smoke ended at the baseline structured-output rejection with the adapter's structured modes unreached, so a widened preflight would advertise a generation path whose structured capability is not established; no capability availability is asserted by this record. Preflight/`effective_roles` behavior is unchanged; `judge_provider: pydantic-ai` is unaffected and remains opt-in offline. Recorded with the [offline leftovers handoff](20261024-offline-leftovers-handoff.md).
 
+## Serving default decision — 2026-11-03 — OpenCode Go for generation and judging
+
+**Status:** implemented and smoke-tested. This supersedes the 2026-10-24 decision to keep `pydantic-ai` generation fail-closed in preflight and `effective_roles`. Evidence: [switch handoff](20261103-serving-model-switch-handoff.md).
+
+- **Owner selection.** Owner approved making the running app’s text roles consistent on OpenCode Go and chose **`mimo-v2.6-flash`** for chat instead of `deepseek-v4.1-flash`; the independent judge remains **`longcat-2.0`**. The owner reconfirmed that the Go route is acceptable for the public/synthetic medical Q&A workload under D03.
+- **Runtime tuple.** `provider: pydantic-ai`, `pydantic_ai_model: mimo-v2.6-flash`, `judge_provider: pydantic-ai`, `judge_model_light_pydantic_ai = judge_model_heavy_pydantic_ai = longcat-2.0`, `judge_max_tokens: 16384`, base URL `https://opencode.ai/inference/go/openai/v1`. Embeddings stay on Qwen `text-embedding-v4`; the D11 index is not rebuilt or re-embedded.
+- **Compatibility change.** `src/cli/preflight.py` now accepts `pydantic-ai` as a generation provider and reports `pydantic_ai_model`; `src/evals/deepeval_models.py::_generation_details` and `effective_roles` now record that generation role; `src/usecases/runtime_config.py` reports the pydantic model. The previous fail-closed posture was a deliberate structured-output caution, not a permanent prohibition.
+- **Evidence boundary.** This is a configuration/default switch, not a quality claim. The bounded live smoke on 2026-11-03 verified MiMo text generation, MiMo SSE streaming, a full `/chat` request through retrieval, and a LongCat judge call without caller conversation scope. It did not establish a baseline, quality score, structured-output success, or large-cap judge behaviour. The generator and judge still share the OpenCode Go route, so route independence remains a recorded confound.
+- **Live finding fixed.** OpenCode Go rejects requests without `x-opencode-session`. The chat path already bound one; the judge wrapper now reuses a caller scope or binds one stable opaque session per judge instance. A direct judge call without a caller scope succeeded after the fix.
+- **Cancellation note.** The actual ASGI disconnect path completed without backend errors in the local smoke. A separate direct task-cancellation harness that closed the pydantic-ai stream from an outer task emitted pydantic-ai 2.31 teardown warnings; that harness path is not the application's `/chat` path and is not claimed as clean provider shutdown.
+- **Rollback.** Revert the provider/model/judge settings and compose/env template changes; no data or index migration is involved.
+
 ## Uncertainties to resolve experimentally, not by preference
 
 1. Can the selected dependency versions coexist with the current Python 3.12 lockfile and provider SDKs?

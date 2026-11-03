@@ -1,6 +1,6 @@
 # Local Docker preview — restart handoff
 
-**Snapshot:** 2026-11-02, branch `design/evidence-led-redesign`.
+**Snapshot:** 2026-11-03, branch `design/evidence-led-redesign`.
 **Purpose:** preview the actual demo images behind the Caddy key-injection boundary before any Cloudflare deployment or PR merge.
 
 ## Current machine state
@@ -13,10 +13,26 @@
   - `IMAGE_TAG=local`
   - a generated operator key/hash and session signing secret
   - a dummy `CLOUDFLARE_TUNNEL_TOKEN=local-preview-only`
-  - blank provider credentials
+  - OpenCode Go and DashScope credentials copied locally from `.env`; values are not printed or committed
+  - served tuple `pydantic-ai` / `mimo-v2.6-flash`, judge `longcat-2.0`
 - `/tmp/fieldnote-preview-compose.yml` contains the localhost-only ingress port override. `/tmp` may be cleared on reboot; recreate it from §2.
-- The old Vite dev server and a review backend may still be running on `127.0.0.1:5173` and `127.0.0.1:8000`. They are not the Docker stack and can be stopped.
-- Nothing was built or started with Docker yet. No commit, push or PR exists.
+- The old Vite dev servers and review backend were stopped; ports `5173`, `5174` and `8000` are free.
+- Nothing was built or started with Docker yet. The design branch commit `e9dc452` and the model-switch commit are pushed. A local dev-server `/chat` smoke passed with MiMo + D11 retrieval and sources.
+
+## Moving to another machine
+
+1. Clone/pull `design/evidence-led-redesign` and run `uv sync --frozen`.
+2. Recreate `.env` out-of-band (mode 600) with the OpenCode Go and DashScope keys. Never transfer `.env` through Git or chat.
+3. Restore `data/chroma-d11`, `data/raw` and `data/evals/review` using `docs/data-sync-runbook.md`. Re-run `--verify`; do not assume the R2 copy matches the latest local cleanup.
+4. Run preflight and confirm the model tuple:
+
+   ```bash
+   uv run --env-file .env python -m src.cli.preflight
+   ```
+
+   Expect `pydantic-ai` / `mimo-v2.6-flash`, judge `longcat-2.0`, embeddings `text-embedding-v4`.
+5. Generate the local preview env from the template, fill the provider keys, and recreate `/tmp/fieldnote-preview-compose.yml` as in §2. `.env.demo.local` is not in Git.
+6. Follow §1 for Docker group/socket access, then build and start the preview.
 
 ## 1. Check Docker access in the new session
 
@@ -88,7 +104,7 @@ ss -ltnp | grep ':8080 '
 
 Expected: frontend `200`, backend `200`, only `127.0.0.1:8080` published. Caddy injects the operator key; the browser never has it.
 
-Read-only research/evaluation/evidence pages should load from `data/`. Q&A generation will fail unless provider credentials are filled into `.env.demo.local`; do not add them unless provider spend is approved.
+Read-only research/evaluation/evidence pages should load from `data/`. Q&A generation uses OpenCode Go through `pydantic-ai`; the local env now carries the OpenCode Go and DashScope keys. Run one bounded smoke question before declaring the preview functional, and do not expose the preview outside localhost.
 
 ## 7. Stop the preview
 
@@ -127,7 +143,7 @@ The Cloudflare demo and G-AUTH evidence still require:
 
 1. Cloudflare-managed domain/zone.
 2. Host choice: VPS with SSH or home/NAT.
-3. Live chat/provider spend permission.
+3. Deployment-level live provider spend and budget sign-off (the bounded local smoke is approved; production chat volume is not).
 4. Access allowlist.
 5. GHCR package visibility (or use the local-build path).
 
