@@ -37,7 +37,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
-        run: uv sync --dev --frozen
+        run: uv sync --dev --frozen --group evaluation
 
       # One explicit project-wide coverage report over the shared offline
       # selection (unit + integration). No secrets are attached: live,
@@ -79,7 +79,7 @@ jobs:
         run: uvx pip-audit --strict
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:

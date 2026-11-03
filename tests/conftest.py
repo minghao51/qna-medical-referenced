@@ -33,10 +33,13 @@ def _ensure_nltk_stopwords_available() -> None:
 _ensure_nltk_stopwords_available()
 
 
-if "APP__LLM__DASHSCOPE_API_KEY" not in os.environ or not os.environ.get(
-    "APP__LLM__DASHSCOPE_API_KEY"
+for _provider_env in (
+    "APP__LLM__DASHSCOPE_API_KEY",
+    "APP__LLM__GEMINI_API_KEY",
+    "APP__LLM__PYDANTIC_AI_API_KEY",
 ):
-    os.environ["APP__LLM__DASHSCOPE_API_KEY"] = "test-api-key"
+    if not os.environ.get(_provider_env):
+        os.environ[_provider_env] = "test-api-key"
 
 
 LIVE_QWEN_ENABLED = os.environ.get("RUN_LIVE_QWEN_TESTS") == "1"
