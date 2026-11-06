@@ -1,20 +1,22 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { PipelineTrace, RetrievedDocument } from '$lib/types';
-	import { calculateConfidence, getStageStatus } from '$lib/confidenceCalculator';
+	import { getStageStatus } from '$lib/confidenceCalculator';
 	import { formatScore } from '$lib/utils/format';
 	import StepCard from './StepCard.svelte';
-	import ConfidenceBadge from './ConfidenceBadge.svelte';
-	import MetricBar from './MetricBar.svelte';
 	import SourceQualityIndicator from './SourceQualityIndicator.svelte';
 	import DocumentInspector from './DocumentInspector.svelte';
 	import PipelineFlowDiagram from './PipelineFlowDiagram.svelte';
 
 	let { pipeline, isOpen = $bindable(false) }: { pipeline: PipelineTrace; isOpen?: boolean } = $props();
 
-	const confidence = $derived(calculateConfidence(pipeline));
 	const stageStatus = $derived(getStageStatus(pipeline.retrieval, pipeline.context, pipeline.generation));
 
 	let selectedDocument: RetrievedDocument | null = $state(null);
+	let closeButton: HTMLButtonElement | undefined = $state();
+	let panelElement: HTMLDialogElement | undefined = $state();
+	let previousFocus: HTMLElement | null = null;
+	let previousBodyOverflow = '';
 	let activeFlowStage: 'retrieval' | 'context' | 'generation' | null = $state(null);
 	let expandedStep: string | null = $state(null);
 
@@ -36,27 +38,87 @@
 	function detailValue(step: { details: Record<string, unknown> }, key: string): unknown {
 		return step.details[key];
 	}
+
+	function closePanel() {
+		isOpen = false;
+		if (panelElement?.open) panelElement.close();
+	}
+
+	function handlePanelKeydown(event: KeyboardEvent) {
+		if (selectedDocument) return;
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closePanel();
+			return;
+		}
+		if (event.key !== 'Tab' || !panelElement) return;
+		const focusable = Array.from(
+			panelElement.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+			)
+		).filter((element) => element.getClientRects().length > 0);
+		if (focusable.length === 0) return;
+		const first = focusable[0];
+		const last = focusable[focusable.length - 1];
+		if (event.shiftKey) {
+			if (document.activeElement === first || !panelElement.contains(document.activeElement)) {
+				event.preventDefault();
+				last.focus();
+			}
+			return;
+		}
+		if (document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
+
+	function handleBackdropClick(event: MouseEvent) {
+		if (event.target === event.currentTarget) closePanel();
+	}
+
+	onMount(() => {
+		previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		previousBodyOverflow = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+		panelElement?.showModal();
+		closeButton?.focus();
+		window.addEventListener('keydown', handlePanelKeydown);
+		return () => {
+			window.removeEventListener('keydown', handlePanelKeydown);
+			document.body.style.overflow = previousBodyOverflow;
+			previousFocus?.focus();
+		};
+	});
 </script>
 
 {#if isOpen}
-	<aside class="pipeline-panel">
+	<dialog
+		bind:this={panelElement}
+		class="pipeline-panel"
+		aria-labelledby="pipeline-panel-title"
+		aria-describedby="pipeline-panel-summary"
+		onclose={() => (isOpen = false)}
+		onclick={handleBackdropClick}
+	>
 		<div class="panel-header">
-			<h2>Pipeline Details</h2>
-			<button class="close-btn" onclick={() => (isOpen = false)} aria-label="Close panel">
+			<h2 id="pipeline-panel-title">Pipeline Details</h2>
+			<button bind:this={closeButton} class="close-btn" onclick={closePanel} aria-label="Close panel">
 				×
 			</button>
 		</div>
 
-		<div class="confidence-header">
-			<span class="confidence-label">Pipeline diagnostic (uncalibrated):</span>
-			<ConfidenceBadge level={confidence.level} score={confidence.overall} />
-			<p class="confidence-note">A heuristic retrieval/pipeline signal, not a probability of medical correctness.</p>
-			<div class="confidence-breakdown">
-				<MetricBar label="Retrieval" value={confidence.breakdown.retrieval} compact />
-				<MetricBar label="Sources" value={confidence.breakdown.sourceQuality} compact />
-				<MetricBar label="Context" value={confidence.breakdown.contextRelevance} compact />
-				<MetricBar label="Generation" value={confidence.breakdown.generationSuccess} compact />
-			</div>
+		<div class="recorded-summary" id="pipeline-panel-summary">
+			<span class="recorded-label">Recorded pipeline evidence</span>
+			<p>
+				{pipeline.retrieval.documents.length} retrieved chunks ·
+				{pipeline.context.total_chunks} context chunks ·
+				{pipeline.total_time_ms} ms recorded total
+			</p>
+			<p class="recorded-note">
+				Recorded RAG stages only. No medical-confidence score, provider-call tree or hidden
+				reasoning is implied.
+			</p>
 		</div>
 
 		<PipelineFlowDiagram
@@ -156,6 +218,10 @@
 													<span class="detail-value">{String(detailValue(step, 'mmr_lambda'))}</span>
 												</div>
 											{/if}
+											<details class="raw-details">
+												<summary>Raw recorded fields</summary>
+												<pre>{JSON.stringify(step.details, null, 2)}</pre>
+											</details>
 										</div>
 									{/if}
 								</div>
@@ -285,31 +351,42 @@
 				<strong>Total Pipeline Time:</strong> {pipeline.total_time_ms}ms
 			</div>
 		</div>
-	</aside>
-{/if}
 
-{#if selectedDocument}
-	<DocumentInspector
-		document={selectedDocument}
-		query={pipeline.retrieval.query}
-		onclose={() => selectedDocument = null}
-	/>
+		{#if selectedDocument}
+			<DocumentInspector
+				document={selectedDocument}
+				query={pipeline.retrieval.query}
+				onclose={() => selectedDocument = null}
+			/>
+		{/if}
+	</dialog>
 {/if}
 
 <style>
 	.pipeline-panel {
 		position: fixed;
-		right: 0;
-		top: 0;
-		height: 100vh;
-		width: 450px;
-		background: white;
-		border-left: 1px solid #ddd;
-		box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
-		z-index: 1000;
+		inset: 0 0 0 auto;
+		width: min(480px, 100vw);
+		max-width: none;
+		height: 100dvh;
+		max-height: 100dvh;
+		margin: 0;
+		padding: 0;
+		border: none;
+		border-left: 1px solid var(--border-color);
+		background: #fffdf8;
+		color: var(--ink);
+		box-shadow: -12px 0 32px rgba(24, 45, 50, 0.18);
+		animation: slideIn 0.3s ease-out;
+	}
+
+	.pipeline-panel[open] {
 		display: flex;
 		flex-direction: column;
-		animation: slideIn 0.3s ease-out;
+	}
+
+	.pipeline-panel::backdrop {
+		background: rgba(24, 45, 50, 0.32);
 	}
 
 	@keyframes slideIn {
@@ -326,14 +403,14 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 1rem;
-		border-bottom: 1px solid #eee;
-		background: #f9f9f9;
+		border-bottom: 1px solid var(--border-color);
+		background: var(--surface-subtle);
 	}
 
 	.panel-header h2 {
 		margin: 0;
 		font-size: 1.2rem;
-		color: #333;
+		color: var(--ink);
 	}
 
 	.close-btn {
@@ -348,11 +425,11 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: 4px;
-		color: #666;
+		color: var(--secondary);
 	}
 
 	.close-btn:hover {
-		background: #e0e0e0;
+		background: var(--surface-strong);
 	}
 
 	.panel-content {
@@ -400,7 +477,7 @@
 	.documents-list .hint {
 		font-size: 0.8rem;
 		font-weight: normal;
-		color: #888;
+		color: #4b5563;
 	}
 
 	.steps-list {
@@ -584,7 +661,7 @@
 
 	.why-hint {
 		font-size: 0.75rem;
-		color: #2196f3;
+		color: #1d4ed8;
 		margin-top: 0.5rem;
 		font-weight: 500;
 	}
@@ -598,7 +675,7 @@
 	}
 
 	.doc-rank {
-		background: #2196f3;
+		background: #1d4ed8;
 		color: white;
 		padding: 0.2rem 0.5rem;
 		border-radius: 3px;
@@ -618,7 +695,7 @@
 	}
 
 	.doc-score {
-		background: #4caf50;
+		background: #047857;
 		color: white;
 		padding: 0.2rem 0.5rem;
 		border-radius: 3px;
@@ -703,6 +780,51 @@
 		color: #1976d2;
 	}
 
+	.recorded-summary {
+		padding: 0.85rem 1rem;
+		border-bottom: 1px solid var(--border-color);
+		background: var(--surface-subtle);
+	}
+
+	.recorded-label {
+		font-weight: 700;
+		font-size: 0.9rem;
+		color: #333;
+	}
+
+	.recorded-summary p {
+		margin: 0.35rem 0 0;
+		font-size: 0.85rem;
+		color: #555;
+	}
+
+	.recorded-note {
+		color: #6b7280 !important;
+		font-size: 0.78rem !important;
+	}
+
+	.raw-details {
+		margin-top: 0.5rem;
+	}
+
+	.raw-details summary {
+		cursor: pointer;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: #555;
+	}
+
+	.raw-details pre {
+		max-height: 16rem;
+		overflow: auto;
+		margin: 0.4rem 0 0;
+		padding: 0.5rem;
+		background: #f3f4f6;
+		font-size: 0.7rem;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
 	.confidence-header {
 		padding: 1rem;
 		background: #f8fafc;
@@ -767,13 +889,14 @@
 	/* Responsive design */
 	@media (max-width: 1024px) {
 		.pipeline-panel {
-			width: 350px;
+			width: min(420px, 100vw);
 		}
 	}
 
 	@media (max-width: 768px) {
 		.pipeline-panel {
-			width: 100%;
+			width: 100vw;
+			border-left: none;
 		}
 	}
 </style>

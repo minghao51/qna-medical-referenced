@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1180" viewBox="0 0 1440 1180" role="img" aria-labelledby="title description"><title id="title">Q&amp;A conversation with per-turn showcases</title><desc id="description">Synthetic conversation and trace counts for UI specification, based on real corpus excerpt. Dedicated turn selection and full breakdown entry.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1180" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text x="340" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Overview</text>
+<text x="468" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Ask</text>
+<line x1="468" y1="60" x2="495" y2="60" stroke="#006B61" stroke-width="3"/>
+<text x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text x="692" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Research</text>
+<text x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<rect x="48" y="110" width="246" height="979" fill="#182D32" rx="4"/>
+<text x="70" y="147" font-size="11" font-weight="700" style="fill:#B5DACE" class="">THIS CONVERSATION</text>
+<rect x="70" y="168" width="202" height="44" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="86" y="196" font-size="15" font-weight="700" style="fill:#182D32" class="">New conversation</text>
+<text x="70" y="261" font-size="17" font-weight="700" style="fill:#FFFFFF" class="">Basal insulin</text>
+<text x="70" y="288" font-size="17" font-weight="700" style="fill:#FFFFFF" class="">and shared decisions</text>
+<text x="70" y="346" font-size="11" font-weight="700" style="fill:#B5DACE" class="">TURN INDEX</text>
+<rect x="60" y="372" width="222" height="76" fill="#182D32" rx="4"/>
+<text x="70" y="398" font-size="12" font-weight="400" style="fill:#FFFFFF" class="">01  What does the guidance say?</text>
+<text x="70" y="421" font-size="12" font-weight="400" style="fill:#FFFFFF" class="">      Complete · 2 source entries</text>
+<rect x="60" y="464" width="222" height="76" fill="#006B61" rx="4"/>
+<text x="70" y="490" font-size="12" font-weight="400" style="fill:#FFFFFF" class="">02  What should I ask next?</text>
+<text x="70" y="513" font-size="12" font-weight="400" style="fill:#FFFFFF" class="">      Complete · selected</text>
+<text x="70" y="820" font-size="12" font-weight="400" style="fill:#D6E0DC" class="">History is cookie-bound.</text>
+<text x="70" y="843" font-size="12" font-weight="400" style="fill:#D6E0DC" class="">No account or saved-conversation</text>
+<text x="70" y="866" font-size="12" font-weight="400" style="fill:#D6E0DC" class="">library is currently available.</text>
+<text x="70" y="889" font-size="12" font-weight="400" style="fill:#D6E0DC" class=""></text>
+<text x="70" y="912" font-size="12" font-weight="400" style="fill:#D6E0DC" class="">New conversation clears history;</text>
+<text x="70" y="935" font-size="12" font-weight="400" style="fill:#D6E0DC" class="">confirm before deleting.</text>
+<text x="330" y="143" font-size="30" font-weight="400" style="fill:#182D32" class="serif">Basal insulin and shared decisions</text>
+<rect x="330" y="168" width="258" height="26" fill="#FBECE2" rx="3"/>
+<text x="340" y="186" font-size="12" font-weight="700" style="fill:#B34322" class="">ILLUSTRATIVE CONVERSATION</text>
+<text x="880" y="185" font-size="13" font-weight="400" style="fill:#506469" class="">Details on for this conversation</text>
+<line x1="330" y1="215" x2="1392" y2="215" stroke="#CED5D0" stroke-width="1"/>
+<g id="turn-01">
+<text x="330" y="252" font-size="11" font-weight="700" style="fill:#506469" class="">YOU / TURN 01</text>
+<text x="330" y="287" font-size="20" font-weight="700" style="fill:#182D32" class="">What does the guidance say about shared decisions?</text>
+<text x="330" y="331" font-size="11" font-weight="700" style="fill:#006B61" class="">FIELDNOTE</text>
+<text x="330" y="371" font-size="18" font-weight="400" style="fill:#182D32" class="">The indexed guidance describes patient education and shared decision</text>
+<text x="330" y="401" font-size="18" font-weight="400" style="fill:#182D32" class="">making as integral to starting insulin for people with type 2 diabetes. [1]</text>
+<text x="330" y="431" font-size="18" font-weight="400" style="fill:#182D32" class="">It also highlights addressing concerns and discussing appropriate, safe use.</text>
+<text x="330" y="461" font-size="18" font-weight="400" style="fill:#182D32" class="">The excerpt is incomplete; read the original with a qualified clinician.</text>
+<rect x="330" y="489" width="1062" height="59" fill="#E5F1EA" rx="4"/>
+<text x="350" y="525" font-size="14" font-weight="700" style="fill:#006B61" class="">✓ Complete   ·   2 source entries   ·   Breakdown available</text>
+<text x="1150" y="525" font-size="14" font-weight="700" style="fill:#006B61" class="">Inspect turn 01 →</text>
+</g>
+<g id="turn-02-selected">
+<rect x="318" y="576" width="4" height="335" fill="#006B61"/>
+<text x="330" y="607" font-size="11" font-weight="700" style="fill:#506469" class="">YOU / TURN 02</text>
+<text x="330" y="641" font-size="20" font-weight="700" style="fill:#182D32" class="">What should I ask at my next appointment?</text>
+<text x="330" y="683" font-size="11" font-weight="700" style="fill:#006B61" class="">FIELDNOTE</text>
+<text x="330" y="720" font-size="18" font-weight="400" style="fill:#182D32" class="">You could ask your clinician to explain your treatment goals, address</text>
+<text x="330" y="750" font-size="18" font-weight="400" style="fill:#182D32" class="">your concerns, and discuss how medicines can be used safely. [1]</text>
+<text x="330" y="780" font-size="18" font-weight="400" style="fill:#182D32" class="">This is an illustrative summary—not a verified generated answer.</text>
+<rect x="330" y="811" width="1062" height="81" fill="#FFFFFF" stroke="#006B61" rx="4"/>
+<text x="350" y="842" font-size="11" font-weight="700" style="fill:#006B61" class="">TURN 02 · SELECTED</text>
+<text x="350" y="870" font-size="14" font-weight="400" style="fill:#182D32" class="">2 retrieved chunks · 2 source entries · 1.80 s total</text>
+<rect x="1124" y="829" width="248" height="44" fill="#006B61" rx="4"/>
+<text x="1140" y="857" font-size="15" font-weight="700" style="fill:#FFFFFF" class="">Full turn breakdown →</text>
+</g>
+<rect x="330" y="934" width="1062" height="133" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="350" y="962" font-size="12" font-weight="700" style="fill:#506469" class="">Follow-up question</text>
+<text x="350" y="994" font-size="17" font-weight="400" style="fill:#506469" class="">Ask about the cited guidance…</text>
+<rect x="1220" y="983" width="150" height="44" fill="#006B61" rx="4"/>
+<text x="1236" y="1011" font-size="15" font-weight="700" style="fill:#FFFFFF" class="">Send →</text>
+<text x="350" y="1044" font-size="12" font-weight="400" style="fill:#506469" class="">0 / 2,000 characters · Enter sends; Shift+Enter adds a line. Do not enter identifying information.</text>
+<text x="330" y="1101" font-size="12" font-weight="400" style="fill:#506469" class="">[1] ACE basal-insulin guidance, page 1 · Open source ↗   /   [2] Same publication, adjacent chunk.</text>
+<line x1="48" y1="1128" x2="1392" y2="1128" stroke="#CED5D0" stroke-width="1"/>
+<text x="48" y="1155" font-size="12" font-weight="400" style="fill:#506469" class="">DESIGN PROPOSAL • Repository snapshot, not a live service</text>
+</svg>

@@ -147,6 +147,7 @@ def test_serving_profile_preserves_the_configured_collection_name(monkeypatch):
         ("gemini", "", "synthetic-gemini"),
         ("litellm", "", "openrouter/synthetic-router"),
         ("litellm", "custom/model", "custom/model"),
+        ("pydantic-ai", "", "synthetic-pydantic-ai"),
     ],
 )
 def test_config_view_reports_configured_provider_model(
@@ -157,6 +158,7 @@ def test_config_view_reports_configured_provider_model(
     monkeypatch.setattr(settings.llm, "gemini_model_name", "synthetic-gemini")
     monkeypatch.setattr(settings.llm, "openrouter_model", "synthetic-router")
     monkeypatch.setattr(settings.llm, "litellm_model", custom_litellm)
+    monkeypatch.setattr(settings.llm, "pydantic_ai_model", "synthetic-pydantic-ai")
     assert get_runtime_config_view()["llm"]["model_name"] == expected
 
 

@@ -27,6 +27,8 @@ def get_runtime_config_view(*, llm_client: Any = None) -> dict[str, Any]:
             model = settings.llm.gemini_model_name
         elif provider == "litellm":
             model = settings.llm.litellm_model or f"openrouter/{settings.llm.openrouter_model}"
+        elif provider == "pydantic-ai":
+            model = settings.llm.pydantic_ai_model
         else:
             model = settings.llm.model_name
 

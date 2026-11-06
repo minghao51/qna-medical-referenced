@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1390" viewBox="0 0 390 1390" role="img" aria-labelledby="title description"><title id="title">Mobile evaluation completeness</title><desc id="description">Mobile inspection preserves per-metric successful/failed denominators instead of squeezing a desktop score table.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="390" height="1390" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="390" height="80" fill="#F7F4ED"/>
+<rect x="24" y="23" width="8" height="30" fill="#B34322"/>
+<text id="label-1-fieldnote" x="44" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text id="label-2-menu" x="314" y="46" font-size="14" font-weight="700" style="fill:#182D32" class="">Menu</text>
+<line x1="24" y1="79" x2="366" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text id="label-3-evaluations-local-archive" x="24" y="120" font-size="11" font-weight="700" style="fill:#006B61" class="">EVALUATIONS / LOCAL ARCHIVE</text>
+<text id="label-4-read-coverage" x="24" y="170" font-size="30" font-weight="400" style="fill:#182D32" class="serif">Read coverage</text>
+<text id="label-5-before-the-means" x="24" y="208" font-size="30" font-weight="400" style="fill:#182D32" class="serif">before the means.</text>
+<text id="label-6-baseline-57-queries-18-apr-2026" x="24" y="271" font-size="14" font-weight="400" style="fill:#506469" class="">Baseline · 57 queries · 18 Apr 2026</text>
+<text id="label-7-underlying-per-case-run-files-absent" x="24" y="296" font-size="14" font-weight="400" style="fill:#506469" class="">Underlying per-case run files absent.</text>
+<rect x="24" y="332" width="227" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-8-degraded-measurement" x="34" y="350" font-size="12" font-weight="700" style="fill:#B34322" class="">DEGRADED MEASUREMENT</text>
+<rect x="24" y="385" width="342" height="140" fill="#182D32" rx="4"/>
+<text id="label-9-measured-slots-not-cases" x="40" y="422" font-size="11" font-weight="700" style="fill:#B5DACE" class="">MEASURED SLOTS / NOT CASES</text>
+<text id="label-10-268-342" x="40" y="466" font-size="32" font-weight="700" style="fill:#FFFFFF" class="">268 / 342</text>
+<text id="label-11-74-failed-6-metrics-57-questions" x="40" y="500" font-size="14" font-weight="400" style="fill:#D6E0DC" class="">74 failed · 6 metrics × 57 questions</text>
+<rect x="24" y="557" width="342" height="171" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-12-answer-relevancy" x="40" y="589" font-size="21" font-weight="700" style="fill:#182D32" class="">Answer relevancy</text>
+<text id="label-13-mean-0-8594-successful-measurements" x="40" y="621" font-size="12" font-weight="400" style="fill:#506469" class="">Mean 0.8594 · successful measurements</text>
+<rect x="40" y="641" width="310" height="17" fill="#FBECE2"/>
+<rect x="40" y="641" width="135.96491228070175" height="17" fill="#006B61"/>
+<text id="label-14-25-57-measured" x="40" y="686" font-size="14" font-weight="700" style="fill:#006B61" class="">25 / 57 measured</text>
+<text id="label-15-32-failed" x="227" y="686" font-size="14" font-weight="400" style="fill:#B34322" class="">32 failed</text>
+<text id="label-16-view-definition-provenance" x="40" y="711" font-size="13" font-weight="700" style="fill:#006B61" class="">View definition &amp; provenance →</text>
+<rect x="24" y="750" width="342" height="171" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-17-faithfulness" x="40" y="782" font-size="21" font-weight="700" style="fill:#182D32" class="">Faithfulness</text>
+<text id="label-18-mean-0-9799-successful-measurements" x="40" y="814" font-size="12" font-weight="400" style="fill:#506469" class="">Mean 0.9799 · successful measurements</text>
+<rect x="40" y="834" width="310" height="17" fill="#FBECE2"/>
+<rect x="40" y="834" width="81.57894736842105" height="17" fill="#006B61"/>
+<text id="label-19-15-57-measured" x="40" y="879" font-size="14" font-weight="700" style="fill:#006B61" class="">15 / 57 measured</text>
+<text id="label-20-42-failed" x="227" y="879" font-size="14" font-weight="400" style="fill:#B34322" class="">42 failed</text>
+<text id="label-21-view-definition-provenance" x="40" y="904" font-size="13" font-weight="700" style="fill:#006B61" class="">View definition &amp; provenance →</text>
+<rect x="24" y="943" width="342" height="171" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-22-completeness" x="40" y="975" font-size="21" font-weight="700" style="fill:#182D32" class="">Completeness</text>
+<text id="label-23-mean-0-7088-successful-measurements" x="40" y="1007" font-size="12" font-weight="400" style="fill:#506469" class="">Mean 0.7088 · successful measurements</text>
+<rect x="40" y="1027" width="310" height="17" fill="#FBECE2"/>
+<rect x="40" y="1027" width="310.0" height="17" fill="#006B61"/>
+<text id="label-24-57-57-measured" x="40" y="1072" font-size="14" font-weight="700" style="fill:#006B61" class="">57 / 57 measured</text>
+<text id="label-25-0-failed" x="227" y="1072" font-size="14" font-weight="400" style="fill:#506469" class="">0 failed</text>
+<text id="label-26-view-definition-provenance" x="40" y="1097" font-size="13" font-weight="700" style="fill:#006B61" class="">View definition &amp; provenance →</text>
+<text id="label-27-no-comparable-cohort-is-verified" x="24" y="1185" font-size="14" font-weight="400" style="fill:#506469" class="">No comparable cohort is verified.</text>
+<text id="label-28-do-not-average-these-with-another-run" x="24" y="1210" font-size="14" font-weight="400" style="fill:#506469" class="">Do not average these with another run.</text>
+<text id="label-29-open-all-six-metrics-as-stacked-rows" x="24" y="1235" font-size="14" font-weight="400" style="fill:#506469" class="">Open all six metrics as stacked rows.</text>
+<rect x="24" y="1283" width="342" height="44" fill="#006B61" rx="4"/>
+<text id="label-30-inspect-dataset" x="40" y="1311" font-size="15" font-weight="700" style="fill:#FFFFFF" class="">Inspect dataset →</text>
+<line x1="24" y1="1338" x2="366" y2="1338" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-31-proposed-ui-real-archived-counts-and-means" x="24" y="1365" font-size="10" font-weight="400" style="fill:#506469" class="">PROPOSED UI • Real archived counts and means</text>
+</svg>

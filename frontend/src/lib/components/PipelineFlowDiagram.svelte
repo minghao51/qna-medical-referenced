@@ -270,9 +270,9 @@
 		align-items: center;
 		gap: 0.25rem;
 		font-size: 0.75rem;
-		color: #6b7280;
+		color: #4b5563;
 		transition: all 0.3s ease;
-		opacity: 0.6;
+		opacity: 0.85;
 	}
 
 	.description.active {
@@ -282,7 +282,7 @@
 
 	.desc-title {
 		font-weight: 600;
-		color: #374151;
+		color: #1f2937;
 	}
 
 	@media (max-width: 640px) {

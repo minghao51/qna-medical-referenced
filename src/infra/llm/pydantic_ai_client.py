@@ -1,4 +1,4 @@
-"""Pydantic AI generation adapter for OpenCode Go (opt-in provider ``pydantic-ai``).
+"""Pydantic AI generation adapter for OpenCode Go (served provider ``pydantic-ai``).
 
 Implements the existing :class:`src.infra.llm.interfaces.LLMClient` protocol on
 ``OpenAIChatModel`` + ``OpenAIProvider`` (pydantic-ai-slim 2.31.0). Resources
@@ -22,8 +22,7 @@ Material differences and confounds versus the Qwen baseline:
   assembled by pydantic-ai rather than the OpenAI SDK directly. Note the
   framework maps the ``max_tokens`` setting to the ``max_completion_tokens``
   wire field for models without a known profile (same number, different field
-  name); the OpenCode Go gateway's acceptance of that field name is untested
-  until the live smoke.
+  name); the bounded 2026-11-03 live smoke accepted judge calls with that field.
 - Structured output: default mode is tool-based structured output (a
   ``final_result`` tool call) instead of Qwen's ``response_format
   json_object`` plus client-side validation. ``native-json-schema`` sends
@@ -43,8 +42,9 @@ Material differences and confounds versus the Qwen baseline:
   retries and a 600s request timeout would otherwise multiply attempts and
   shadow the owned-client timeout). This mirrors ``QwenClient``'s per-call
   ``with_options(max_retries=0, timeout=...)`` overrides.
-- OpenCode Go route support for tools/JSON-schema/SSE is documented but not
-  verified until the separately approved live smoke (P4-D).
+- OpenCode Go text and SSE streaming were verified by the bounded 2026-11-03
+  live smoke. Tool/JSON-schema structured output remains unverified on the live
+  route and therefore stays fail-closed at the application boundary.
 """
 
 import asyncio

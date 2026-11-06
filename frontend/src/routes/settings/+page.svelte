@@ -20,7 +20,7 @@
 		return val ? 'Enabled' : 'Disabled';
 	}
 	function colorFor(val: boolean): string {
-		return val ? '#059669' : '#6b7280';
+		return val ? 'var(--success)' : '#6b7280';
 	}
 
 	onMount(async () => {
@@ -158,7 +158,7 @@
 
 	.config-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 		gap: 1rem;
 	}
 
@@ -214,6 +214,6 @@
 		margin: 0;
 		font-size: 1.1rem;
 		font-weight: 700;
-		color: #4338ca;
+		color: var(--blue);
 	}
 </style>

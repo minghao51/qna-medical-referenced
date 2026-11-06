@@ -88,6 +88,28 @@ def test_generation_task_reports_explicit_provider_and_model_selection(monkeypat
     assert roles["generator"]["credential"]["setting"] == "APP__LLM__GEMINI_API_KEY"
 
 
+def test_generation_task_reports_pydantic_ai_provider(monkeypatch):
+    generation_secret = "pydantic-ai-generation-secret-canary"
+    monkeypatch.setattr(settings.llm, "provider", "pydantic-ai")
+    monkeypatch.setattr(settings.llm, "pydantic_ai_api_key", SecretStr(generation_secret))
+    monkeypatch.setattr(settings.llm, "pydantic_ai_model", "mimo-v2.6-flash")
+    monkeypatch.setattr(
+        settings.llm, "pydantic_ai_base_url", "https://opencode.ai/inference/go/openai/v1"
+    )
+
+    roles = effective_roles(task="generation")
+
+    assert roles["generator"]["provider"] == "pydantic-ai"
+    assert roles["generator"]["model"] == "mimo-v2.6-flash"
+    assert roles["generator"]["endpoint"] == "https://opencode.ai/inference/go/openai/v1"
+    assert roles["generator"]["credential"] == {
+        "setting": "APP__LLM__PYDANTIC_AI_API_KEY",
+        "configured": True,
+        "required": True,
+    }
+    assert generation_secret not in repr(roles)
+
+
 def test_generation_task_does_not_validate_or_require_unused_judge(monkeypatch):
     _set_credentials(monkeypatch, gemini="generator-secret")
     monkeypatch.setattr(settings.llm, "provider", "gemini")

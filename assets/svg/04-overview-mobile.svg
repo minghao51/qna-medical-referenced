@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1340" viewBox="0 0 390 1340" role="img" aria-labelledby="title description"><title id="title">Private research workspace mobile</title><desc id="description">Research-first mobile landing with real archived completeness counts and explicit Q&amp;A workbench access.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="390" height="1340" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="390" height="80" fill="#F7F4ED"/>
+<rect x="24" y="23" width="8" height="30" fill="#B34322"/>
+<text id="label-1-fieldnote" x="44" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text id="label-2-menu" x="314" y="46" font-size="14" font-weight="700" style="fill:#182D32" class="">Menu</text>
+<line x1="24" y1="79" x2="366" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text id="label-3-private-lab-public-synthetic-data" x="24" y="119" font-size="10" font-weight="700" style="fill:#006B61" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<text id="label-4-what-changes-actually" x="24" y="170" font-size="29" font-weight="400" style="fill:#182D32" class="serif">What changes actually</text>
+<text id="label-5-improve-this-system" x="24" y="207" font-size="29" font-weight="400" style="fill:#182D32" class="serif">improve this system?</text>
+<text id="label-6-start-with-the-evidence-behind-the-score" x="24" y="269" font-size="15" font-weight="400" style="fill:#506469" class="">Start with the evidence behind the score.</text>
+<text id="label-7-no-clinical-suitability-claims" x="24" y="294" font-size="15" font-weight="400" style="fill:#506469" class="">No clinical-suitability claims.</text>
+<rect x="24" y="337" width="342" height="352" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="40" y="357" width="214" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-8-local-archived-report" x="50" y="375" font-size="12" font-weight="700" style="fill:#B34322" class="">LOCAL ARCHIVED REPORT</text>
+<text id="label-9-a-high-score" x="40" y="418" font-size="23" font-weight="400" style="fill:#182D32" class="serif">A high score.</text>
+<text id="label-10-incomplete-evidence" x="40" y="448" font-size="23" font-weight="400" style="fill:#182D32" class="serif">Incomplete evidence.</text>
+<text id="label-11-faithfulness-mean-0-9799" x="40" y="504" font-size="15" font-weight="400" style="fill:#182D32" class="">Faithfulness mean: 0.9799</text>
+<text id="label-12-measured-15-57-failed-42-57" x="40" y="530" font-size="15" font-weight="400" style="fill:#182D32" class="">Measured: 15 / 57 · failed: 42 / 57</text>
+<rect x="40" y="558" width="310" height="18" fill="#FBECE2"/>
+<rect x="40" y="558" width="81.57894736842105" height="18" fill="#006B61"/>
+<text id="label-13-57-query-baseline-reported-18-apr-2026" x="40" y="612" font-size="12" font-weight="400" style="fill:#506469" class="">57-query baseline · reported 18 Apr 2026</text>
+<rect x="40" y="630" width="310" height="44" fill="#006B61" rx="4"/>
+<text id="label-14-inspect-evaluation" x="56" y="658" font-size="15" font-weight="700" style="fill:#FFFFFF" class="">Inspect evaluation →</text>
+<rect x="24" y="721" width="342" height="113" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-15-features" x="40" y="755" font-size="22" font-weight="700" style="fill:#182D32" class="">Features →</text>
+<text id="label-16-configured-measured-effective" x="40" y="791" font-size="13" font-weight="400" style="fill:#506469" class="">Configured ≠ measured effective</text>
+<rect x="24" y="858" width="342" height="113" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-17-datasets" x="40" y="892" font-size="22" font-weight="700" style="fill:#182D32" class="">Datasets →</text>
+<text id="label-18-counts-splits-overlap-and-review-status" x="40" y="928" font-size="13" font-weight="400" style="fill:#506469" class="">Counts, splits, overlap and review status</text>
+<rect x="24" y="995" width="342" height="113" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-19-q-a-workbench" x="40" y="1029" font-size="22" font-weight="700" style="fill:#182D32" class="">Q&amp;A workbench →</text>
+<text id="label-20-ask-using-public-or-synthetic-questions" x="40" y="1065" font-size="13" font-weight="400" style="fill:#506469" class="">Ask using public or synthetic questions</text>
+<rect x="24" y="1167" width="309" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-21-comparisons-require-verified-identity" x="34" y="1185" font-size="12" font-weight="700" style="fill:#B34322" class="">Comparisons require verified identity</text>
+<text id="label-22-no-live-run-is-implied-by-this-preview" x="24" y="1227" font-size="13" font-weight="400" style="fill:#506469" class="">No live run is implied by this preview.</text>
+<text id="label-23-d11-corpus-2-473-chunks-not-publications" x="24" y="1251" font-size="13" font-weight="400" style="fill:#506469" class="">D11 corpus: 2,473 chunks, not publications.</text>
+<line x1="24" y1="1288" x2="366" y2="1288" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-24-proposed-ui-private-research-workspace" x="24" y="1315" font-size="10" font-weight="400" style="fill:#506469" class="">PROPOSED UI • Private research workspace</text>
+</svg>

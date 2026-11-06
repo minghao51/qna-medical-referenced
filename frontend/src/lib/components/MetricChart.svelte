@@ -35,7 +35,7 @@
 			labels: string[];
 			datasets: {
 				label: string;
-				data: number[];
+				data: Array<number | null>;
 				borderColor?: string | string[];
 				backgroundColor?: string | string[];
 			}[];

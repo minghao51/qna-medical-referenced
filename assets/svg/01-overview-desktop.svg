@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1360" viewBox="0 0 1440 1360" role="img" aria-labelledby="title description"><title id="title">Fieldnote private research workspace</title><desc id="description">Refined root experience: evaluation completeness, feature evidence and dataset provenance are first-class. Real local archived report values, no fabricated live runs.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1360" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text id="label-1-fieldnote" x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text id="label-2-overview" x="340" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Overview</text>
+<line x1="340" y1="60" x2="412" y2="60" stroke="#006B61" stroke-width="3"/>
+<text id="label-3-ask" x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text id="label-4-evidence" x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text id="label-5-research" x="692" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Research</text>
+<text id="label-6-private-lab-public-synthetic-data" x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text id="label-7-workspace" x="48" y="111" font-size="14" font-weight="700" style="fill:#006B61" class="">Workspace</text>
+<line x1="48" y1="124" x2="120" y2="124" stroke="#006B61" stroke-width="3"/>
+<text id="label-8-evaluations" x="213" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Evaluations</text>
+<text id="label-9-features" x="397" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Features</text>
+<text id="label-10-datasets" x="547" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Datasets</text>
+<text id="label-11-methodology" x="699" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Methodology</text>
+<line x1="48" y1="138" x2="1392" y2="138" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-12-private-research-engineering-evidence" x="48" y="182" font-size="12" font-weight="700" style="fill:#006B61" class="">PRIVATE RESEARCH / ENGINEERING EVIDENCE</text>
+<text id="label-13-what-changes-actually-improve-this-system" x="48" y="231" font-size="39" font-weight="400" style="fill:#182D32" class="serif">What changes actually improve this system?</text>
+<text id="label-14-inspect-the-dataset-the-configuration-and-the-measuremen" x="48" y="265" font-size="16" font-weight="400" style="fill:#506469" class="">Inspect the dataset, the configuration and the measurement—not just the highest score.</text>
+<g id="primary-research-story">
+<rect x="48" y="301" width="874" height="324" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<rect x="72" y="325" width="213" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-15-local-archived-report" x="82" y="343" font-size="12" font-weight="700" style="fill:#B34322" class="">LOCAL ARCHIVED REPORT</text>
+<text id="label-16-a-strong-average-can-hide-missing-measurements" x="72" y="389" font-size="27" font-weight="400" style="fill:#182D32" class="serif">A strong average can hide missing measurements.</text>
+<text id="label-17-the-57-query-baseline-reports-faithfulness-of-0-9799" x="72" y="429" font-size="18" font-weight="400" style="fill:#182D32" class="">The 57-query baseline reports faithfulness of 0.9799.</text>
+<text id="label-18-but-only-15-of-57-faithfulness-measurements-succeeded" x="72" y="459" font-size="18" font-weight="400" style="fill:#182D32" class="">But only 15 of 57 faithfulness measurements succeeded.</text>
+<text id="label-19-the-other-42-failed-read-coverage-before-comparing-quali" x="72" y="489" font-size="18" font-weight="400" style="fill:#182D32" class="">The other 42 failed. Read coverage before comparing quality.</text>
+<rect x="72" y="532" width="668" height="18" fill="#FBECE2"/>
+<rect x="72" y="532" width="175.78947368421052" height="18" fill="#006B61"/>
+<text id="label-20-15-measured" x="72" y="577" font-size="14" font-weight="700" style="fill:#006B61" class="">15 measured</text>
+<text id="label-21-42-failed-57-expected" x="514" y="577" font-size="14" font-weight="700" style="fill:#B34322" class="">42 failed · 57 expected</text>
+<text id="label-22-inspect-evaluation-coverage" x="72" y="605" font-size="15" font-weight="700" style="fill:#006B61" class="">Inspect evaluation coverage →</text>
+</g>
+<rect x="954" y="301" width="438" height="324" fill="#182D32" rx="4"/>
+<text id="label-23-q-a-workbench" x="978" y="340" font-size="12" font-weight="700" style="fill:#B5DACE" class="">Q&amp;A WORKBENCH</text>
+<text id="label-24-ask-inspect-a-turn" x="978" y="386" font-size="29" font-weight="400" style="fill:#FFFFFF" class="serif">Ask. Inspect a turn.</text>
+<text id="label-25-understand-the-retrieval" x="978" y="424" font-size="29" font-weight="400" style="fill:#FFFFFF" class="serif">Understand the retrieval.</text>
+<text id="label-26-use-public-or-synthetic-questions-only" x="978" y="486" font-size="16" font-weight="400" style="fill:#D6E0DC" class="">Use public or synthetic questions only.</text>
+<text id="label-27-this-is-not-a-clinical-product" x="978" y="513" font-size="16" font-weight="400" style="fill:#D6E0DC" class="">This is not a clinical product.</text>
+<rect x="978" y="552" width="236" height="44" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-28-open-q-a-workbench" x="994" y="580" font-size="15" font-weight="700" style="fill:#182D32" class="">Open Q&amp;A workbench →</text>
+<g id="research-pathways">
+<text id="label-29-three-ways-to-investigate" x="48" y="687" font-size="12" font-weight="700" style="fill:#006B61" class="">THREE WAYS TO INVESTIGATE</text>
+<rect x="48" y="713" width="432" height="185" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-30-01" x="70" y="746" font-size="12" font-weight="700" style="fill:#506469" class="">01</text>
+<text id="label-31-evaluations" x="70" y="782" font-size="25" font-weight="700" style="fill:#182D32" class="">Evaluations</text>
+<text id="label-32-see-execution-measurement-and" x="70" y="814" font-size="15" font-weight="400" style="fill:#506469" class="">See execution, measurement and</text>
+<text id="label-33-eligibility-as-separate-states" x="70" y="838" font-size="15" font-weight="400" style="fill:#506469" class="">eligibility as separate states.</text>
+<text id="label-34-inspect-reports" x="70" y="875" font-size="14" font-weight="700" style="fill:#006B61" class="">Inspect reports →</text>
+<rect x="504" y="713" width="432" height="185" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-35-02" x="526" y="746" font-size="12" font-weight="700" style="fill:#506469" class="">02</text>
+<text id="label-36-features" x="526" y="782" font-size="25" font-weight="700" style="fill:#182D32" class="">Features</text>
+<text id="label-37-separate-a-configured-capability" x="526" y="814" font-size="15" font-weight="400" style="fill:#506469" class="">Separate a configured capability</text>
+<text id="label-38-from-an-effective-measured-change" x="526" y="838" font-size="15" font-weight="400" style="fill:#506469" class="">from an effective, measured change.</text>
+<text id="label-39-compare-feature-evidence" x="526" y="875" font-size="14" font-weight="700" style="fill:#006B61" class="">Compare feature evidence →</text>
+<rect x="960" y="713" width="432" height="185" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-40-03" x="982" y="746" font-size="12" font-weight="700" style="fill:#506469" class="">03</text>
+<text id="label-41-datasets" x="982" y="782" font-size="25" font-weight="700" style="fill:#182D32" class="">Datasets</text>
+<text id="label-42-know-what-was-tested-what-overlaps" x="982" y="814" font-size="15" font-weight="400" style="fill:#506469" class="">Know what was tested, what overlaps</text>
+<text id="label-43-and-what-the-labels-can-support" x="982" y="838" font-size="15" font-weight="400" style="fill:#506469" class="">and what the labels can support.</text>
+<text id="label-44-inspect-dataset-cards" x="982" y="875" font-size="14" font-weight="700" style="fill:#006B61" class="">Inspect dataset cards →</text>
+</g>
+<line x1="48" y1="944" x2="1392" y2="944" stroke="#CED5D0" stroke-width="1"/>
+<g id="corpus-chart">
+<text id="label-45-what-is-in-the-frozen-index" x="48" y="987" font-size="22" font-weight="700" style="fill:#182D32" class="">What is in the frozen index?</text>
+<text id="label-46-d11-2-473-chunks-counts-not-publications" x="48" y="1015" font-size="14" font-weight="400" style="fill:#506469" class="">D11 • 2,473 chunks • counts, not publications</text>
+<text id="label-47-pdf" x="48" y="1067" font-size="15" font-weight="400" style="fill:#182D32" class="">PDF</text>
+<rect x="194" y="1052" width="549" height="22" fill="#E6E7E2"/>
+<rect x="194" y="1052" width="477.996" height="22" fill="#006B61"/>
+<text id="label-48-1-306" x="753" y="1068" font-size="13" font-weight="700" style="fill:#182D32" class="">1,306</text>
+<text id="label-49-html" x="48" y="1115" font-size="15" font-weight="400" style="fill:#182D32" class="">HTML</text>
+<rect x="194" y="1100" width="549" height="22" fill="#E6E7E2"/>
+<rect x="194" y="1100" width="218.502" height="22" fill="#006B61"/>
+<text id="label-50-597" x="753" y="1116" font-size="13" font-weight="700" style="fill:#182D32" class="">597</text>
+<text id="label-51-lab-reference" x="48" y="1163" font-size="15" font-weight="400" style="fill:#182D32" class="">Lab reference</text>
+<rect x="194" y="1148" width="549" height="22" fill="#E6E7E2"/>
+<rect x="194" y="1148" width="168.36" height="22" fill="#375E91"/>
+<text id="label-52-460" x="753" y="1164" font-size="13" font-weight="700" style="fill:#182D32" class="">460</text>
+<text id="label-53-markdown" x="48" y="1211" font-size="15" font-weight="400" style="fill:#182D32" class="">Markdown</text>
+<rect x="194" y="1196" width="549" height="22" fill="#E6E7E2"/>
+<rect x="194" y="1196" width="40.26" height="22" fill="#006B61"/>
+<text id="label-54-110" x="753" y="1212" font-size="13" font-weight="700" style="fill:#182D32" class="">110</text>
+<text id="label-55-0" x="190.0" y="1257" font-size="11" font-weight="400" style="fill:#506469" class="">0</text>
+<text id="label-56-500" x="373.0" y="1257" font-size="11" font-weight="400" style="fill:#506469" class="">500</text>
+<text id="label-57-1-000" x="556.0" y="1257" font-size="11" font-weight="400" style="fill:#506469" class="">1,000</text>
+<text id="label-58-1-500" x="739.0" y="1257" font-size="11" font-weight="400" style="fill:#506469" class="">1,500</text>
+<text id="label-59-source-local-d11-medical-docs-index-read-only-count" x="48" y="1288" font-size="13" font-weight="400" style="fill:#506469" class="">Source: local D11 medical_docs index; read-only count.</text>
+</g>
+<text id="label-60-do-not-pool-these-inventories" x="920" y="987" font-size="24" font-weight="400" style="fill:#182D32" class="serif">Do not pool these inventories.</text>
+<text id="label-61-d11-corpus-2-473-indexed-chunks" x="920" y="1028" font-size="16" font-weight="400" style="fill:#182D32" class="">D11 corpus: 2,473 indexed chunks.</text>
+<text id="label-62-all-query-fixture-57-questions" x="920" y="1058" font-size="16" font-weight="400" style="fill:#182D32" class="">All-query fixture: 57 questions.</text>
+<text id="label-63-expanded-fixture-54-questions" x="920" y="1088" font-size="16" font-weight="400" style="fill:#182D32" class="">Expanded fixture: 54 questions.</text>
+<text id="label-64-frozen-review-set-8-cases" x="920" y="1118" font-size="16" font-weight="400" style="fill:#182D32" class="">Frozen review set: 8 cases.</text>
+<text id="label-65-conversation-fixture-15-conversations" x="920" y="1148" font-size="16" font-weight="400" style="fill:#182D32" class="">Conversation fixture: 15 conversations.</text>
+<rect x="920" y="1210" width="288" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-66-different-units-different-evidence" x="930" y="1228" font-size="12" font-weight="700" style="fill:#B34322" class="">Different units. Different evidence.</text>
+<text id="label-67-inspect-dataset-provenance" x="920" y="1270" font-size="15" font-weight="700" style="fill:#006B61" class="">Inspect dataset provenance →</text>
+<line x1="48" y1="1308" x2="1392" y2="1308" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-68-design-refinement-private-research-lab-archived-metrics-" x="48" y="1335" font-size="12" font-weight="400" style="fill:#506469" class="">DESIGN REFINEMENT • Private research lab • Archived metrics, not a live run</text>
+</svg>

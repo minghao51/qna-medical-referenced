@@ -7,7 +7,7 @@ factories in :mod:`src.evals.deepeval_models` are expected to construct this
 class through a lazy import (no import cycle): this module imports only the
 ``_safe_model_name``/``_judge_parameters`` helpers from that module.
 
-Known confounds and limitations (every claim below is offline-only verified):
+Known confounds and limitations (offline-verified unless a live date is named):
 
 - Prompt shape: the DeepEval metric prompt is sent verbatim as a single raw user
   message (``raw_prompt=True``) — no chat system prompt, no
@@ -19,16 +19,19 @@ Known confounds and limitations (every claim below is offline-only verified):
   must fall back to plain text instead of a structured mode the route may not
   honor.
 - Route/family overlap: ``pydantic-ai`` judges use the same OpenCode Go base URL
-  (``settings.llm.pydantic_ai_base_url``) and, by default, the same model
-  identifier as the ``pydantic-ai`` generator (``mimo-v2.6-flash``). Nothing
-  here enforces judge/generator family independence, so a matched run can score
-  a generator with a same-family judge over the same route; independent-judge
-  pinning remains a D17/P4-D configuration decision.
+  (``settings.llm.pydantic_ai_base_url``). The committed default pins the judge to
+  ``longcat-2.0`` while generation uses ``mimo-v2.6-flash``, but this wrapper
+  enforces no family independence itself; a matched run must still record its
+  effective roles. Route independence is never provided by this wrapper.
+- Session identity: OpenCode Go requires ``x-opencode-session``. The wrapper
+  reuses the caller's conversation scope when present and otherwise binds one
+  stable opaque session per judge instance, so DeepEval calls made outside a
+  chat request remain routable.
 - ``max_completion_tokens`` mapping: the adapter's ``max_tokens`` model setting
   (here ``settings.llm.judge_max_tokens``) is sent as the framework's
-  ``max_completion_tokens`` wire field for models without a known profile. The
-  limit value is the judge limit, but the field name differs from the
-  Qwen/LiteLLM ``max_tokens`` and OpenCode Go acceptance is unverified.
+  ``max_completion_tokens`` wire field for models without a known profile. A
+  bounded live smoke accepted the field on 2026-11-03; the 16,384-token cap and
+  real judge quality remain untested.
 - Empty output: the adapter raises on a falsy run output; that documented guard
   is translated back to ``""`` so DeepEval sees an empty judge completion
   instead of an exception, matching ``LiteLLMJudgeModel``. A provider response
@@ -38,9 +41,9 @@ Known confounds and limitations (every claim below is offline-only verified):
   running event loop; async metrics must use ``a_generate``. Only the async
   transport exists, so ``close`` is a documented no-op and ``aclose`` performs
   the real cleanup.
-- No live route validation: no request to OpenCode Go has been made. Auth,
-  latency, usage accuracy, judge quality, and route acceptance of the judge
-  settings remain untested until the separately approved P4-D live smoke.
+- Live validation: a bounded 2026-11-03 smoke completed a LongCat judge call
+  through this wrapper without a caller conversation scope. Quality, latency
+  parity, usage accuracy and all metric prompts remain unverified.
 
 Retries stay owned by the adapter (``settings.retry``-bounded loop, SDK
 ``max_retries=0``); DeepEval's outer metric retries are separate and unchanged.
@@ -48,7 +51,11 @@ Judge token usage is attributed through :func:`src.infra.usage.usage_role` to
 the configured ``usage_role`` (``judge``/``judge_light``/``judge_heavy``).
 """
 
+import uuid
+from contextlib import AbstractContextManager
+
 from src.evals.deepeval_models import _judge_parameters, _safe_model_name
+from src.infra.llm.conversation_context import conversation_scope, get_conversation_id
 from src.infra.llm.pydantic_ai_client import PydanticAIClient
 from src.infra.usage import usage_role
 
@@ -74,6 +81,10 @@ class PydanticAIJudgeModel(DeepEvalBaseLLM):
         self.name = self.model_name
         self.model = self
         self.temperature, self.max_tokens, self.timeout_seconds = _judge_parameters()
+        # DeepEval may invoke the judge outside a chat request, where no
+        # conversation scope exists. Bind one stable opaque session per judge
+        # instance so every OpenCode Go request carries x-opencode-session.
+        self._session_id = str(uuid.uuid4())
         # Judge settings, not generation settings, and a verbatim prompt: the
         # metric text must reach the model unchanged.
         self.client = PydanticAIClient(
@@ -87,10 +98,15 @@ class PydanticAIJudgeModel(DeepEvalBaseLLM):
     def load_model(self) -> "PydanticAIJudgeModel":
         return self
 
+    def _session_scope(self) -> AbstractContextManager[None]:
+        """Keep the caller's conversation scope, or bind this judge's own."""
+        return conversation_scope(get_conversation_id() or self._session_id)
+
     def generate(self, prompt: str) -> str:
         with usage_role(self.usage_role):
             try:
-                return self.client.generate(prompt)
+                with self._session_scope():
+                    return self.client.generate(prompt)
             except ValueError as exc:
                 if str(exc) != _EMPTY_OUTPUT_ERROR:
                     raise
@@ -99,7 +115,8 @@ class PydanticAIJudgeModel(DeepEvalBaseLLM):
     async def a_generate(self, prompt: str) -> str:
         with usage_role(self.usage_role):
             try:
-                return await self.client.a_generate(prompt)
+                with self._session_scope():
+                    return await self.client.a_generate(prompt)
             except ValueError as exc:
                 if str(exc) != _EMPTY_OUTPUT_ERROR:
                     raise

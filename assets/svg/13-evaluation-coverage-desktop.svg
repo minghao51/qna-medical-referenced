@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1370" viewBox="0 0 1440 1370" role="img" aria-labelledby="title description"><title id="title">Evaluation coverage and degraded measurements</title><desc id="description">Real archived 57-query baseline from local JSON. Mean scores shown beside successful/failed evaluation slots. Not current live run, not clinical validation.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1370" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text id="label-1-fieldnote" x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text id="label-2-overview" x="340" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Overview</text>
+<text id="label-3-ask" x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text id="label-4-evidence" x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text id="label-5-research" x="692" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Research</text>
+<line x1="692" y1="60" x2="764" y2="60" stroke="#006B61" stroke-width="3"/>
+<text id="label-6-private-lab-public-synthetic-data" x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text id="label-7-workspace" x="48" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Workspace</text>
+<text id="label-8-evaluations" x="213" y="111" font-size="14" font-weight="700" style="fill:#006B61" class="">Evaluations</text>
+<line x1="213" y1="124" x2="301" y2="124" stroke="#006B61" stroke-width="3"/>
+<text id="label-9-features" x="397" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Features</text>
+<text id="label-10-datasets" x="547" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Datasets</text>
+<text id="label-11-methodology" x="699" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Methodology</text>
+<line x1="48" y1="138" x2="1392" y2="138" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-12-evaluation-local-report-18-apr-2026" x="48" y="182" font-size="12" font-weight="700" style="fill:#006B61" class="">EVALUATION / LOCAL REPORT / 18 APR 2026</text>
+<text id="label-13-read-the-missing-measurements-before-the-means" x="48" y="231" font-size="39" font-weight="400" style="fill:#182D32" class="serif">Read the missing measurements before the means.</text>
+<text id="label-14-medical-semantic-chunking-exp-baseline-57-queries-archiv" x="48" y="265" font-size="16" font-weight="400" style="fill:#506469" class="">medical_semantic_chunking_exp → baseline · 57 queries · archived aggregate; underlying case-run directory absent.</text>
+<rect x="48" y="301" width="228" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-15-degraded-measurement" x="58" y="319" font-size="12" font-weight="700" style="fill:#B34322" class="">DEGRADED MEASUREMENT</text>
+<rect x="292" y="301" width="263" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-16-archive-not-comparable-cohort" x="302" y="319" font-size="12" font-weight="700" style="fill:#B34322" class="">Archive, not comparable cohort</text>
+<rect x="1132" y="292" width="260" height="44" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-17-view-report-provenance" x="1148" y="320" font-size="15" font-weight="700" style="fill:#182D32" class="">View report provenance →</text>
+<rect x="48" y="356" width="1344" height="118" fill="#182D32" rx="4"/>
+<text id="label-18-measurement-slots" x="72" y="391" font-size="12" font-weight="700" style="fill:#B5DACE" class="">MEASUREMENT SLOTS</text>
+<text id="label-19-268-measured-342-expected" x="72" y="434" font-size="28" font-weight="700" style="fill:#FFFFFF" class="">268 measured / 342 expected</text>
+<text id="label-20-74-failed-21-6-error-rate" x="650" y="434" font-size="23" font-weight="700" style="fill:#FFFFFF" class="">74 failed · 21.6% error rate</text>
+<text id="label-21-6-metrics-57-queries" x="1118" y="403" font-size="13" font-weight="400" style="fill:#D6E0DC" class="">6 metrics × 57 queries</text>
+<text id="label-22-not-342-patient-cases" x="1118" y="435" font-size="13" font-weight="400" style="fill:#D6E0DC" class="">Not 342 patient cases</text>
+<text id="label-23-metric" x="48" y="528" font-size="12" font-weight="700" style="fill:#506469" class="">METRIC</text>
+<text id="label-24-mean-0-1" x="344" y="528" font-size="12" font-weight="700" style="fill:#506469" class="">MEAN / 0–1</text>
+<text id="label-25-coverage-57-expected-per-metric" x="535" y="528" font-size="12" font-weight="700" style="fill:#506469" class="">COVERAGE / 57 EXPECTED PER METRIC</text>
+<text id="label-26-measured" x="1110" y="528" font-size="12" font-weight="700" style="fill:#506469" class="">MEASURED</text>
+<text id="label-27-failed" x="1255" y="528" font-size="12" font-weight="700" style="fill:#506469" class="">FAILED</text>
+<rect x="48" y="554" width="1344" height="58" fill="#FFFFFF" stroke="#CED5D0" rx="3"/>
+<text id="label-28-factual-accuracy" x="70" y="589" font-size="18" font-weight="400" style="fill:#182D32" class="">Factual accuracy</text>
+<text id="label-29-0-9965" x="344" y="589" font-size="17" font-weight="400" style="fill:#182D32" class="mono">0.9965</text>
+<rect x="535" y="573" width="490" height="20" fill="#FBECE2"/>
+<rect x="535" y="573" width="490.0" height="20" fill="#006B61"/>
+<text id="label-30-57-57" x="1110" y="589" font-size="16" font-weight="400" style="fill:#182D32" class="mono">57 / 57</text>
+<text id="label-31-0" x="1255" y="589" font-size="16" font-weight="400" style="fill:#506469" class="">0</text>
+<rect x="48" y="621" width="1344" height="58" fill="#FFFFFF" stroke="#CED5D0" rx="3"/>
+<text id="label-32-completeness" x="70" y="656" font-size="18" font-weight="400" style="fill:#182D32" class="">Completeness</text>
+<text id="label-33-0-7088" x="344" y="656" font-size="17" font-weight="400" style="fill:#182D32" class="mono">0.7088</text>
+<rect x="535" y="640" width="490" height="20" fill="#FBECE2"/>
+<rect x="535" y="640" width="490.0" height="20" fill="#006B61"/>
+<text id="label-34-57-57" x="1110" y="656" font-size="16" font-weight="400" style="fill:#182D32" class="mono">57 / 57</text>
+<text id="label-35-0" x="1255" y="656" font-size="16" font-weight="400" style="fill:#506469" class="">0</text>
+<rect x="48" y="688" width="1344" height="58" fill="#FFFFFF" stroke="#CED5D0" rx="3"/>
+<text id="label-36-clinical-relevance" x="70" y="723" font-size="18" font-weight="400" style="fill:#182D32" class="">Clinical relevance</text>
+<text id="label-37-0-9772" x="344" y="723" font-size="17" font-weight="400" style="fill:#182D32" class="mono">0.9772</text>
+<rect x="535" y="707" width="490" height="20" fill="#FBECE2"/>
+<rect x="535" y="707" width="490.0" height="20" fill="#006B61"/>
+<text id="label-38-57-57" x="1110" y="723" font-size="16" font-weight="400" style="fill:#182D32" class="mono">57 / 57</text>
+<text id="label-39-0" x="1255" y="723" font-size="16" font-weight="400" style="fill:#506469" class="">0</text>
+<rect x="48" y="755" width="1344" height="58" fill="#FFFFFF" stroke="#CED5D0" rx="3"/>
+<text id="label-40-clarity" x="70" y="790" font-size="18" font-weight="400" style="fill:#182D32" class="">Clarity</text>
+<text id="label-41-0-9193" x="344" y="790" font-size="17" font-weight="400" style="fill:#182D32" class="mono">0.9193</text>
+<rect x="535" y="774" width="490" height="20" fill="#FBECE2"/>
+<rect x="535" y="774" width="490.0" height="20" fill="#006B61"/>
+<text id="label-42-57-57" x="1110" y="790" font-size="16" font-weight="400" style="fill:#182D32" class="mono">57 / 57</text>
+<text id="label-43-0" x="1255" y="790" font-size="16" font-weight="400" style="fill:#506469" class="">0</text>
+<rect x="48" y="822" width="1344" height="58" fill="#FFFFFF" stroke="#CED5D0" rx="3"/>
+<text id="label-44-answer-relevancy" x="70" y="857" font-size="18" font-weight="700" style="fill:#182D32" class="">Answer relevancy</text>
+<text id="label-45-0-8594" x="344" y="857" font-size="17" font-weight="400" style="fill:#182D32" class="mono">0.8594</text>
+<rect x="535" y="841" width="490" height="20" fill="#FBECE2"/>
+<rect x="535" y="841" width="214.91228070175438" height="20" fill="#006B61"/>
+<text id="label-46-25-57" x="1110" y="857" font-size="16" font-weight="400" style="fill:#182D32" class="mono">25 / 57</text>
+<text id="label-47-32" x="1255" y="857" font-size="16" font-weight="700" style="fill:#B34322" class="">32</text>
+<rect x="48" y="889" width="1344" height="58" fill="#FFFFFF" stroke="#CED5D0" rx="3"/>
+<text id="label-48-faithfulness" x="70" y="924" font-size="18" font-weight="700" style="fill:#182D32" class="">Faithfulness</text>
+<text id="label-49-0-9799" x="344" y="924" font-size="17" font-weight="400" style="fill:#182D32" class="mono">0.9799</text>
+<rect x="535" y="908" width="490" height="20" fill="#FBECE2"/>
+<rect x="535" y="908" width="128.94736842105263" height="20" fill="#006B61"/>
+<text id="label-50-15-57" x="1110" y="924" font-size="16" font-weight="400" style="fill:#182D32" class="mono">15 / 57</text>
+<text id="label-51-42" x="1255" y="924" font-size="16" font-weight="700" style="fill:#B34322" class="">42</text>
+<rect x="535" y="983" width="15" height="15" fill="#006B61"/>
+<text id="label-52-successful-measurement" x="560" y="996" font-size="13" font-weight="400" style="fill:#182D32" class="">Successful measurement</text>
+<rect x="790" y="983" width="15" height="15" fill="#FBECE2" stroke="#B34322"/>
+<text id="label-53-failed-metric-evaluation" x="815" y="996" font-size="13" font-weight="400" style="fill:#182D32" class="">Failed metric evaluation</text>
+<text id="label-54-coverage-scale-0-57-slots-per-row-means-summarize-succes" x="48" y="1042" font-size="15" font-weight="400" style="fill:#506469" class="">Coverage scale: 0–57 slots per row. Means summarize successful measurements only; missing slots are not scored zero.</text>
+<line x1="48" y1="1080" x2="1392" y2="1080" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-55-what-can-you-inspect-next" x="48" y="1123" font-size="24" font-weight="400" style="fill:#182D32" class="serif">What can you inspect next?</text>
+<text id="label-56-inspect-dataset-expectations-57-query-fixture-inspect-co" x="48" y="1160" font-size="16" font-weight="400" style="fill:#182D32" class="">Inspect dataset expectations → 57-query fixture     /     Inspect configured feature changes → variant matrix</text>
+<text id="label-57-raw-case-errors-and-judge-reasons-not-available-in-this-" x="48" y="1190" font-size="16" font-weight="400" style="fill:#182D32" class="">Raw case errors and judge reasons: not available in this local aggregate report. Never infer them from counts.</text>
+<text id="label-58-factual-accuracy-and-clinical-relevance-are-metric-names" x="48" y="1220" font-size="16" font-weight="400" style="fill:#182D32" class="">Factual accuracy and clinical relevance are metric names, not evidence of clinical suitability or independent clinician review.</text>
+<text id="label-59-source-experiments-outputs-medical-semantic-chunking-exp" x="48" y="1277" font-size="13" font-weight="400" style="fill:#506469" class="">Source: experiments/outputs/medical_semantic_chunking_exp_report.json → baseline.metrics. No judge identity verified.</text>
+<line x1="48" y1="1318" x2="1392" y2="1318" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-60-proposed-ui-real-archived-counts-and-means-no-live-evalu" x="48" y="1345" font-size="12" font-weight="400" style="fill:#506469" class="">PROPOSED UI • Real archived counts and means • No live evaluation execution</text>
+</svg>

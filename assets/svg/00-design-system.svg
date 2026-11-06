@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1200" viewBox="0 0 1440 1200" role="img" aria-labelledby="title description"><title id="title">Fieldnote design system</title><desc id="description">Editorial medical evidence interface. All components are proposed; use semantic HTML, not SVG for application UI.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1200" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text x="340" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Overview</text>
+<line x1="340" y1="60" x2="412" y2="60" stroke="#006B61" stroke-width="3"/>
+<text x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text x="692" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Research</text>
+<text x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text x="48" y="122" font-size="12" font-weight="700" style="fill:#006B61" class="">00 / VISUAL LANGUAGE</text>
+<text x="48" y="176" font-size="42" font-weight="400" style="fill:#182D32" class="serif">Evidence first. Certainty never implied.</text>
+<text x="48" y="210" font-size="17" font-weight="400" style="fill:#506469" class="">Warm paper, disciplined rules, editorial type and a single decisive action.</text>
+<text x="48" y="270" font-size="13" font-weight="700" style="fill:#182D32" class="">01  PALETTE</text>
+<rect x="48" y="292" width="204" height="66" fill="#182D32" stroke="#CED5D0"/>
+<text x="48" y="383" font-size="13" font-weight="400" style="fill:#182D32" class="">Ink / #182D32</text>
+<rect x="276" y="292" width="204" height="66" fill="#F7F4ED" stroke="#CED5D0"/>
+<text x="276" y="383" font-size="13" font-weight="400" style="fill:#182D32" class="">Paper / #F7F4ED</text>
+<rect x="504" y="292" width="204" height="66" fill="#006B61" stroke="#CED5D0"/>
+<text x="504" y="383" font-size="13" font-weight="400" style="fill:#182D32" class="">Action / #006B61</text>
+<rect x="732" y="292" width="204" height="66" fill="#B34322" stroke="#CED5D0"/>
+<text x="732" y="383" font-size="13" font-weight="400" style="fill:#182D32" class="">Caution / #B34322</text>
+<rect x="960" y="292" width="204" height="66" fill="#375E91" stroke="#CED5D0"/>
+<text x="960" y="383" font-size="13" font-weight="400" style="fill:#182D32" class="">Reference / #375E91</text>
+<rect x="1188" y="292" width="204" height="66" fill="#506469" stroke="#CED5D0"/>
+<text x="1188" y="383" font-size="13" font-weight="400" style="fill:#182D32" class="">Secondary / #506469</text>
+<text x="48" y="439" font-size="13" font-weight="700" style="fill:#182D32" class="">02  TYPE / SYSTEM FONTS</text>
+<text x="48" y="502" font-size="40" font-weight="400" style="fill:#182D32" class="serif">Ask a better question.</text>
+<text x="48" y="540" font-size="24" font-weight="700" style="fill:#182D32" class="">Section heading · Arial Bold · 24 / 30</text>
+<text x="48" y="576" font-size="16" font-weight="400" style="fill:#182D32" class="">Body · Arial · 16 / 25. Readable at every viewport.</text>
+<text x="48" y="607" font-size="13" font-weight="400" style="fill:#506469" class="">Metadata · 13 / 20. Do not reduce body text to fit.</text>
+<text x="48" y="637" font-size="15" font-weight="400" style="fill:#182D32" class="mono">2473 chunks  |  485.0 ms  |  nDCG 0.7205</text>
+<text x="790" y="439" font-size="13" font-weight="700" style="fill:#182D32" class="">03  GRID &amp; RHYTHM</text>
+<text x="790" y="478" font-size="16" font-weight="400" style="fill:#182D32" class="">Desktop: 1440, 48 px margins, 12 columns.</text>
+<text x="790" y="508" font-size="16" font-weight="400" style="fill:#182D32" class="">Content max-width: 1344; 24 px gutters.</text>
+<text x="790" y="538" font-size="16" font-weight="400" style="fill:#182D32" class="">Reading column: 640–720; 65–75 characters.</text>
+<text x="790" y="568" font-size="16" font-weight="400" style="fill:#182D32" class="">Mobile: 390, 24 px margins, one column.</text>
+<text x="790" y="598" font-size="16" font-weight="400" style="fill:#182D32" class="">Space: 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64.</text>
+<text x="790" y="628" font-size="16" font-weight="400" style="fill:#182D32" class="">Breakpoints: 640 and 1024; reflow, do not shrink.</text>
+<text x="48" y="710" font-size="13" font-weight="700" style="fill:#182D32" class="">04  CONTROLS &amp; STATES</text>
+<rect x="48" y="732" width="158" height="44" fill="#006B61" rx="4"/>
+<text x="64" y="760" font-size="15" font-weight="700" style="fill:#FFFFFF" class="">Ask a question</text>
+<rect x="222" y="732" width="162" height="44" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="238" y="760" font-size="15" font-weight="700" style="fill:#182D32" class="">Inspect this turn</text>
+<rect x="400" y="728" width="145" height="52" fill="#F7F4ED" stroke="#375E91" rx="6"/>
+<rect x="404" y="732" width="137" height="44" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="420" y="760" font-size="15" font-weight="700" style="fill:#182D32" class="">Focus visible</text>
+<rect x="563" y="732" width="140" height="44" fill="#E6E7E2" rx="4"/>
+<text x="579" y="760" font-size="15" font-weight="700" style="fill:#506469" class="">Unavailable</text>
+<rect x="48" y="800" width="655" height="66" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="64" y="824" font-size="12" font-weight="700" style="fill:#506469" class="">Your question</text>
+<text x="64" y="850" font-size="16" font-weight="400" style="fill:#182D32" class="">How do I read a lab reference range?</text>
+<rect x="48" y="886" width="113" height="26" fill="#E5F1EA" rx="3"/>
+<text x="58" y="904" font-size="12" font-weight="700" style="fill:#006B61" class="">Selected: PDF</text>
+<rect x="203" y="886" width="148" height="26" fill="#FBECE2" rx="3"/>
+<text x="213" y="904" font-size="12" font-weight="700" style="fill:#B34322" class="">Snapshot, not live</text>
+<text x="48" y="946" font-size="14" font-weight="400" style="fill:#506469" class="">Native controls; minimum target 44 × 44 px. Focus ring: 2 px blue.</text>
+<text x="790" y="710" font-size="13" font-weight="700" style="fill:#182D32" class="">05  CHART GRAMMAR</text>
+<text x="790" y="750" font-size="20" font-weight="700" style="fill:#182D32" class="">Name the measure. Show the baseline.</text>
+<text x="790" y="808" font-size="14" font-weight="400" style="fill:#182D32" class="">Baseline</text>
+<rect x="920" y="790" width="224.829" height="22" fill="#506469"/>
+<text x="1180" y="807" font-size="14" font-weight="400" style="fill:#182D32" class="mono">0.6813</text>
+<text x="790" y="854" font-size="14" font-weight="400" style="fill:#182D32" class="">Cross-encoder</text>
+<rect x="920" y="836" width="237.76500000000001" height="22" fill="#006B61"/>
+<text x="1180" y="853" font-size="14" font-weight="400" style="fill:#182D32" class="mono">0.7205</text>
+<line x1="920" y1="884" x2="1250" y2="884" stroke="#CED5D0" stroke-width="1"/>
+<text x="920" y="906" font-size="12" font-weight="400" style="fill:#506469" class="">0</text>
+<text x="1240" y="906" font-size="12" font-weight="400" style="fill:#506469" class="">1</text>
+<text x="790" y="945" font-size="14" font-weight="400" style="fill:#182D32" class="">nDCG@K, 0–1; higher is better.</text>
+<text x="790" y="969" font-size="14" font-weight="400" style="fill:#182D32" class="">54 queries; reported 15 Apr 2026. No intervals available.</text>
+<text x="790" y="993" font-size="14" font-weight="400" style="fill:#182D32" class="">Never label retrieval scores as medical confidence.</text>
+<text x="48" y="1030" font-size="16" font-weight="400" style="fill:#182D32" class="">Semantic HTML: navigation, forms, tables, disclosures and dialogs. Charts: Chart.js + equivalent data table.</text>
+<text x="48" y="1058" font-size="16" font-weight="400" style="fill:#182D32" class="">Reduced motion: no shimmering skeletons. Status needs text + icon, never color alone.</text>
+<text x="48" y="1086" font-size="16" font-weight="400" style="fill:#182D32" class="">Contrast target: 4.5:1 text, 3:1 controls. Paper is the default canvas; white is reserved for evidence and input.</text>
+<line x1="48" y1="1148" x2="1392" y2="1148" stroke="#CED5D0" stroke-width="1"/>
+<text x="48" y="1175" font-size="12" font-weight="400" style="fill:#506469" class="">DESIGN PROPOSAL • Repository snapshot, not a live service</text>
+</svg>

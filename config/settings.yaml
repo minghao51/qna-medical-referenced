@@ -28,41 +28,55 @@ api:
 # LLM Provider Configuration
 # =============================================================================
 llm:
-  # Provider selection: qwen | litellm | gemini
-  provider: gemini
+  # Provider selection: qwen | litellm | gemini | pydantic-ai
+  # Served text generation and judging use OpenCode Go through pydantic-ai.
+  # Embeddings remain on Qwen/DashScope because the D11 index is frozen to it.
+  provider: pydantic-ai
+  judge_provider: pydantic-ai
 
   # --- Qwen (Dashscope) Configuration ---
-  model_name: qwen3.5-flash  # qwen3.5-flash | qwen3.5-27b | qwen3.5-plus | qwen-max
+  model_name: qwen3.5-flash  # Qwen enrichment/index-time model; not the served chat model
   dashscope_api_key: ""      # Get from https://dashscope-us.aliyuncs.com/
   qwen_base_url: "https://dashscope-us.aliyuncs.com/compatible-mode/v1"
 
   # --- Embedding Configuration ---
-  embedding_model: text-embedding-v4  # Embedding model for vector search
+  embedding_model: text-embedding-v4  # Embedding model for vector search (frozen D11)
   embedding_batch_size: 10            # Batch size for embedding requests
+
+  # --- Pydantic AI / OpenCode Go Configuration (served generation) ---
+  pydantic_ai_base_url: "https://opencode.ai/inference/go/openai/v1"
+  pydantic_ai_model: mimo-v2.6-flash  # Served chat model
+  pydantic_ai_temperature: 0.7
+  pydantic_ai_max_tokens: 2048
+  pydantic_ai_timeout_seconds: 30.0
+  pydantic_ai_structured_output_mode: tool  # tool | native-json-schema
 
   # --- LiteLLM/OpenRouter Configuration (when provider=litellm) ---
   openrouter_api_key: ""     # Get from https://openrouter.ai/settings/keys
   openrouter_model: google/gemma-4-31b-it  # Default OpenRouter model
   litellm_model: ""          # Override with any LiteLLM model string
 
-  # --- Google Gemini Configuration (when provider=gemini) ---
+  # --- Google Gemini Configuration (fallback when provider=gemini) ---
   gemini_api_key: ""              # Get from https://aistudio.google.com/apikey (set via .env)
   gemini_model_name: gemma-4-31b-it  # gemini-2.5-flash | gemini-2.5-pro | gemini-2.0-flash
 
   # --- Evaluation Judge Models (used by DeepEval for LLM-as-judge) ---
+  # Qwen/LiteLLM/Gemini judge fields remain available for explicit fallback.
   # Light judge: faster, cheaper (for routine evaluations)
   judge_model_light: qwen3.5-35b-a3b
   judge_model_light_litellm: google/gemma-4-31b-it
   judge_model_light_gemini: gemma-4-31b-it
+  judge_model_light_pydantic_ai: longcat-2.0
 
   # Heavy judge: more accurate (for complex evaluations)
   judge_model_heavy: qwen3.5-flash
   judge_model_heavy_litellm: google/gemma-4-31b-it
   judge_model_heavy_gemini: gemma-4-31b-it
+  judge_model_heavy_pydantic_ai: longcat-2.0
 
   # Judge generation parameters
   judge_temperature: 0.0     # 0.0 = deterministic, higher = more creative
-  judge_max_tokens: 1024     # Maximum tokens for judge responses
+  judge_max_tokens: 16384    # LongCat reasoning output cap; avoids truncated verdicts
 
 # =============================================================================
 # Vector Storage Configuration

@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1180" viewBox="0 0 1440 1180" role="img" aria-labelledby="title description"><title id="title">Individual retrieval step inspector</title><desc id="description">A DeepSeek Harness-inspired inspector adapted to recorded RetrievalStep data, with honest missing call-level instrumentation.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1180" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text x="340" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Overview</text>
+<text x="468" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Ask</text>
+<line x1="468" y1="60" x2="495" y2="60" stroke="#006B61" stroke-width="3"/>
+<text x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text x="692" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Research</text>
+<text x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text x="48" y="122" font-size="14" font-weight="700" style="fill:#006B61" class="">← Turn 02 / Retrieval / semantic_search</text>
+<text x="48" y="180" font-size="40" font-weight="400" style="fill:#182D32" class="serif">A step is not necessarily a provider call.</text>
+<rect x="48" y="206" width="174" height="26" fill="#FBECE2" rx="3"/>
+<text x="58" y="224" font-size="12" font-weight="700" style="fill:#B34322" class="">SYNTHETIC TRACE</text>
+<text x="248" y="224" font-size="15" font-weight="400" style="fill:#506469" class="">Proposed detail view of existing fields; no new event API implied.</text>
+<rect x="48" y="274" width="320" height="739" fill="#182D32" rx="4"/>
+<text x="72" y="312" font-size="12" font-weight="700" style="fill:#B5DACE" class="">TURN 02 / STAGE LEDGER</text>
+<rect x="60" y="345" width="296" height="86" fill="#182D32" rx="4"/>
+<text x="76" y="375" font-size="17" font-weight="700" style="fill:#FFFFFF" class="">query_expansion</text>
+<text x="76" y="404" font-size="13" font-weight="400" style="fill:#D6E0DC" class="">20 ms</text>
+<rect x="60" y="447" width="296" height="86" fill="#006B61" rx="4"/>
+<text x="76" y="477" font-size="17" font-weight="700" style="fill:#FFFFFF" class="">semantic_search</text>
+<text x="76" y="506" font-size="13" font-weight="400" style="fill:#D6E0DC" class="">200 ms</text>
+<rect x="60" y="549" width="296" height="86" fill="#182D32" rx="4"/>
+<text x="76" y="579" font-size="17" font-weight="700" style="fill:#FFFFFF" class="">keyword_search</text>
+<text x="76" y="608" font-size="13" font-weight="400" style="fill:#D6E0DC" class="">0 ms · placeholder</text>
+<rect x="60" y="651" width="296" height="86" fill="#182D32" rx="4"/>
+<text x="76" y="681" font-size="17" font-weight="700" style="fill:#FFFFFF" class="">score_fusion</text>
+<text x="76" y="710" font-size="13" font-weight="400" style="fill:#D6E0DC" class="">0 ms · placeholder</text>
+<rect x="60" y="753" width="296" height="86" fill="#182D32" rx="4"/>
+<text x="76" y="783" font-size="17" font-weight="700" style="fill:#FFFFFF" class="">reranking</text>
+<text x="76" y="812" font-size="13" font-weight="400" style="fill:#D6E0DC" class="">Skipped</text>
+<text x="72" y="927" font-size="14" font-weight="400" style="fill:#D6E0DC" class="">Choose any recorded step.</text>
+<text x="72" y="952" font-size="14" font-weight="400" style="fill:#D6E0DC" class="">Expand available details only.</text>
+<text x="406" y="307" font-size="27" font-weight="700" style="fill:#182D32" class="">semantic_search</text>
+<text x="1146" y="307" font-size="24" font-weight="400" style="fill:#182D32" class="mono">200 ms</text>
+<text x="406" y="342" font-size="15" font-weight="400" style="fill:#506469" class="">Recorded step · skipped = false · details.queries_count = 1</text>
+<text x="406" y="401" font-size="16" font-weight="400" style="fill:#506469" class="">Summary</text>
+<text x="550" y="401" font-size="16" font-weight="400" style="fill:#506469" class="">Input</text>
+<text x="670" y="401" font-size="16" font-weight="400" style="fill:#506469" class="">Output</text>
+<text x="796" y="401" font-size="16" font-weight="700" style="fill:#006B61" class="">Raw</text>
+<line x1="796" y1="414" x2="851" y2="414" stroke="#006B61" stroke-width="3"/>
+<line x1="406" y1="430" x2="1392" y2="430" stroke="#CED5D0" stroke-width="1"/>
+<rect x="406" y="454" width="986" height="204" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text x="430" y="491" font-size="16" font-weight="400" style="fill:#182D32" class="mono">{</text>
+<text x="430" y="518" font-size="16" font-weight="400" style="fill:#182D32" class="mono">  "name": "semantic_search",</text>
+<text x="430" y="545" font-size="16" font-weight="400" style="fill:#182D32" class="mono">  "timing_ms": 200,</text>
+<text x="430" y="572" font-size="16" font-weight="400" style="fill:#182D32" class="mono">  "skipped": false,</text>
+<text x="430" y="599" font-size="16" font-weight="400" style="fill:#182D32" class="mono">  "details": { "queries_count": 1 }</text>
+<text x="430" y="626" font-size="16" font-weight="400" style="fill:#182D32" class="mono">}</text>
+<text x="406" y="705" font-size="21" font-weight="700" style="fill:#182D32" class="">Related turn context—not this call’s raw payload</text>
+<text x="406" y="741" font-size="16" font-weight="400" style="fill:#182D32" class="">Query: What should I ask at my next appointment?</text>
+<text x="406" y="770" font-size="16" font-weight="400" style="fill:#182D32" class="">Retrieval mode: rrf_hybrid · returned chunks: 2 · top_k: 2</text>
+<text x="406" y="799" font-size="16" font-weight="400" style="fill:#182D32" class="">Rank 1 → page 1, chunk 1 · combined_score 0.66</text>
+<text x="406" y="828" font-size="16" font-weight="400" style="fill:#182D32" class="">Rank 2 → page 1, chunk 0 · combined_score 0.61</text>
+<rect x="406" y="883" width="986" height="130" fill="#FBECE2" rx="4"/>
+<text x="430" y="916" font-size="12" font-weight="700" style="fill:#B34322" class="">NOT RECORDED AT INDIVIDUAL-CALL GRANULARITY</text>
+<text x="430" y="951" font-size="15" font-weight="400" style="fill:#182D32" class="">Provider request / response, retry attempts, exact usage, cost and call start/end timestamps.</text>
+<text x="430" y="978" font-size="15" font-weight="400" style="fill:#182D32" class="">Input and Output tabs show “not recorded for this step” unless supported by its real fields.</text>
+<text x="48" y="1061" font-size="16" font-weight="400" style="fill:#506469" class="">Possible later extension: an authorized, redacted provider-call ledger. Requires a new schema, retention rules and privacy review.</text>
+<text x="48" y="1089" font-size="16" font-weight="400" style="fill:#506469" class="">Do not expose model reasoning, credentials or raw SDK bodies. The current implementation slice should stop at recorded RAG steps.</text>
+<line x1="48" y1="1128" x2="1392" y2="1128" stroke="#CED5D0" stroke-width="1"/>
+<text x="48" y="1155" font-size="12" font-weight="400" style="fill:#506469" class="">DESIGN PROPOSAL • Repository snapshot, not a live service</text>
+</svg>

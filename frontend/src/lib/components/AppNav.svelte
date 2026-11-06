@@ -9,75 +9,103 @@
 	};
 
 	const primaryItems: NavItem[] = [
-		{ href: '/', label: 'Chat' },
-		{ href: '/documents', label: 'Documents' },
-		{ href: '/experiments', label: 'Experiments' }
+		{ href: '/', label: 'Overview' },
+		{ href: '/ask', label: 'Ask' },
+		{ href: '/evidence', label: 'Evidence' }
 	];
 
-	const secondaryItems: NavItem[] = [
-		{ href: '/eval', label: 'Pipeline Eval' },
-		{ href: '/eval/ablation', label: 'Ablation Study' },
+	// Legacy diagnostic destinations remain reachable while the research
+	// subpages land in later slices.
+	const researchItems: NavItem[] = [
+		{ href: '/', label: 'Workspace' },
+		{ href: '/research/evaluations', label: 'Evaluations' },
+		{ href: '/research/methodology', label: 'Methodology' },
+		{ href: '/research/features', label: 'Features' },
+		{ href: '/research/datasets', label: 'Datasets' },
+		{ href: '/eval/ablation', label: 'Ablation study' },
+		{ href: '/docs/pipeline', label: 'Pipeline documentation' },
+		{ href: '/help', label: 'Help' },
 		{ href: '/settings', label: 'Settings' },
-		{ href: '/health', label: 'System Health' },
-		{ href: '/docs/pipeline', label: 'Pipeline Docs' },
-		{ href: '/help', label: 'Help' }
+		{ href: '/health', label: 'System health' }
 	];
 
 	let { current }: Props = $props();
-	let dropdownOpen = $state(false);
+	let researchOpen = $state(false);
+	let mobileOpen = $state(false);
+	let researchButton: HTMLButtonElement | undefined = $state();
+	let mobileButton: HTMLButtonElement | undefined = $state();
 
-	function toggleDropdown() {
-		dropdownOpen = !dropdownOpen;
+	const researchActive = $derived(
+		current.startsWith('/research') ||
+			researchItems.some(
+				(item) => item.href !== '/' && (current === item.href || current.startsWith(`${item.href}/`))
+			)
+	);
+
+	function closeResearch() {
+		researchOpen = false;
+		researchButton?.focus();
 	}
 
-	function closeDropdown() {
-		dropdownOpen = false;
+	function closeMobile() {
+		mobileOpen = false;
+		mobileButton?.focus();
+	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Escape') return;
+		if (researchOpen) closeResearch();
+		if (mobileOpen) closeMobile();
 	}
 </script>
 
-<nav class="app-nav" aria-label="Primary">
-	<div class="nav-links">
+<svelte:window onkeydown={handleKeydown} />
+
+<header class="app-nav">
+	<a class="brand" href="/" aria-label="Fieldnote overview">FIELDNOTE</a>
+	<p class="lab-note">Private lab · public + synthetic data</p>
+
+	<nav class="desktop-nav" aria-label="Primary">
 		{#each primaryItems as item}
 			<a
 				href={item.href}
 				class="nav-link"
-				class:active={current === item.href}
+				class:active={current === item.href || current.startsWith(`${item.href}/`)}
 				aria-current={current === item.href ? 'page' : undefined}
 			>
 				{item.label}
 			</a>
 		{/each}
 
-		<div class="more-menu">
+		<div class="menu-wrap">
 			<button
+				bind:this={researchButton}
 				type="button"
-				class="nav-link more-btn"
-				class:active={secondaryItems.some((i) => i.href === current)}
-				onclick={toggleDropdown}
-				aria-expanded={dropdownOpen}
+				class="nav-link menu-trigger"
+				class:active={researchActive}
+				aria-expanded={researchOpen}
 				aria-haspopup="true"
+				onclick={() => (researchOpen = !researchOpen)}
 			>
-				More
-				<svg class="chevron" class:open={dropdownOpen} viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-					<path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
-				</svg>
+				Research
+				<span class="chevron" class:open={researchOpen} aria-hidden="true">▾</span>
 			</button>
 
-				{#if dropdownOpen}
-					<button
-						type="button"
-						class="dropdown-backdrop"
-						aria-label="Close menu"
-						onclick={closeDropdown}
-					></button>
-					<div class="dropdown" role="menu">
-					{#each secondaryItems as item}
+			{#if researchOpen}
+				<button
+					type="button"
+					class="menu-backdrop"
+					aria-label="Close research menu"
+					onclick={closeResearch}
+				></button>
+				<div class="dropdown" role="menu">
+					{#each researchItems as item}
 						<a
 							href={item.href}
 							class="dropdown-item"
 							class:active={current === item.href}
 							role="menuitem"
-							onclick={closeDropdown}
+							onclick={() => (researchOpen = false)}
 						>
 							{item.label}
 						</a>
@@ -85,75 +113,136 @@
 				</div>
 			{/if}
 		</div>
-	</div>
-	<a
-		href="https://github.com/anomalyco/qna_medical_referenced"
-		target="_blank"
-		rel="noopener noreferrer"
-		class="github-link"
-		aria-label="View on GitHub"
+	</nav>
+
+	<button
+		bind:this={mobileButton}
+		type="button"
+		class="menu-button"
+		aria-expanded={mobileOpen}
+		aria-controls="mobile-menu"
+		onclick={() => (mobileOpen = !mobileOpen)}
 	>
-		<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-			<path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-		</svg>
-	</a>
-</nav>
+		Menu
+	</button>
+
+	{#if mobileOpen}
+		<button
+			type="button"
+			class="mobile-backdrop"
+			aria-label="Close menu"
+			onclick={closeMobile}
+		></button>
+		<nav id="mobile-menu" class="mobile-panel" aria-label="Menu">
+			<p class="menu-heading">Primary</p>
+			{#each primaryItems as item}
+				<a
+					href={item.href}
+					class="mobile-link"
+					class:active={current === item.href}
+					aria-current={current === item.href ? 'page' : undefined}
+					onclick={() => (mobileOpen = false)}
+				>
+					{item.label}
+				</a>
+			{/each}
+			<p class="menu-heading">Research</p>
+			{#each researchItems as item}
+				<a
+					href={item.href}
+					class="mobile-link"
+					class:active={current === item.href}
+					onclick={() => (mobileOpen = false)}
+				>
+					{item.label}
+				</a>
+			{/each}
+		</nav>
+	{/if}
+</header>
 
 <style>
 	.app-nav {
+		position: relative;
+		z-index: 20;
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
+		gap: 1.5rem;
 		padding: 0.75rem 0 1rem;
 		border-bottom: 1px solid var(--border-color);
 	}
 
-	.nav-links {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
+	.brand {
+		display: inline-flex;
 		align-items: center;
+		gap: 0.55rem;
+		min-height: 44px;
+		font-family: var(--font-heading);
+		font-size: 1.05rem;
+		font-weight: 700;
+		letter-spacing: 0.16em;
+		color: var(--ink);
+		text-decoration: none;
+		white-space: nowrap;
 	}
 
-	.nav-link,
-	.github-link {
+	.brand::before {
+		content: '';
+		width: 5px;
+		height: 1.35rem;
+		background: var(--rust);
+	}
+
+	.lab-note {
+		margin: 0;
+		color: var(--muted-color);
+		font-size: 0.72rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.desktop-nav {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-left: auto;
+	}
+
+	.nav-link {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		min-height: 2.5rem;
-		padding: 0.5rem 0.9rem;
-		border-radius: 999px;
+		min-height: 44px;
+		padding: 0.45rem 0.85rem;
+		border: none;
+		border-radius: 6px;
+		background: transparent;
 		color: var(--muted-color);
-		text-decoration: none;
+		font: inherit;
 		font-weight: 600;
-		transition: background 0.2s ease, color 0.2s ease;
+		text-decoration: none;
+		cursor: pointer;
 	}
 
 	.nav-link:hover,
-	.github-link:hover {
+	.menu-button:hover {
 		background: var(--surface-subtle);
-		color: var(--text-color);
+		color: var(--ink);
 	}
 
 	.nav-link.active {
-		background: var(--surface-strong);
-		color: var(--text-color);
+		border-radius: 0;
+		background: transparent;
+		color: var(--teal);
+		box-shadow: inset 0 -2px 0 var(--teal);
 	}
 
-	.more-menu {
-		position: relative;
-	}
-
-	.more-btn {
-		cursor: pointer;
-		border: none;
-		background: none;
-		font: inherit;
-		gap: 0.25rem;
+	.menu-trigger {
+		gap: 0.35rem;
 	}
 
 	.chevron {
+		font-size: 0.7rem;
 		transition: transform 0.15s ease;
 	}
 
@@ -161,63 +250,122 @@
 		transform: rotate(180deg);
 	}
 
-	.dropdown-backdrop {
+	.menu-wrap {
+		position: relative;
+	}
+
+	.menu-backdrop {
 		position: fixed;
 		inset: 0;
-		z-index: 99;
+		z-index: 30;
+		border: none;
+		background: transparent;
+		cursor: default;
 	}
 
 	.dropdown {
 		position: absolute;
 		top: calc(100% + 0.35rem);
-		left: 0;
-		z-index: 100;
-		min-width: 10rem;
-		padding: 0.35rem;
+		right: 0;
+		z-index: 40;
+		min-width: 14rem;
+		padding: 0.4rem;
 		border: 1px solid var(--border-color);
-		border-radius: 12px;
-		background: white;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+		border-radius: 10px;
+		background: #fffdf8;
+		box-shadow: 0 12px 30px rgb(24 45 50 / 16%);
 	}
 
 	.dropdown-item {
 		display: block;
-		padding: 0.55rem 0.85rem;
-		border-radius: 8px;
+		padding: 0.65rem 0.8rem;
+		border-radius: 6px;
 		color: var(--muted-color);
-		text-decoration: none;
+		font-size: 0.9rem;
 		font-weight: 600;
-		font-size: 0.88rem;
-		transition: background 0.15s ease, color 0.15s ease;
+		text-decoration: none;
 	}
 
-	.dropdown-item:hover {
-		background: var(--surface-subtle);
-		color: var(--text-color);
-	}
-
+	.dropdown-item:hover,
 	.dropdown-item.active {
-		background: var(--surface-strong);
-		color: var(--text-color);
+		background: var(--surface-subtle);
+		color: var(--ink);
 	}
 
-	.github-link {
-		flex-shrink: 0;
+	.menu-button {
+		display: none;
+		margin-left: auto;
+		min-height: 44px;
+		padding: 0.5rem 1rem;
 		border: 1px solid var(--border-color);
+		border-radius: 6px;
+		background: transparent;
+		color: var(--ink);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
 	}
 
-	.github-link svg {
-		width: 18px;
-		height: 18px;
+	.mobile-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 30;
+		border: none;
+		background: rgb(24 45 50 / 28%);
 	}
 
-	@media (max-width: 700px) {
-		.app-nav {
-			align-items: flex-start;
+	.mobile-panel {
+		position: absolute;
+		top: calc(100% - 0.5rem);
+		left: 0;
+		right: 0;
+		z-index: 40;
+		display: flex;
+		flex-direction: column;
+		padding: 0.75rem;
+		border: 1px solid var(--border-color);
+		border-radius: 10px;
+		background: #fffdf8;
+		box-shadow: 0 12px 30px rgb(24 45 50 / 16%);
+	}
+
+	.menu-heading {
+		margin: 0.6rem 0 0.25rem;
+		padding: 0 0.65rem;
+		color: var(--muted-color);
+		font-size: 0.68rem;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+
+	.mobile-link {
+		display: flex;
+		align-items: center;
+		min-height: 44px;
+		padding: 0.5rem 0.65rem;
+		border-radius: 6px;
+		color: var(--ink);
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	.mobile-link:hover,
+	.mobile-link.active {
+		background: var(--surface-subtle);
+	}
+
+	@media (max-width: 860px) {
+		.lab-note {
+			display: none;
 		}
 
-		.github-link {
-			margin-left: auto;
+		.desktop-nav {
+			display: none;
+		}
+
+		.menu-button {
+			display: inline-flex;
+			align-items: center;
 		}
 	}
 </style>

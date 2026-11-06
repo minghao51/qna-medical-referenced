@@ -7,6 +7,8 @@
 	import MetricTile from '$lib/components/MetricTile.svelte';
 	import EvalSection from '$lib/components/EvalSection.svelte';
 	import { getExperiments, getExperimentResults, getExperimentConfig } from '$lib/utils/api';
+	import { calculateMetricDelta, metricNumber } from '$lib/utils/eval';
+	import { primaryMetricKey } from '$lib/utils/research';
 	import type {
 		ExperimentListResponse,
 		ExperimentReport,
@@ -24,36 +26,15 @@
 	let reportLoading = $state(false);
 	let reportError = $state('');
 
-	function metricValue(m: Record<string, unknown>, key: string): number {
-		const v = (m as Record<string, unknown>)[key];
-		return typeof v === 'number' ? v : 0;
-	}
+	const configNameCounts = $derived(
+		(listData?.configs ?? []).reduce<Record<string, number>>((counts, config) => {
+			counts[config.name] = (counts[config.name] ?? 0) + 1;
+			return counts;
+		}, {})
+	);
 
-	function fmtPct(v: unknown): string {
-		return typeof v === 'number' ? (v * 100).toFixed(1) + '%' : '—';
-	}
-
-	function fmtNum(v: unknown): string {
-		return typeof v === 'number' ? v.toFixed(4) : '—';
-	}
-
-	function fmtDelta(baseline: number, variant: number): string {
-		const d = variant - baseline;
-		const sign = d >= 0 ? '+' : '';
-		return `${sign}${(d * 100).toFixed(1)}%`;
-	}
-
-	function deltaClass(baseline: number, variant: number): string {
-		if (variant > baseline) return 'delta positive';
-		if (variant < baseline) return 'delta negative';
-		return 'delta';
-	}
-
-	function primaryMetricKey(metric: string): string {
-		if (metric === 'ndcg@5' || metric === 'ndcg@k') return 'ndcg_at_k';
-		if (metric === 'mrr') return 'mrr';
-		if (metric.startsWith('hit_rate')) return 'hit_rate_at_k';
-		return 'ndcg_at_k';
+	function fmtNum(value: unknown): string {
+		return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(4) : '—';
 	}
 
 	function getChartData(
@@ -67,10 +48,10 @@
 			datasets: [
 				{
 					label: metricKey,
-					data: all.map((v) => metricValue(v.metrics as Record<string, unknown>, metricKey)),
-					backgroundColor: all.map((v) =>
-						report?.winner?.name === v.name ? '#10b981' : '#94a3b8'
-					),
+					data: all.map((v) => metricNumber(
+						(v.metrics as Record<string, unknown>)[metricKey], metricKey
+					)),
+					backgroundColor: '#006b61',
 					borderRadius: 6
 				}
 			]
@@ -82,7 +63,8 @@
 		for (const v of [baseline, ...variants]) {
 			const m = v.metrics as Record<string, unknown>;
 			for (const k of Object.keys(m)) {
-				if (typeof m[k] === 'number' && !k.startsWith('by_') && !k.startsWith('retrieval_')) {
+				if (typeof m[k] === 'number' && Number.isFinite(m[k])
+					&& !k.startsWith('by_') && !k.startsWith('retrieval_')) {
 					keys.add(k);
 				}
 			}
@@ -96,10 +78,14 @@
 		parsedConfig = null;
 		reportLoading = true;
 		reportError = '';
+		// Follow only an explicit server-declared config/report association.
+		const reportId = listData?.reports.find((item) =>
+			item.config_ref === summary.experiment_id && item.availability === 'available'
+		)?.report_id ?? summary.experiment_id;
 
 		try {
 			const [reportRes, configRes] = await Promise.allSettled([
-				getExperimentResults<ExperimentReport>(summary.experiment_id),
+				getExperimentResults<ExperimentReport>(reportId),
 				getExperimentConfig<ParsedExperimentConfig>(summary.experiment_id)
 			]);
 
@@ -160,7 +146,12 @@
 							onclick={() => selectExperiment(cfg)}
 						>
 							<span class="exp-name">{cfg.name}</span>
-							<span class="exp-meta">{cfg.variant_count} variant{cfg.variant_count !== 1 ? 's' : ''}</span>
+							<span class="exp-meta">
+								{cfg.variant_count} variant{cfg.variant_count !== 1 ? 's' : ''}
+								{#if configNameCounts[cfg.name] > 1}
+									· {cfg.experiment_id}
+								{/if}
+							</span>
 							{#if cfg.has_results}
 								<span class="has-results-badge">Has results</span>
 							{/if}
@@ -179,7 +170,7 @@
 										</span>
 									{/if}
 									{#if rpt.winner}
-										Winner: <strong>{rpt.winner}</strong>
+										Reported winner: <strong>{rpt.winner}</strong>
 									{/if}
 								</span>
 							</div>
@@ -187,7 +178,7 @@
 					{/if}
 				</aside>
 
-					<main class="detail">
+					<section class="detail" aria-label="Selected experiment">
 						{#if !selectedExperimentId}
 							<p class="placeholder">Select an experiment on the left to view details.</p>
 					{:else if reportLoading}
@@ -214,19 +205,27 @@
 							<div class="summary-grid">
 								<MetricTile label="Primary metric" value={report.primary_metric} />
 								<MetricTile label="Target improvement" value={`+${(report.target_improvement * 100).toFixed(0)}%`} />
-								<MetricTile label="Winner" value={report.winner?.name ?? '—'} quiet={false} />
-								<MetricTile label="Target met" value={report.any_target_met ? 'Yes' : 'No'} quiet={true} />
+								<MetricTile label="Reported winner (historical)" value={report.winner?.name ?? '—'} quiet={false} />
+								<MetricTile label="Target status (reported)" value={report.any_target_met ? 'Met' : 'Not met'} quiet={true} />
 							</div>
+							<p class="archive-note">
+								Archived report data. A reported winner is not a current eligibility or promotion
+								decision; measurements may be incomplete.
+							</p>
 
 							{@const metricKey = primaryMetricKey(report.primary_metric)}
-							<EvalSection title="Variant Comparison" description="NDCG@K across variants">
+							<EvalSection title="Variant Comparison" description="Archived primary metric across variants">
 								<div class="chart-card">
-									<MetricChart
-										type="bar"
-										title={metricKey}
-										data={getChartData(report.baseline, report.variants, metricKey)}
-										height={220}
-									/>
+									{#if metricKey}
+										<MetricChart
+											type="bar"
+											title={metricKey}
+											data={getChartData(report.baseline, report.variants, metricKey)}
+											height={220}
+										/>
+									{:else}
+										<p class="archive-note">Unsupported primary metric: {report.primary_metric}</p>
+									{/if}
 								</div>
 							</EvalSection>
 
@@ -245,16 +244,17 @@
 										</thead>
 										<tbody>
 											{#each metrics as key}
+												{@const baseRaw = (report.baseline.metrics as Record<string, unknown>)[key]}
 												<tr>
 													<td class="metric-label">{key}</td>
-													<td>{fmtNum((report.baseline.metrics as Record<string, unknown>)[key])}</td>
+													<td>{fmtNum(baseRaw)}</td>
 													{#each report.variants as v}
-														{@const baseVal = metricValue(report.baseline.metrics as Record<string, unknown>, key)}
-														{@const varVal = metricValue(v.metrics as Record<string, unknown>, key)}
-														<td class={deltaClass(baseVal, varVal)}>
-															{fmtNum(varVal)}
-															{#if baseVal !== varVal}
-																<span class="delta-tag">{fmtDelta(baseVal, varVal)}</span>
+														{@const varRaw = (v.metrics as Record<string, unknown>)[key]}
+														{@const delta = calculateMetricDelta(key, baseRaw, varRaw)}
+														<td class:improved={delta.favorability === 'improved'} class:worsened={delta.favorability === 'worsened'}>
+															{fmtNum(varRaw)}
+															{#if delta.absolute !== null && delta.absolute !== 0}
+																<span class="delta-tag">{delta.absolute_label} / {delta.relative_label}</span>
 															{/if}
 														</td>
 													{/each}
@@ -266,7 +266,7 @@
 							</EvalSection>
 						{/if}
 					{/if}
-				</main>
+				</section>
 			</div>
 		{/if}
 	</div>
@@ -357,7 +357,7 @@
 
 	.experiment-btn.active {
 		background: var(--surface-strong);
-		border-color: #6366f1;
+		border-color: var(--teal);
 	}
 
 	.exp-name {
@@ -390,6 +390,7 @@
 	.rpt-name {
 		font-weight: 600;
 		display: block;
+		overflow-wrap: anywhere;
 	}
 
 	.rpt-meta {
@@ -398,7 +399,7 @@
 	}
 
 	.met {
-		color: #059669;
+		color: var(--success);
 		font-weight: 600;
 	}
 
@@ -509,17 +510,23 @@
 		color: var(--text-color);
 	}
 
-	.delta.positive {
-		color: #059669;
+	.improved {
+		color: #046b5a;
 	}
 
-	.delta.negative {
-		color: #dc2626;
+	.worsened {
+		color: #a63f23;
 	}
 
 	.delta-tag {
 		font-size: 0.7rem;
 		margin-left: 0.3rem;
 		opacity: 0.8;
+	}
+
+	.archive-note {
+		max-width: 48rem;
+		font-size: 0.86rem;
+		color: var(--muted-color);
 	}
 </style>

@@ -9,6 +9,8 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
+from src.core.source_metadata import sanitize_external_url
+
 if TYPE_CHECKING:
     from chromadb.api import Collection
 
@@ -69,6 +71,11 @@ class DocumentListingMixin:
                     "content_type": metadata.get("content_type", ""),
                     "content_preview": content[:200] if content else "",
                     "content_length": len(content),
+                    "canonical_label": metadata.get("canonical_label") or None,
+                    "display_label": metadata.get("display_label") or None,
+                    "logical_name": metadata.get("logical_name") or None,
+                    "source_url": sanitize_external_url(metadata.get("source_url")),
+                    "domain": metadata.get("domain") or None,
                 }
             )
 
@@ -90,13 +97,35 @@ class DocumentListingMixin:
             key = str((metadata or {}).get("source_type") or "unknown")
             source_type_counts[key] = source_type_counts.get(key, 0) + 1
 
+        # Global facets intentionally use the full mirror, independent of the
+        # selected source_type. The filtered ``source_type_counts`` above keeps
+        # its existing compatibility semantics.
+        global_source_type_counts: dict[str, int] = {}
+        for metadata in self._doc_metadatas:
+            key = str((metadata or {}).get("source_type") or "unknown")
+            global_source_type_counts[key] = global_source_type_counts.get(key, 0) + 1
+
         total = len(matching_metadatas)
         return {
             "total": total,
             "items": items,
             "source_type_counts": source_type_counts,
+            "global_source_type_counts": global_source_type_counts,
             "index_metadata": self._index_metadata,
+            "index_identity": self._index_identity(),
         }
+
+    def _index_identity(self) -> str | None:
+        """Expose only a verified source-snapshot digest when it is valid."""
+        value = self._index_metadata.get("source_snapshot_sha256")
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip().lower()
+        return (
+            normalized
+            if len(normalized) == 64 and all(c in "0123456789abcdef" for c in normalized)
+            else None
+        )
 
     def get_document_by_id(self, doc_id: str) -> dict[str, Any] | None:
         result = cast(

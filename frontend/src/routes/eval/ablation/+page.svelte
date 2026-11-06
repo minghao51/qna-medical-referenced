@@ -1,3 +1,7 @@
+<svelte:head>
+	<title>Ablation study · Fieldnote</title>
+</svelte:head>
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import AppShell from '$lib/components/AppShell.svelte';
@@ -25,7 +29,7 @@
 	let activeDimension: DimensionKey = 'all';
 	let showFindings = true;
 
-	const latestFeatureFindings: FeatureFinding[] = [
+	const archivedFeatureFindings: FeatureFinding[] = [
 		{
 			family: 'Medical Semantic / Query Understanding',
 			winner: 'query_understanding',
@@ -143,6 +147,18 @@
 
 <AppShell current="/eval">
 <div class="ablation-page">
+	<div class="page-header">
+		<p class="eyebrow">Archived feature benchmark</p>
+		<h1>Archived ablation study results</h1>
+		<p class="subtitle">
+			{#if data && data.runs.length > 0}
+				{data.total_variants} variants · Clean-state isolation · Archived top variant: <strong>{data.optimal_variant}</strong>
+			{:else}
+				Read-only archive · no live run, promotion or current eligibility is certified
+			{/if}
+		</p>
+	</div>
+
 	{#if loading}
 		<EvalSection title="Ablation Study Results" description="Loading comprehensive ablation data...">
 			<LoadingSkeleton count={4} type="card" height="80px" />
@@ -151,23 +167,16 @@
 		<EmptyState title="Failed to load ablation data" body={error} />
 	{:else if !data || data.runs.length === 0}
 		<EmptyState
-			title="No ablation results available"
-			body="Run the ablation study with scripts/run_variant_clean.py to generate results."
+			title="No archived ablation results"
+			body="This installation has no archived variant results. No feature winner or current eligibility is certified by this screen."
 		/>
 	{:else}
-		<div class="page-header">
-			<h1>Ablation Study Results</h1>
-			<p class="subtitle">
-				{data.total_variants} variants · Clean-state isolation · Optimal: <strong>{data.optimal_variant}</strong>
-			</p>
-		</div>
-
 		<EvalSection
-			title="Latest Feature Benchmark"
-			description="Feature-family snapshot updated 2026-04-18"
+			title="Archived feature benchmark"
+			description="Reported feature-family snapshot dated 2026-04-18; not current eligibility"
 		>
 			<div class="feature-findings-grid">
-				{#each latestFeatureFindings as finding}
+				{#each archivedFeatureFindings as finding}
 					<div class="feature-finding-card">
 						<div class="feature-finding-header">
 							<div>
@@ -276,7 +285,7 @@
 								<td class="variant">
 									{run.variant}
 									{#if run.variant === data?.optimal_variant}
-										<span class="badge optimal-badge">Optimal</span>
+										<span class="badge optimal-badge">Archived top</span>
 									{/if}
 									{#if run.variant === data?.baseline_variant}
 										<span class="badge baseline-badge">Baseline</span>
@@ -312,9 +321,24 @@
 		margin-bottom: 0.5rem;
 	}
 
+	.eyebrow {
+		margin: 0 0 0.45rem;
+		color: var(--muted-color);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+	}
+
 	.page-header h1 {
-		font-size: 1.5rem;
-		margin: 0 0 0.25rem;
+		font-size: 2rem;
+		margin: 0 0 0.35rem;
+	}
+
+	@media (max-width: 640px) {
+		.page-header h1 {
+			font-size: 1.65rem;
+		}
 	}
 
 	.subtitle {
@@ -515,7 +539,7 @@
 	}
 
 	.delta.positive {
-		color: #059669;
+		color: var(--success);
 	}
 
 	.delta.negative {

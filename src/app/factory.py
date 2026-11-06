@@ -54,6 +54,7 @@ from src.app.routes import (
     experiments_router,
     health_router,
     history_router,
+    research_router,
 )
 from src.app.security import validate_security_configuration
 from src.config import settings
@@ -346,6 +347,7 @@ def create_app() -> FastAPI:
     app.include_router(config_router)
     app.include_router(experiments_router)
     app.include_router(documents_router)
+    app.include_router(research_router)
     request_exception_handler = cast(ExceptionHandler, app_error_handler)
     http_request_exception_handler = cast(ExceptionHandler, http_exception_handler)
     app.add_exception_handler(AppError, request_exception_handler)

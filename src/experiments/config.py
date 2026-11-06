@@ -306,9 +306,11 @@ def _index_config_subset(experiment: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def load_experiment_file(path: str | Path) -> dict[str, Any]:
+def load_experiment_file(path: str | Path, *, raw_text: str | None = None) -> dict[str, Any]:
+    """Normalize a config, optionally using text already read by a bounded caller."""
     file_path = Path(path)
-    raw_text = file_path.read_text(encoding="utf-8")
+    if raw_text is None:
+        raw_text = file_path.read_text(encoding="utf-8")
     parsed = parse_simple_yaml(raw_text)
     normalized = _normalize_experiment_dict(parsed, file_path=file_path)
     normalized["experiment_file"] = str(file_path)

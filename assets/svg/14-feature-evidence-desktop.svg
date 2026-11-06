@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1330" viewBox="0 0 1440 1330" role="img" aria-labelledby="title description"><title id="title">Feature configuration and measured evidence</title><desc id="description">Actual 57-query archived comparison and declared feature matrix. No promotion, live toggle or cross-run eligibility is inferred.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1330" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text id="label-1-fieldnote" x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text id="label-2-overview" x="340" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Overview</text>
+<text id="label-3-ask" x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text id="label-4-evidence" x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text id="label-5-research" x="692" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Research</text>
+<line x1="692" y1="60" x2="764" y2="60" stroke="#006B61" stroke-width="3"/>
+<text id="label-6-private-lab-public-synthetic-data" x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text id="label-7-workspace" x="48" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Workspace</text>
+<text id="label-8-evaluations" x="213" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Evaluations</text>
+<text id="label-9-features" x="397" y="111" font-size="14" font-weight="700" style="fill:#006B61" class="">Features</text>
+<line x1="397" y1="124" x2="461" y2="124" stroke="#006B61" stroke-width="3"/>
+<text id="label-10-datasets" x="547" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Datasets</text>
+<text id="label-11-methodology" x="699" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Methodology</text>
+<line x1="48" y1="138" x2="1392" y2="138" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-12-feature-evidence-local-archive" x="48" y="182" font-size="12" font-weight="700" style="fill:#006B61" class="">FEATURE EVIDENCE / LOCAL ARCHIVE</text>
+<text id="label-13-a-feature-flag-is-not-a-finding" x="48" y="231" font-size="39" font-weight="400" style="fill:#182D32" class="serif">A feature flag is not a finding.</text>
+<text id="label-14-separate-declared-configuration-observed-outcomes-and-th" x="48" y="265" font-size="16" font-weight="400" style="fill:#506469" class="">Separate declared configuration, observed outcomes and the evidence needed to make a decision.</text>
+<rect x="48" y="301" width="282" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-15-57-query-report-18-apr-2026" x="58" y="319" font-size="12" font-weight="700" style="fill:#B34322" class="">57-QUERY REPORT · 18 APR 2026</text>
+<text id="label-16-no-default-profile-change-is-authorized-by-this-screen" x="365" y="319" font-size="14" font-weight="400" style="fill:#506469" class="">No default-profile change is authorized by this screen.</text>
+<text id="label-17-declared-variant" x="48" y="378" font-size="12" font-weight="700" style="fill:#506469" class="">DECLARED VARIANT</text>
+<text id="label-18-chunking" x="390" y="378" font-size="12" font-weight="700" style="fill:#506469" class="">CHUNKING</text>
+<text id="label-19-query-understanding" x="650" y="378" font-size="12" font-weight="700" style="fill:#506469" class="">QUERY UNDERSTANDING</text>
+<text id="label-20-ndcg-5" x="957" y="378" font-size="12" font-weight="700" style="fill:#506469" class="">nDCG@5</text>
+<text id="label-21-vs-baseline" x="1140" y="378" font-size="12" font-weight="700" style="fill:#506469" class="">Δ VS BASELINE</text>
+<rect x="48" y="402" width="1344" height="56" fill="#FFFFFF" stroke="#CED5D0" rx="3"/>
+<text id="label-22-baseline" x="70" y="436" font-size="17" font-weight="400" style="fill:#182D32" class="">baseline</text>
+<text id="label-23-chonkie-semantic" x="390" y="436" font-size="15" font-weight="400" style="fill:#182D32" class="mono">chonkie_semantic</text>
+<text id="label-24-off" x="650" y="436" font-size="16" font-weight="400" style="fill:#182D32" class="">Off</text>
+<text id="label-25-0-6596" x="957" y="436" font-size="16" font-weight="400" style="fill:#182D32" class="mono">0.6596</text>
+<text id="label-26-" x="1140" y="436" font-size="16" font-weight="400" style="fill:#182D32" class="mono">—</text>
+<rect x="48" y="468" width="1344" height="56" fill="#FFFFFF" stroke="#CED5D0" rx="3"/>
+<text id="label-27-medical-chunking" x="70" y="502" font-size="17" font-weight="400" style="fill:#182D32" class="">medical_chunking</text>
+<text id="label-28-medical-semantic" x="390" y="502" font-size="15" font-weight="400" style="fill:#182D32" class="mono">medical_semantic</text>
+<text id="label-29-off" x="650" y="502" font-size="16" font-weight="400" style="fill:#182D32" class="">Off</text>
+<text id="label-30-0-6596" x="957" y="502" font-size="16" font-weight="400" style="fill:#182D32" class="mono">0.6596</text>
+<text id="label-31-0-0000" x="1140" y="502" font-size="16" font-weight="400" style="fill:#182D32" class="mono">0.0000</text>
+<rect x="48" y="534" width="1344" height="56" fill="#E5F1EA" stroke="#CED5D0" rx="3"/>
+<text id="label-32-query-understanding" x="70" y="568" font-size="17" font-weight="700" style="fill:#182D32" class="">query_understanding</text>
+<g id="selected-variant-state"><rect x="1248" y="547" width="120" height="28" rx="3" fill="#182D32"/><text x="1260" y="566" font-size="12" style="fill:#FFFFFF">Inspecting</text></g>
+<text id="label-33-chonkie-semantic" x="390" y="568" font-size="15" font-weight="400" style="fill:#182D32" class="mono">chonkie_semantic</text>
+<text id="label-34-on" x="650" y="568" font-size="16" font-weight="400" style="fill:#182D32" class="">On</text>
+<text id="label-35-0-7009" x="957" y="568" font-size="16" font-weight="400" style="fill:#182D32" class="mono">0.7009</text>
+<text id="label-36-0-0413" x="1140" y="568" font-size="16" font-weight="400" style="fill:#182D32" class="mono">+0.0413</text>
+<rect x="48" y="600" width="1344" height="56" fill="#FFFFFF" stroke="#CED5D0" rx="3"/>
+<text id="label-37-both-features" x="70" y="634" font-size="17" font-weight="400" style="fill:#182D32" class="">both_features</text>
+<text id="label-38-medical-semantic" x="390" y="634" font-size="15" font-weight="400" style="fill:#182D32" class="mono">medical_semantic</text>
+<text id="label-39-on" x="650" y="634" font-size="16" font-weight="400" style="fill:#182D32" class="">On</text>
+<text id="label-40-0-7009" x="957" y="634" font-size="16" font-weight="400" style="fill:#182D32" class="mono">0.7009</text>
+<text id="label-41-0-0413" x="1140" y="634" font-size="16" font-weight="400" style="fill:#182D32" class="mono">+0.0413</text>
+<rect x="48" y="697" width="1344" height="114" fill="#FBECE2" rx="4"/>
+<text id="label-42-descriptive-result-eligible-winner" x="72" y="733" font-size="12" font-weight="700" style="fill:#B34322" class="">DESCRIPTIVE RESULT ≠ ELIGIBLE WINNER</text>
+<text id="label-43-reported-absolute-change-0-0413-relative-change-6-3-all-" x="72" y="770" font-size="15" font-weight="400" style="fill:#182D32" class="">Reported absolute change: +0.0413; relative change: +6.3%. All four variants have degraded answer measurements.</text>
+<text id="label-44-the-old-report-names-a-winner-this-ui-does-not-certify-p" x="72" y="796" font-size="15" font-weight="400" style="fill:#182D32" class="">The old report names a winner; this UI does not certify promotion. No confidence intervals or matched per-case rows are available locally.</text>
+<text id="label-45-capability-map" x="48" y="872" font-size="25" font-weight="400" style="fill:#182D32" class="serif">Capability map</text>
+<text id="label-46-implementation-and-archived-evidence-are-separate-dimens" x="48" y="904" font-size="14" font-weight="400" style="fill:#506469" class="">Implementation and archived evidence are separate dimensions. Runtime activation must come from effective config.</text>
+<line x1="48" y1="928" x2="1392" y2="928" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-47-query-understanding" x="48" y="961" font-size="17" font-weight="700" style="fill:#182D32" class="">Query understanding</text>
+<text id="label-48-rule-based-classification-routing" x="420" y="961" font-size="15" font-weight="400" style="fill:#182D32" class="">Rule-based classification / routing</text>
+<text id="label-49-57-query-archived-ranking-lift" x="920" y="961" font-size="14" font-weight="400" style="fill:#506469" class="">57-query archived ranking lift</text>
+<line x1="48" y1="985" x2="1392" y2="985" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-50-medical-semantic-chunking" x="48" y="1018" font-size="17" font-weight="700" style="fill:#182D32" class="">Medical semantic chunking</text>
+<text id="label-51-optional-chunking-strategy" x="420" y="1018" font-size="15" font-weight="400" style="fill:#182D32" class="">Optional chunking strategy</text>
+<text id="label-52-same-ranking-metrics-in-this-archive" x="920" y="1018" font-size="14" font-weight="400" style="fill:#506469" class="">Same ranking metrics in this archive</text>
+<line x1="48" y1="1042" x2="1392" y2="1042" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-53-cross-encoder-reranking" x="48" y="1075" font-size="17" font-weight="700" style="fill:#182D32" class="">Cross-encoder reranking</text>
+<text id="label-54-opt-in-dependencies-local-model-assets" x="420" y="1075" font-size="15" font-weight="400" style="fill:#182D32" class="">Opt-in dependencies + local model assets</text>
+<text id="label-55-54-query-reported-trade-off-separate-dataset" x="920" y="1075" font-size="14" font-weight="400" style="fill:#506469" class="">54-query reported trade-off; separate dataset</text>
+<line x1="48" y1="1099" x2="1392" y2="1099" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-56-hyde-hype-enrichment" x="48" y="1132" font-size="17" font-weight="700" style="fill:#182D32" class="">HyDE / HyPE / enrichment</text>
+<text id="label-57-optional-query-time-index-time-features" x="420" y="1132" font-size="15" font-weight="400" style="fill:#182D32" class="">Optional query-time / index-time features</text>
+<text id="label-58-no-retrieval-lift-reported-in-54-query-note" x="920" y="1132" font-size="14" font-weight="400" style="fill:#506469" class="">No retrieval lift reported in 54-query note</text>
+<text id="label-59-inspect-declared-vs-effective-settings-read-the-separate" x="48" y="1213" font-size="14" font-weight="700" style="fill:#006B61" class="">Inspect declared vs effective settings →    /    Read the separate reranking study →    /    Inspect dataset identity →</text>
+<line x1="48" y1="1278" x2="1392" y2="1278" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-60-proposed-ui-read-only-feature-evidence-no-live-settings-" x="48" y="1305" font-size="12" font-weight="400" style="fill:#506469" class="">PROPOSED UI • Read-only feature evidence; no live settings toggles or experiment-launch controls</text>
+</svg>

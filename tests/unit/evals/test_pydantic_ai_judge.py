@@ -116,6 +116,7 @@ async def test_constructor_uses_judge_settings_and_requested_pydantic_ai_model(
         assert judge._openai_client.max_retries == 0
 
         assert await model.a_generate(PROMPT) == "synthetic verdict"
+        assert requests[0].headers["x-opencode-session"].startswith("qna-")
         body = json.loads(requests[0].content)
         assert body["model"] == judge_settings.llm.judge_model_light_pydantic_ai
         assert body["temperature"] == judge_settings.llm.judge_temperature
@@ -125,6 +126,28 @@ async def test_constructor_uses_judge_settings_and_requested_pydantic_ai_model(
         assert wire_max_tokens == judge_settings.llm.judge_max_tokens
     finally:
         await model.aclose()
+
+
+@pytest.mark.asyncio
+async def test_judge_binds_stable_session_without_caller_scope(monkeypatch, judge_settings):
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=text_completion("synthetic verdict"))
+
+    install_mock_transport(monkeypatch, handle)
+    model = PydanticAIJudgeModel(MODEL)
+    try:
+        assert await model.a_generate(PROMPT) == "synthetic verdict"
+        assert await model.a_generate(PROMPT) == "synthetic verdict"
+    finally:
+        await model.aclose()
+
+    sessions = [request.headers["x-opencode-session"] for request in requests]
+    assert len(sessions) == 2
+    assert sessions[0].startswith("qna-")
+    assert sessions[0] == sessions[1]
 
 
 @pytest.mark.asyncio

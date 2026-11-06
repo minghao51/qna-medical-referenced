@@ -5,6 +5,7 @@ from src.app.routes.evaluation import router as evaluation_router
 from src.app.routes.experiments import router as experiments_router
 from src.app.routes.health import router as health_router
 from src.app.routes.history import router as history_router
+from src.app.routes.research import router as research_router
 
 __all__ = [
     "chat_router",
@@ -14,4 +15,5 @@ __all__ = [
     "experiments_router",
     "health_router",
     "history_router",
+    "research_router",
 ]

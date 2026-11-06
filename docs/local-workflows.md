@@ -91,7 +91,7 @@ This is the process that powers:
 - Without a configured development secret, a process-random key is used. Restarting that process, rotating a configured secret, or moving from the old API-key/environment-derived signer invalidates old cookies and starts fresh browser sessions. Historical messages are not deleted or migrated; there is no legacy-signature fallback.
 - File-backed history supports **one process/worker and one store instance**. `src.cli.serve_production --workers` rejects values other than `1`; do not bypass this with multiple Uvicorn workers, independent servers sharing the file, or an external process manager. This guard does not implement cross-process locking.
 - Bind explicitly to loopback for private local use, for example `dotenvx run -- uv run python -m src.cli.serve_production --host 127.0.0.1 --workers 1`. Existing bind defaults are unchanged. Do not expose this research application publicly; provider/profile readiness, container parity and a value-free preflight remain separate migration gates.
-- Generation providers are restricted to `qwen`, `gemini`, and `litellm`; unknown values fail rather than falling back to Qwen. The selected comparison profile does not silently change serving defaults.
+- Generation providers are restricted to `qwen`, `gemini`, `litellm`, and `pydantic-ai` (OpenCode Go); unknown values fail rather than falling back. The selected comparison profile does not silently change serving defaults.
 
 ### 4. Start the frontend
 

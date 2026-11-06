@@ -18,6 +18,7 @@ def test_backend_image_includes_authoritative_settings_and_compose_uses_nested_n
         "APP__LLM__PROVIDER",
         "APP__LLM__DASHSCOPE_API_KEY",
         "APP__LLM__GEMINI_API_KEY",
+        "APP__LLM__PYDANTIC_AI_API_KEY",
         "APP__API__SESSION_SIGNING_SECRET",
         "APP__PRODUCTION__PRODUCTION_PROFILE",
         "APP__STORAGE__CHROMA_PERSIST_DIRECTORY",

@@ -518,7 +518,7 @@ def get_heavy_model() -> QwenModel | LiteLLMJudgeModel | GeminiJudgeModel | Pyda
 
 def _generation_details(
     provider_override: str | None = None, model_override: str | None = None
-) -> tuple[Literal["qwen", "gemini", "litellm"], str, str]:
+) -> tuple[Literal["qwen", "gemini", "litellm", "pydantic-ai"], str, str]:
     provider = settings.llm.provider if provider_override is None else provider_override
     if provider == "qwen":
         model = settings.llm.model_name if model_override is None else model_override
@@ -535,8 +535,12 @@ def _generation_details(
         safe_model = _safe_model_name(model)
         endpoint = "openrouter" if safe_model.startswith("openrouter/") else "litellm"
         return "litellm", safe_model, endpoint
+    if provider == "pydantic-ai":
+        model = settings.llm.pydantic_ai_model if model_override is None else model_override
+        return "pydantic-ai", _safe_model_name(model), _safe_pydantic_ai_endpoint()
     raise ValueError(
-        "Unsupported generation provider; supported providers are qwen, gemini, and litellm."
+        "Unsupported generation provider; supported providers are qwen, gemini, litellm, "
+        "and pydantic-ai."
     )
 
 

@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1220" viewBox="0 0 1440 1220" role="img" aria-labelledby="title description"><title id="title">Private lab information architecture</title><desc id="description">Research is the primary purpose. Workbench and evidence inspection connect to datasets, features and evaluations without proposing public deployment.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1220" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text id="label-1-fieldnote" x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text id="label-2-overview" x="340" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Overview</text>
+<line x1="340" y1="60" x2="412" y2="60" stroke="#006B61" stroke-width="3"/>
+<text id="label-3-ask" x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text id="label-4-evidence" x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text id="label-5-research" x="692" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Research</text>
+<text id="label-6-private-lab-public-synthetic-data" x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text id="label-7-workspace" x="48" y="111" font-size="14" font-weight="700" style="fill:#006B61" class="">Workspace</text>
+<line x1="48" y1="124" x2="120" y2="124" stroke="#006B61" stroke-width="3"/>
+<text id="label-8-evaluations" x="213" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Evaluations</text>
+<text id="label-9-features" x="397" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Features</text>
+<text id="label-10-datasets" x="547" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Datasets</text>
+<text id="label-11-methodology" x="699" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Methodology</text>
+<line x1="48" y1="138" x2="1392" y2="138" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-12-product-correction-owner-decision-d01" x="48" y="182" font-size="12" font-weight="700" style="fill:#006B61" class="">PRODUCT CORRECTION / OWNER DECISION D01</text>
+<text id="label-13-a-research-lab-with-an-inspectable-q-a-workbench" x="48" y="231" font-size="39" font-weight="400" style="fill:#182D32" class="serif">A research lab with an inspectable Q&amp;A workbench.</text>
+<text id="label-14-keep-the-editorial-clarity-put-evaluations-feature-evide" x="48" y="265" font-size="16" font-weight="400" style="fill:#506469" class="">Keep the editorial clarity. Put evaluations, feature evidence and dataset identity at the center.</text>
+<rect x="48" y="316" width="318" height="238" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-15-workspace" x="68" y="353" font-size="25" font-weight="700" style="fill:#182D32" class="">Workspace</text>
+<text id="label-16-" x="68" y="389" font-size="14" font-weight="700" style="fill:#006B61" class="">/</text>
+<text id="label-17-evidence-led-starting-question" x="68" y="435" font-size="14" font-weight="400" style="fill:#182D32" class="">Evidence-led starting question</text>
+<text id="label-18-selected-local-report-caveats" x="68" y="465" font-size="14" font-weight="400" style="fill:#182D32" class="">Selected local report + caveats</text>
+<text id="label-19-ask-inspect-entry-point" x="68" y="495" font-size="14" font-weight="400" style="fill:#182D32" class="">Ask / inspect entry point</text>
+<rect x="390" y="316" width="318" height="238" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-20-evaluations" x="410" y="353" font-size="25" font-weight="700" style="fill:#182D32" class="">Evaluations</text>
+<text id="label-21-research-evaluations" x="410" y="389" font-size="14" font-weight="700" style="fill:#006B61" class="">/research/evaluations</text>
+<text id="label-22-run-identity-measurement-status" x="410" y="435" font-size="14" font-weight="400" style="fill:#182D32" class="">Run identity + measurement status</text>
+<text id="label-23-metric-completeness-and-failures" x="410" y="465" font-size="14" font-weight="400" style="fill:#182D32" class="">Metric completeness and failures</text>
+<text id="label-24-comparison-gate-then-drilldown" x="410" y="495" font-size="14" font-weight="400" style="fill:#182D32" class="">Comparison gate, then drilldown</text>
+<rect x="732" y="316" width="318" height="238" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-25-features" x="752" y="353" font-size="25" font-weight="700" style="fill:#182D32" class="">Features</text>
+<text id="label-26-research-features" x="752" y="389" font-size="14" font-weight="700" style="fill:#006B61" class="">/research/features</text>
+<text id="label-27-declared-effective-settings" x="752" y="435" font-size="14" font-weight="400" style="fill:#182D32" class="">Declared / effective settings</text>
+<text id="label-28-variant-matrix-and-evidence-scope" x="752" y="465" font-size="14" font-weight="400" style="fill:#182D32" class="">Variant matrix and evidence scope</text>
+<text id="label-29-dependencies-no-live-toggles" x="752" y="495" font-size="14" font-weight="400" style="fill:#182D32" class="">Dependencies, no live toggles</text>
+<rect x="1074" y="316" width="318" height="238" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-30-datasets" x="1094" y="353" font-size="25" font-weight="700" style="fill:#182D32" class="">Datasets</text>
+<text id="label-31-research-datasets" x="1094" y="389" font-size="14" font-weight="700" style="fill:#006B61" class="">/research/datasets</text>
+<text id="label-32-fixtures-vs-index-vs-review-set" x="1094" y="435" font-size="14" font-weight="400" style="fill:#182D32" class="">Fixtures vs index vs review set</text>
+<text id="label-33-split-overlap-label-provenance" x="1094" y="465" font-size="14" font-weight="400" style="fill:#182D32" class="">Split / overlap / label provenance</text>
+<text id="label-34-case-expectations-not-fake-results" x="1094" y="495" font-size="14" font-weight="400" style="fill:#182D32" class="">Case expectations, not fake results</text>
+<rect x="48" y="602" width="1344" height="142" fill="#E5F1EA" rx="4"/>
+<text id="label-35-cross-linked-not-merged" x="72" y="639" font-size="12" font-weight="700" style="fill:#006B61" class="">CROSS-LINKED, NOT MERGED</text>
+<text id="label-36-dataset-feature-experiment-archived-report-measurement-c" x="72" y="677" font-size="18" font-weight="400" style="fill:#182D32" class="">Dataset → feature experiment → archived report → measurement coverage → case expectations or recorded results.</text>
+<text id="label-37-q-a-ask-selected-turn-recorded-rag-step-indexed-chunk-ev" x="72" y="707" font-size="18" font-weight="400" style="fill:#182D32" class="">Q&amp;A /ask → selected turn → recorded RAG step → indexed chunk /evidence/[id] → original source.</text>
+<text id="label-38-access-and-execution" x="48" y="807" font-size="12" font-weight="700" style="fill:#006B61" class="">ACCESS AND EXECUTION</text>
+<text id="label-39-private-lab-is-the-recorded-deployment-posture-public-cl" x="48" y="846" font-size="17" font-weight="400" style="fill:#182D32" class="">Private lab is the recorded deployment posture. Public clinical/demo rollout is not part of this design refinement.</text>
+<text id="label-40-run-execution-remains-cli-yaml-first-the-web-ui-inspects" x="48" y="878" font-size="17" font-weight="400" style="fill:#182D32" class="">Run execution remains CLI/YAML-first; the web UI inspects artifacts. No “Run benchmark” button or default-profile switch.</text>
+<text id="label-41-use-existing-logfire-tooling-for-approved-detailed-traci" x="48" y="910" font-size="17" font-weight="400" style="fill:#182D32" class="">Use existing Logfire tooling for approved detailed tracing; do not silently duplicate hosted traces or fabricate deep links.</text>
+<rect x="48" y="987" width="1344" height="135" fill="#182D32" rx="4"/>
+<text id="label-42-migration" x="72" y="1023" font-size="12" font-weight="700" style="fill:#B5DACE" class="">MIGRATION</text>
+<text id="label-43-keep-ask-evidence-and-current-route-aliases-retain-eval-" x="72" y="1056" font-size="16" font-weight="400" style="fill:#FFFFFF" class="">Keep /ask, /evidence and current route aliases; retain /eval, /eval/ablation, /experiments, /health, /settings and documentation.</text>
+<text id="label-44-current-api-history-says-comparable-false-format-compati" x="72" y="1085" font-size="16" font-weight="400" style="fill:#FFFFFF" class="">Current API history says comparable=false. Format compatibility, matching row counts or an old winner label do not override it.</text>
+<line x1="48" y1="1168" x2="1392" y2="1168" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-45-design-refinement-private-lab-posture-takes-precedence-o" x="48" y="1195" font-size="12" font-weight="400" style="fill:#506469" class="">DESIGN REFINEMENT • Private lab posture takes precedence over earlier public-reader framing</text>
+</svg>

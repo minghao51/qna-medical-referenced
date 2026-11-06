@@ -29,7 +29,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from src.app.schemas import EvaluateSingleRequest
-from src.evals.artifact_service import EvaluationService
+from src.evals.artifact_service import EvaluationService, InvalidRunDirectoryError
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +249,8 @@ def get_evaluation_run(run_dir: str, request: Request) -> dict[str, Any]:
         return _get_evaluation_service().load_evaluation_run(run_dir)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidRunDirectoryError as exc:
+        raise HTTPException(status_code=400, detail="Invalid run directory identifier") from exc
 
 
 @router.get(
@@ -334,7 +336,9 @@ def get_full_ablation_results(request: Request) -> dict[str, Any]:
     summary="Get detailed records for a stage",
     description="Get detailed records for debugging and drill-down",
 )
-def get_step_records(stage: str, request: Request, limit: int = 100) -> dict[str, Any]:
+def get_step_records(
+    stage: str, request: Request, limit: int = 100, run_dir: str | None = None
+) -> dict[str, Any]:
     """Get detailed records for a specific pipeline stage.
 
     Returns individual records for a stage, useful for debugging
@@ -343,27 +347,31 @@ def get_step_records(stage: str, request: Request, limit: int = 100) -> dict[str
     Args:
         stage: Pipeline stage identifier (l0, l1, l2, l3, l4, l5)
         limit: Maximum number of records to return (default: 100)
+        run_dir: Optional explicit run directory; latest is used only when omitted
 
     Returns:
         Dictionary containing:
             - stage: Stage name
+            - run_dir: Actual selected run directory
             - records: Array of detailed records
             - total_count: Total number of records available
 
     Raises:
-        HTTPException(404): If no evaluation runs exist
-        HTTPException(400): If stage name is invalid
+        HTTPException(400): If stage or run identifier is invalid
+        HTTPException(404): If no evaluation runs exist or the run is missing
 
     Example:
-        GET /evaluation/steps/l3/records?limit=50
+        GET /evaluation/steps/l3/records?limit=50&run_dir=250228T120000Z_abc123
     """
     _require_authenticated_request(request)
     stage_name = _validate_stage(stage)
     limit = max(1, min(int(limit), 500))
     try:
-        return _get_evaluation_service().load_step_records(stage_name, limit)
+        return _get_evaluation_service().load_step_records(stage_name, limit, run_dir)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidRunDirectoryError as exc:
+        raise HTTPException(status_code=400, detail="Invalid run directory identifier") from exc
 
 
 @router.get(
@@ -371,7 +379,9 @@ def get_step_records(stage: str, request: Request, limit: int = 100) -> dict[str
     summary="Get L6 answer quality per-query records",
     description="Get detailed per-query records for L6 answer quality drill-down",
 )
-def get_l6_records(request: Request, limit: int = 100) -> dict[str, Any]:
+def get_l6_records(
+    request: Request, limit: int = 100, run_dir: str | None = None
+) -> dict[str, Any]:
     """Get detailed per-query L6 answer quality records.
 
     Returns individual query evaluation records from DeepEval including
@@ -379,24 +389,31 @@ def get_l6_records(request: Request, limit: int = 100) -> dict[str, Any]:
 
     Args:
         limit: Maximum number of records to return (default: 100)
+        run_dir: Optional explicit run directory; latest is used only when omitted
 
     Returns:
         Dictionary containing:
+            - run_dir: Actual selected run directory
             - records: Array of per-query L6 evaluation records
             - total_count: Total number of records available
+            - malformed_count: Records skipped because they were invalid or oversized
 
     Raises:
+        HTTPException(400): If the run identifier is invalid
         HTTPException(404): If no evaluation runs exist
         HTTPException(404): If L6 answer quality records not found
 
     Example:
-        GET /evaluation/l6/records?limit=50
+        GET /evaluation/l6/records?limit=50&run_dir=250228T120000Z_abc123
     """
     _require_authenticated_request(request)
+    limit = max(1, min(int(limit), 500))
     try:
-        return _get_evaluation_service().load_l6_records(limit)
+        return _get_evaluation_service().load_l6_records(limit, run_dir)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidRunDirectoryError as exc:
+        raise HTTPException(status_code=400, detail="Invalid run directory identifier") from exc
 
 
 @router.get(
@@ -404,7 +421,7 @@ def get_l6_records(request: Request, limit: int = 100) -> dict[str, Any]:
     summary="Get pipeline stage metrics",
     description="Get detailed metrics for a specific pipeline stage (L0-L5)",
 )
-def get_step_metrics(stage: str, request: Request) -> dict[str, Any]:
+def get_step_metrics(stage: str, request: Request, run_dir: str | None = None) -> dict[str, Any]:
     """Get metrics for a specific pipeline stage.
 
     Retrieves detailed step-level metrics for the specified pipeline stage.
@@ -412,18 +429,19 @@ def get_step_metrics(stage: str, request: Request) -> dict[str, Any]:
 
     Args:
         stage: Pipeline stage identifier (l0, l1, l2, l3, l4, l5)
+        run_dir: Optional explicit run directory; latest is used only when omitted
 
     Returns:
         Dictionary containing stage-specific metrics including
-        timing, document counts, and quality assessments
+        timing, document counts, quality assessments and the selected run directory
 
     Raises:
+        HTTPException(400): If stage or run identifier is invalid
         HTTPException(404): If no evaluation runs exist
-        HTTPException(400): If stage name is invalid
         HTTPException(404): If step metrics file doesn't exist
 
     Example:
-        GET /evaluation/steps/l2
+        GET /evaluation/steps/l2?run_dir=250228T120000Z_abc123
 
         Response:
         {
@@ -436,9 +454,11 @@ def get_step_metrics(stage: str, request: Request) -> dict[str, Any]:
     _require_authenticated_request(request)
     stage_name = _validate_stage(stage)
     try:
-        return _get_evaluation_service().load_step_metrics(stage_name)
+        return _get_evaluation_service().load_step_metrics(stage_name, run_dir)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidRunDirectoryError as exc:
+        raise HTTPException(status_code=400, detail="Invalid run directory identifier") from exc
     except ValueError as exc:
         logger.exception("Failed to load step metrics for stage %s", stage_name)
         raise HTTPException(status_code=500, detail="Internal server error") from exc
@@ -491,6 +511,8 @@ def get_answer_quality_details(run_dir: str, request: Request) -> dict[str, Any]
         return _get_evaluation_service().load_answer_quality_details(run_dir)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidRunDirectoryError as exc:
+        raise HTTPException(status_code=400, detail="Invalid run directory identifier") from exc
 
 
 @router.post(

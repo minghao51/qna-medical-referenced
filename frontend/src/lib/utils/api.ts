@@ -2,21 +2,31 @@ import type { ApiErrorPayload, HealthResponse } from '$lib/types';
 
 const LOCALHOST_NAMES = new Set(['localhost', '127.0.0.1']);
 
+export function normalizeApiBase(value: string | null | undefined): string {
+	const configured = (value ?? '').trim().replace(/\/+$/, '');
+	if (!configured) return '';
+	if (/^https?:\/\//i.test(configured) || configured.startsWith('/')) return configured;
+	// Unsupported schemes and bare relative paths are not treated as an API origin.
+	return '';
+}
+
 export function getApiBaseUrl(): string {
-	const configured = (import.meta.env.VITE_API_URL || '').trim();
-	if (configured) {
-		return configured.replace(/\/$/, '');
-	}
+	const configured = normalizeApiBase(import.meta.env.VITE_API_URL);
+	if (configured) return configured;
 
-	if (typeof window === 'undefined') {
-		return '';
-	}
+	if (typeof window === 'undefined') return '';
 
-	if (LOCALHOST_NAMES.has(window.location.hostname)) {
-		return 'http://localhost:8000';
-	}
+	if (LOCALHOST_NAMES.has(window.location.hostname)) return 'http://localhost:8000';
 
 	return '';
+}
+
+/** Resolve a configured API base and path without assuming a browser origin exists. */
+export function resolveApiUrl(base: string, path: string, origin: string): string {
+	const normalized = normalizeApiBase(base);
+	if (/^https?:\/\//i.test(normalized)) return `${normalized}${path}`;
+	if (normalized.startsWith('/')) return `${origin}${normalized}${path}`;
+	return `${origin}${path}`;
 }
 
 export async function parseApiError(response: Response): Promise<string> {
@@ -83,7 +93,8 @@ export async function clearHistory(): Promise<void> {
 }
 
 export function chatStreamUrl(includePipeline: boolean): string {
-	const url = new URL(`${baseUrl()}/chat`);
+	const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+	const url = new URL(resolveApiUrl(baseUrl(), '/chat', origin));
 	if (includePipeline) url.searchParams.append('include_pipeline', 'true');
 	return url.toString();
 }
@@ -144,21 +155,27 @@ export async function getEvaluationRuns<T>(): Promise<T> {
 	return apiFetch<T>('/evaluation/runs');
 }
 
-export async function getStepMetrics<T>(stage: string): Promise<T> {
-	return apiFetch<T>(`/evaluation/steps/${encodeURIComponent(stage)}`);
+export async function getStepMetrics<T>(stage: string, runDir?: string): Promise<T> {
+	const query = runDir ? `?run_dir=${encodeURIComponent(runDir)}` : '';
+	return apiFetch<T>(`/evaluation/steps/${encodeURIComponent(stage)}${query}`);
 }
 
 export async function getStepRecords<T>(
 	stage: string,
-	limit: number = 100
+	limit: number = 100,
+	runDir?: string
 ): Promise<T> {
+	const params = new URLSearchParams({ limit: String(limit) });
+	if (runDir) params.set('run_dir', runDir);
 	return apiFetch<T>(
-		`/evaluation/steps/${encodeURIComponent(stage)}/records?limit=${limit}`
+		`/evaluation/steps/${encodeURIComponent(stage)}/records?${params.toString()}`
 	);
 }
 
-export async function getL6Records<T>(limit: number = 100): Promise<T> {
-	return apiFetch<T>(`/evaluation/l6/records?limit=${limit}`);
+export async function getL6Records<T>(limit: number = 100, runDir?: string): Promise<T> {
+	const params = new URLSearchParams({ limit: String(limit) });
+	if (runDir) params.set('run_dir', runDir);
+	return apiFetch<T>(`/evaluation/l6/records?${params.toString()}`);
 }
 
 export async function getAnswerQuality<T>(runDir: string): Promise<T> {
@@ -175,4 +192,26 @@ export async function getExperimentResults<T>(experimentName: string): Promise<T
 
 export async function getExperimentConfig<T>(experimentName: string): Promise<T> {
 	return apiFetch<T>(`/experiments/${encodeURIComponent(experimentName)}/config`);
+}
+
+export async function getResearchDatasets<T>(): Promise<T> {
+	return apiFetch<T>('/research-data/datasets');
+}
+
+export async function getResearchDataset<T>(datasetId: string): Promise<T> {
+	return apiFetch<T>(`/research-data/datasets/${encodeURIComponent(datasetId)}`);
+}
+
+export async function getResearchDatasetCases<T>(
+	datasetId: string,
+	params: { revision: string; limit?: number; offset?: number }
+): Promise<T> {
+	const query = new URLSearchParams({
+		revision: params.revision,
+		limit: String(params.limit ?? 20),
+		offset: String(params.offset ?? 0)
+	});
+	return apiFetch<T>(
+		`/research-data/datasets/${encodeURIComponent(datasetId)}/cases?${query.toString()}`
+	);
 }

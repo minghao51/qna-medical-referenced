@@ -1,0 +1,84 @@
+# Private Cloudflare Access demo stack.
+#
+# Nothing is published to the host. Only the cloudflared container can reach the
+# Caddy ingress, and Caddy is the only component that knows the backend API key.
+# Copy `.env.demo.example` to `.env.demo` on the host and run:
+#   docker compose --env-file .env.demo -f docker-compose.demo.yml up -d
+name: fieldnote-demo
+
+services:
+  backend:
+    image: ${REGISTRY:?set REGISTRY}/qna-medical-referenced-backend:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    env_file:
+      - .env.demo
+    environment:
+      APP__APP__ENVIRONMENT: production
+      APP__API__CORS_ALLOWED_ORIGINS: ${DEMO_ORIGIN:?set DEMO_ORIGIN}
+      APP__API__TRUST_PROXY_HEADERS: "true"
+    expose:
+      - "8000"
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    image: ${REGISTRY:?set REGISTRY}/qna-medical-referenced-frontend:${IMAGE_TAG:-latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        VITE_API_URL: ${DEMO_ORIGIN:?set DEMO_ORIGIN}/api
+    expose:
+      - "5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ingress:
+    image: caddy:2-alpine
+    environment:
+      OPERATOR_API_KEY: ${OPERATOR_API_KEY:?set OPERATOR_API_KEY}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    expose:
+      - "8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --loglevel info run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      ingress:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

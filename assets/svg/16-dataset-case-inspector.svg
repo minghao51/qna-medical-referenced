@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1250" viewBox="0 0 1440 1250" role="img" aria-labelledby="title description"><title id="title">Dataset case expectations and unavailable observed result</title><desc id="description">Real first all-query fixture question and expected keywords. Lexical expectations are not clinical answers or reviewed evidence judgments. No retrieved result fabricated.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1250" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text id="label-1-fieldnote" x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text id="label-2-overview" x="340" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Overview</text>
+<text id="label-3-ask" x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text id="label-4-evidence" x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text id="label-5-research" x="692" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Research</text>
+<line x1="692" y1="60" x2="764" y2="60" stroke="#006B61" stroke-width="3"/>
+<text id="label-6-private-lab-public-synthetic-data" x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text id="label-7-workspace" x="48" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Workspace</text>
+<text id="label-8-evaluations" x="213" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Evaluations</text>
+<text id="label-9-features" x="397" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Features</text>
+<text id="label-10-datasets" x="547" y="111" font-size="14" font-weight="700" style="fill:#006B61" class="">Datasets</text>
+<line x1="547" y1="124" x2="611" y2="124" stroke="#006B61" stroke-width="3"/>
+<text id="label-11-methodology" x="699" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Methodology</text>
+<line x1="48" y1="138" x2="1392" y2="138" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-12-all-query-fixture-first-stored-case" x="48" y="181" font-size="14" font-weight="700" style="fill:#006B61" class="">← All-query fixture / First stored case</text>
+<text id="label-13-what-is-the-ldl-c-target-for-secondary-prevention" x="48" y="233" font-size="35" font-weight="400" style="fill:#182D32" class="serif">What is the LDL-C target for secondary prevention?</text>
+<rect x="48" y="259" width="188" height="26" fill="#E5F1EA" rx="3"/>
+<text id="label-14-real-public-fixture" x="58" y="277" font-size="12" font-weight="700" style="fill:#006B61" class="">REAL PUBLIC FIXTURE</text>
+<rect x="258" y="259" width="290" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-15-not-an-answer-or-recommendation" x="268" y="277" font-size="12" font-weight="700" style="fill:#B34322" class="">Not an answer or recommendation</text>
+<rect x="48" y="326" width="650" height="452" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-16-expected-fixture-labels" x="72" y="364" font-size="12" font-weight="700" style="fill:#006B61" class="">EXPECTED / FIXTURE LABELS</text>
+<text id="label-17-expected-source-label" x="72" y="409" font-size="19" font-weight="700" style="fill:#182D32" class="">Expected source label</text>
+<text id="label-18-lipid-management-guideline" x="72" y="442" font-size="17" font-weight="400" style="fill:#182D32" class="mono">lipid_management_guideline</text>
+<text id="label-19-expected-lexical-terms" x="72" y="492" font-size="19" font-weight="700" style="fill:#182D32" class="">Expected lexical terms</text>
+<text id="label-20-ldl-c-secondary-prevention-1-8-mmol" x="72" y="529" font-size="16" font-weight="400" style="fill:#182D32" class="">LDL-C · secondary · prevention · 1.8 · mmol</text>
+<text id="label-21-these-tokens-are-a-test-expectation-not-a-clinical-thres" x="72" y="556" font-size="16" font-weight="400" style="fill:#182D32" class="">These tokens are a test expectation, not a clinical threshold</text>
+<text id="label-22-assertion-or-a-verified-evidence-passage" x="72" y="583" font-size="16" font-weight="400" style="fill:#182D32" class="">assertion or a verified evidence passage.</text>
+<line x1="72" y1="621" x2="674" y2="621" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-23-split-regression-difficulty-medium" x="72" y="660" font-size="15" font-weight="400" style="fill:#182D32" class="">Split: regression · difficulty: medium</text>
+<text id="label-24-category-anchor-source-family-lipid-topic-targets" x="72" y="690" font-size="15" font-weight="400" style="fill:#182D32" class="">Category: anchor · source family: lipid · topic: targets</text>
+<text id="label-25-label-confidence-high-raw-review-status-absent" x="72" y="720" font-size="15" font-weight="400" style="fill:#182D32" class="">label_confidence: high · raw review_status: absent</text>
+<rect x="730" y="326" width="662" height="452" fill="#F7F4ED" stroke="#CED5D0" rx="4"/>
+<text id="label-26-observed-selected-archive" x="754" y="364" font-size="12" font-weight="700" style="fill:#506469" class="">OBSERVED / SELECTED ARCHIVE</text>
+<text id="label-27-per-case-results-are-not-available" x="754" y="420" font-size="26" font-weight="400" style="fill:#182D32" class="serif">Per-case results are not available.</text>
+<text id="label-28-the-local-experiment-report-contains-aggregate-metrics" x="754" y="466" font-size="17" font-weight="400" style="fill:#182D32" class="">The local experiment report contains aggregate metrics.</text>
+<text id="label-29-its-referenced-case-run-directory-is-absent" x="754" y="497" font-size="17" font-weight="400" style="fill:#182D32" class="">Its referenced case-run directory is absent.</text>
+<text id="label-30-no-ranks-generated-answer-judge-reason-or-call-trace" x="754" y="528" font-size="17" font-weight="400" style="fill:#182D32" class="">No ranks, generated answer, judge reason or call trace</text>
+<text id="label-31-can-be-reconstructed-from-the-aggregate" x="754" y="559" font-size="17" font-weight="400" style="fill:#182D32" class="">can be reconstructed from the aggregate.</text>
+<rect x="754" y="635" width="280" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-32-not-recorded-here-test-failure" x="764" y="653" font-size="12" font-weight="700" style="fill:#B34322" class="">Not recorded here ≠ test failure</text>
+<text id="label-33-inspect-aggregate-coverage-instead" x="754" y="729" font-size="15" font-weight="700" style="fill:#006B61" class="">Inspect aggregate coverage instead →</text>
+<line x1="48" y1="831" x2="1392" y2="831" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-34-when-recorded-results-exist" x="48" y="879" font-size="25" font-weight="400" style="fill:#182D32" class="serif">When recorded results exist</text>
+<text id="label-35-show-selected-run-identity-exact-case-binding-expected-p" x="48" y="921" font-size="17" font-weight="400" style="fill:#182D32" class="">Show selected run identity, exact case binding, expected passages, returned ranks and a safe failure reason.</text>
+<text id="label-36-keep-label-expectations-distinct-from-measured-evidence-" x="48" y="952" font-size="17" font-weight="400" style="fill:#182D32" class="">Keep label expectations distinct from measured evidence scores and unanswerable-case behavior.</text>
+<text id="label-37-raw-source-ids-are-internal-joins-not-authenticated-revi" x="48" y="983" font-size="17" font-weight="400" style="fill:#182D32" class="">Raw source IDs are internal joins, not authenticated reviewer identities. Do not send source case IDs as telemetry identifiers.</text>
+<rect x="48" y="1064" width="1344" height="95" fill="#E5F1EA" rx="4"/>
+<text id="label-38-implementation-note" x="72" y="1099" font-size="12" font-weight="700" style="fill:#006B61" class="">IMPLEMENTATION NOTE</text>
+<text id="label-39-run-scoped-l6-details-exist-for-available-runs-generic-s" x="72" y="1134" font-size="15" font-weight="400" style="fill:#182D32" class="">Run-scoped L6 details exist for available runs; generic step/record routes currently read latest, not the selected historical run.</text>
+<line x1="48" y1="1198" x2="1392" y2="1198" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-40-proposed-ui-real-fixture-expectations-unavailable-observ" x="48" y="1225" font-size="12" font-weight="400" style="fill:#506469" class="">PROPOSED UI • Real fixture expectations; unavailable observed data is intentionally left empty</text>
+</svg>

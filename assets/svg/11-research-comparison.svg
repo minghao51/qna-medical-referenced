@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1170" viewBox="0 0 1440 1170" role="img" aria-labelledby="title description"><title id="title">Research comparison and methodology</title><desc id="description">Dated retrieval-only results from repository documentation, not a recomputed benchmark or evidence of medical answer accuracy.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1170" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text x="340" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Overview</text>
+<text x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text x="692" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Research</text>
+<line x1="692" y1="60" x2="764" y2="60" stroke="#006B61" stroke-width="3"/>
+<text x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text x="48" y="122" font-size="12" font-weight="700" style="fill:#006B61" class="">RESEARCH / REPORTED 15 APR 2026</text>
+<text x="48" y="176" font-size="42" font-weight="400" style="fill:#182D32" class="serif">Better retrieval has a latency cost.</text>
+<text x="48" y="210" font-size="17" font-weight="400" style="fill:#506469" class="">A 54-query reranking comparison. This is an archived result, not the currently served runtime.</text>
+<rect x="48" y="257" width="190" height="26" fill="#FBECE2" rx="3"/>
+<text x="58" y="275" font-size="12" font-weight="700" style="fill:#B34322" class="">REPORTED SNAPSHOT</text>
+<text x="264" y="277" font-size="14" font-weight="400" style="fill:#506469" class="">Source: docs/feature_ablation_findings.md • Raw run bundle absent locally</text>
+<g id="comparison-charts">
+<text x="48" y="311" font-size="13" style="fill:#506469">Archived diagnostic metrics; no verified current comparison cohort or promotion decision.</text>
+<text x="48" y="345" font-size="25" font-weight="700" style="fill:#182D32" class="">Ranking quality</text>
+<text x="48" y="374" font-size="14" font-weight="400" style="fill:#506469" class="">nDCG@K · 0–1 · higher is better</text>
+<text x="780" y="345" font-size="25" font-weight="700" style="fill:#182D32" class="">Retrieval latency</text>
+<text x="780" y="374" font-size="14" font-weight="400" style="fill:#506469" class="">p50 · milliseconds · lower is better</text>
+<text x="48" y="430" font-size="16" font-weight="400" style="fill:#182D32" class="">No reranking</text>
+<rect x="215" y="411" width="299.772" height="25" fill="#506469"/>
+<text x="526.7719999999999" y="430" font-size="14" font-weight="400" style="fill:#182D32" class="mono">0.6813</text>
+<rect x="780" y="411" width="144.85625" height="25" fill="#506469"/>
+<text x="936.85625" y="430" font-size="14" font-weight="400" style="fill:#182D32" class="mono">236.5</text>
+<text x="48" y="492" font-size="16" font-weight="700" style="fill:#182D32" class="">Cross-encoder</text>
+<rect x="215" y="473" width="317.02000000000004" height="25" fill="#006B61"/>
+<text x="544.02" y="492" font-size="14" font-weight="400" style="fill:#182D32" class="mono">0.7205</text>
+<rect x="780" y="473" width="297.0625" height="25" fill="#006B61"/>
+<text x="1089.0625" y="492" font-size="14" font-weight="400" style="fill:#182D32" class="mono">485.0</text>
+<text x="48" y="554" font-size="16" font-weight="400" style="fill:#182D32" class="">MMR only</text>
+<rect x="215" y="535" width="292.46799999999996" height="25" fill="#506469"/>
+<text x="519.468" y="554" font-size="14" font-weight="400" style="fill:#182D32" class="mono">0.6647</text>
+<rect x="780" y="535" width="329.525" height="25" fill="#506469"/>
+<text x="1121.525" y="554" font-size="14" font-weight="400" style="fill:#182D32" class="mono">538.0</text>
+<text x="48" y="616" font-size="16" font-weight="400" style="fill:#182D32" class="">Both</text>
+<rect x="215" y="597" width="292.46799999999996" height="25" fill="#506469"/>
+<text x="519.468" y="616" font-size="14" font-weight="400" style="fill:#182D32" class="mono">0.6647</text>
+<rect x="780" y="597" width="474.075" height="25" fill="#506469"/>
+<text x="1266.075" y="616" font-size="14" font-weight="400" style="fill:#182D32" class="mono">774.0</text>
+<line x1="215" y1="677" x2="655" y2="677" stroke="#CED5D0" stroke-width="1"/>
+<text x="210.0" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">0</text>
+<text x="320.0" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">0.25</text>
+<text x="430.0" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">0.5</text>
+<text x="540.0" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">0.75</text>
+<text x="650.0" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">1</text>
+<line x1="780" y1="677" x2="1270" y2="677" stroke="#CED5D0" stroke-width="1"/>
+<text x="775.0" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">0</text>
+<text x="897.5" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">200</text>
+<text x="1020.0" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">400</text>
+<text x="1142.5" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">600</text>
+<text x="1265.0" y="700" font-size="12" font-weight="400" style="fill:#506469" class="">800</text>
+</g>
+<rect x="48" y="746" width="1344" height="114" fill="#E5F1EA" rx="4"/>
+<text x="72" y="783" font-size="20" font-weight="700" style="fill:#182D32" class="">Cross-encoder versus no reranking</text>
+<text x="72" y="821" font-size="22" font-weight="700" style="fill:#006B61" class="">+0.0392 nDCG@K   /   +248.5 ms median latency   /   2.05× the median retrieval time</text>
+<text x="48" y="915" font-size="24" font-weight="400" style="fill:#182D32" class="serif">What this does—and does not—tell us</text>
+<text x="48" y="954" font-size="16" font-weight="400" style="fill:#182D32" class="">54 queries from golden_queries_expanded.json. Comparison recovered in retrieval-only mode after answer evaluation stalled.</text>
+<text x="48" y="983" font-size="16" font-weight="400" style="fill:#182D32" class="">The result supports a retrieval trade-off within this benchmark. It does not establish better medical answers or a causal latency estimate.</text>
+<text x="48" y="1012" font-size="16" font-weight="400" style="fill:#182D32" class="">No confidence intervals are supplied. The separate 57-query experiment is not pooled into these charts.</text>
+<text x="48" y="1074" font-size="14" font-weight="400" style="fill:#506469" class="">Served profile: baseline (read-only D11). Cross-encoder remains opt-in and requires optional dependencies + model assets.</text>
+<line x1="48" y1="1118" x2="1392" y2="1118" stroke="#CED5D0" stroke-width="1"/>
+<text x="48" y="1145" font-size="12" font-weight="400" style="fill:#506469" class="">DESIGN PROPOSAL • Repository snapshot, not a live service</text>
+</svg>

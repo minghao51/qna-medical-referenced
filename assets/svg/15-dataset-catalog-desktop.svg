@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1440" viewBox="0 0 1440 1440" role="img" aria-labelledby="title description"><title id="title">Dataset catalog and selected fixture provenance</title><desc id="description">Real fixture counts, splits and overlap. Frozen corpus, reference rows, review cases and conversations retain distinct units. New catalog API is proposed.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182D32} .serif{font-family:Georgia,Times,serif} .mono{font-family:monospace} .muted{fill:#506469}</style>
+<rect x="0" y="0" width="1440" height="1440" fill="#F7F4ED"/>
+<g id="site-navigation">
+<rect x="0" y="0" width="1440" height="80" fill="#F7F4ED"/>
+<rect x="48" y="23" width="8" height="30" fill="#B34322"/>
+<text id="label-1-fieldnote" x="70" y="46" font-size="22" font-weight="800" style="fill:#182D32" class="">FIELDNOTE</text>
+<text id="label-2-overview" x="340" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Overview</text>
+<text id="label-3-ask" x="468" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Ask</text>
+<text id="label-4-evidence" x="550" y="46" font-size="16" font-weight="400" style="fill:#506469" class="">Evidence</text>
+<text id="label-5-research" x="692" y="46" font-size="16" font-weight="700" style="fill:#006B61" class="">Research</text>
+<line x1="692" y1="60" x2="764" y2="60" stroke="#006B61" stroke-width="3"/>
+<text id="label-6-private-lab-public-synthetic-data" x="1130" y="45" font-size="11" font-weight="700" style="fill:#506469" class="">PRIVATE LAB / PUBLIC + SYNTHETIC DATA</text>
+<line x1="48" y1="79" x2="1392" y2="79" stroke="#CED5D0" stroke-width="1"/>
+</g>
+<text id="label-7-workspace" x="48" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Workspace</text>
+<text id="label-8-evaluations" x="213" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Evaluations</text>
+<text id="label-9-features" x="397" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Features</text>
+<text id="label-10-datasets" x="547" y="111" font-size="14" font-weight="700" style="fill:#006B61" class="">Datasets</text>
+<line x1="547" y1="124" x2="611" y2="124" stroke="#006B61" stroke-width="3"/>
+<text id="label-11-methodology" x="699" y="111" font-size="14" font-weight="400" style="fill:#506469" class="">Methodology</text>
+<line x1="48" y1="138" x2="1392" y2="138" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-12-datasets-local-inventory" x="48" y="182" font-size="12" font-weight="700" style="fill:#006B61" class="">DATASETS / LOCAL INVENTORY</text>
+<text id="label-13-what-are-we-actually-testing" x="48" y="231" font-size="39" font-weight="400" style="fill:#182D32" class="serif">What are we actually testing?</text>
+<text id="label-14-a-catalog-of-distinct-artifacts-not-one-grand-total-new-" x="48" y="265" font-size="16" font-weight="400" style="fill:#506469" class="">A catalog of distinct artifacts—not one grand total. New read-only catalog adapter required.</text>
+<rect x="48" y="301" width="405" height="978" fill="#FFFFFF" stroke="#CED5D0" rx="4"/>
+<text id="label-15-select-an-artifact" x="70" y="341" font-size="12" font-weight="700" style="fill:#006B61" class="">SELECT AN ARTIFACT</text>
+<rect x="60" y="367" width="381" height="81" fill="#E5F1EA" rx="4"/>
+<text id="label-16-all-query-fixture" x="76" y="396" font-size="18" font-weight="700" style="fill:#182D32" class="">All-query fixture</text>
+<text id="label-17-57-questions-selected" x="76" y="424" font-size="14" font-weight="400" style="fill:#506469" class="">57 questions · selected</text>
+<rect x="60" y="461" width="381" height="81" fill="#FFFFFF" rx="4"/>
+<text id="label-18-expanded-query-fixture" x="76" y="490" font-size="18" font-weight="400" style="fill:#182D32" class="">Expanded query fixture</text>
+<text id="label-19-54-questions-overlapping" x="76" y="518" font-size="14" font-weight="400" style="fill:#506469" class="">54 questions · overlapping</text>
+<rect x="60" y="555" width="381" height="81" fill="#FFFFFF" rx="4"/>
+<text id="label-20-comprehensive-query-fixture" x="76" y="584" font-size="18" font-weight="400" style="fill:#182D32" class="">Comprehensive query fixture</text>
+<text id="label-21-35-questions" x="76" y="612" font-size="14" font-weight="400" style="fill:#506469" class="">35 questions</text>
+<rect x="60" y="649" width="381" height="81" fill="#FFFFFF" rx="4"/>
+<text id="label-22-diverse-query-fixture" x="76" y="678" font-size="18" font-weight="400" style="fill:#182D32" class="">Diverse query fixture</text>
+<text id="label-23-20-questions" x="76" y="706" font-size="14" font-weight="400" style="fill:#506469" class="">20 questions</text>
+<rect x="60" y="743" width="381" height="81" fill="#FFFFFF" rx="4"/>
+<text id="label-24-original-query-fixture" x="76" y="772" font-size="18" font-weight="400" style="fill:#182D32" class="">Original query fixture</text>
+<text id="label-25-21-questions" x="76" y="800" font-size="14" font-weight="400" style="fill:#506469" class="">21 questions</text>
+<rect x="60" y="837" width="381" height="81" fill="#FFFFFF" rx="4"/>
+<text id="label-26-conversation-fixture" x="76" y="866" font-size="18" font-weight="400" style="fill:#182D32" class="">Conversation fixture</text>
+<text id="label-27-15-conversations-30-turns" x="76" y="894" font-size="14" font-weight="400" style="fill:#506469" class="">15 conversations · 30 turns</text>
+<rect x="60" y="931" width="381" height="81" fill="#FFFFFF" rx="4"/>
+<text id="label-28-frozen-review-set" x="76" y="960" font-size="18" font-weight="400" style="fill:#182D32" class="">Frozen review set</text>
+<text id="label-29-8-cases-manifest-present" x="76" y="988" font-size="14" font-weight="400" style="fill:#506469" class="">8 cases · manifest present</text>
+<rect x="60" y="1025" width="381" height="81" fill="#FFFFFF" rx="4"/>
+<text id="label-30-d11-retrieval-corpus" x="76" y="1054" font-size="18" font-weight="400" style="fill:#182D32" class="">D11 retrieval corpus</text>
+<text id="label-31-2-473-indexed-chunks" x="76" y="1082" font-size="14" font-weight="400" style="fill:#506469" class="">2,473 indexed chunks</text>
+<rect x="60" y="1119" width="381" height="81" fill="#FFFFFF" rx="4"/>
+<text id="label-32-lab-reference-csv" x="76" y="1148" font-size="18" font-weight="400" style="fill:#182D32" class="">Lab reference CSV</text>
+<text id="label-33-471-rows-d11-serves-460" x="76" y="1176" font-size="14" font-weight="400" style="fill:#506469" class="">471 rows · D11 serves 460</text>
+<text id="label-34-all-query-fixture" x="493" y="340" font-size="31" font-weight="400" style="fill:#182D32" class="serif">All-query fixture</text>
+<text id="label-35-tests-fixtures-golden-queries-all-json" x="493" y="377" font-size="16" font-weight="400" style="fill:#182D32" class="mono">tests/fixtures/golden_queries_all.json</text>
+<rect x="493" y="400" width="225" height="26" fill="#E5F1EA" rx="3"/>
+<text id="label-36-current-file-inspection" x="503" y="418" font-size="12" font-weight="700" style="fill:#006B61" class="">CURRENT FILE INSPECTION</text>
+<rect x="738" y="400" width="277" height="26" fill="#FBECE2" rx="3"/>
+<text id="label-37-review-status-absent-in-raw-rows" x="748" y="418" font-size="12" font-weight="700" style="fill:#B34322" class="">Review status absent in raw rows</text>
+<text id="label-38-57-questions-across-three-splits" x="493" y="474" font-size="23" font-weight="700" style="fill:#182D32" class="">57 questions across three splits</text>
+<text id="label-39-regression" x="493" y="523" font-size="16" font-weight="400" style="fill:#182D32" class="">Regression</text>
+<rect x="625" y="505" width="340.0" height="23" fill="#006B61"/>
+<text id="label-40-17" x="977.0" y="523" font-size="15" font-weight="400" style="fill:#182D32" class="mono">17</text>
+<text id="label-41-test" x="493" y="572" font-size="16" font-weight="400" style="fill:#182D32" class="">Test</text>
+<rect x="625" y="554" width="460.0" height="23" fill="#006B61"/>
+<text id="label-42-23" x="1097.0" y="572" font-size="15" font-weight="400" style="fill:#182D32" class="mono">23</text>
+<text id="label-43-dev" x="493" y="621" font-size="16" font-weight="400" style="fill:#182D32" class="">Dev</text>
+<rect x="625" y="603" width="340.0" height="23" fill="#006B61"/>
+<text id="label-44-17" x="977.0" y="621" font-size="15" font-weight="400" style="fill:#182D32" class="mono">17</text>
+<line x1="625" y1="663" x2="1125" y2="663" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-45-0" x="622.0" y="686" font-size="11" font-weight="400" style="fill:#506469" class="">0</text>
+<text id="label-46-5" x="722.0" y="686" font-size="11" font-weight="400" style="fill:#506469" class="">5</text>
+<text id="label-47-10" x="822.0" y="686" font-size="11" font-weight="400" style="fill:#506469" class="">10</text>
+<text id="label-48-15" x="922.0" y="686" font-size="11" font-weight="400" style="fill:#506469" class="">15</text>
+<text id="label-49-20" x="1022.0" y="686" font-size="11" font-weight="400" style="fill:#506469" class="">20</text>
+<text id="label-50-25" x="1122.0" y="686" font-size="11" font-weight="400" style="fill:#506469" class="">25</text>
+<text id="label-51-label-confidence-is-not-review-authority" x="493" y="727" font-size="21" font-weight="400" style="fill:#182D32" class="serif">Label confidence is not review authority.</text>
+<text id="label-52-43-high-confidence-labels-14-medium-review-status-is-abs" x="493" y="764" font-size="16" font-weight="400" style="fill:#182D32" class="">43 high-confidence labels; 14 medium. Review status is absent in raw rows.</text>
+<text id="label-53-the-normalizer-defaults-missing-review-status-to-unrevie" x="493" y="793" font-size="16" font-weight="400" style="fill:#182D32" class="">The normalizer defaults missing review_status to unreviewed.</text>
+<text id="label-54-query-categories-45-anchor-7-adversarial-5-paraphrase" x="493" y="822" font-size="16" font-weight="400" style="fill:#182D32" class="">Query categories: 45 anchor / 7 adversarial / 5 paraphrase.</text>
+<rect x="493" y="876" width="899" height="125" fill="#FBECE2" rx="4"/>
+<text id="label-55-overlap-alert-exact-query-text" x="517" y="913" font-size="12" font-weight="700" style="fill:#B34322" class="">OVERLAP ALERT / EXACT QUERY TEXT</text>
+<text id="label-56-all-54-expanded-fixture-questions-also-occur-in-this-57-" x="517" y="951" font-size="15" font-weight="400" style="fill:#182D32" class="">All 54 expanded-fixture questions also occur in this 57-question file.</text>
+<text id="label-57-these-are-not-independent-samples-matching-text-does-not" x="517" y="978" font-size="15" font-weight="400" style="fill:#182D32" class="">These are not independent samples. Matching text does not prove identical labels, corpus or benchmark identity.</text>
+<text id="label-58-separate-review-set" x="493" y="1057" font-size="23" font-weight="700" style="fill:#182D32" class="">Separate review set</text>
+<text id="label-59-8-frozen-cases-7-answerable-1-unanswerable-manifest-mark" x="493" y="1096" font-size="16" font-weight="400" style="fill:#182D32" class="">8 frozen cases: 7 answerable, 1 unanswerable. Manifest marks all 8 human_reviewed.</text>
+<text id="label-60-manifest-presence-is-not-reviewer-authentication-or-a-fr" x="493" y="1125" font-size="16" font-weight="400" style="fill:#182D32" class="">Manifest presence is not reviewer authentication or a fresh integrity verification.</text>
+<text id="label-61-its-declared-corpus-has-2-473-documents-chunks-and-60-so" x="493" y="1154" font-size="16" font-weight="400" style="fill:#182D32" class="">Its declared corpus has 2,473 documents/chunks and 60 source labels.</text>
+<rect x="493" y="1212" width="242" height="44" fill="#006B61" rx="4"/>
+<text id="label-62-inspect-a-fixture-case" x="509" y="1240" font-size="15" font-weight="700" style="fill:#FFFFFF" class="">Inspect a fixture case →</text>
+<text id="label-63-counts-are-from-current-files-not-proof-of-the-historica" x="493" y="1317" font-size="14" font-weight="400" style="fill:#506469" class="">Counts are from current files, not proof of the historical dataset bytes used in an archived run.</text>
+<line x1="48" y1="1388" x2="1392" y2="1388" stroke="#CED5D0" stroke-width="1"/>
+<text id="label-64-proposed-ui-new-read-only-dataset-catalog-raw-identities" x="48" y="1415" font-size="12" font-weight="400" style="fill:#506469" class="">PROPOSED UI • New read-only dataset catalog; raw identities and reviewer details remain protected</text>
+</svg>

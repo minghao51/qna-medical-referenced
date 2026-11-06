@@ -53,6 +53,8 @@
 	let activeTab = $state<EvalTabId>('ingestion');
 	let selectedTrendMetric = $state<EvalTrendMetric>('hit_rate');
 	let selectedRunKey = $state('');
+	let latestRequestSeq = 0;
+	let runRequestSeq = 0;
 	let urlStateReady = false;
 	let drillDownModal = $state(emptyDrillDownState());
 	let healthStatus = $state<HealthResponse | null>(null);
@@ -120,20 +122,25 @@
 	}
 
 	async function loadData() {
+		const token = ++latestRequestSeq;
 		try {
 			const payload = await getLatestEvaluation<EvaluationResponse>();
+			if (token !== latestRequestSeq) return;
 			latestData = payload;
-			if (!selectedRunKey || selectedRunKey === selectionKey(payload) || !data) {
-				selectedRunKey = selectionKey(payload);
+			const latestKey = selectionKey(payload);
+			if (!selectedRunKey) {
+				selectedRunKey = latestKey;
+				data = payload;
+			} else if (selectedRunKey === latestKey) {
 				data = payload;
 			}
 			error = '';
 		} catch (err) {
+			if (token !== latestRequestSeq) return;
 			error = err instanceof Error ? err.message : 'Failed to load evaluation data.';
 			console.error(err);
 		} finally {
-			loading = false;
-			refreshing = false;
+			if (token === latestRequestSeq) refreshing = false;
 		}
 	}
 
@@ -172,10 +179,10 @@
 
 	async function loadRun(runKey: string): Promise<EvaluationResponse | null> {
 		if (latestData && selectionKey(latestData) === runKey) return latestData;
-		const run = (historyData?.runs ?? []).find((item) => selectionKey(item) === runKey);
-		if (!run) return null;
+		const runDir = runKey.startsWith('local:') ? runKey.slice('local:'.length) : runKey;
+		if (!runDir) return null;
 		try {
-			return await getEvaluationRun<EvaluationResponse>(run.run_dir);
+			return await getEvaluationRun<EvaluationResponse>(runDir);
 		} catch (err) {
 			console.error('Failed to load run:', err);
 		}
@@ -184,23 +191,36 @@
 
 	async function selectRun(runKey: string) {
 		selectedRunKey = runKey;
+		const token = ++runRequestSeq;
 		const selected = await loadRun(runKey);
-		if (selected) data = selected;
+		if (token !== runRequestSeq || selectedRunKey !== runKey) return;
+		if (selected) {
+			data = selected;
+			error = '';
+		} else {
+			error = 'The selected evaluation run is unavailable.';
+		}
 	}
 
 	async function refresh() {
 		refreshing = true;
+		const requestedRunKey = selectedRunKey;
 		await loadData();
-		if (selectedRunKey && latestData && selectedRunKey !== selectionKey(latestData)) {
-			const selected = await loadRun(selectedRunKey);
-			if (selected) data = selected;
+		if (
+			requestedRunKey &&
+			latestData &&
+			requestedRunKey !== selectionKey(latestData)
+		) {
+			await selectRun(requestedRunKey);
 		}
+		refreshing = false;
 	}
 
 	function selectedRunLabel(): string {
 		const run = (historyData?.runs ?? []).find((item) => selectionKey(item) === selectedRunKey);
 		if (run) return historyLabel(run);
-		return latestData ? historyLabel(latestData) : 'Latest run';
+		if (latestData && selectionKey(latestData) === selectedRunKey) return historyLabel(latestData);
+		return selectedRunKey.replace(/^local:/, '') || 'Latest run';
 	}
 
 	function showMetricDrillDown(
@@ -233,10 +253,10 @@
 		applyUrlStateFromLocation();
 		await ensureActiveTabComponent(activeTab);
 		await Promise.all([loadData(), loadHistory(), loadAblationResults(), loadHealth()]);
-		if (selectedRunKey && latestData && selectedRunKey !== selectionKey(latestData)) {
-			const selected = await loadRun(selectedRunKey);
-			if (selected) data = selected;
+		if (selectedRunKey && (!latestData || selectedRunKey !== selectionKey(latestData))) {
+			await selectRun(selectedRunKey);
 		}
+		loading = false;
 		urlStateReady = true;
 	});
 </script>
@@ -378,7 +398,9 @@
 <style>
 	.eval-container {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
+		min-width: 0;
 	}
 
 	.page-header {
@@ -413,10 +435,15 @@
 	.loading-panel,
 	.error-panel,
 	.ops-banner {
+		min-width: 0;
 		padding: 1rem;
 		border: 1px solid var(--border-color);
 		border-radius: 18px;
 		background: white;
+	}
+
+	.tabs-wrap {
+		overflow: hidden;
 	}
 
 	.ops-banner {
